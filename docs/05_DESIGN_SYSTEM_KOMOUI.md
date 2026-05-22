@@ -1,0 +1,335 @@
+# AgarthaVision · Design System (KomoUI 0.3.0)
+
+> How to build the **Clinical Pulse** moodboard on top of
+> [KomoUI](https://github.com/derangga/komoui) `0.3.0` (Kotlin + Jetpack Compose).
+>
+> This document is the **source of truth** for tokens, typography, and component usage.
+> It supersedes the original `components.md` which referenced the legacy `shadcn-ui-kmp` package.
+>
+> **Migration note:** KomoUI 0.3.0 is the rebranded continuation of `shadcn-ui-kmp`.
+> All imports changed from `com.shadcn.ui.*` → `com.komoui.*` and the theme wrapper
+> changed from `ShadcnTheme` → `KomoTheme`. The `ShadcnColors` and `ShadcnRadius`
+> interfaces are retained for backward compatibility.
+
+---
+
+## 1. Setup
+
+Add the dependency (see `02_PROJECT_ARCHITECTURE.md` version catalog):
+
+```kotlin
+// gradle/libs.versions.toml
+komoui = "0.3.0"
+
+// app/build.gradle.kts
+implementation(libs.komoui)
+```
+
+Wrap your `setContent { … }` inside `MainActivity`:
+
+```kotlin
+import com.komoui.theme.KomoTheme
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            KomoTheme(
+                shadcnLightColors = AgarthaLightColors,
+                shadcnRadius      = AgarthaRadius,
+            ) {
+                MaterialTheme(typography = AgarthaTypography) {
+                    // app navigation here
+                }
+            }
+        }
+    }
+}
+```
+
+Access design tokens via `MaterialTheme.styles` (colors), `MaterialTheme.radius`, and `MaterialTheme.isDark`.
+
+---
+
+## 2. Color Tokens — `AgarthaLightColors`
+
+Override `ShadcnColors` with the Clinical Pulse palette.
+
+```kotlin
+import androidx.compose.ui.graphics.Color
+import com.komoui.theme.ShadcnColors
+
+object AgarthaLightColors : ShadcnColors {
+
+    // — Surfaces ————————————————————————————————————————————
+    override val background        = Color(0xFFFAFAF7) // Bone
+    override val card              = Color(0xFFFFFFFF) // pure white card on bone
+    override val popover           = Color(0xFFFFFFFF)
+    override val sidebar           = Color(0xFFFAFAF7) // Bone
+
+    // — Text ————————————————————————————————————————————————
+    override val foreground         = Color(0xFF0E1B2C) // Ink
+    override val cardForeground     = Color(0xFF0E1B2C)
+    override val popoverForeground  = Color(0xFF0E1B2C)
+    override val sidebarForeground  = Color(0xFF0E1B2C)
+    override val mutedForeground    = Color(0xFF5A6577) // Mute · secondary text
+
+    // — Primary action (Clinical Blue) ——————————————————————
+    override val primary             = Color(0xFF1F5BFF)
+    override val primaryForeground   = Color(0xFFFFFFFF)
+    override val sidebarPrimary          = Color(0xFF1F5BFF)
+    override val sidebarPrimaryForeground = Color(0xFFFFFFFF)
+
+    // — Secondary surfaces (Paper) ———————————————————————————
+    override val secondary           = Color(0xFFF1EFE9) // Paper
+    override val secondaryForeground = Color(0xFF0E1B2C)
+    override val muted               = Color(0xFFF1EFE9) // Paper
+    override val accent              = Color(0xFFE5F7FF) // Diagnostic Cyan @ tint
+    override val accentForeground    = Color(0xFF0E1B2C)
+    override val sidebarAccent          = Color(0xFFE5F7FF)
+    override val sidebarAccentForeground = Color(0xFF0E1B2C)
+
+    // — Destructive (Alert Coral) ————————————————————————————
+    override val destructive          = Color(0xFFFF5A4A)
+    override val destructiveForeground = Color(0xFFFFFFFF)
+
+    // — Lines & focus ————————————————————————————————————————
+    override val border         = Color(0xFFE5E3DF) // Ink @ 15%
+    override val input          = Color(0xFF0E1B2C) // 1.5px ink border
+    override val ring           = Color(0xFF1F5BFF) // Clinical Blue focus ring
+    override val sidebarBorder  = Color(0xFFE5E3DF)
+    override val sidebarRing    = Color(0xFF1F5BFF)
+
+    // — Snackbar / toast ————————————————————————————————————
+    override val snackbar       = Color(0xFF0E1B2C)
+
+    // — Charts (Progress, sparklines, EPG history) ———————————
+    override val chart1 = Color(0xFF1F5BFF) // Clinical Blue — primary series
+    override val chart2 = Color(0xFF7FE3FF) // Diagnostic Cyan — secondary
+    override val chart3 = Color(0xFF0E1B2C) // Ink — reference line
+    override val chart4 = Color(0xFFFF5A4A) // Alert Coral — threshold breach
+    override val chart5 = Color(0xFF5A6577) // Mute — comparison series
+}
+```
+
+### Semantic Colour Cheatsheet
+
+| Moodboard name      | Hex        | Token                     | Use for                              |
+|---------------------|------------|---------------------------|--------------------------------------|
+| Bone                | `#FAFAF7`  | `background`, `sidebar`   | App background, scaffold             |
+| Paper               | `#F1EFE9`  | `secondary`, `muted`      | Chips, inset cards, skeleton base    |
+| Ink                 | `#0E1B2C`  | `foreground`, `input`     | All primary text + outlined inputs   |
+| Mute                | `#5A6577`  | `mutedForeground`         | Captions, metadata, helper text      |
+| Clinical Blue       | `#1F5BFF`  | `primary`, `ring`         | Primary actions, focus, progress     |
+| Diagnostic Cyan     | `#7FE3FF`  | `chart2` + raw            | Live signal dot, overlay highlights  |
+| Diagnostic Cyan 10% | `#E5F7FF`  | `accent`                  | Hover / soft highlight backgrounds   |
+| Alert Coral         | `#FF5A4A`  | `destructive`             | Errors, discard, threshold breach    |
+
+> **Rule:** Clinical Blue = "act" · Diagnostic Cyan = "signal / live" · Coral = "danger". Don't swap them.
+
+---
+
+## 3. Typography
+
+Load Geist and JetBrains Mono via Google Fonts and define `AgarthaTypography`.
+
+```kotlin
+import androidx.compose.ui.text.googlefonts.GoogleFont
+import androidx.compose.ui.text.googlefonts.Font
+import com.komoui.theme.ShadcnColors
+
+val provider = GoogleFont.Provider(
+    providerAuthority = "com.google.android.gms.fonts",
+    providerPackage = "com.google.android.gms",
+    certificates = R.array.com_google_android_gms_fonts_certs,
+)
+
+val Geist         = GoogleFont("Geist")
+val JetBrainsMono = GoogleFont("JetBrains Mono")
+
+val GeistFamily         = FontFamily(Font(googleFont = Geist, fontProvider = provider))
+val JetBrainsMonoFamily = FontFamily(Font(googleFont = JetBrainsMono, fontProvider = provider))
+```
+
+| Role            | Family         | Size · Weight     | Letter-spacing | Where it appears                              |
+|-----------------|----------------|-------------------|----------------|-----------------------------------------------|
+| Display         | Geist 500      | 56–96 sp / 500    | −0.04 em       | Hero numerals (e.g. EPG `1,284`)              |
+| Headline        | Geist 500      | 28–32 sp / 500    | −0.02 em       | Screen titles ("Sample SMP-0429 …")           |
+| Title           | Geist 500      | 20–22 sp / 500    | −0.01 em       | Card titles, dialog titles                    |
+| Body            | Geist 400      | 16 sp / 400       |  0             | Paragraphs, long copy                         |
+| Label           | Geist 500      | 14 sp / 500       |  0             | Buttons, tabs, list rows                      |
+| Caption / Meta  | Geist 400      | 12 sp / 400       |  0             | Helper text                                   |
+| Mono · Data     | JetBrains Mono | 11–14 sp / 400    |  0             | IDs, timestamps, GPS, EPG readouts            |
+| Mono · Eyebrow  | JetBrains Mono | 10 sp / 400 · UC  |  +0.12 em      | Section labels ("DETECTION", "EDGE INFERENCE")|
+
+> **Rule:** Numerics get tabular figures everywhere they line up vertically (`fontFeatureSettings = "tnum"`).
+
+---
+
+## 4. Radius — `AgarthaRadius`
+
+```kotlin
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.max
+import com.komoui.theme.ShadcnRadius
+
+object AgarthaRadius : ShadcnRadius {
+    override val radius = 12.dp                       // base
+    override val sm     = max(0.dp, radius - 4.dp)    // 8  — chips, mini tags
+    override val md     = max(0.dp, radius - 2.dp)    // 10 — inputs, popovers
+    override val lg     = radius                      // 12 — most controls
+    override val xl     = max(0.dp, radius + 4.dp)    // 16 — cards, dialogs
+    override val full   = 999.dp                      // pill buttons
+}
+```
+
+**Spacing scale (use these, not arbitrary dp):**
+`4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 · 56 · 64` dp.
+Card outer padding = `24.dp`. Screen edge padding = `20.dp`. Cluster gap = `12.dp`.
+
+---
+
+## 5. Component Playbook
+
+All components are imported from `com.komoui.components.*`.
+
+For each component, this section says **what to use it for in AgarthaVision** and any
+non-default props/styling to keep on-brand. Components are listed alphabetically.
+
+### Accordion
+**Use for** sample detail expansion in lists (history, audit trail, "show metadata"). Keep the trigger row 56.dp tall with the chevron on the right. Avoid nesting more than one level.
+
+### Alert
+**Use for** inline status banners in the validation dashboard.
+Variants → Clinical mapping: `default` → neutral info ("Synced to DOH endpoint 14:22"). `destructive` → red coral ("Specimen outside biological window"). Add a one-line description with mono-font timestamps where relevant.
+
+### Alert Dialog
+**Use for** any irreversible HITL action: Discard sample, Override AI finding, Delete report draft. Destructive confirm button uses `destructive` token; cancel is the secondary variant.
+
+### Avatar
+**Use for** the technologist chip in the app bar and on validated samples ("Validated by J. Novabos"). Initials fallback on Paper background, Ink text, `lg` radius.
+
+### Badge
+**Use for** status pills throughout: `LIVE`, `QUEUED`, `VALIDATED`, `DOH-COMPLIANT`, taxonomy tags like `Trichuris trichiura 0.91`.
+Variant mapping: `default` → Clinical Blue fill (active states). `secondary` → Paper fill, Ink text (resting tags). `outline` → Ink 1.5px border, transparent fill (taxonomy chips). `destructive` → Coral (threshold breach).
+Always use JetBrains Mono for badge text, 11 sp, uppercase, `+0.06 em`.
+
+### Button
+**Use for** every CTA. Variants → moodboard mapping: `default` → Clinical Blue, pill (`full` radius) — "Validate sample". `secondary` → Paper fill, Ink text, pill. `outline` → Ink 1.5px border, transparent — "Re-scan". `destructive` → Coral fill — "Discard". `ghost` → text-only, used inside cards. `link` → reserved for cross-screen jumps.
+Default size is `default` (40.dp tall, 24.dp padding). Use `lg` (48.dp) for the primary capture button.
+
+### Calendar
+**Use for** the date filter in the dashboard ("Validated between …"). Selected day uses `primary`; today's ring uses `ring`. Weekday header in JetBrains Mono 10 sp uppercase.
+
+### Card
+**Workhorse container.** Two recipes:
+1. **Elevated detection card** — `background = card (#FFFFFF)`, `xl` radius, shadow `0 12 32 -16 rgba(14,27,44,.18)`, `border = none`.
+2. **Resting list card** — `background = secondary (Paper)`, `lg` radius, no shadow.
+Internal padding `24.dp`, header gap `16.dp`.
+
+### Carousel
+**Use for** browsing microscopy fields per slide. Dot indicator uses `mutedForeground` inactive, `primary` active. Edge-to-edge; no arrow chrome on mobile.
+
+### Checkbox
+**Use for** multi-select on the queue ("Sync these 7 samples") and "Mark for educational repository". Checked state uses `primary`.
+
+### Combobox
+**Use for** site picker ("Brgy. San Roque ▾") and species override. Filter as the technologist types.
+
+### Date Picker
+**Use for** report range selection in the DOH export screen. Always paired with a Combobox for time slot.
+
+### Dialog
+**Use for** non-destructive modal flows: EPG calibration, GPS override, Manual species edit. Title in Geist 22 sp / 500, body in Geist 16 sp / 400. Buttons right-aligned.
+
+### Drawer (Bottom Sheet)
+**Use for** sample-quick-look on dashboard map and Capture-options sheet (lighting / exposure). Drag handle visible (24.dp pill in `mutedForeground`). Snap points at 30% / 60% / 95%.
+
+### Dropdown Menu
+**Use for** kebab menu on each sample row (Re-scan · Export · Discard). Destructive items get Coral. Item height 36.dp, padding 12.dp.
+
+### Input
+**Use for** Sample ID entry, EPG manual override, notes. Default: 1.5px Ink border (`input` token), `lg` radius, 14.dp vertical padding. Mono font for IDs/numbers, sans for free text.
+
+### Popover
+**Use for** "what is EPG?" explainers, confidence breakdowns, GPS tooltip. Background `popover` white, `xl` radius.
+
+### Progress
+**Use for** AI confidence bar ("0.91"), upload-sync progress, biological-window countdown. Track uses `secondary` (Paper); fill uses `primary` (Clinical Blue). For bio-window ≤ 10 min, switch fill to `destructive`.
+
+### Radio Group
+**Use for** species override selector (single choice: Ascaris / Trichuris / Hookworm / Artifact). Show JetBrains Mono confidence next to each option.
+
+### Select
+**Use for** simple dropdowns ≤ 5 options (magnification: 400× / 1000× / 1200×; shift: AM / PM).
+
+### Sidebar
+**Use for** dashboard navigation on tablet/foldable. Hidden on phones — switch to `BottomNavBar` (custom).
+
+### Skeleton
+**Use for** image loading state in detection cards and queued-sample list during sync. Base: `muted` (Paper); shimmer: `accent`.
+
+### Slider
+**Use for** manual exposure/focus during capture and confidence threshold filter. Active track `primary`, thumb white with Ink ring.
+
+### Sonner (toast)
+**Use for** transient confirmations: "Sample queued", "Synced 7 samples". Bottom-center, 4-second auto-dismiss. `destructive` variant for failures. Never use for actions — that's an AlertDialog.
+
+### Switch
+**Use for** binary settings (Offline mode · Enable GPS · Auto-validate above 0.95). Track on = `primary`, off = `mutedForeground`.
+
+### Tabs
+**Use for** segmented sample view: Image · Detections · Metadata · Audit. Underline indicator in `primary`, inactive labels in `mutedForeground`, active in `foreground`.
+
+---
+
+## 6. Custom Components (not in KomoUI — build these)
+
+These live in `ui/components/` and use only the tokens defined above.
+
+| Custom component        | Built from                           | Where it's used                            |
+|-------------------------|--------------------------------------|--------------------------------------------|
+| `MicroscopyViewport`    | `Box` + `Canvas` + `Image`           | Capture screen, detection card             |
+| `DetectionOverlay`      | `Canvas` over `MicroscopyViewport`   | Draws bounding circles + species labels    |
+| `EpgReadout`            | Composition of `Text` styles         | Big "1,284 EPG" display                    |
+| `BiologicalWindowChip`  | `Badge` + countdown `LaunchedEffect` | App-bar timer ("BIO 47:12")                |
+| `OfflineQueueBadge`     | `Badge` with leading dot             | Persistent queue counter in app bar        |
+| `BottomNavBar` (phone)  | `Surface` + `Row` of `IconButton`    | Phone replacement for `Sidebar`            |
+| `GeoMapMarker`          | `Canvas` + Maps SDK                  | Map view on Reports screen                 |
+| `AuditTimeline`         | `LazyColumn` of `Row` + `Divider`    | Sample audit-trail tab                     |
+
+---
+
+## 7. Screen → Component Map
+
+| Screen           | Components Used                                                               |
+|------------------|-------------------------------------------------------------------------------|
+| `CaptureScreen`  | `MicroscopyViewport` · `Slider` · `Badge` · `BiologicalWindowChip` · `Button (lg)` · `Sonner` · `Drawer` |
+| `QueueScreen`    | `Card (resting)` · `Badge` · `Checkbox` · `Progress` · `DropdownMenu` · `Sonner` · `Skeleton` |
+| `ValidateScreen` | `Card (elevated)` · `MicroscopyViewport` + `DetectionOverlay` · `EpgReadout` · `Progress` · `Tabs` · `RadioGroup` · `Combobox` · `Button` · `AlertDialog` |
+| `ReportsScreen`  | `Sidebar`/`BottomNavBar` · `DatePicker` · `Tabs` · `Charts` · `Card (elevated)` · `Button (outline)` |
+| `SettingsScreen` | `Switch` · `Select` · `Input` · `Alert` · `AlertDialog`                      |
+
+---
+
+## 8. Do / Don't
+
+**Do**
+- Always use tokens (`MaterialTheme.styles.primary`) instead of hardcoded hex.
+- Use `JetBrains Mono` for any string that is a *value* (ID, EPG, GPS, confidence, timestamp).
+- Use `Geist` for any string that is a *label or sentence*.
+- Use `Badge (outline)` for taxonomy tags so they read as data, not action.
+- Reserve `destructive` for irreversible loss of data or specimen.
+
+**Don't**
+- Don't tint the background of a `Card (elevated)` — keep it pure white.
+- Don't use `Button (default)` for navigation. Use `link` or `ghost`.
+- Don't recolour Diagnostic Cyan to mean "success" — it's a signal colour.
+- Don't introduce new radii. The four-step scale is the system.
+- Don't replace `Sonner` with a custom snackbar.
+
+---
+
+*Library: [KomoUI 0.3.0](https://github.com/derangga/komoui) ·
+Docs: [shadcn-compose.site](https://shadcn-compose.site) ·
+Design: Clinical Pulse moodboard v0.1*
