@@ -1,6 +1,8 @@
 # AgarthaVision · Git Workflow and CI/CD
 
 > Branching strategy, PR process, GitHub Actions, and release process for a team of 5.
+>
+> **Status:** branching/commit conventions are in force today (enforced by commitlint + husky + lint-staged). The `.github/` workflows and PR template described in §4–§5 are **proposed — not yet created**; create them as part of the first CI-setup PR. This doc covers the Android `app/` module; the `backend/` module ships its own workflow.
 
 ---
 
@@ -120,7 +122,7 @@ test(validation): add unit tests for ApproveSampleUseCase
 
 ### 4.2 PR Template
 
-Create `.github/pull_request_template.md`:
+> **Not yet created.** When setting up CI, save the template below to `.github/pull_request_template.md`.
 
 ```markdown
 ## What does this PR do?
@@ -173,7 +175,7 @@ Create `.github/pull_request_template.md`:
 
 ### 5.1 PR Check Workflow
 
-Create `.github/workflows/pr-check.yml`:
+> **Not yet created.** Save the YAML below to `.github/workflows/pr-check.yml` as part of the CI-setup PR.
 
 ```yaml
 name: PR Check
@@ -228,7 +230,7 @@ jobs:
 
 ### 5.2 Commit Lint Workflow
 
-Create `.github/workflows/commitlint.yml`:
+> **Not yet created.** Save the YAML below to `.github/workflows/commitlint.yml`. (Local commits are already linted via husky/commitlint — this workflow guards the remote.)
 
 ```yaml
 name: Commit Lint
@@ -306,7 +308,7 @@ app/release/
 
 # Bun / Node
 node_modules/
-bun.lockb
+# Note: bun.lock IS committed (lockfile reproducibility) — do not ignore it.
 
 # OS
 .DS_Store
@@ -317,5 +319,6 @@ Thumbs.db
 *.keystore
 ```
 
-**Do track:** `gradle/libs.versions.toml`, `package.json`, `commitlint.config.js`,
-`.github/`, `docs/`, `schemas/` (Room exported schemas).
+**Do track:** `gradle/libs.versions.toml`, `package.json`, `bun.lock`,
+`commitlint.config.js`, `lint-staged.config.js`, `.github/`, `docs/`,
+`schemas/` (Room exported schemas).

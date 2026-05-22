@@ -10,7 +10,7 @@
 
 ### 1.1 Enforced by Tooling
 
-ktlint and Detekt run on every PR via CI. Configure them once and never argue about formatting again.
+ktlint and Detekt are both applied as Gradle plugins on the `:app` module. Run them locally with `bun run lint` (`./gradlew ktlintCheck detekt`); the matching CI workflow described in [06_GIT_WORKFLOW_AND_CI.md §5.1](06_GIT_WORKFLOW_AND_CI.md) is **proposed — to be added** as part of the CI-setup PR.
 
 ktlint follows the official [Kotlin coding conventions](https://kotlinlang.org/docs/coding-conventions.html) with these additions:
 
@@ -122,7 +122,7 @@ Always include the author's last name so the right person gets pinged.
 
 ### 2.3 Architecture Decision Records (ADRs)
 
-When making a non-obvious architectural choice, write a short ADR in `docs/adr/`:
+When making a non-obvious architectural choice, write a short ADR in `docs/adr/`. The directory doesn't exist yet — create it alongside the first ADR (`docs/adr/001-...md`):
 
 ```
 docs/adr/
@@ -214,10 +214,12 @@ sealed class CaptureEvent {
 | Layer      | Test Type        | Coverage Target | Framework          |
 |------------|------------------|-----------------|--------------------|
 | Use Cases  | Unit test (JVM)  | High            | JUnit + Coroutines Test |
-| ViewModels | Unit test (JVM)  | High            | JUnit + Turbine    |
+| ViewModels | Unit test (JVM)  | High            | JUnit + Turbine¹   |
 | Repositories| Unit test (JVM) | Medium          | JUnit + Fake DAOs  |
-| DAOs       | Instrumented     | Medium          | Room Testing       |
-| Composables| Screenshot/UI    | Low (MVP)       | Compose Test        |
+| DAOs       | Instrumented     | Medium          | Room Testing¹      |
+| Composables| Screenshot/UI    | Low (MVP)       | Compose Test       |
+
+¹ Turbine and `androidx.room:room-testing` are not yet in [`gradle/libs.versions.toml`](../gradle/libs.versions.toml) — add them as part of the first PR that introduces a ViewModel test / DAO test, respectively. Current catalog ships `junit`, `coroutines-test`, and `compose-test`.
 
 ### Naming Convention
 
@@ -272,9 +274,11 @@ try { doThing() } catch (_: Exception) { }
 try {
     doThing()
 } catch (e: Exception) {
-    Timber.e(e, "Failed to do thing for sample $sampleId")
+    Log.e("Capture", "Failed to do thing for sample $sampleId", e)
     _state.update { it.copy(error = e.message) }
 }
+// Use android.util.Log today. When Timber is added to the catalog,
+// switch to Timber.e(e, "...") project-wide in a single PR.
 ```
 
 ### Use Sealed Results for Domain Layer
@@ -314,7 +318,7 @@ Text(color = Color(0xFF1F5BFF))
 Text(color = MaterialTheme.styles.primary)
 ```
 
-The only place raw hex values appear is in `AgarthaLightColors.kt`.
+The only place raw hex values appear is in [`Color.kt`](../app/src/main/java/com/agarthavision/ui/theme/Color.kt) — the raw moodboard palette constants (`Bone`, `Paper`, `Ink`, etc.) and the `object AgarthaLightStyles : KomoStyles` that maps them onto theme tokens.
 
 ---
 

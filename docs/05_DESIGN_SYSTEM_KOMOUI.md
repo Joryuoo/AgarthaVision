@@ -8,8 +8,8 @@
 >
 > **Migration note:** KomoUI 0.3.0 is the rebranded continuation of `shadcn-ui-kmp`.
 > All imports changed from `com.shadcn.ui.*` → `com.komoui.*` and the theme wrapper
-> changed from `ShadcnTheme` → `KomoTheme`. The `ShadcnColors` and `ShadcnRadius`
-> interfaces are retained for backward compatibility.
+> changed from `ShadcnTheme` → `KomoTheme`. The implementation uses `KomoStyles` and
+> `KomoRadius` (the current interfaces); `ShadcnColors`/`ShadcnRadius` are legacy aliases.
 
 ---
 
@@ -25,25 +25,29 @@ komoui = "0.3.0"
 implementation(libs.komoui)
 ```
 
-Wrap your `setContent { … }` inside `MainActivity`:
+Wrap `setContent { … }` in `MainActivity` via the `AgarthaVisionTheme` composable defined in `ui/theme/Theme.kt`:
 
 ```kotlin
-import com.komoui.theme.KomoTheme
-
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            KomoTheme(
-                shadcnLightColors = AgarthaLightColors,
-                shadcnRadius      = AgarthaRadius,
-            ) {
-                MaterialTheme(typography = AgarthaTypography) {
-                    // app navigation here
-                }
-            }
-        }
+// MainActivity.kt
+setContent {
+    AgarthaVisionTheme {
+        // app navigation here
     }
+}
+
+// ui/theme/Theme.kt
+@Composable
+fun AgarthaVisionTheme(content: @Composable () -> Unit) {
+    KomoTheme(
+        isDarkTheme         = false,            // locked light — see §8
+        komoLightColors     = AgarthaLightStyles,
+        komoDarkColors      = AgarthaLightStyles, // same palette intentionally
+        materialLightColors = AgarthaMaterialColorScheme,
+        materialDarkColors  = AgarthaMaterialColorScheme,
+        komoRadius          = AgarthaRadius,
+        typography          = AgarthaTypography,
+        content             = content,
+    )
 }
 ```
 
@@ -51,15 +55,15 @@ Access design tokens via `MaterialTheme.styles` (colors), `MaterialTheme.radius`
 
 ---
 
-## 2. Color Tokens — `AgarthaLightColors`
+## 2. Color Tokens — `AgarthaLightStyles`
 
-Override `ShadcnColors` with the Clinical Pulse palette.
+Override `KomoStyles` with the Clinical Pulse palette.
 
 ```kotlin
 import androidx.compose.ui.graphics.Color
-import com.komoui.theme.ShadcnColors
+import com.komoui.themes.KomoStyles
 
-object AgarthaLightColors : ShadcnColors {
+object AgarthaLightStyles : KomoStyles {
 
     // — Surfaces ————————————————————————————————————————————
     override val background        = Color(0xFFFAFAF7) // Bone
@@ -131,24 +135,28 @@ object AgarthaLightColors : ShadcnColors {
 
 ## 3. Typography
 
-Load Geist and JetBrains Mono via Google Fonts and define `AgarthaTypography`.
+Fonts are **bundled** in `app/src/main/res/font/` for offline field-site operation.
+
+Download from Google Fonts and rename exactly as shown before adding to `res/font/`:
+
+| Source file | Save as |
+|---|---|
+| `Geist-Regular.ttf` (weight 400) | `geist_regular.ttf` |
+| `Geist-Medium.ttf` (weight 500) | `geist_medium.ttf` |
+| `JetBrainsMono-Regular.ttf` (weight 400) | `jetbrains_mono_regular.ttf` |
 
 ```kotlin
-import androidx.compose.ui.text.googlefonts.GoogleFont
-import androidx.compose.ui.text.googlefonts.Font
-import com.komoui.theme.ShadcnColors
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 
-val provider = GoogleFont.Provider(
-    providerAuthority = "com.google.android.gms.fonts",
-    providerPackage = "com.google.android.gms",
-    certificates = R.array.com_google_android_gms_fonts_certs,
+val GeistFamily = FontFamily(
+    Font(resId = R.font.geist_regular, weight = FontWeight.Normal),
+    Font(resId = R.font.geist_medium,  weight = FontWeight.Medium),
 )
-
-val Geist         = GoogleFont("Geist")
-val JetBrainsMono = GoogleFont("JetBrains Mono")
-
-val GeistFamily         = FontFamily(Font(googleFont = Geist, fontProvider = provider))
-val JetBrainsMonoFamily = FontFamily(Font(googleFont = JetBrainsMono, fontProvider = provider))
+val JetBrainsMonoFamily = FontFamily(
+    Font(resId = R.font.jetbrains_mono_regular, weight = FontWeight.Normal),
+)
 ```
 
 | Role            | Family         | Size · Weight     | Letter-spacing | Where it appears                              |
@@ -170,16 +178,17 @@ val JetBrainsMonoFamily = FontFamily(Font(googleFont = JetBrainsMono, fontProvid
 
 ```kotlin
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
-import com.komoui.theme.ShadcnRadius
+import com.komoui.themes.KomoRadius
 
-object AgarthaRadius : ShadcnRadius {
-    override val radius = 12.dp                       // base
-    override val sm     = max(0.dp, radius - 4.dp)    // 8  — chips, mini tags
-    override val md     = max(0.dp, radius - 2.dp)    // 10 — inputs, popovers
-    override val lg     = radius                      // 12 — most controls
-    override val xl     = max(0.dp, radius + 4.dp)    // 16 — cards, dialogs
-    override val full   = 999.dp                      // pill buttons
+object AgarthaRadius : KomoRadius {
+    override val radius = 12.dp  // base anchor
+    override val sm     =  8.dp  // chips, mini tags
+    override val md     = 10.dp  // inputs, popovers
+    override val lg     = 12.dp  // most controls
+    override val xl     = 16.dp  // cards, dialogs
+    override val xxl    = 20.dp  // large panels
+    override val xl3    = 24.dp  // bottom sheets
+    override val full   = 999.dp // pill buttons
 }
 ```
 

@@ -1,5 +1,7 @@
 # AgarthaVision · Components Guide
 
+> **Implementation note:** the library exposes these as `KomoTheme` / `KomoStyles` / `KomoRadius`. Token names in this doc match the library exactly; only the wrapper class names differ from the `Shadcn*` names shown below.
+
 > How to build the **Clinical Pulse** moodboard on top of the
 > [shadcn/compose](https://shadcn-compose.site) component library
 > (Kotlin + Jetpack Compose, KMP).
