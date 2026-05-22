@@ -14,6 +14,7 @@ coroutines = "1.9.0"
 navigation = "2.8.5"
 lifecycle = "2.8.7"
 coil = "2.7.0"
+activity = "1.10.1"
 ktlint-plugin = "12.1.2"
 detekt = "1.23.7"
 
@@ -24,6 +25,9 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+
+# Activity
+activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
 
 # KomoUI
 komoui = { group = "io.github.derangga", name = "komoui", version.ref = "komoui" }

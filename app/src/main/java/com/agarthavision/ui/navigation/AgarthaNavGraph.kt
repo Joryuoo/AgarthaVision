@@ -1,3 +1,5 @@
+package com.agarthavision.ui.navigation
+
 sealed class Screen(val route: String) {
     data object Capture    : Screen("capture")
     data object Queue      : Screen("queue")

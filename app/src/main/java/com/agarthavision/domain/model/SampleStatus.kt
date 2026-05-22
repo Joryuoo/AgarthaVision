@@ -1,3 +1,5 @@
+package com.agarthavision.domain.model
+
 enum class SampleStatus(val value: String) {
     CAPTURE_STARTED("capture_started"),
     CAPTURED("captured"),

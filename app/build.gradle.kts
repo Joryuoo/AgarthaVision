@@ -53,6 +53,9 @@ android {
 }
 
 dependencies {
+    // Activity
+    implementation(libs.activity.compose)
+
     // Compose BOM
     val composeBom = platform(libs.compose.bom)
     implementation(composeBom)
