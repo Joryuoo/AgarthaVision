@@ -11,6 +11,7 @@ import androidx.camera.core.ImageCapture
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.agarthavision.core.camera.CameraManager
+import com.agarthavision.ui.components.MicroscopyScreen
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -33,10 +34,6 @@ class MainActivity : ComponentActivity() {
                     CameraManager(context)
                 }
 
-                var imageCapture by remember {
-                    mutableStateOf<ImageCapture?>(null)
-                }
-
                 val permissionLauncher =
                     rememberLauncherForActivityResult(
                         contract = ActivityResultContracts.RequestPermission(),
@@ -48,11 +45,8 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                MicroscopyViewport(
-                    cameraManager = cameraManager,
-                    onReady = {
-                        imageCapture = it
-                    }
+                MicroscopyScreen(
+                    cameraManager = cameraManager
                 )
             }
         }

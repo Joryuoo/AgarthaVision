@@ -21,6 +21,7 @@ espresso = "3.7.0"
 ksp = "2.2.10-2.0.2"
 ktlint-plugin = "12.1.2"
 detekt = "1.23.7"
+foundation-layout = "1.11.2"
 
 [libraries]
 # Compose
@@ -86,6 +87,7 @@ compose-test = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 junit-ext = { group = "androidx.test.ext", name = "junit", version.ref = "junit-ext" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundation-layout" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
