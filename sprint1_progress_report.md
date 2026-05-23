@@ -4,13 +4,13 @@ Date: 2026-05-23
 
 ## Summary
 
-Sprint 1 work is not started yet. The capture feature set (CameraX, Capture screen, ViewModel, use case, and Room entities/DAOs) is missing or only stubbed. Existing work is still at Sprint 0 scaffolding.
+§1.1 CameraX integration is complete. §1.2 is in progress — MicroscopyViewport, BiologicalWindowChip, and the theme system are done; CaptureScreen, CaptureViewModel, and the capture button are still pending. §1.3 LocationProvider is done (Bundle 2). §1.4 Room persistence is pending (Bundle 1 in progress).
 
 ## Checklist
 
 ### 1.1 CameraX integration
-- [ ] core/camera/CameraManager.kt exists and binds preview
-- [ ] Image capture saves to app-internal storage
+- [x] core/camera/CameraManager.kt exists and binds preview
+- [x] Image capture saves to app-internal storage
 
 ### 1.2 Capture screen
 - [ ] CaptureScreen UI exists with MicroscopyViewport + overlays
@@ -19,7 +19,7 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 
 ### 1.3 Metadata binding
 - [ ] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
-- [ ] LocationProvider used for GPS data
+- [x] LocationProvider used for GPS data
 
 ### 1.4 Local persistence (Room)
 - [ ] SampleEntity exists with SDD fields
@@ -27,30 +27,31 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 - [ ] Room database includes SampleEntity
 
 ### 1.5 Acceptance criteria
-- [ ] Camera preview works on device/emulator
-- [ ] Capture writes JPEG to internal storage
+- [x] Camera preview works on device/emulator
+- [x] Capture writes JPEG to internal storage
 - [ ] Room row created with status CAPTURED and full metadata
-- [ ] GPS coordinates populated or null on denial
-- [ ] Biological window chip counts down
+- [x] GPS coordinates populated or null on denial
+- [x] Biological window chip counts down
 - [ ] Thumbnail updates after each capture
 
 ## Evidence From Codebase
 
-- Capture screen is not present (ui/capture is empty).
-- Camera manager is not present (core/camera does not exist).
-- Use case package is empty (domain/usecase/capture has no files).
-- Room entities and DAOs are stubs at [app/src/main/java/com/agarthavision/data/local/entity.kt](app/src/main/java/com/agarthavision/data/local/entity.kt#L1-L3) and [app/src/main/java/com/agarthavision/data/local/dao.kt](app/src/main/java/com/agarthavision/data/local/dao.kt#L1-L3).
-- Database package is empty (core/database has no files).
-- Sample status enum exists at [app/src/main/java/com/agarthavision/domain/model/SampleStatus.kt](app/src/main/java/com/agarthavision/domain/model/SampleStatus.kt#L1-L22).
-- MainActivity still renders a placeholder label at [app/src/main/java/com/agarthavision/MainActivity.kt](app/src/main/java/com/agarthavision/MainActivity.kt#L1-L18).
+- [CameraManager.kt](app/src/main/java/com/agarthavision/core/camera/CameraManager.kt) — complete. Binds preview via `ProcessCameraProvider`, captures JPEG to `filesDir/captures/UUID.jpg`.
+- [MicroscopyViewport.kt](app/src/main/java/com/agarthavision/ui/components/MicroscopyViewport.kt) — complete. Wires CameraManager to PreviewView; passes `ImageCapture` via `onReady`.
+- [BiologicalWindowChip.kt](app/src/main/java/com/agarthavision/ui/components/BiologicalWindowChip.kt) — complete. Countdown timer with critical color switch at ≤600 seconds.
+- [LocationProvider.kt](app/src/main/java/com/agarthavision/domain/repository/LocationProvider.kt) + [FusedLocationProvider.kt](app/src/main/java/com/agarthavision/core/location/FusedLocationProvider.kt) — complete. Returns `null` on denial / timeout; never throws `SecurityException`.
+- CaptureScreen composable is not present (ui/capture is empty).
+- CaptureViewModel is not present.
+- Room entities and DAOs are stubs at [entity.kt](app/src/main/java/com/agarthavision/data/local/entity.kt) and [dao.kt](app/src/main/java/com/agarthavision/data/local/dao.kt).
+- DatabaseModule is still commented out at [DatabaseModule.kt](app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt).
 
 ## Risks / Blockers
 
-- Sprint 1 depends on Room entities/DAOs and a database class; these are missing.
-- CameraX wrapper and capture flow are not started.
+- §1.4 Room persistence (SampleEntity, SampleDao, AgarthaDatabase) still missing — Bundle 1 is the next unblocked task.
+- MainActivity constructs `CameraManager(context)` directly ([MainActivity.kt:32](app/src/main/java/com/agarthavision/MainActivity.kt#L32)) — bypasses Hilt `@Singleton` scope. Must be fixed when CaptureViewModel is wired.
 
 ## Suggested Next Steps
 
-1. Implement Room entities/DAOs and database shell per Sprint 0 and Sprint 1 requirements.
-2. Add core/camera/CameraManager.kt and integrate CameraX preview + capture.
-3. Build CaptureScreen + CaptureViewModel + CaptureSampleUseCase.
+1. Land Bundle 1: SampleEntity, SampleDao, AgarthaDatabase, SampleRepository, DatabaseModule, RepositoryModule.
+2. Build CaptureScreen + CaptureViewModel + CaptureSampleUseCase (wires LocationProvider + SampleRepository).
+3. Add capture button and thumbnail display to complete §1.2.

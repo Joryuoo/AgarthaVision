@@ -54,14 +54,14 @@ ksp {
 }
 
 dependencies {
-    val camerax_version = "1.6.1"
-    implementation("androidx.camera:camera-core:${camerax_version}")
-    implementation("androidx.camera:camera-camera2:${camerax_version}")
-    implementation("androidx.camera:camera-lifecycle:${camerax_version}")
-    implementation("androidx.camera:camera-video:${camerax_version}")
-    implementation("androidx.camera:camera-view:${camerax_version}")
-    implementation("androidx.camera:camera-mlkit-vision:${camerax_version}")
-    implementation("androidx.camera:camera-extensions:${camerax_version}")
+    val cameraxVersion = "1.6.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-video:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+    implementation("androidx.camera:camera-mlkit-vision:$cameraxVersion")
+    implementation("androidx.camera:camera-extensions:$cameraxVersion")
     // Core
     implementation(libs.core.ktx)
 
@@ -118,8 +118,12 @@ dependencies {
     // Image loading
     implementation(libs.coil)
 
+    // Location
+    implementation(libs.play.services.location)
+
     // Testing
     testImplementation(libs.junit)
+    testImplementation(libs.mockito.kotlin)
     testImplementation(libs.coroutines.test)
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.junit.ext)
