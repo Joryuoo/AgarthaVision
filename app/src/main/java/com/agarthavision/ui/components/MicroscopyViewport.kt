@@ -113,13 +113,13 @@ fun MicroscopyScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 24.dp)
+                .padding(bottom = 12.dp)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(0.9f)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 12.dp)
             ) {
                 MicroscopyViewport(
                     cameraManager = cameraManager,
@@ -134,7 +134,7 @@ fun MicroscopyScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
