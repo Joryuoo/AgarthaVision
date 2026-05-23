@@ -178,7 +178,7 @@ fun MicroscopyScreen(
                             imageVector = Icons.Default.PhotoLibrary,
                             contentDescription = "Gallery",
                             modifier = Modifier.size(48.dp),
-                            tint = Color.White
+                            tint = Color.Black
                         )
                     }
                 }
