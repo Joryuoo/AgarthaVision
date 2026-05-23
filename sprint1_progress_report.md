@@ -18,8 +18,8 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 - [x] Recent thumbnail renders from latest capture
 
 ### 1.3 Metadata binding
-- [ ] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
-- [ ] LocationProvider used for GPS data
+- [X] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
+- [X] LocationProvider used for GPS data
 
 ### 1.4 Local persistence (Room)
 - [ ] SampleEntity exists with SDD fields

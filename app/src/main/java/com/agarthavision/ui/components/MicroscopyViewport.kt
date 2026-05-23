@@ -2,6 +2,9 @@ package com.agarthavision.ui.components
 
 import androidx.camera.core.ImageCapture
 import androidx.camera.view.PreviewView
+import com.agarthavision.core.camera.CameraManager
+import com.agarthavision.domain.usecase.capture.CaptureSampleUseCase
+import java.io.File
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -37,9 +40,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.ui.theme.AgarthaVisionTheme
-
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -50,7 +51,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.rememberCoroutineScope
 import com.komoui.components.sooner.SonnerHost
 import kotlinx.coroutines.launch
-import java.io.File
 
 // Box + Canvas + Image — Capture screen and detection card.
 // Displays a raw microscopy frame; slot for DetectionOverlay drawn on top.
@@ -101,6 +101,7 @@ fun MicroscopyViewport(
 @Composable
 fun MicroscopyScreen(
     cameraManager: CameraManager,
+    captureSampleUseCase: CaptureSampleUseCase,
     onCapture: (ImageCapture) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -147,9 +148,14 @@ fun MicroscopyScreen(
                         activeImageCapture?.let { capture ->
                             scope.launch {
                                 try {
-                                    val file = cameraManager.captureImage(capture)
-                                    latestCapture = file
-                                    snackbarHostState.showSnackbar("Sample saved: ${file.name}")
+                                    val result = captureSampleUseCase(capture)
+                                    result.onSuccess { sample ->
+                                        val file = File(sample.filePath)
+                                        latestCapture = file
+                                        snackbarHostState.showSnackbar("Sample saved with metadata: ${sample.id}")
+                                    }.onFailure { e ->
+                                        snackbarHostState.showSnackbar("Capture failed: ${e.localizedMessage}")
+                                    }
                                 } catch (e: Exception) {
                                     snackbarHostState.showSnackbar("Capture failed: ${e.localizedMessage}")
                                 }

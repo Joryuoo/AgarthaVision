@@ -55,17 +55,19 @@ ksp {
 
 dependencies {
     implementation(libs.foundation.layout)
-    val camerax_version = "1.6.1"
-    implementation("androidx.camera:camera-core:${camerax_version}")
-    implementation("androidx.camera:camera-camera2:${camerax_version}")
-    implementation("androidx.camera:camera-lifecycle:${camerax_version}")
-    implementation("androidx.camera:camera-video:${camerax_version}")
-    implementation("androidx.camera:camera-view:${camerax_version}")
-    implementation("androidx.camera:camera-mlkit-vision:${camerax_version}")
-    implementation("androidx.camera:camera-extensions:${camerax_version}")
+    implementation(libs.play.services.location)
+    // CameraX
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.video)
+    implementation(libs.camerax.view)
+    implementation(libs.camerax.mlkit)
+    implementation(libs.camerax.extensions)
     implementation("androidx.compose.material:material-icons-extended")
     // Core
     implementation(libs.core.ktx)
+    implementation(libs.exifinterface)
 
     // Activity
     implementation(libs.activity.compose)
@@ -98,11 +100,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
 
-    // CameraX
-    implementation(libs.camerax.core)
-    implementation(libs.camerax.camera2)
-    implementation(libs.camerax.lifecycle)
-    implementation(libs.camerax.view)
 
     // Background + Async
     implementation(libs.workmanager)

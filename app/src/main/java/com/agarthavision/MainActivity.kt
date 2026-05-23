@@ -11,13 +11,18 @@ import androidx.camera.core.ImageCapture
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import com.agarthavision.core.camera.CameraManager
+import com.agarthavision.domain.usecase.capture.CaptureSampleUseCase
 import com.agarthavision.ui.components.MicroscopyScreen
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var cameraManager: CameraManager
+    @Inject lateinit var captureSampleUseCase: CaptureSampleUseCase
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,12 +32,6 @@ class MainActivity : ComponentActivity() {
         setContent {
 
             AgarthaVisionTheme {
-
-                val context = LocalContext.current
-
-                val cameraManager = remember {
-                    CameraManager(context)
-                }
 
                 val permissionLauncher =
                     rememberLauncherForActivityResult(
@@ -46,7 +45,8 @@ class MainActivity : ComponentActivity() {
                 }
 
                 MicroscopyScreen(
-                    cameraManager = cameraManager
+                    cameraManager = cameraManager,
+                    captureSampleUseCase = captureSampleUseCase
                 )
             }
         }
