@@ -40,6 +40,18 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import com.komoui.themes.KomoTheme
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.rememberCoroutineScope
+import com.komoui.components.sooner.SonnerHost
+import kotlinx.coroutines.launch
+import java.io.File
+
 // Box + Canvas + Image — Capture screen and detection card.
 // Displays a raw microscopy frame; slot for DetectionOverlay drawn on top.
 // See docs/components.md §6.
@@ -89,55 +101,95 @@ fun MicroscopyViewport(
 @Composable
 fun MicroscopyScreen(
     cameraManager: CameraManager,
-    onCapture: (ImageCapture) -> Unit = {},
-    onCaptureClick: () -> Unit = {}
+    onCapture: (ImageCapture) -> Unit = {}
 ) {
+    val scope = rememberCoroutineScope()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var activeImageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    var latestCapture by remember { mutableStateOf<File?>(null) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(bottom = 24.dp)
-    ) {
-        Box(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(0.9f)
+                .fillMaxSize()
                 .padding(bottom = 24.dp)
         ) {
-            MicroscopyViewport(
-                cameraManager = cameraManager,
-                modifier = Modifier.fillMaxSize(),
-                onReady = onCapture
-            )
-        }
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-
-            // Left side spacer (or empty)
-            Spacer(modifier = Modifier.size(72.dp))
-
-            // Center shutter button
-            ShutterButton(
-                onClick = onCaptureClick
-            )
-
-            // Right side gallery button
-            IconButton(
-                onClick = { /* TODO: open gallery */ },
-                modifier = Modifier.padding(12.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(0.9f)
+                    .padding(bottom = 24.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.PhotoLibrary,
-                    contentDescription = "Gallery",
-                    modifier = Modifier.size(48.dp)
+                MicroscopyViewport(
+                    cameraManager = cameraManager,
+                    modifier = Modifier.fillMaxSize(),
+                    onReady = {
+                        activeImageCapture = it
+                        onCapture(it)
+                    }
                 )
             }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                // Left side spacer (or empty)
+                Spacer(modifier = Modifier.size(72.dp))
+
+                // Center shutter button
+                ShutterButton(
+                    onClick = {
+                        activeImageCapture?.let { capture ->
+                            scope.launch {
+                                try {
+                                    val file = cameraManager.captureImage(capture)
+                                    latestCapture = file
+                                    snackbarHostState.showSnackbar("Sample saved: ${file.name}")
+                                } catch (e: Exception) {
+                                    snackbarHostState.showSnackbar("Capture failed: ${e.localizedMessage}")
+                                }
+                            }
+                        }
+                    }
+                )
+
+                // Right side gallery/thumbnail button
+                IconButton(
+                    onClick = { /* TODO: open gallery */ },
+                    modifier = Modifier.size(72.dp)
+                ) {
+                    if (latestCapture != null) {
+                        AsyncImage(
+                            model = latestCapture,
+                            contentDescription = "Latest capture",
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, Color.White, CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PhotoLibrary,
+                            contentDescription = "Gallery",
+                            modifier = Modifier.size(48.dp),
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
         }
+
+        SonnerHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 96.dp)
+        )
     }
 }
