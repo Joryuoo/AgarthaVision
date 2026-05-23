@@ -27,12 +27,12 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 - [ ] Room database includes SampleEntity
 
 ### 1.5 Acceptance criteria
-- [ ] Camera preview works on device/emulator
+- [x] Camera preview works on device/emulator
 - [ ] Capture writes JPEG to internal storage
 - [ ] Room row created with status CAPTURED and full metadata
 - [ ] GPS coordinates populated or null on denial
 - [ ] Biological window chip counts down
-- [ ] Thumbnail updates after each capture
+- [x] Thumbnail updates after each capture
 
 ## Evidence From Codebase
 
