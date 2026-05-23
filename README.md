@@ -9,7 +9,7 @@ AgarthaVision is a mobile-based diagnostic support and surveillance platform for
 The system is designed as a decision-support and preprocessing tool. It does **not** replace the judgment of qualified medical personnel. Instead, it improves traceability, reduces manual scanning burden, and supports structured surveillance reporting.
 
 ## Members: 
-1. edita para tanan contributors (ikaw na ni ben)
+1. Ben Joseph V. Escolano
 2. Jhon Ryan D. Ledon
 3. Joseph Victor P. Novabos
 4. Josh Mark T. Piodos
