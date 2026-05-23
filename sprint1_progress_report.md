@@ -9,13 +9,13 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 ## Checklist
 
 ### 1.1 CameraX integration
-- [ ] core/camera/CameraManager.kt exists and binds preview
-- [ ] Image capture saves to app-internal storage
+- [x] core/camera/CameraManager.kt exists and binds preview
+- [x] Image capture saves to app-internal storage
 
 ### 1.2 Capture screen
-- [ ] CaptureScreen UI exists with MicroscopyViewport + overlays
-- [ ] Capture button saves snapshot and shows Sonner toast
-- [ ] Recent thumbnail renders from latest capture
+- [x] CaptureScreen UI exists with MicroscopyViewport + overlays
+- [x] Capture button saves snapshot and shows Sonner toast
+- [x] Recent thumbnail renders from latest capture
 
 ### 1.3 Metadata binding
 - [ ] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
