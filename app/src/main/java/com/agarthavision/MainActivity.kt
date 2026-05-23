@@ -1,47 +1,60 @@
 package com.agarthavision
 
+import android.Manifest
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.ImageCapture
+import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import com.agarthavision.core.camera.CameraManager
+import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         enableEdgeToEdge()
+
         setContent {
+
             AgarthaVisionTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    Greeting(
-                        name = "Android",
-                        modifier = Modifier.padding(innerPadding)
+
+                val context = LocalContext.current
+
+                val cameraManager = remember {
+                    CameraManager(context)
+                }
+
+                var imageCapture by remember {
+                    mutableStateOf<ImageCapture?>(null)
+                }
+
+                val permissionLauncher =
+                    rememberLauncherForActivityResult(
+                        contract = ActivityResultContracts.RequestPermission(),
+                    ) { _ -> }
+
+                LaunchedEffect(Unit) {
+                    permissionLauncher.launch(
+                        Manifest.permission.CAMERA
                     )
                 }
+
+                MicroscopyViewport(
+                    cameraManager = cameraManager,
+                    onReady = {
+                        imageCapture = it
+                    }
+                )
             }
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    AgarthaVisionTheme {
-        Greeting("Android")
     }
 }

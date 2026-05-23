@@ -1,58 +1,53 @@
 package com.agarthavision.ui.theme
 
-import android.app.Activity
-import android.os.Build
-import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import com.komoui.themes.KomoTheme
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+// Material3 color scheme derived from Clinical Pulse tokens.
+// Used by KomoTheme for Material3 components that live underneath komoui.
+// Keep these values in sync with AgarthaLightStyles above.
+private val AgarthaMaterialColorScheme = lightColorScheme(
+    primary             = ClinicalBlue,
+    onPrimary           = Ink,
+    primaryContainer    = DiagnosticCyanSoft,
+    onPrimaryContainer  = Ink,
+    secondary           = Paper,
+    onSecondary         = Ink,
+    secondaryContainer  = Paper,
+    onSecondaryContainer = Ink,
+    tertiary            = DiagnosticCyan,
+    onTertiary          = Ink,
+    tertiaryContainer   = DiagnosticCyanSoft,
+    onTertiaryContainer = Ink,
+    error               = AlertCoral,
+    onError             = Ink,
+    errorContainer      = AlertCoral.copy(alpha = 0.12f),
+    onErrorContainer    = AlertCoral,
+    background          = Bone,
+    onBackground        = Ink,
+    surface             = Bone,
+    onSurface           = Ink,
+    surfaceVariant      = Paper,
+    onSurfaceVariant    = Mute,
+    outline             = BorderInk,
+    outlineVariant      = BorderInk.copy(alpha = 0.5f),
+    scrim               = Ink.copy(alpha = 0.32f),
 )
 
-private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
-)
-
+// Root theme composable — wrap all screens inside this.
+// Dark mode is intentionally locked off: the Clinical Pulse moodboard is
+// designed for light backgrounds; chart contrast is calibrated accordingly.
 @Composable
-fun AgarthaVisionTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
-    }
-
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
+fun AgarthaVisionTheme(content: @Composable () -> Unit) {
+    KomoTheme(
+        isDarkTheme          = false,
+        komoLightColors      = AgarthaLightStyles,
+        komoDarkColors       = AgarthaLightStyles, // same palette — dark toggle stays on-brand
+        materialLightColors  = AgarthaMaterialColorScheme,
+        materialDarkColors   = AgarthaMaterialColorScheme,
+        komoRadius           = AgarthaRadius,
+        typography           = AgarthaTypography,
+        content              = content,
     )
 }
