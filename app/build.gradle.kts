@@ -47,13 +47,16 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+}
 
-    ksp {
-        arg("room.schemaLocation", "$projectDir/schemas")
-    }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
+    // Core
+    implementation(libs.core.ktx)
+
     // Activity
     implementation(libs.activity.compose)
 
@@ -64,6 +67,7 @@ dependencies {
     implementation(libs.compose.material3)
     implementation(libs.compose.tooling.preview)
     debugImplementation(libs.compose.tooling)
+    debugImplementation(libs.compose.test.manifest)
 
     // KomoUI
     implementation(libs.komoui)
@@ -110,5 +114,7 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.coroutines.test)
     androidTestImplementation(composeBom)
+    androidTestImplementation(libs.junit.ext)
+    androidTestImplementation(libs.espresso.core)
     androidTestImplementation(libs.compose.test)
 }

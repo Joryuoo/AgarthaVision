@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "stop" : "./gradlew --stop",
     "build": "./gradlew assembleDebug",
     "build:release": "./gradlew assembleRelease",
     "install:device": "./gradlew installDebug",
