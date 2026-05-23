@@ -22,15 +22,15 @@ Sprint 1 work is not started yet. The capture feature set (CameraX, Capture scre
 - [X] LocationProvider used for GPS data
 
 ### 1.4 Local persistence (Room)
-- [ ] SampleEntity exists with SDD fields
-- [ ] SampleDao exists with insert/query methods
-- [ ] Room database includes SampleEntity
+- [X] SampleEntity exists with SDD fields
+- [X] SampleDao exists with insert/query methods
+- [X] Room database includes SampleEntity
 
 ### 1.5 Acceptance criteria
 - [x] Camera preview works on device/emulator
-- [ ] Capture writes JPEG to internal storage
-- [ ] Room row created with status CAPTURED and full metadata
-- [ ] GPS coordinates populated or null on denial
+- [X] Capture writes JPEG to internal storage
+- [X] Room row created with status CAPTURED and full metadata
+- [X] GPS coordinates populated or null on denial
 - [ ] Biological window chip counts down
 - [x] Thumbnail updates after each capture
 

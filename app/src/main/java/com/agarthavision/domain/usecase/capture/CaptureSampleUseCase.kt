@@ -14,13 +14,15 @@ import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 
+import com.agarthavision.domain.repository.SampleRepository
 /**
  * Use case to capture a sample with full metadata binding.
  * See docs/03_MOBILE_APP_PLAN.md §1.3.
  */
 class CaptureSampleUseCase @Inject constructor(
     private val cameraManager: CameraManager,
-    private val locationProvider: LocationProvider
+    private val locationProvider: LocationProvider,
+    private val sampleRepository: SampleRepository,
 ) {
     suspend operator fun invoke(imageCapture: ImageCapture): Result<Sample> = try {
         // 1. Capture the image file
@@ -46,8 +48,9 @@ class CaptureSampleUseCase @Inject constructor(
         // 3. Embed metadata into the image file
         embedMetadata(file, sample)
 
-        // TODO: Save sample to repository (Database)
-        Log.d("Sample: ", sample.toString())
+        sampleRepository.saveSample(sample)
+        Log.d("CaptureSampleUseCase", "Sample saved locally: ${sample.id}")
+        Result.success(sample)
 
         Result.success(sample)
     } catch (e: Exception) {

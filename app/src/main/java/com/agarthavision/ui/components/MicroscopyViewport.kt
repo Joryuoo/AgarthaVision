@@ -52,6 +52,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import com.komoui.components.sooner.SonnerHost
 import kotlinx.coroutines.launch
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+
 // Box + Canvas + Image — Capture screen and detection card.
 // Displays a raw microscopy frame; slot for DetectionOverlay drawn on top.
 // See docs/components.md §6.
@@ -109,17 +115,48 @@ fun MicroscopyScreen(
     var activeImageCapture by remember { mutableStateOf<ImageCapture?>(null) }
     var latestCapture by remember { mutableStateOf<File?>(null) }
 
+    val context = LocalContext.current
+
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+    ) { permissions ->
+        val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
+        val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+
+        scope.launch {
+            if (fineGranted || coarseGranted) {
+                snackbarHostState.showSnackbar("Location permission granted")
+            } else {
+                snackbarHostState.showSnackbar("Location denied. Sample will be saved without GPS.")
+            }
+        }
+    }
+
+    fun hasLocationPermission(): Boolean {
+        val fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+
+        val coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED
+
+        return fineGranted || coarseGranted
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(bottom = 24.dp)
+                .padding(bottom = 12.dp)
         ) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(0.9f)
-                    .padding(bottom = 24.dp)
+                    .padding(bottom = 12.dp)
             ) {
                 MicroscopyViewport(
                     cameraManager = cameraManager,
@@ -134,7 +171,7 @@ fun MicroscopyScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 24.dp),
+                    .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -145,6 +182,15 @@ fun MicroscopyScreen(
                 // Center shutter button
                 ShutterButton(
                     onClick = {
+                        if (!hasLocationPermission()) {
+                            locationPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                                ),
+                            )
+                        }
+
                         activeImageCapture?.let { capture ->
                             scope.launch {
                                 try {
