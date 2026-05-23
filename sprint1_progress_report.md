@@ -22,14 +22,14 @@ Date: 2026-05-23
 - [X] LocationProvider used for GPS data
 
 ### 1.4 Local persistence (Room)
-- [ ] SampleEntity exists with SDD fields
-- [ ] SampleDao exists with insert/query methods
-- [ ] Room database includes SampleEntity
+- [X] SampleEntity exists with SDD fields
+- [X] SampleDao exists with insert/query methods
+- [X] Room database includes SampleEntity
 
 ### 1.5 Acceptance criteria
 - [x] Camera preview works on device/emulator
 - [x] Capture writes JPEG to internal storage
-- [ ] Room row created with status CAPTURED and full metadata
+- [X] Room row created with status CAPTURED and full metadata
 - [x] GPS coordinates populated or null on denial
 - [x] Biological window chip counts down
 - [x] Thumbnail updates after each capture
