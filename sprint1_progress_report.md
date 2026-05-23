@@ -13,13 +13,13 @@ Date: 2026-05-23
 - [x] Image capture saves to app-internal storage
 
 ### 1.2 Capture screen
-- [ ] CaptureScreen UI exists with MicroscopyViewport + overlays
-- [ ] Capture button saves snapshot and shows Sonner toast
-- [ ] Recent thumbnail renders from latest capture
+- [x] CaptureScreen UI exists with MicroscopyViewport + overlays
+- [x] Capture button saves snapshot and shows Sonner toast
+- [x] Recent thumbnail renders from latest capture
 
 ### 1.3 Metadata binding
-- [ ] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
-- [x] LocationProvider used for GPS data
+- [X] CaptureSampleUseCase binds UUID, timestamp, device ID, session ID, GPS
+- [X] LocationProvider used for GPS data
 
 ### 1.4 Local persistence (Room)
 - [ ] SampleEntity exists with SDD fields
@@ -32,7 +32,7 @@ Date: 2026-05-23
 - [ ] Room row created with status CAPTURED and full metadata
 - [x] GPS coordinates populated or null on denial
 - [x] Biological window chip counts down
-- [ ] Thumbnail updates after each capture
+- [x] Thumbnail updates after each capture
 
 ## Evidence From Codebase
 
