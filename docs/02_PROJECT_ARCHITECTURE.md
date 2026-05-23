@@ -82,34 +82,36 @@ com.agarthavision/
 ├── MainActivity.kt                      # Single-activity host
 │
 ├── core/                                # Shared utilities — no feature logic
-│   ├── di/                              # Hilt modules (AppModule, DatabaseModule, NetworkModule)
-│   ├── network/                         # Retrofit client, interceptors, API base
+│   ├── di/                              # Hilt modules (DatabaseModule, SupabaseModule, RoboflowModule, LocationModule)
+│   ├── camera/                          # CameraManager (CameraX ImageAnalysis wrapper)
 │   ├── database/                        # Room database class, migrations
-│   ├── sync/                            # SyncQueueManager, WorkManager workers
-│   ├── location/                        # LocationProvider wrapper
-│   ├── connectivity/                    # NetworkMonitor (ConnectivityManager wrapper)
+│   ├── location/                        # LocationProvider (Fused), DeviceIdProvider
+│   ├── session/                         # SessionManager (active recording session)
+│   ├── connectivity/                    # NetworkMonitor (Roboflow reachability)
 │   ├── datastore/                       # DataStore preferences wrapper
 │   └── util/                            # Extensions, formatters, UUID generator
 │
 ├── domain/                              # Pure Kotlin — domain models + use cases
-│   ├── model/                           # Domain data classes (Sample, Detection, EPGResult, Report, etc.)
-│   ├── repository/                      # Repository interfaces (contracts only)
+│   ├── model/                           # Domain data classes (Sample, Detection, Session, LocationResult)
+│   ├── repository/                      # Repository interfaces + LocationProvider contract
 │   └── usecase/                         # Use case classes grouped by feature
-│       ├── capture/                     # CaptureSampleUseCase, TransmitPayloadUseCase
-│       ├── inference/                   # FetchInferenceResultUseCase
-│       ├── validation/                  # ApproveSampleUseCase, EditDetectionUseCase, RejectFindingsUseCase
-│       └── reports/                     # GenerateSessionReportUseCase, FetchDetailedRecordsUseCase
+│       ├── auth/                        # SignInUseCase, SignOutUseCase
+│       ├── capture/                     # InferFrameUseCase, VerifySampleUseCase, RejectSampleUseCase
+│       └── records/                     # ListSessionsUseCase, ExportSessionUseCase
 │
-├── data/                                # Implementations — Room, Retrofit, mappers
+├── data/                                # Implementations — Room, Retrofit, Supabase, mappers
 │   ├── local/                           # Room entities, DAOs, type converters
-│   │   ├── entity/                      # SampleEntity, DetectionEntity, EPGEntity, etc.
-│   │   ├── dao/                         # SampleDao, DetectionDao, ValidationDao, etc.
+│   │   ├── entity/                      # SessionEntity, SampleEntity, DetectionEntity
+│   │   ├── dao/                         # SessionDao, SampleDao, DetectionDao
 │   │   └── mapper/                      # Entity ↔ Domain model mappers
-│   ├── remote/                          # Retrofit API definitions + DTOs
-│   │   ├── api/                         # InferenceApi, ReportApi, SyncApi
-│   │   ├── dto/                         # InferenceRequestDto, InferenceResultDto, etc.
-│   │   └── mapper/                      # DTO ↔ Domain model mappers
-│   └── repository/                      # Repository implementations (SampleRepositoryImpl, etc.)
+│   ├── remote/                          # Roboflow API + DTOs (Retrofit)
+│   │   ├── RoboflowApi.kt
+│   │   ├── dto/                         # RoboflowInferenceDto
+│   │   └── mapper/                      # DTO ↔ Domain mappers
+│   ├── supabase/                        # Supabase client wrapper + sync logic
+│   │   ├── SupabaseClientProvider.kt
+│   │   └── SyncSampleUseCase.kt
+│   └── repository/                      # SampleRepositoryImpl, SessionRepositoryImpl, FlaggedFrameStore
 │
 ├── ui/                                  # Presentation layer — Compose screens + ViewModels
 │   ├── theme/                           # AgarthaLightColors, AgarthaRadius, AgarthaTypography, KomoUI setup
@@ -117,29 +119,29 @@ com.agarthavision/
 │   ├── components/                      # Custom composables (not in KomoUI)
 │   │   ├── MicroscopyViewport.kt
 │   │   ├── DetectionOverlay.kt
-│   │   ├── EpgReadout.kt
-│   │   ├── BiologicalWindowChip.kt
-│   │   ├── OfflineQueueBadge.kt
+│   │   ├── VerificationSheet.kt
 │   │   ├── BottomNavBar.kt
-│   │   ├── GeoMapMarker.kt
-│   │   └── AuditTimeline.kt
+│   │   └── DetectionToast.kt
+│   ├── auth/                            # LoginScreen, LoginViewModel
 │   ├── capture/                         # CaptureScreen, CaptureViewModel
-│   ├── queue/                           # QueueScreen, QueueViewModel
-│   ├── validate/                        # ValidateScreen, ValidateViewModel
-│   ├── reports/                         # ReportsScreen, ReportsViewModel, AdminDashboard
+│   ├── records/                         # RecordsScreen, SessionDetailScreen, SampleDetailScreen
 │   └── settings/                        # SettingsScreen, SettingsViewModel
 │
-└── worker/                              # WorkManager workers
-    ├── SyncWorker.kt                    # Upload queued samples to cloud
-    └── ReportGenerationWorker.kt        # Background PDF report generation
+└── worker/                              # WorkManager workers (Phase 2+; not used in Phase 1)
 ```
+
+> **Phase 1 (Supabase + Roboflow MVP) note:** the queue/validate/reports vertical
+> slices and the WorkManager workers are out of scope for the MVP. Inference is
+> synchronous per frame (Roboflow Hosted), and sync to Supabase is a one-shot
+> call at verify time — no background queue. See [03_MOBILE_APP_PLAN.md](03_MOBILE_APP_PLAN.md)
+> and [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md).
 
 ### Why This Structure
 
-- **Vertical slices** (`ui/capture/`, `ui/validate/`) keep each screen's ViewModel and composables together — easy to find.
+- **Vertical slices** (`ui/auth/`, `ui/capture/`, `ui/records/`) keep each screen's ViewModel and composables together — easy to find.
 - **Horizontal layers** (`domain/`, `data/`, `core/`) enforce dependency direction and make testing straightforward.
 - **`domain/` has zero Android imports** — pure Kotlin, unit-testable without Robolectric.
-- **Custom components** (`ui/components/`) are the 8 composables from the design system that KomoUI doesn't ship (see `05_DESIGN_SYSTEM_KOMOUI.md` §6).
+- **Custom components** (`ui/components/`) are the composables from the design system that KomoUI doesn't ship (see [05_DESIGN_SYSTEM_KOMOUI.md](05_DESIGN_SYSTEM_KOMOUI.md) §6).
 
 ---
 
@@ -150,7 +152,7 @@ references versions from here — never hard-code versions in `build.gradle.kts`
 
 ```toml
 [versions]
-kotlin = "2.2.10-RC"
+kotlin = "2.2.10"
 agp = "9.2.1"
 compose-bom = "2026.02.01"
 komoui = "0.3.0"
@@ -158,13 +160,17 @@ hilt = "2.59.2"
 room = "2.7.0"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
-camerax = "1.4.1"
-workmanager = "2.10.0"
+camerax = "1.6.1"
+workmanager = "2.10.0"      # Phase 2 only — not used in Phase 1
 datastore = "1.1.2"
 coroutines = "1.9.0"
 navigation = "2.8.5"
 lifecycle = "2.8.7"
 coil = "2.7.0"
+play-services-location = "21.3.0"
+supabase = "2.6.0"           # supabase-kt BOM
+ktor = "2.3.12"              # transitive dep of supabase-kt; pin explicitly
+mockito-kotlin = "5.4.0"
 ktlint-plugin = "12.1.2"
 detekt = "1.23.7"
 
@@ -219,8 +225,19 @@ datastore = { group = "androidx.datastore", name = "datastore-preferences", vers
 # Image loading
 coil = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
+# Location
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "play-services-location" }
+
+# Supabase (Phase 1)
+supabase-bom         = { group = "io.github.jan-tennert.supabase", name = "bom", version.ref = "supabase" }
+supabase-postgrest   = { group = "io.github.jan-tennert.supabase", name = "postgrest-kt" }
+supabase-storage     = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
+supabase-auth        = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
+ktor-client-android  = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
+
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }
+mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockito-kotlin" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 compose-test = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 
@@ -287,13 +304,19 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("Boolean", "USE_MOCK_API", "true")
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000\"")
+            buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<local dev anon key>\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("Boolean", "USE_MOCK_API", "false")
-            buildConfigField("String", "API_BASE_URL", "\"https://api.agarthavision.com\"")
+            buildConfigField("String", "SUPABASE_URL",       "\"https://<ref>.supabase.co\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<prod anon key>\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
         }
     }
 
@@ -329,11 +352,18 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Network
+    // Network (used by Roboflow client)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+
+    // Supabase (Phase 1)
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.storage)
+    implementation(libs.supabase.auth)
+    implementation(libs.ktor.client.android)
 
     // CameraX
     implementation(libs.camerax.core)
@@ -341,8 +371,10 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
 
-    // Background + Async
-    implementation(libs.workmanager)
+    // Location
+    implementation(libs.play.services.location)
+
+    // Async
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
 
@@ -389,84 +421,97 @@ object DatabaseModule {
         Room.databaseBuilder(ctx, AgarthaDatabase::class.java, "agarthavision.db")
             .build()
 
-    @Provides fun provideSampleDao(db: AgarthaDatabase) = db.sampleDao()
+    @Provides fun provideSessionDao(db: AgarthaDatabase)   = db.sessionDao()
+    @Provides fun provideSampleDao(db: AgarthaDatabase)    = db.sampleDao()
     @Provides fun provideDetectionDao(db: AgarthaDatabase) = db.detectionDao()
-    // ... one per DAO
 }
 
-// NetworkModule.kt
+// SupabaseModule.kt
 @Module
 @InstallIn(SingletonComponent::class)
-object NetworkModule {
+object SupabaseModule {
+    @Provides @Singleton
+    fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
+        supabaseUrl = BuildConfig.SUPABASE_URL,
+        supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
+    ) {
+        install(Auth)
+        install(Postgrest)
+        install(Storage)
+    }
+}
+
+// RoboflowModule.kt
+@Module
+@InstallIn(SingletonComponent::class)
+object RoboflowModule {
     @Provides @Singleton
     fun provideOkHttp(): OkHttpClient = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply { level = BODY })
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)   // inference can take time
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)   // per-frame inference budget
         .build()
 
     @Provides @Singleton
-    fun provideRetrofit(client: OkHttpClient): Retrofit = Retrofit.Builder()
-        .baseUrl(BuildConfig.API_BASE_URL)
+    fun provideRoboflowApi(client: OkHttpClient): RoboflowApi = Retrofit.Builder()
+        .baseUrl("https://detect.roboflow.com/")
         .client(client)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
-
-    @Provides fun provideInferenceApi(retrofit: Retrofit): InferenceApi =
-        retrofit.create(InferenceApi::class.java)
+        .create(RoboflowApi::class.java)
 }
 ```
 
 ---
 
-## 8. State Machine — Sample Transaction States
+## 8. State Machine — Sample Lifecycle (Phase 1)
 
-The SDD defines a strict state machine. Encode it as a sealed class:
+Phase 1's continuous-capture model collapses the original SDD state machine into a
+much smaller set. Only states that result in a Room row are listed; `CANDIDATE`
+(pre-inference) and `FLAGGED` (pre-verify, in-memory only) are transient and never
+persisted.
 
 ```kotlin
 // domain/model/SampleStatus.kt
 enum class SampleStatus(val value: String) {
-    CAPTURE_STARTED("capture_started"),
-    CAPTURED("captured"),
-    CAPTURE_FAILED("capture_failed"),
-    CAPTURE_INVALID("capture_invalid"),
-    PAYLOAD_PACKAGED("payload_packaged"),
-    QUEUED_FOR_UPLOAD("queued_for_upload"),
-    UPLOADED("uploaded"),
-    PROCESSING("processing"),
-    PROCESSED("processed"),
-    INFERENCE_FAILED("inference_failed"),
-    PENDING_VALIDATION("pending_validation"),
-    VALIDATED("validated"),
-    FINDINGS_REJECTED("findings_rejected"),
-    UNUSABLE("unusable"),
-    REPORT_QUEUED("report_queued"),
-    REPORT_GENERATED("report_generated"),
-    REPORT_FAILED("report_failed"),
-    QUEUED_FOR_SYNC("queued_for_sync"),
-    SYNCED("synced");
+    VERIFIED("verified"),         // user accepted the detection; row written to Room
+    SYNCED("synced"),             // also uploaded to Supabase
+    SYNC_FAILED("sync_failed"),   // upload failed; retry on next session start
 }
 ```
 
-Guard transitions in the repository layer — never allow an invalid state jump.
+Transitions:
+
+```
+FLAGGED (in-memory) → user verifies → VERIFIED  → upload → SYNCED
+                                              ╰── upload fails → SYNC_FAILED
+FLAGGED (in-memory) → user rejects → discarded (no row)
+```
+
+Guard transitions in the repository layer. The Phase 2 SDD-aligned model (with
+`CAPTURE_FAILED`, `INFERENCE_FAILED`, `REPORT_QUEUED`, etc.) is documented in
+[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) §Phase 2 schema.
 
 ---
 
-## 9. Navigation Graph
+## 9. Navigation Graph (Phase 1)
 
 ```kotlin
 // ui/navigation/AgarthaNavGraph.kt
 sealed class Screen(val route: String) {
-    data object Capture    : Screen("capture")
-    data object Queue      : Screen("queue")
-    data object Validate   : Screen("validate/{sampleId}") {
-        fun createRoute(sampleId: String) = "validate/$sampleId"
+    data object Login    : Screen("login")
+    data object Capture  : Screen("capture")
+    data object Records  : Screen("records")
+    data object SessionDetail : Screen("records/session/{sessionId}") {
+        fun createRoute(sessionId: String) = "records/session/$sessionId"
     }
-    data object Reports    : Screen("reports")
-    data object Admin      : Screen("admin")
-    data object Settings   : Screen("settings")
+    data object SampleDetail  : Screen("records/sample/{sampleId}") {
+        fun createRoute(sampleId: String) = "records/sample/$sampleId"
+    }
+    data object Settings : Screen("settings")
 }
 ```
 
-Bottom navigation on phones: Capture · Queue · Validate · Reports · Settings.
-Sidebar on tablets (if supported later).
+Bottom navigation on phones (visible after login): **Capture · Records · Settings**.
+Login is full-screen and has no bottom nav. The Phase 2 sprint plan adds
+Validate / Reports / Admin as separate destinations.

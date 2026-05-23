@@ -78,6 +78,51 @@ git config user.name   # Should show your name
 git config user.email  # Should show your email
 ```
 
+#### Supabase CLI
+
+Required to run the local Supabase stack (Postgres + Auth + Storage) for development.
+See [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §8.
+
+```bash
+# macOS
+brew install supabase/tap/supabase
+
+# Linux
+curl -fsSL https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz \
+  | tar -xz -C /usr/local/bin supabase
+
+# Windows
+scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+scoop install supabase
+```
+
+Verify: `supabase --version` should print 1.x or higher.
+
+Local development also requires Docker (Supabase CLI spins up Postgres + Auth + Storage as containers):
+
+```bash
+# macOS
+brew install --cask docker
+
+# Linux
+# follow https://docs.docker.com/engine/install/
+
+# Windows
+winget install Docker.DockerDesktop
+```
+
+#### Roboflow Account
+
+Sign up at [roboflow.com](https://roboflow.com) and create a **Public** workspace
+(free, unlimited inference, model is publicly viewable). Per
+[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md), Phase 1 MVP accepts the
+model-visibility trade-off in exchange for unmetered free inference.
+
+From the workspace settings, collect:
+- API Key (under Settings → API Keys)
+- Project slug (URL path: `roboflow.com/{workspace}/{project_slug}`)
+- Model version number (visible on the model's Versions page)
+
 ---
 
 ### A.2 Create the Android Project
@@ -108,12 +153,16 @@ clicking ▶ and confirming it runs on an emulator or device.
 Android Studio generates a `gradle/libs.versions.toml` by default. Replace
 its contents entirely with the project's version catalog.
 
+The authoritative version catalog lives in [02_PROJECT_ARCHITECTURE.md §4](02_PROJECT_ARCHITECTURE.md).
+The block below is a snapshot at MVP time — keep them in sync; if they drift, the
+architecture doc wins.
+
 Open `gradle/libs.versions.toml` and replace with:
 
 ```toml
 [versions]
-kotlin = "2.2.10-RC"
-agp = "8.7.0"
+kotlin = "2.2.10"
+agp = "9.2.1"
 compose-bom = "2025.05.00"
 komoui = "0.3.0"
 hilt = "2.51.1"
@@ -256,13 +305,19 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("Boolean", "USE_MOCK_API", "true")
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000\"")
+            buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"${project.findProperty("ROBOFLOW_API_KEY") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"${project.findProperty("ROBOFLOW_PROJECT") ?: ""}\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "${project.findProperty("ROBOFLOW_VERSION") ?: 1}")
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("Boolean", "USE_MOCK_API", "false")
-            buildConfigField("String", "API_BASE_URL", "\"https://api.agarthavision.com\"")
+            buildConfigField("String", "SUPABASE_URL",       "\"${project.findProperty("SUPABASE_URL_PROD") ?: ""}\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"${project.findProperty("ROBOFLOW_API_KEY") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"${project.findProperty("ROBOFLOW_PROJECT") ?: ""}\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "${project.findProperty("ROBOFLOW_VERSION") ?: 1}")
         }
     }
 
@@ -664,7 +719,30 @@ Then in GitHub settings:
 
 ---
 
-### A.15 Create an Emulator (optional)
+### A.15 Initialize the Supabase Project
+
+From the project root:
+
+```bash
+supabase init           # Generates the supabase/ directory with config.toml
+supabase start          # Spins up local Postgres + Auth + Storage on Docker
+supabase status         # Prints local URLs + anon key — copy the anon key into local.properties
+```
+
+Then create the first migration with the Phase 1 schema (see [04_CLOUD_BACKEND_PLAN.md §4.1](04_CLOUD_BACKEND_PLAN.md)):
+
+```bash
+supabase migration new init
+# Open supabase/migrations/<timestamp>_init.sql and paste the schema from 04_CLOUD_BACKEND_PLAN.md §4.1
+supabase db reset       # Re-applies all migrations to the local database
+```
+
+For production: create a Supabase project at [supabase.com](https://supabase.com),
+then `supabase link --project-ref <ref>` and `supabase db push`.
+
+---
+
+### A.16 Create an Emulator (optional)
 
 Through the terminal:
 
@@ -801,7 +879,45 @@ If any fail:
 
 ---
 
-### B.6 Recommended IDE Plugins (Optional)
+### B.6 Secrets and Environment Variables
+
+The app reads Supabase + Roboflow credentials from `BuildConfig` fields populated
+at build time. Secrets must never be committed — they live in `local.properties`
+(gitignored).
+
+Create or edit `local.properties` in the project root:
+
+```properties
+# Local development (Supabase CLI defaults)
+SUPABASE_ANON_KEY_DEV=<copy from supabase status output after `supabase start`>
+
+# Production (Supabase dashboard → Settings → API)
+SUPABASE_URL_PROD=https://<project-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=<prod anon key>
+
+# Roboflow (workspace settings → API Keys)
+ROBOFLOW_API_KEY=<api key>
+ROBOFLOW_PROJECT=<project-slug>
+ROBOFLOW_VERSION=1
+```
+
+Gradle's `project.findProperty(...)` reads these and feeds them into `BuildConfig`.
+If a property is missing, the field defaults to an empty string and the app's
+network calls will fail with a clear "Missing API key" error at runtime — fail
+loudly, not silently.
+
+`local.properties` is already in `.gitignore`. Confirm with:
+
+```bash
+grep "local.properties" .gitignore
+```
+
+For CI builds, pass the same properties via `-PSUPABASE_ANON_KEY_PROD=...` on the
+Gradle command line. Do **not** commit a `local.properties.example` with real keys.
+
+---
+
+### B.7 Recommended IDE Plugins (Optional)
 
 | Plugin / Extension        | Available In       | Why                                         |
 |---------------------------|--------------------|---------------------------------------------|

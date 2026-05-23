@@ -1,24 +1,27 @@
-# AgarthaVision · Mobile App Implementation Plan
+# AgarthaVision · Mobile App Implementation Plan (Phase 1 MVP)
 
-> Feature-by-feature breakdown of the Android application across all four MVP modules.
-> Each feature includes its SDD reference, key components, implementation steps, and acceptance criteria.
+> Sprint-by-sprint plan for the Android application. **Phase 1 MVP** ships
+> continuous-video capture with Roboflow inference and Supabase sync.
+> Phase 2 (self-hosted inference, DOH-formatted reports) is out of scope.
+>
+> Authority: [AGENTS.md](../AGENTS.md) and [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md)
+> govern the architectural choices in this doc. Cloud architecture in
+> [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md).
 
 ---
 
-## Sprint Roadmap (suggested)
+## Sprint Roadmap
 
-The implementation is ordered by dependency: you cannot validate a sample that hasn't
-been captured, and you cannot generate a report from unvalidated data.
+The Phase 1 MVP collapses the original 6-sprint plan into 3 working sprints + Sprint 0
+scaffold. Validation is no longer a separate sprint — it's the verification step inside
+the capture flow.
 
-| Sprint | Duration | Focus                                      | Modules  |
-|--------|----------|--------------------------------------------|----------|
-| 0      | 1 week   | Project scaffold, CI, theming, navigation  | Core     |
-| 1      | 2 weeks  | Live image acquisition + local persistence | 1A.1     |
-| 2      | 2 weeks  | Payload transmission + sync queue          | 1A.2     |
-| 3      | 2 weeks  | Diagnostic result rendering                | 3.1      |
-| 4      | 2 weeks  | HITL validation (approve/edit/reject)      | 3.2      |
-| 5      | 2 weeks  | Session reports + admin dashboard          | 4        |
-| 6      | 1 week   | Polish, integration testing, bug sweep     | All      |
+| Sprint | Duration | Focus                                                              |
+|--------|----------|--------------------------------------------------------------------|
+| 0      | 1 week   | Project scaffold, CI, theming, navigation, Supabase + Roboflow keys|
+| 1      | 3 weeks  | Auth + continuous capture + Roboflow inference + verify + sync      |
+| 2      | 2 weeks  | Records browser + session reports + CSV export                      |
+| 3      | 1 week   | Polish, integration testing, bug sweep, demo prep                   |
 
 ---
 
@@ -26,522 +29,549 @@ been captured, and you cannot generate a report from unvalidated data.
 
 ### 0.1 Project Initialization
 
-1. Clone the repo and set up the Gradle structure from `02_PROJECT_ARCHITECTURE.md`.
+1. Clone the repo and set up the Gradle structure from [02_PROJECT_ARCHITECTURE.md](02_PROJECT_ARCHITECTURE.md).
 2. Add all dependencies via the version catalog.
 3. Verify `bun run build` succeeds with an empty `MainActivity`.
 
 ### 0.2 KomoUI Theme Integration
 
-1. Create `ui/theme/AgarthaLightColors.kt` (from `05_DESIGN_SYSTEM_KOMOUI.md` §2).
-2. Create `ui/theme/AgarthaRadius.kt` (from §4).
-3. Create `ui/theme/AgarthaTypography.kt` — load Geist and JetBrains Mono via Google Fonts provider.
-4. Create `ui/theme/AgarthaVisionTheme.kt` that wraps `KomoTheme`:
+1. Create `ui/theme/Color.kt` (from [05_DESIGN_SYSTEM_KOMOUI.md](05_DESIGN_SYSTEM_KOMOUI.md) §2) containing `AgarthaLightStyles : KomoStyles`.
+2. Create `ui/theme/Radius.kt` (§4).
+3. Create `ui/theme/Type.kt` — bundle Geist and JetBrains Mono TTFs in `res/font/`.
+4. Create `ui/theme/Theme.kt` exposing `AgarthaVisionTheme`:
 
 ```kotlin
 @Composable
 fun AgarthaVisionTheme(content: @Composable () -> Unit) {
     KomoTheme(
-        shadcnLightColors = AgarthaLightColors,
-        shadcnRadius = AgarthaRadius,
-    ) {
-        MaterialTheme(typography = AgarthaTypography) {
-            content()
-        }
-    }
+        isDarkTheme         = false,
+        komoLightColors     = AgarthaLightStyles,
+        komoDarkColors      = AgarthaLightStyles,
+        materialLightColors = AgarthaMaterialColorScheme,
+        materialDarkColors  = AgarthaMaterialColorScheme,
+        komoRadius          = AgarthaRadius,
+        typography          = AgarthaTypography,
+        content             = content,
+    )
 }
 ```
 
 5. Wrap `MainActivity.setContent` with `AgarthaVisionTheme`.
 
-### 0.3 Navigation Shell
+### 0.3 Supabase + Roboflow Configuration
 
-1. Create `ui/navigation/AgarthaNavGraph.kt` with all `Screen` routes.
-2. Create `ui/components/BottomNavBar.kt` — the phone navigation bar.
-3. Wire up empty placeholder screens for Capture, Queue, Validate, Reports, Settings.
-4. Verify: tapping each bottom nav item navigates to the correct placeholder.
+1. Create a Supabase project (see [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §8).
+2. Create a Roboflow Public workspace and import the egg-detection model.
+3. Add `BuildConfig` fields in `app/build.gradle.kts`:
 
-### 0.4 Room Database Shell
+```kotlin
+buildTypes {
+    debug {
+        buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<local dev anon key>\"")
+        buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
+        buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
+        buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+    }
+    release {
+        buildConfigField("String", "SUPABASE_URL",       "\"https://<ref>.supabase.co\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<prod anon key>\"")
+        buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
+        buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
+        buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+    }
+}
+```
 
-1. Create `core/database/AgarthaDatabase.kt` with `@Database` annotation listing all 11 entities from the SDD ERD.
-2. Create stub entity classes in `data/local/entity/` (fields match the SDD schema exactly).
-3. Create stub DAO interfaces in `data/local/dao/`.
-4. Run `bun run build` to verify Room compiles the schema.
+Real secrets live outside the repo — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONMENT_SETUP.md) §B.7.
 
-### 0.5 Hilt Setup
+### 0.4 Navigation Shell
+
+1. Create `ui/navigation/AgarthaNavGraph.kt` with route definitions.
+2. Wire up a `NavHost` in `MainActivity` with placeholder routes: `Login`, `Capture`, `Records`, `Settings`.
+3. Phone navigation: bottom nav bar (Capture · Records · Settings) — only visible after login.
+
+### 0.5 Room Database Shell
+
+1. Create `core/database/AgarthaDatabase.kt` with `@Database(entities = [SampleEntity::class, DetectionEntity::class, SessionEntity::class], version = 1, exportSchema = true)`.
+2. Create the three entity stubs in `data/local/entity/` with field shells matching §5 of this doc.
+3. Create stub DAOs in `data/local/dao/`.
+4. Run `bun run build` to verify Room compiles + schema exports to `app/schemas/`.
+
+### 0.6 Hilt Setup
 
 1. Create `AgarthaVisionApp.kt` with `@HiltAndroidApp`.
-2. Create `DatabaseModule`, `NetworkModule` in `core/di/`.
+2. Create `DatabaseModule` and `SupabaseModule` in `core/di/`.
 3. Annotate `MainActivity` with `@AndroidEntryPoint`.
 
 ### Acceptance Criteria — Sprint 0
 
-- App launches on device/emulator showing the bottom nav with 5 tabs.
-- Tapping each tab shows a placeholder screen.
+- App launches and shows the Login screen placeholder.
+- Supabase + Roboflow env vars are wired (debug build can `println(BuildConfig.SUPABASE_URL)` without crash).
 - `bun run build` and `bun run lint` pass.
-- Commit messages pass commitlint.
+- Room schema `1.json` exists in `app/schemas/`.
 
 ---
 
-## Sprint 1 — Module 1A.1: Live Image Acquisition
+## Sprint 1 — Auth + Continuous Capture + Inference + Verify + Sync
 
-> SDD Reference: Module 1, Section 1.1
+> The core MVP loop. A medtech logs in, starts a recording session, frames flow to
+> Roboflow at 1 fps every 2 seconds, detections surface as Sonner toasts, the medtech
+> taps to verify, verified samples sync to Supabase.
 
 ### Key Deliverables
 
-- `CaptureScreen` — full-screen camera preview with microscopy grid overlay
-- `CaptureViewModel` — manages capture state
-- `CaptureSampleUseCase` — orchestrates metadata binding + local save
-- Room persistence for `SAMPLES` entity
+- `LoginScreen` + `LoginViewModel` (Supabase Auth)
+- `CaptureScreen` + `CaptureViewModel` (continuous-frame `ImageAnalysis`)
+- `VerificationSheet` + `VerificationViewModel`
+- `RoboflowClient` (Retrofit + OkHttp)
+- `SupabaseSyncManager`
+- Room entities: `SampleEntity`, `DetectionEntity`, `SessionEntity`
 
-### Implementation Steps
+### 1.0 Login Screen
 
-**1.1 CameraX Integration**
+First screen after splash. Email + password.
 
-Create `core/camera/CameraManager.kt`:
+| Field        | Source                                                |
+|--------------|-------------------------------------------------------|
+| Email        | `TextField`, validates with simple regex              |
+| Password     | `TextField` with `KeyboardType.Password`              |
+| Submit       | `Button(lg, primary)` — "Log in"                      |
+
+Behavior:
+- On submit, `LoginViewModel` calls `client.auth.signInWith(Email)`.
+- On success: persist session (handled by `supabase-kt`), navigate to `Capture`.
+- On failure: `Sonner` with the error message.
+- On cold start with a valid persisted session: skip Login, go straight to `Capture`.
+
+There is no sign-up flow in MVP. Accounts are provisioned manually in the Supabase dashboard by an admin. Document this in [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §6.
+
+### 1.1 Session Lifecycle
+
+A `SessionManager` (`@Singleton`, app-scoped) tracks the active recording session:
 
 ```kotlin
+@Singleton
+class SessionManager @Inject constructor(
+    private val supabase: SupabaseClient,
+    private val sessionDao: SessionDao,
+    private val deviceIdProvider: DeviceIdProvider,
+) {
+    private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
+    val state: StateFlow<SessionState> = _state.asStateFlow()
+
+    suspend fun startSession(): SessionEntity { /* ... */ }
+    suspend fun stopSession()                  { /* ... */ }
+}
+
+sealed interface SessionState {
+    data object Idle : SessionState
+    data class Recording(val session: SessionEntity, val startedAt: Instant) : SessionState
+}
+```
+
+`startSession()`:
+1. Generate UUID for `session_id`.
+2. Insert `SessionEntity` locally with `started_at = Instant.now()`.
+3. Insert the same row into Supabase `sessions` table via `supabase-kt`.
+4. Transition state to `Recording`.
+
+`stopSession()`: set `ended_at`, update locally + remotely.
+
+### 1.2 CameraX Integration
+
+`core/camera/CameraManager.kt` exposes a single use case: bind preview + start frame analysis.
+
+```kotlin
+@Singleton
 class CameraManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private var cameraProvider: ProcessCameraProvider? = null
-
-    suspend fun bindPreview(
+    suspend fun bindAnalysis(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
-    ): ImageCapture { /* ... */ }
+        analyzer: ImageAnalysis.Analyzer,
+    ): Camera {
+        val provider = ProcessCameraProvider.getInstance(context).await()
 
-    suspend fun captureImage(imageCapture: ImageCapture): File { /* ... */ }
+        val preview = Preview.Builder().build().apply {
+            surfaceProvider = previewView.surfaceProvider
+        }
+
+        val imageAnalysis = ImageAnalysis.Builder()
+            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+            .setTargetResolution(Size(640, 640))      // matches Roboflow input
+            .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+            .build()
+            .apply {
+                setAnalyzer(Dispatchers.IO.asExecutor(), analyzer)
+            }
+
+        provider.unbindAll()
+        return provider.bindToLifecycle(
+            lifecycleOwner,
+            CameraSelector.DEFAULT_BACK_CAMERA,
+            preview,
+            imageAnalysis,
+        )
+    }
 }
 ```
 
-- Use `ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY`.
-- Save to app-internal storage: `context.filesDir/captures/{uuid}.jpg`.
+Note: this is `ImageAnalysis`, **not** `ImageCapture`. There is no shutter button in the MVP — the capture is continuous while a session is recording.
 
-**1.2 CaptureScreen Composable**
+### 1.3 Frame Sampling
 
-Components used (from design system):
-- `MicroscopyViewport` (custom) — wraps `AndroidView(PreviewView)` with grid overlay
-- `Button (lg, primary)` — Capture trigger (pill, thumb-reachable at bottom)
-- `Badge` — LIVE indicator + magnification label
-- `BiologicalWindowChip` (custom) — countdown timer in app bar
-- `Slider` — manual focus assist (if device supports `CONTROL_AF_MODE_OFF`)
-- `Sonner` — toast on "Snapshot saved"
-- `Drawer` — capture options (exposure, focal step)
-
-Layout:
-```
-┌────────────────────────────┐
-│  App bar: BioWindowChip    │
-├────────────────────────────┤
-│                            │
-│   MicroscopyViewport       │
-│   (80% of screen)          │
-│   + Grid overlay           │
-│   + LIVE badge             │
-│                            │
-├────────────────────────────┤
-│  Recent thumbnail | [  ●  ]│  ← Capture button
-│                   | Start  │
-└────────────────────────────┘
-```
-
-**1.3 Metadata Binding**
-
-On capture, the `CaptureSampleUseCase` collects and binds:
-
-| Field         | Source                                   |
-|---------------|------------------------------------------|
-| `sample_id`   | `UUID.randomUUID().toString()`           |
-| `timestamp`   | `Instant.now()`                          |
-| `device_id`   | `Settings.Secure.ANDROID_ID`             |
-| `session_id`  | Generated once per app session           |
-| `gps_lat/lng` | `LocationProvider` (fused location)      |
-| `gps_accuracy`| From location result                     |
-| `image_path`  | Local file path                          |
-| `status`      | `SampleStatus.CAPTURED`                  |
-
-**1.4 Local Persistence**
-
-Insert a `SampleEntity` into Room with status `CAPTURED`. The image file is stored on disk;
-the entity only holds the file path.
-
-**1.5 Recent Capture Thumbnail**
-
-Query the most recent sample from Room and display its thumbnail in the capture screen corner.
-
-### Acceptance Criteria — Sprint 1
-
-- Camera preview fills the viewport on a real device.
-- Pressing Capture saves a JPEG to internal storage.
-- A new row appears in the Room database with all metadata fields populated.
-- GPS coordinates are populated (or gracefully null if location permission is denied).
-- The biological window chip counts down from 60 minutes.
-- The recent-capture thumbnail updates after each capture.
-
----
-
-## Sprint 2 — Module 1A.2: Image Payload Transmission
-
-> SDD Reference: Module 1, Section 1.2
-
-### Key Deliverables
-
-- `TransmitPayloadUseCase` — packages and sends the image to the cloud
-- `SyncQueueManager` — offline queue with retry
-- `SyncWorker` (WorkManager) — background upload
-- Payload Processing Status Screen
-
-### Implementation Steps
-
-**2.1 Payload Packaging**
-
-Create `data/remote/dto/PayloadDto.kt`:
+A `FrameSampler` is the `ImageAnalysis.Analyzer` implementation. It enforces the 1-frame-per-2-seconds throttle and dispatches sampled frames to `InferFrameUseCase`.
 
 ```kotlin
-data class PayloadDto(
-    val sampleId: String,
-    val sessionId: String,
-    val deviceId: String,
-    val timestamp: String,       // ISO 8601
-    val gpsLatitude: Double?,
-    val gpsLongitude: Double?,
-    val gpsAccuracy: Float?,
-    val imageBase64: String,     // or multipart — see API contract
-)
-```
+class FrameSampler @Inject constructor(
+    private val inferFrameUseCase: InferFrameUseCase,
+    private val sessionManager: SessionManager,
+) : ImageAnalysis.Analyzer {
 
-**2.2 Retrofit API**
+    private val intervalMs = 2_000L
+    @Volatile private var lastSentAt = 0L
+    @Volatile private var inFlight = false
 
-```kotlin
-interface InferenceApi {
-    @Multipart
-    @POST("v1/inference/submit")
-    suspend fun submitPayload(
-        @Part image: MultipartBody.Part,
-        @Part("metadata") metadata: RequestBody,
-    ): Response<InferenceSubmitResponse>
+    override fun analyze(image: ImageProxy) {
+        val state = sessionManager.state.value
+        if (state !is SessionState.Recording) { image.close(); return }
 
-    @GET("v1/inference/{requestId}/status")
-    suspend fun getInferenceStatus(
-        @Path("requestId") requestId: String,
-    ): Response<InferenceStatusResponse>
+        val now = System.currentTimeMillis()
+        if (now - lastSentAt < intervalMs || inFlight) { image.close(); return }
 
-    @GET("v1/inference/{requestId}/result")
-    suspend fun getInferenceResult(
-        @Path("requestId") requestId: String,
-    ): Response<InferenceResultResponse>
+        lastSentAt = now
+        inFlight = true
+
+        val jpegBytes = image.toJpegBytes()    // extension fn; encodes from YUV/RGBA
+        image.close()                          // CRITICAL — backpressure relies on this
+
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                inferFrameUseCase(state.session.id, jpegBytes)
+            } finally {
+                inFlight = false
+            }
+        }
+    }
 }
 ```
 
-**2.3 Transmission Flow**
+`SAMPLE_INTERVAL_MS = 2_000L` is a single tunable constant. Do not bake it in elsewhere.
 
-```
-CAPTURED → payload_packaged → (network check)
-   ├─ online  → UPLOADED → PROCESSING → PROCESSED → PENDING_VALIDATION
-   └─ offline → QUEUED_FOR_UPLOAD → (SyncWorker retries later)
-```
+### 1.4 Inference Call
 
-**2.4 SyncQueueManager**
-
-- Uses Room `SYNC_QUEUE` entity to track pending uploads.
-- WorkManager `SyncWorker` runs with `NetworkType.CONNECTED` constraint.
-- Retry policy: exponential backoff, max 5 attempts.
-- Idempotency: each payload includes `sample_id` as the idempotency key.
-
-**2.5 Status Screen**
-
-After capture, show a processing status screen using:
-- `Spinner` — animated loading indicator
-- Text label — "Processing Sample" / "Analyzing Sample" / "Analysis Complete"
-- `Button (primary)` — "Check Result" (navigates to ValidateScreen)
-- `Button (secondary)` — "Back to Camera"
-
-Poll `getInferenceStatus()` every 3 seconds until status is `PROCESSED` or `FAILED`.
-
-### Acceptance Criteria — Sprint 2
-
-- With network: captured sample uploads, receives inference results, status transitions to `PENDING_VALIDATION`.
-- Without network: sample enters the sync queue; when network returns, `SyncWorker` uploads automatically.
-- Status screen shows real-time progress.
-- "Check Result" navigates to the validation screen with the correct sample ID.
-
----
-
-## Sprint 3 — Module 3.1: Diagnostic Result Rendering
-
-> SDD Reference: Module 2, Section 2.1
-
-### Key Deliverables
-
-- `ValidateScreen` — split view with annotated image and detection metadata
-- `ValidateViewModel` — loads and holds diagnostic result state
-- `FetchDiagnosticResultUseCase`
-- Custom composables: `DetectionOverlay`, `EpgReadout`
-
-### Implementation Steps
-
-**3.1 Data Retrieval**
-
-`FetchDiagnosticResultUseCase` fetches from Room:
-- Sample record (image path, metadata)
-- Inference result (model version, preprocessing, timing)
-- List of detections (bounding boxes, class labels, confidence scores)
-- EPG calculations (per species)
-
-Assembles into a `DiagnosticResultState` data class for the ViewModel.
-
-**3.2 ValidateScreen Layout**
-
-```
-┌─────────────────────────────────────┐
-│  Header: SMP-0429 · PENDING        │
-├─────────────────────────────────────┤
-│                                     │
-│  MicroscopyViewport                 │
-│  + DetectionOverlay (bounding boxes)│
-│                                     │
-├─────────────────────────────────────┤
-│  Tabs: Image | Detections |         │
-│        Metadata | Audit             │
-├─────────────────────────────────────┤
-│  ┌ Selected Detection Card ───────┐ │
-│  │ Trichuris trichiura            │ │
-│  │ Confidence: ████████░░ 0.91    │ │
-│  │ EPG: 1,284                     │ │
-│  └────────────────────────────────┘ │
-├─────────────────────────────────────┤
-│  [Validate]  [Edit]  [Reject]       │
-└─────────────────────────────────────┘
-```
-
-Components used:
-- `Card (elevated)` — detection panel
-- `MicroscopyViewport` + `DetectionOverlay` (custom)
-- `EpgReadout` (custom) — large numeral display
-- `Progress` — confidence bar (Clinical Blue fill)
-- `Tabs` — Image / Detections / Metadata / Audit
-- `Badge (outline)` — species taxonomy tag
-- `Popover` — "What is EPG?" inline explainer
-
-**3.3 Detection Overlay**
-
-`DetectionOverlay.kt` renders bounding boxes on a `Canvas` layer over the microscopy image:
-- Color-coded by species (using chart tokens)
-- Tappable — selecting a box updates the detail card below
-- Non-destructive — original image is never modified
-
-**3.4 EpgReadout**
-
-`EpgReadout.kt` — the hero numeral display from the moodboard:
-- Display size (56 sp, Geist 500, tabular figures)
-- Sub-label: "EPG · TRICHURIS TRICHIURA" in JetBrains Mono 10 sp uppercase
-
-### Acceptance Criteria — Sprint 3
-
-- Opening a processed sample renders the microscopy image with bounding box overlays.
-- Tapping a bounding box highlights it and updates the detail card.
-- EPG readout displays the calculated value in the correct typography.
-- Tabs switch between Image, Detections, Metadata, and Audit views.
-- Metadata tab shows detection ID, confidence, coordinates, model version, inference time.
-
----
-
-## Sprint 4 — Module 3.2: Human-in-the-Loop Validation
-
-> SDD Reference: Module 2, Section 2.2
-
-### Key Deliverables
-
-- Approve, Edit, and Reject workflows
-- `ApproveSampleUseCase`, `EditDetectionUseCase`, `RejectFindingsUseCase`
-- Detection reclassification and false positive marking
-- EPG recalculation after edits
-- Validation audit trail (append-only)
-
-### Implementation Steps
-
-**4.1 Approve Flow**
-
-1. Medtech taps "Validate" → confirmation dialog (`AlertDialog`).
-2. `ApproveSampleUseCase`:
-   - Sets sample status to `VALIDATED`.
-   - Creates a `ValidationRecord` with `action = APPROVED`.
-   - Triggers background report generation.
-
-**4.2 Edit Flow**
-
-1. Medtech taps a bounding box → taps "Edit".
-2. `Detection Edit Panel` (bottom sheet) offers:
-   - **Reclassify** — `RadioGroup` with Ascaris / Trichuris / Hookworm / Artifact.
-   - **Mark False Positive** — flags the detection, excludes from EPG.
-3. On confirm:
-   - `EditDetectionUseCase` updates the detection's `class_label`, preserves `original_class_label`.
-   - Creates a `ValidationRecord` with `action = RECLASSIFIED` or `action = FALSE_POSITIVE`.
-   - `ValidatedEPGRecalculationService` recomputes EPG using only non-flagged detections.
-   - UI updates the overlay color and EPG readout in real-time.
-
-**4.3 Reject Flow**
-
-1. Medtech taps "Reject" → `AlertDialog` with rejection reason selector:
-   - Excessive false positives
-   - Widespread misclassification
-   - Duplicate detections
-   - Unreliable detection quality
-   - Overall AI findings unusable
-2. `RejectFindingsUseCase`:
-   - Sets sample status to `FINDINGS_REJECTED`.
-   - Creates a `ValidationRecord` with rejection reason.
-   - Original image and metadata are preserved.
-
-**4.4 Audit Trail**
-
-Every validation action writes to `VALIDATION_RECORDS`:
+`InferFrameUseCase` is the only thing that talks to Roboflow.
 
 ```kotlin
-data class ValidationRecordEntity(
-    val id: String,           // UUID
-    val sampleId: String,
-    val detectionId: String?, // null for sample-level actions
-    val userId: String,
-    val actionType: String,   // APPROVED, RECLASSIFIED, FALSE_POSITIVE, REJECTED, UNUSABLE
-    val previousValue: String?,
-    val newValue: String?,
-    val rejectionReason: String?,
-    val remarks: String?,
-    val timestamp: Instant,
-)
+class InferFrameUseCase @Inject constructor(
+    private val roboflow: RoboflowApi,
+    private val flaggedFrameStore: FlaggedFrameStore,
+) {
+    suspend operator fun invoke(sessionId: UUID, jpegBytes: ByteArray) {
+        val response = runCatching {
+            roboflow.infer(
+                project = BuildConfig.ROBOFLOW_PROJECT,
+                version = BuildConfig.ROBOFLOW_VERSION,
+                apiKey  = BuildConfig.ROBOFLOW_API_KEY,
+                image   = jpegBytes.toRequestBody("image/jpeg".toMediaType()),
+            )
+        }.getOrElse {
+            // network error → bubble up; CaptureViewModel decides whether to stop the session
+            throw RoboflowConnectionException(it)
+        }
+
+        val predictions = response.body()?.predictions.orEmpty()
+        if (predictions.isEmpty()) return    // discard frame, no toast, no storage
+
+        flaggedFrameStore.add(
+            FlaggedFrame(
+                sessionId   = sessionId,
+                capturedAt  = Instant.now(),
+                jpegBytes   = jpegBytes,
+                predictions = predictions,
+            )
+        )
+    }
+}
 ```
 
-The Audit tab in `ValidateScreen` uses `AuditTimeline` (custom composable) to render this chronologically.
+`FlaggedFrameStore` is an in-memory `MutableStateFlow<List<FlaggedFrame>>` plus a write-through to a small disk cache (since frames are < 100 KB). It's *not* the Room database — flagged frames only become Room rows after the user verifies them.
 
-### Acceptance Criteria — Sprint 4
+### 1.5 Detection Toasts
 
-- Approving a sample transitions its status to `VALIDATED` and triggers report generation.
-- Reclassifying a detection updates the overlay color and recalculates EPG immediately.
-- Marking a detection as false positive removes it from the EPG calculation.
-- Rejecting requires a reason; original data is preserved.
-- The Audit tab shows a complete chronological history of all actions.
+The Capture screen observes `flaggedFrameStore.state` and shows a `Sonner` toast each time a new flagged frame arrives:
+
+```
+"egg detected · 0.91 · Ascaris lumbricoides   [view]"
+```
+
+Tapping "view" opens the `VerificationSheet` (bottom sheet, snap point 95%) at the most recent flagged frame.
+
+If multiple frames flag in quick succession, the toasts collapse — `Sonner` debounces 1.5 seconds. The badge counter on the verification chip in the app bar shows the unverified count.
+
+### 1.6 Verification Sheet
+
+`VerificationSheet` is a `Drawer` (bottom sheet) showing one flagged frame at a time:
+
+```
+┌────────────────────────────────────────┐
+│  Flagged Frame · 1 of 4                │
+├────────────────────────────────────────┤
+│                                        │
+│   [Frame with DetectionOverlay         │
+│    bounding boxes]                     │
+│                                        │
+├────────────────────────────────────────┤
+│  Detection: Ascaris lumbricoides       │
+│  Confidence: ████████░░ 0.91           │
+├────────────────────────────────────────┤
+│  [Reject]                  [Verify]    │
+└────────────────────────────────────────┘
+```
+
+Opening the sheet **stops the recording session** (per ADR-002 §UX). The capture window remains visible behind the sheet.
+
+| Action     | Effect                                                                       |
+|------------|------------------------------------------------------------------------------|
+| Verify     | Persist `SampleEntity` to Room (status `VERIFIED`), enqueue Supabase upload. |
+| Reject     | Discard the frame entirely (both in-memory and disk cache).                  |
+| Next / Prev| Navigate the flagged queue.                                                  |
+| Dismiss    | Sheet closes; flagged frames remain pending; session stays stopped.          |
+
+### 1.7 Sample Lifecycle
+
+```
+┌─────────────────┐
+│  CANDIDATE      │  In-memory only. The current frame being analyzed.
+└────────┬────────┘
+         │
+         ├─ no detection → discarded (no trace)
+         │
+         └─ predictions non-empty
+                 ▼
+         ┌─────────────────┐
+         │  FLAGGED        │  In-memory + small disk cache.
+         │  (pending)      │  Surfaces in Sonner toast + Verification queue.
+         └────────┬────────┘
+                  │
+       ┌──────────┼──────────┐
+       │                     │
+       ▼                     ▼
+┌─────────────┐       ┌──────────────┐
+│  REJECTED   │       │  VERIFIED    │  In Room + queued for Supabase sync.
+│  (deleted)  │       └──────┬───────┘
+└─────────────┘              │
+                             ▼
+                      ┌──────────────┐
+                      │   SYNCED     │  In Room + persisted in Supabase.
+                      └──────────────┘
+```
+
+Encode as `domain/model/SampleStatus.kt`:
+
+```kotlin
+enum class SampleStatus(val value: String) {
+    FLAGGED("flagged"),               // persisted to Room only if cached to disk
+    VERIFIED("verified"),
+    SYNCED("synced"),
+    SYNC_FAILED("sync_failed"),
+}
+```
+
+Rejected and CANDIDATE states never reach Room — they're transient.
+
+### 1.8 Supabase Sync
+
+`SyncSampleUseCase` runs immediately on verify (see [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §7).
+
+1. Resize the JPEG to 640×640 if it isn't already.
+2. Upload to Supabase Storage at `{user_id}/{sample_id}.jpg`.
+3. Insert `samples` row.
+4. Insert `detections` rows.
+5. Update local Room row's status to `SYNCED`.
+
+If any step fails, status becomes `SYNC_FAILED` and a retry is attempted next time a session starts.
+
+### 1.9 Connection-loss Handling
+
+A `NetworkMonitor` (`core/connectivity/NetworkMonitor.kt`) observes Roboflow connectivity. If `InferFrameUseCase` throws `RoboflowConnectionException`:
+
+1. The current recording session stops (`SessionManager.stopSession()`).
+2. A persistent `Alert` banner appears: *"Cloud connection lost. Recording stopped."*
+3. The capture preview remains live (like the system camera app — user can still see through the lens).
+4. A "Resume Recording" button surfaces. Tapping it re-checks connectivity and restarts the session if cloud is reachable.
+
+GPS permission handling is the same as before: requested on first session start; on denial, GPS fields stay null. No first-capture race because there's no per-capture permission flow — the dialog appears before recording starts.
+
+### 1.10 Metadata Binding (per VERIFIED sample)
+
+| Field         | Source                                              |
+|---------------|-----------------------------------------------------|
+| `id`          | `UUID.randomUUID().toString()`                      |
+| `session_id`  | `SessionManager.state.session.id`                   |
+| `user_id`     | `supabase.auth.currentUserOrNull()?.id`             |
+| `captured_at` | `FlaggedFrame.capturedAt` (when the frame analyzed) |
+| `verified_at` | `Instant.now()` at verify-tap                       |
+| `device_id`   | `DeviceIdProvider.id` (`Settings.Secure.ANDROID_ID`)|
+| `gps_*`       | `LocationProvider.getCurrentLocation()` at verify   |
+| `storage_path`| Computed at upload                                  |
+| `roboflow_model_version` | `BuildConfig.ROBOFLOW_VERSION`           |
+
+### 1.11 Acceptance Criteria — Sprint 1
+
+- Cold start with no session → shows Login screen.
+- Successful login navigates to Capture screen.
+- Cold start with valid persisted session → skips Login.
+- Starting a recording session activates the camera preview and begins frame sampling at 2-second intervals.
+- A frame containing a detectable egg surfaces as a Sonner toast within ~3 seconds.
+- Tapping the toast (or the in-app-bar verification chip) opens the Verification sheet **and stops recording**.
+- Verifying a flagged frame writes a row to Room (status `VERIFIED`) and uploads to Supabase (status → `SYNCED`).
+- Rejecting a flagged frame deletes it entirely — no trace in Room or Supabase.
+- Losing Roboflow connectivity mid-session stops recording and shows the "Cloud connection lost" banner; the capture preview stays visible.
+- Tapping "Resume Recording" after connectivity returns restarts the session.
+- GPS coordinates populated on verify if permission granted; null if denied — never throws.
 
 ---
 
-## Sprint 5 — Module 4: Reporting and Administration
+## Sprint 2 — Records Browser + Session Reports
 
-> SDD Reference: Module 3
+> The medtech reviews past sessions, browses verified samples, and exports session
+> summaries as CSV for offline filing.
 
 ### Key Deliverables
 
-- Session-based report generation (for medtechs)
-- Administrative aggregated report (for admins)
-- PDF export
-- Filterable records table
+- `RecordsScreen` — list of past sessions (most recent first)
+- `SessionDetailScreen` — list of verified samples in a session
+- `SampleDetailScreen` — full-size image + detection overlay + metadata
+- `ExportSessionUseCase` — generates a CSV per session
+- Pagination + offline caching
 
-### Implementation Steps
+### 2.1 Records List
 
-**5.1 Session Report Generation**
-
-`GenerateSessionReportUseCase`:
-1. Queries all `VALIDATED` samples in the current diagnostic session.
-2. Computes session summary: total captured, verified, excluded, positive, negative.
-3. Computes parasite distribution: counts by Ascaris, Trichuris, Hookworm, Mixed.
-4. Computes EPG summary: average, highest, lowest.
-5. Persists to `REPORTS` and `REPORT_SAMPLES` tables.
-6. Triggers PDF export via `PDFExportService`.
-
-**5.2 Reports Screen**
+Two-level navigation:
 
 ```
-┌──────────────────────────────────┐
-│  Captured Samples Gallery        │
-│  (thumbnail grid of session)     │
-├──────────────────────────────────┤
-│  [Generate Report] [View Reports]│
-├──────────────────────────────────┤
-│  Session Summary Card            │
-│  Total: 24 · Verified: 22       │
-│  Positive: 18 · Negative: 4     │
-├──────────────────────────────────┤
-│  Parasite Distribution           │
-│  Ascaris: 8 · Trichuris: 6      │
-│  Hookworm: 3 · Mixed: 1         │
-├──────────────────────────────────┤
-│  EPG Summary                     │
-│  Avg: 842 · High: 2,104         │
-│  Low: 124                        │
-├──────────────────────────────────┤
-│  [Download PDF]                  │
-└──────────────────────────────────┘
+RecordsScreen (list of sessions)
+   └── SessionDetailScreen (list of samples in selected session)
+         └── SampleDetailScreen (single sample, full-size image)
 ```
 
-Components: `Card (elevated)` for summary, `DatePicker` for range filter, `Button (outline)` for export.
+Each session row:
 
-**5.3 Administrative Dashboard**
+```
+┌────────────────────────────────────────────────────────┐
+│  Session 2026-05-22 · 14:22 → 14:51                   │
+│  4 verified samples · 2 species                        │
+│  Brgy. San Roque · 9.65°N 123.86°E                    │
+└────────────────────────────────────────────────────────┘
+```
 
-For admin users:
-- Summary cards: total processed, pending validation, active inference.
-- EPG trend chart (using KomoUI Charts with `chart1–5` tokens).
-- Detailed records table with filters (date, species, confidence, EPG range, status).
-- Export to CSV/JSON.
+Components: `Card (resting)` · `Badge` · `Skeleton` (during load) · `EpgReadout` (deferred — see §2.3).
 
-**5.4 PDF Generation**
+### 2.2 Sample Detail
 
-Use Android's `PdfDocument` API or a lightweight library like `iText` to generate
-DOH-formatted reports. Save to `Downloads/` and offer share intent.
+Reuses `MicroscopyViewport` + `DetectionOverlay` from Sprint 1. The image is loaded from Supabase Storage (signed URL) with Coil. Local cache covers offline access.
 
-### Acceptance Criteria — Sprint 5
+Tabs: **Image** · **Detections** · **Metadata**.
 
-- Generating a session report produces a summary with correct aggregations.
-- Only validated samples are included (pending/rejected excluded).
-- PDF downloads with correct formatting.
-- Admin dashboard shows system-wide statistics.
-- Records table filters work correctly.
-- Export produces valid CSV/JSON.
+The **Audit** tab from the old plan is deferred — verification in the MVP is one-shot, no edit history.
+
+### 2.3 Session Report (CSV Export)
+
+`ExportSessionUseCase` queries all verified samples in a session and emits a CSV:
+
+```csv
+sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path
+```
+
+EPG calculations are deferred to Phase 2 — they require:
+- A trusted volumetric multiplier (Kato-Katz prep-method dependent)
+- Per-species egg counts at session level
+- DOH validation of the formula
+
+For Phase 1 MVP, the CSV is a raw export. The medtech aggregates externally.
+
+### 2.4 Acceptance Criteria — Sprint 2
+
+- Records screen lists past sessions, most recent first.
+- Tapping a session shows the list of verified samples in it.
+- Tapping a sample opens the full image with detection overlay.
+- Image loads from Supabase Storage; cached locally for offline re-open.
+- "Export session as CSV" produces a valid CSV file in `Downloads/`.
 
 ---
 
-## Sprint 6 — Integration and Polish
+## Sprint 3 — Polish, Integration Testing, Demo Prep
 
-### 6.1 End-to-End Flow Test
+### 3.1 End-to-End Flow Test
 
-Walk through the complete workflow on a real device:
-1. Capture → 2. Upload → 3. Wait for inference → 4. Review → 5. Validate → 6. Generate report
+Walk through the full loop on a real device:
 
-### 6.2 Offline Flow Test
+1. Cold start → Login.
+2. Start session → 5-minute recording with sample slides under microscope.
+3. Verify ~5 flagged frames; reject 2.
+4. Stop session.
+5. Records → confirm session appears with correct sample count.
+6. Open a sample → confirm image + detections + metadata.
+7. Export CSV → confirm shape.
 
-1. Capture with airplane mode on.
-2. Verify sample enters sync queue.
-3. Re-enable network.
-4. Verify SyncWorker uploads and receives results.
+### 3.2 Edge Cases
 
-### 6.3 Edge Cases
+| Scenario                                | Expected behavior                                        |
+|-----------------------------------------|----------------------------------------------------------|
+| Camera permission denied                | Show explanation; offer Retry button.                    |
+| Location permission denied              | Recording proceeds; GPS fields stay null.                |
+| Roboflow times out (> 10s per frame)   | Treat as detection-empty; do not crash.                  |
+| Roboflow returns error (4xx / 5xx)     | Stop session; show "Cloud connection lost" banner.       |
+| Supabase upload fails on verify        | Mark `SYNC_FAILED`; retry on next session start.         |
+| App killed mid-session                  | Session marked `ended_at = null`; auto-closed on relaunch.|
+| Low storage                             | Block session start; show alert.                         |
 
-- Camera permission denied — show explanation and request again.
-- Location permission denied — capture succeeds with null GPS (acceptable per SRS).
-- Backend timeout — inference status shows failure; retry available.
-- Low storage — prevent new captures, show alert.
+### 3.3 UI Polish
 
-### 6.4 UI Polish
+- All screens use theme tokens (`MaterialTheme.styles.*`).
+- Geist for labels and sentences; JetBrains Mono for IDs, timestamps, GPS, confidence.
+- No hardcoded colors anywhere except [Color.kt](../app/src/main/java/com/agarthavision/ui/theme/Color.kt).
 
-- Verify all screens match the Clinical Pulse moodboard.
-- Test on different screen sizes (compact phone, large phone).
-- Ensure all data text uses JetBrains Mono, all labels use Geist.
-- Verify color tokens are used everywhere (no hardcoded hex values).
+### 3.4 Acceptance Criteria — Sprint 3
+
+- Full E2E walkthrough succeeds on a Pixel 6 (or equivalent).
+- All edge cases in §3.2 produce the expected behavior.
+- `bun run lint` and `bun run test` are green.
 
 ---
 
-## Room Entity Quick Reference
+## Room Entity Quick Reference (Phase 1)
 
-These map directly to the SDD's unified ERD (11 entities):
+The local schema is intentionally smaller than the original SDD's 11-entity model.
+Phase 2 will reintroduce the rest as needed.
 
-| Entity                  | Primary Key     | Key Fields                                              |
-|-------------------------|-----------------|---------------------------------------------------------|
-| `UserEntity`            | `user_id`       | name, role, created_at                                  |
-| `DeviceEntity`          | `device_id`     | model, os_version, camera_specs                         |
-| `DiagnosticSessionEntity`| `session_id`   | user_id, device_id, started_at, ended_at                |
-| `SampleEntity`          | `sample_id`     | session_id, user_id, device_id, status, image_path, gps, timestamp |
-| `InferenceRequestEntity`| `inference_id`  | sample_id, model_version, status, processing_time       |
-| `DetectionEntity`       | `detection_id`  | sample_id, inference_id, class_label, original_class_label, confidence, bbox_x/y/w/h, is_false_positive |
-| `EPGCalculationEntity`  | `epg_id`        | sample_id, inference_id, species, raw_count, ai_epg, tech_validated_epg |
-| `ValidationRecordEntity`| `validation_id` | sample_id, detection_id, user_id, action_type, previous/new_value, reason, timestamp |
-| `ReportEntity`          | `report_id`     | session_id, user_id, report_type, status, file_path, generated_at |
-| `ReportSampleEntity`    | composite       | report_id, sample_id (junction table)                   |
-| `SyncQueueEntity`       | `queue_id`      | sample_id, payload_type, status, retry_count, last_attempted |
+| Entity              | Purpose                                                                  |
+|---------------------|--------------------------------------------------------------------------|
+| `SessionEntity`     | One row per recording session. Mirrors the Supabase `sessions` row.      |
+| `SampleEntity`      | One row per verified flagged frame. Mirrors Supabase `samples`.          |
+| `DetectionEntity`   | One row per detection within a sample. Mirrors Supabase `detections`.    |
+
+Deferred to Phase 2: `UserEntity`, `DeviceEntity`, `InferenceRequestEntity`, `EPGCalculationEntity`, `ValidationRecordEntity`, `ReportEntity`, `ReportSampleEntity`, `SyncQueueEntity`. Several of these are obviated by Phase 1's simpler model (e.g. inference is synchronous so there's no `InferenceRequest`; verification has no edit history so there's no `ValidationRecord`).
+
+---
+
+## What This Doc Replaces (Phase 1)
+
+The previous version planned a 6-sprint, snapshot-capture, own-backend, full-validation
+workflow. ADR-002 cuts that down to MVP scope. Specifically dropped from Phase 1:
+
+| Was                                      | Now                                                  |
+|------------------------------------------|------------------------------------------------------|
+| `BiologicalWindowChip` countdown timer   | Removed entirely. Window enforcement is off-app.     |
+| Snapshot capture via `ImageCapture`      | Continuous `ImageAnalysis` sampled at 2-second intervals. |
+| Own-backend payload upload pipeline      | Direct Roboflow inference + Supabase sync from mobile.|
+| Separate Validate/Approve/Edit/Reject sprint | Verify / Reject inline during capture.           |
+| `SyncQueueEntity` + `SyncWorker` retry   | One-shot retry at next session start. No WorkManager. |
+| EPG calculation, false-positive marking  | Deferred to Phase 2.                                  |
+| Admin dashboard, DOH PDF reports         | Deferred to Phase 2. CSV export only.                 |
+
+See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the migration path back
+to the full SDD model in Phase 2.

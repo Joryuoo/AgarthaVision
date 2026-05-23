@@ -1,4 +1,22 @@
-# Sprint 1 Progress Report (Capture + Local Persistence)
+# Sprint 1 Progress Report — SUPERSEDED
+
+> **This report is stale as of 2026-05-23.** It tracks the **v0** Sprint 1 spec
+> (snapshot capture + own-backend sync + BiologicalWindowChip). That spec has been
+> superseded by [ADR-002](docs/adr/002-supabase-and-roboflow-for-mvp.md), which
+> pivots the MVP to continuous-video capture with Roboflow + Supabase.
+>
+> A new Sprint 1 spec lives at [docs/03_MOBILE_APP_PLAN.md](docs/03_MOBILE_APP_PLAN.md).
+> Track Sprint 1 progress against that spec, not this file.
+>
+> **Do not update the checkboxes below.** They reflect a version of Sprint 1 that
+> no longer exists. The completed work (CameraManager, MicroscopyViewport, theme,
+> LocationProvider, Sample/Detection Room layer) carries over to the new spec; the
+> incomplete work (snapshot-based CaptureScreen, BiologicalWindowChip integration,
+> own-backend sync) is no longer part of the MVP.
+
+---
+
+## Original Report (frozen)
 
 Date: 2026-05-23
 

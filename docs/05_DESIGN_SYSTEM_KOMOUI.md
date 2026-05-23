@@ -209,8 +209,8 @@ non-default props/styling to keep on-brand. Components are listed alphabetically
 **Use for** sample detail expansion in lists (history, audit trail, "show metadata"). Keep the trigger row 56.dp tall with the chevron on the right. Avoid nesting more than one level.
 
 ### Alert
-**Use for** inline status banners in the validation dashboard.
-Variants → Clinical mapping: `default` → neutral info ("Synced to DOH endpoint 14:22"). `destructive` → red coral ("Specimen outside biological window"). Add a one-line description with mono-font timestamps where relevant.
+**Use for** inline status banners (records dashboard, capture connectivity).
+Variants → Clinical mapping: `default` → neutral info ("Synced 4 samples to Supabase"). `destructive` → red coral ("Cloud connection lost. Recording stopped."). Add a one-line description with mono-font timestamps where relevant.
 
 ### Alert Dialog
 **Use for** any irreversible HITL action: Discard sample, Override AI finding, Delete report draft. Destructive confirm button uses `destructive` token; cancel is the secondary variant.
@@ -264,7 +264,7 @@ Internal padding `24.dp`, header gap `16.dp`.
 **Use for** "what is EPG?" explainers, confidence breakdowns, GPS tooltip. Background `popover` white, `xl` radius.
 
 ### Progress
-**Use for** AI confidence bar ("0.91"), upload-sync progress, biological-window countdown. Track uses `secondary` (Paper); fill uses `primary` (Clinical Blue). For bio-window ≤ 10 min, switch fill to `destructive`.
+**Use for** AI confidence bar ("0.91") and upload-sync progress. Track uses `secondary` (Paper); fill uses `primary` (Clinical Blue). Use `destructive` fill when surfacing a failing sync retry.
 
 ### Radio Group
 **Use for** species override selector (single choice: Ascaris / Trichuris / Hookworm / Artifact). Show JetBrains Mono confidence next to each option.
@@ -298,26 +298,36 @@ These live in `ui/components/` and use only the tokens defined above.
 
 | Custom component        | Built from                           | Where it's used                            |
 |-------------------------|--------------------------------------|--------------------------------------------|
-| `MicroscopyViewport`    | `Box` + `Canvas` + `Image`           | Capture screen, detection card             |
-| `DetectionOverlay`      | `Canvas` over `MicroscopyViewport`   | Draws bounding circles + species labels    |
-| `EpgReadout`            | Composition of `Text` styles         | Big "1,284 EPG" display                    |
-| `BiologicalWindowChip`  | `Badge` + countdown `LaunchedEffect` | App-bar timer ("BIO 47:12")                |
-| `OfflineQueueBadge`     | `Badge` with leading dot             | Persistent queue counter in app bar        |
+| `MicroscopyViewport`    | `Box` + `AndroidView(PreviewView)`   | Capture screen, sample detail screen        |
+| `DetectionOverlay`      | `Canvas` over `MicroscopyViewport`   | Draws bounding boxes + species labels       |
+| `VerificationSheet`     | `Drawer` (`BottomSheet`) + `Pager`   | Verifying / rejecting flagged frames        |
+| `DetectionToast`        | `Sonner` variant with "view" action  | "egg detected · 0.91 · Ascaris ▸"          |
 | `BottomNavBar` (phone)  | `Surface` + `Row` of `IconButton`    | Phone replacement for `Sidebar`            |
-| `GeoMapMarker`          | `Canvas` + Maps SDK                  | Map view on Reports screen                 |
-| `AuditTimeline`         | `LazyColumn` of `Row` + `Divider`    | Sample audit-trail tab                     |
+
+**Phase 2 components** (not built in Phase 1): `EpgReadout`, `BiologicalWindowChip`,
+`OfflineQueueBadge`, `GeoMapMarker`, `AuditTimeline`. See
+[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md).
 
 ---
 
 ## 7. Screen → Component Map
 
-| Screen           | Components Used                                                               |
-|------------------|-------------------------------------------------------------------------------|
-| `CaptureScreen`  | `MicroscopyViewport` · `Slider` · `Badge` · `BiologicalWindowChip` · `Button (lg)` · `Sonner` · `Drawer` |
-| `QueueScreen`    | `Card (resting)` · `Badge` · `Checkbox` · `Progress` · `DropdownMenu` · `Sonner` · `Skeleton` |
-| `ValidateScreen` | `Card (elevated)` · `MicroscopyViewport` + `DetectionOverlay` · `EpgReadout` · `Progress` · `Tabs` · `RadioGroup` · `Combobox` · `Button` · `AlertDialog` |
-| `ReportsScreen`  | `Sidebar`/`BottomNavBar` · `DatePicker` · `Tabs` · `Charts` · `Card (elevated)` · `Button (outline)` |
-| `SettingsScreen` | `Switch` · `Select` · `Input` · `Alert` · `AlertDialog`                      |
+### Phase 1 (MVP)
+
+| Screen                | Components Used                                                                                  |
+|-----------------------|--------------------------------------------------------------------------------------------------|
+| `LoginScreen`         | `Input` · `Button (lg, primary)` · `Sonner` · `Alert (destructive)`                              |
+| `CaptureScreen`       | `MicroscopyViewport` · `Button (lg, primary)` (Start/Stop session) · `Badge` (REC) · `DetectionToast` · `VerificationSheet` · `Alert (destructive)` (cloud loss) |
+| `VerificationSheet`   | `Drawer` · `MicroscopyViewport` + `DetectionOverlay` · `Progress` (confidence) · `Button (default)` (Verify) · `Button (destructive)` (Reject) |
+| `RecordsScreen`       | `Card (resting)` · `Badge` · `Skeleton` · `BottomNavBar`                                         |
+| `SessionDetailScreen` | `Card (resting)` · `Tabs` (Image · Detections · Metadata) · `Button (outline)` (Export CSV)      |
+| `SampleDetailScreen`  | `Card (elevated)` · `MicroscopyViewport` + `DetectionOverlay` · `Progress` · `Tabs`              |
+| `SettingsScreen`      | `Switch` · `Select` · `Input` · `Alert` · `AlertDialog` (sign out)                               |
+
+### Phase 2 (deferred)
+
+`QueueScreen`, `ValidateScreen` (edit/reject flow with audit), `ReportsScreen` (admin
+dashboard with charts + DOH PDF export). See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md).
 
 ---
 
