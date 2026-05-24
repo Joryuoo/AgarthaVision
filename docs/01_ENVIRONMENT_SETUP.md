@@ -78,27 +78,14 @@ git config user.name   # Should show your name
 git config user.email  # Should show your email
 ```
 
-#### Supabase CLI
+#### Docker + GHCR (DMKuZu only)
 
-Required to run the local Supabase stack (Postgres + Auth + Storage) for development.
-See [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §8.
+The inference container (FastAPI + custom Ultralytics fork + model weights) is built
+and pushed by **DMKuZu** to GitHub Container Registry. The rest of the team does NOT
+need Docker — they just consume the deployed endpoint via `INFERENCE_URL` in
+`local.properties`. Per [ADR-003](adr/003-self-hosted-inference-container.md).
 
-```bash
-# macOS
-brew install supabase/tap/supabase
-
-# Linux
-curl -fsSL https://github.com/supabase/cli/releases/latest/download/supabase_linux_amd64.tar.gz \
-  | tar -xz -C /usr/local/bin supabase
-
-# Windows
-scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
-scoop install supabase
-```
-
-Verify: `supabase --version` should print 1.x or higher.
-
-Local development also requires Docker (Supabase CLI spins up Postgres + Auth + Storage as containers):
+DMKuZu only:
 
 ```bash
 # macOS
@@ -111,17 +98,14 @@ brew install --cask docker
 winget install Docker.DockerDesktop
 ```
 
-#### Roboflow Account
+Then log into GHCR with a Personal Access Token (classic, scope: `write:packages`):
 
-Sign up at [roboflow.com](https://roboflow.com) and create a **Public** workspace
-(free, unlimited inference, model is publicly viewable). Per
-[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md), Phase 1 MVP accepts the
-model-visibility trade-off in exchange for unmetered free inference.
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
+```
 
-From the workspace settings, collect:
-- API Key (under Settings → API Keys)
-- Project slug (URL path: `roboflow.com/{workspace}/{project_slug}`)
-- Model version number (visible on the model's Versions page)
+See [inference/README.md](../inference/README.md) for the build/push/deploy runbook
+(Phase 1 §1 of the inference work).
 
 ---
 
@@ -305,7 +289,7 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
+            buildConfigField("String", "SUPABASE_URL",       "\"${project.findProperty("SUPABASE_URL_DEV") ?: ""}\"")
             buildConfigField("String", "SUPABASE_ANON_KEY",  "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"")
             buildConfigField("String", "ROBOFLOW_API_KEY",   "\"${project.findProperty("ROBOFLOW_API_KEY") ?: ""}\"")
             buildConfigField("String", "ROBOFLOW_PROJECT",   "\"${project.findProperty("ROBOFLOW_PROJECT") ?: ""}\"")
@@ -721,24 +705,52 @@ Then in GitHub settings:
 
 ### A.15 Initialize the Supabase Project
 
-From the project root:
+No CLI or Docker needed. Everything is done through the Supabase web dashboard.
 
-```bash
-supabase init           # Generates the supabase/ directory with config.toml
-supabase start          # Spins up local Postgres + Auth + Storage on Docker
-supabase status         # Prints local URLs + anon key — copy the anon key into local.properties
+#### 1. Create projects
+
+Go to [supabase.com](https://supabase.com) and create two projects:
+
+| Project | Purpose | Region |
+|---------|---------|--------|
+| `agarthavision-dev` | Development / testing | ap-southeast-1 (Singapore) if available |
+| `agarthavision-prod` | Demo / production | Same |
+
+Free tier covers both. **DMKuZu** owns these projects.
+
+#### 2. Run the Phase 1 schema
+
+In each project: **SQL Editor** → paste the full schema from
+[04_CLOUD_BACKEND_PLAN.md §4](04_CLOUD_BACKEND_PLAN.md) → **Run**.
+
+Also commit the same SQL to the repo so schema changes are tracked in git:
+
+```
+supabase/migrations/0001_init.sql   ← paste the schema here
 ```
 
-Then create the first migration with the Phase 1 schema (see [04_CLOUD_BACKEND_PLAN.md §4.1](04_CLOUD_BACKEND_PLAN.md)):
+Future schema changes: write a new `0002_*.sql` file, commit it, and run it
+manually in the dashboard SQL editor. This keeps the schema change in git
+without requiring the CLI.
 
-```bash
-supabase migration new init
-# Open supabase/migrations/<timestamp>_init.sql and paste the schema from 04_CLOUD_BACKEND_PLAN.md §4.1
-supabase db reset       # Re-applies all migrations to the local database
+#### 3. Copy credentials into `local.properties`
+
+In each Supabase project: **Settings → API** → copy **Project URL** and **anon key**.
+
+
+Add to `local.properties` (see §B.6 below for the full format):
+
+```properties
+SUPABASE_URL_DEV=https://<dev-ref>.supabase.co
+SUPABASE_ANON_KEY_DEV=<dev anon key>
+SUPABASE_URL_PROD=https://<prod-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=<prod anon key>
 ```
 
-For production: create a Supabase project at [supabase.com](https://supabase.com),
-then `supabase link --project-ref <ref>` and `supabase db push`.
+#### 4. Provision test accounts
+
+No sign-up flow exists in the MVP. Go to **Authentication → Users → Invite user** in the
+dashboard and create one account per team member. Share credentials over the team chat.
 
 ---
 
@@ -881,24 +893,26 @@ If any fail:
 
 ### B.6 Secrets and Environment Variables
 
-The app reads Supabase + Roboflow credentials from `BuildConfig` fields populated
+The app reads Supabase + Inference credentials from `BuildConfig` fields populated
 at build time. Secrets must never be committed — they live in `local.properties`
-(gitignored).
+(gitignored). A template `local.properties.example` lives in the repo root.
 
-Create or edit `local.properties` in the project root:
+Go to our SoftEng Files google drive and copy paste the contents in env_variables.txt and paste it to `local.properties` in the project root:
 
 ```properties
-# Local development (Supabase CLI defaults)
-SUPABASE_ANON_KEY_DEV=<copy from supabase status output after `supabase start`>
+# Development Supabase project (Dashboard → Settings → API)
+SUPABASE_URL_DEV=https://<dev-project-ref>.supabase.co
+SUPABASE_ANON_KEY_DEV=sb_publishable_<dev-anon-key>
 
-# Production (Supabase dashboard → Settings → API)
-SUPABASE_URL_PROD=https://<project-ref>.supabase.co
-SUPABASE_ANON_KEY_PROD=<prod anon key>
+# Production Supabase project (Dashboard → Settings → API)
+SUPABASE_URL_PROD=https://<prod-project-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=sb_publishable_<prod-anon-key>
 
-# Roboflow (workspace settings → API Keys)
-ROBOFLOW_API_KEY=<api key>
-ROBOFLOW_PROJECT=<project-slug>
-ROBOFLOW_VERSION=1
+# Inference container (self-hosted FastAPI on a rented GPU droplet)
+# DMKuZu provisions the droplet and shares the IP + Bearer key over team chat.
+INFERENCE_URL_DEV=http://<droplet-ip>:8000
+INFERENCE_URL_PROD=http://<droplet-ip>:8000
+INFERENCE_API_KEY=<shared-secret>
 ```
 
 Gradle's `project.findProperty(...)` reads these and feeds them into `BuildConfig`.

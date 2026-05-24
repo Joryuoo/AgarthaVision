@@ -1,14 +1,15 @@
-package com.agarthavision.data.local
+package com.agarthavision.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * Room entity for locally persisted captured microscopy samples.
+ * Room entity for verified samples persisted locally.
  *
- * The image itself is stored on disk. This entity only stores the file path and
- * capture metadata required for traceability.
+ * Mirrors the Supabase `samples` table. The image itself lives on disk (path in
+ * `image_path`) and in Supabase Storage (`storage_path` after sync). This entity
+ * only stores the metadata needed for traceability and sync.
  */
 @Entity(tableName = "samples")
 data class SampleEntity(
@@ -16,14 +17,14 @@ data class SampleEntity(
     @ColumnInfo(name = "sample_id")
     val sampleId: String,
 
-    @ColumnInfo(name = "timestamp")
-    val timestamp: Long,
+    @ColumnInfo(name = "session_id")
+    val sessionId: String,
 
     @ColumnInfo(name = "device_id")
     val deviceId: String,
 
-    @ColumnInfo(name = "session_id")
-    val sessionId: String,
+    @ColumnInfo(name = "timestamp")
+    val timestamp: Long,
 
     @ColumnInfo(name = "image_path")
     val imagePath: String,
@@ -33,6 +34,9 @@ data class SampleEntity(
 
     @ColumnInfo(name = "gps_longitude")
     val gpsLongitude: Double?,
+
+    @ColumnInfo(name = "gps_accuracy")
+    val gpsAccuracy: Float?,
 
     @ColumnInfo(name = "status")
     val status: String,

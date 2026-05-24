@@ -3,8 +3,14 @@ package com.agarthavision.domain.model
 import java.util.UUID
 
 /**
- * Domain model representing a captured microscopy sample and its associated metadata.
- * See docs/03_MOBILE_APP_PLAN.md §1.3.
+ * Domain model for a captured microscopy sample.
+ *
+ * In Phase 1, a Sample exists in Room only after the user verifies a flagged frame
+ * (status `VERIFIED`), and is upgraded to `SYNCED` after a successful Supabase upload.
+ *
+ * Additional fields (`userId`, `verifiedAt`, `storagePath`, `inferenceModelVersion`)
+ * may be added in Sprint 1 implementation tracks as the sync flow is built out.
+ * See docs/03_MOBILE_APP_PLAN.md §1.10.
  */
 data class Sample(
     val id: String = UUID.randomUUID().toString(),
@@ -14,6 +20,6 @@ data class Sample(
     val filePath: String,
     val latitude: Double?,
     val longitude: Double?,
-    val status: SampleStatus = SampleStatus.CAPTURED,
-    // Add other fields as needed for §1.3
+    val accuracyMeters: Float? = null,
+    val status: SampleStatus = SampleStatus.FLAGGED,
 )

@@ -1,23 +1,18 @@
 package com.agarthavision.domain.model
 
+/**
+ * Phase 1 sample lifecycle.
+ *
+ * `FLAGGED` is the in-memory + disk-cache state for a frame that Roboflow/Inference
+ * flagged but the user has not yet verified. `VERIFIED` is the state after the user
+ * taps Verify in the sheet. `SYNCED` is the state after a successful upload to Supabase.
+ * `SYNC_FAILED` is set when the upload fails and a retry is queued.
+ *
+ * See docs/03_MOBILE_APP_PLAN.md §1.7.
+ */
 enum class SampleStatus(val value: String) {
-    CAPTURE_STARTED("capture_started"),
-    CAPTURED("captured"),
-    CAPTURE_FAILED("capture_failed"),
-    CAPTURE_INVALID("capture_invalid"),
-    PAYLOAD_PACKAGED("payload_packaged"),
-    QUEUED_FOR_UPLOAD("queued_for_upload"),
-    UPLOADED("uploaded"),
-    PROCESSING("processing"),
-    PROCESSED("processed"),
-    INFERENCE_FAILED("inference_failed"),
-    PENDING_VALIDATION("pending_validation"),
-    VALIDATED("validated"),
-    FINDINGS_REJECTED("findings_rejected"),
-    UNUSABLE("unusable"),
-    REPORT_QUEUED("report_queued"),
-    REPORT_GENERATED("report_generated"),
-    REPORT_FAILED("report_failed"),
-    QUEUED_FOR_SYNC("queued_for_sync"),
-    SYNCED("synced");
+    FLAGGED("flagged"),
+    VERIFIED("verified"),
+    SYNCED("synced"),
+    SYNC_FAILED("sync_failed"),
 }

@@ -31,3 +31,6 @@ Thumbs.db
 .idea/
 *.iml
 .vscode/settings.json
+
+.venv
+roboflow.py

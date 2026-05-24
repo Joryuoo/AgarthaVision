@@ -1,8 +1,8 @@
 package com.agarthavision.data.repository
 
-import com.agarthavision.data.local.SampleDao
-import com.agarthavision.data.local.toDomain
-import com.agarthavision.data.local.toEntity
+import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.data.local.mapper.toDomain
+import com.agarthavision.data.local.mapper.toEntity
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.flow.Flow

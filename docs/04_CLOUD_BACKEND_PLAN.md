@@ -1,10 +1,10 @@
 # AgarthaVision · Cloud Backend Plan (Phase 1 MVP)
 
-> **Phase 1 (this doc):** Supabase (Postgres + Auth + Storage) + Roboflow Hosted Inference. No self-hosted backend.
+> **Phase 1 (this doc):** Supabase (Postgres + Auth + Storage) + a **self-hosted FastAPI inference container** running on a rented GPU droplet. Per [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) and [ADR-003](adr/003-self-hosted-inference-container.md).
 >
-> **Phase 2 (future):** Self-hosted FastAPI + local inference hardware + Philippine-region storage for DPA compliance. Out of scope here — superseded by ADR-002.
+> **Phase 2 (future):** Owned GPU hardware running the same container + self-hosted Postgres in Philippine region for DPA compliance. Out of scope here.
 
-The mobile app talks directly to two managed services. There is no FastAPI service to deploy, no Celery worker, no Docker compose, no S3 bucket to provision. The "backend" is configuration.
+The mobile app talks directly to two services: a managed Supabase project (managed by DMKuZu) and a self-hosted inference container (built and deployed by DMKuZu, runnable on any Docker-capable GPU host). There is no orchestrator, no Celery worker, no API gateway.
 
 ---
 
@@ -15,33 +15,38 @@ The mobile app talks directly to two managed services. There is no FastAPI servi
 | Auth               | Supabase Auth (email/password, JWT)               | Self-hosted OIDC or Better Auth        |
 | Database           | Supabase Postgres (managed)                       | Self-hosted PostgreSQL 16              |
 | Object Storage     | Supabase Storage (S3-compatible buckets)          | Self-hosted MinIO or local NAS         |
-| Inference          | Roboflow Hosted Inference (Public workspace)      | Self-hosted YOLO on local GPU          |
+| Inference          | Self-hosted FastAPI + custom Ultralytics on a rented GPU droplet (default DO MI300X) | Same container on owned GPU hardware |
 | Schema migrations  | Supabase migrations (SQL files in `supabase/`)    | Alembic                                |
 | Real-time          | Supabase Realtime (Postgres LISTEN/NOTIFY)        | WebSocket / SSE                        |
 
-See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the rationale, trade-offs, and migration path.
+See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the Supabase decision and
+[ADR-003](adr/003-self-hosted-inference-container.md) for the inference-container pivot
+(superseded the original Roboflow Hosted Inference choice).
 
 ---
 
 ## 2. Repository Layout
 
-There is no separate backend repository for Phase 1. Supabase + Roboflow assets live alongside the mobile app:
+There is no separate backend repository for Phase 1. Supabase artifacts and the inference container live alongside the mobile app:
 
 ```
 AgarthaVision/
 ├── app/                    # Android app
 ├── supabase/               # Supabase project artifacts
-│   ├── config.toml         # Local dev config (supabase CLI)
-│   ├── migrations/         # SQL migration files
-│   │   └── 0001_init.sql   # Initial schema (see §4)
-│   ├── functions/          # Edge Functions (Deno) — optional, post-MVP
-│   └── seed.sql            # Seed data for local dev
-├── roboflow/               # Roboflow project config (read-only reference)
-│   └── model.yaml          # Class labels, confidence threshold, model version
+│   └── migrations/         # SQL migration files
+│       └── 0001_init.sql   # Initial schema (see §4) — run via web dashboard
+├── inference/              # Self-hosted inference container (DMKuZu)
+│   ├── Dockerfile          # Base: rocm/pytorch or pytorch/pytorch CUDA runtime
+│   ├── requirements.txt    # FastAPI + custom Ultralytics fork
+│   ├── server.py           # FastAPI: POST /infer + GET /health
+│   ├── weights/            # best.pt (Git LFS) baked into the image at build
+│   └── README.md           # Build / push / deploy runbook
 └── docs/
 ```
 
-The Supabase CLI manages `supabase/` locally; production state lives in the Supabase dashboard for the project.
+The Supabase project is managed entirely via the web dashboard (no CLI required for Phase 1).
+The inference container image is published to GHCR and pulled onto whatever GPU droplet
+DMKuZu spins up for testing or demos.
 
 ---
 
@@ -55,7 +60,7 @@ The Supabase CLI manages `supabase/` locally; production state lives in the Supa
 │                          │ 1 frame / 2s (sampled)                            │
 │                          ▼                                                   │
 │             ┌─────────────────────────┐         No detection: discard frame  │
-│             │  RoboflowClient         │◄────────                             │
+│             │  InferenceApi (Retrofit)│◄────────                             │
 │             │  (HTTPS POST /infer)    │                                      │
 │             └────────────┬────────────┘                                      │
 │                          │ detection JSON (bbox + class + conf)              │
@@ -89,7 +94,7 @@ The Supabase CLI manages `supabase/` locally; production state lives in the Supa
                                                   └─────────────────────────┘
 ```
 
-**Critical property:** Roboflow does not store any image. It receives a frame, returns a detection JSON, and forgets. All persistence is local (Room) or remote (Supabase).
+**Critical property:** the inference container does not persist any image. It receives a frame, runs inference, returns a detection JSON, and forgets. All persistence is local (Room) or remote (Supabase Storage).
 
 ---
 
@@ -135,7 +140,7 @@ create table public.samples (
     gps_longitude double precision,
     gps_accuracy real,
     storage_path text not null,                      -- Supabase Storage object key
-    roboflow_model_version text not null,
+    roboflow_model_version text not null,  -- historical column name; per ADR-003 this now stores the self-hosted inference model version. Renaming is deferred to a follow-up migration.
     user_note text
 );
 
@@ -221,29 +226,29 @@ Then add an RLS policy on `storage.objects` to scope reads/writes by user. Path 
 
 ---
 
-## 5. Roboflow Inference
+## 5. Self-Hosted Inference Container
 
-### 5.1 Account + Workspace
+Per [ADR-003](adr/003-self-hosted-inference-container.md), Phase 1 inference runs in a
+FastAPI + custom Ultralytics container that DMKuZu builds, publishes to GHCR, and
+deploys to a rented GPU droplet for testing and demo windows.
 
-Create a free **Public** workspace at [roboflow.com](https://roboflow.com). Public workspaces give unlimited free hosted inference at the cost of the model + dataset being viewable by anyone with the workspace URL. For the MVP demo window this trade-off is accepted ([ADR-002](adr/002-supabase-and-roboflow-for-mvp.md)).
+### 5.1 Container Image
 
-Required environment variables (mobile-side `BuildConfig`):
+The image is built from `inference/Dockerfile` and published to
+**`ghcr.io/joryuoo/agartha-inference:<tag>`** (public).
 
-| Key                          | Where                                |
-|------------------------------|--------------------------------------|
-| `ROBOFLOW_API_KEY`           | Roboflow workspace → API Keys        |
-| `ROBOFLOW_PROJECT_SLUG`      | URL slug of the model project        |
-| `ROBOFLOW_MODEL_VERSION`     | Numeric version (e.g. `3`)           |
+| Component | Detail |
+|-----------|--------|
+| Base image | `rocm/pytorch:latest` (AMD MI300X default) or `pytorch/pytorch:2.x-cuda12-cudnn8-runtime` (NVIDIA fallback) |
+| Model | Custom Ultralytics fork — YOLOv26 head + EfficientNetV2 backbone. Pinned by commit SHA in `requirements.txt`. |
+| Weights | `inference/weights/best.pt`, tracked via Git LFS, **baked into the image at build time** so cold start is just `docker pull` + start (no S3 download). |
+| Entry point | `uvicorn server:app --host 0.0.0.0 --port 8000` |
 
 ### 5.2 Inference Endpoint
 
-Use Roboflow's Hosted Inference HTTP API directly — no SDK needed for a single endpoint.
-
 ```
-POST https://detect.roboflow.com/{project_slug}/{model_version}
-  ?api_key={ROBOFLOW_API_KEY}
-  &confidence=40
-  &overlap=30
+POST  http://<droplet-ip>:8000/infer
+Authorization: Bearer ${INFERENCE_API_KEY}
 Content-Type: image/jpeg
 Body: <raw JPEG bytes>
 ```
@@ -264,33 +269,43 @@ Response (200):
 }
 ```
 
-When `predictions` is empty, the mobile client discards the frame immediately — no toast, no local persistence.
+The response shape intentionally matches Roboflow's so the mobile DTO is provider-agnostic.
+When `predictions` is empty, the mobile client discards the frame immediately — no toast,
+no local persistence.
 
-### 5.3 `RoboflowClient` (mobile-side)
+`GET /health` returns 200 OK once the model is loaded — used to verify the droplet is
+ready before pointing the mobile app at it.
 
-Lives in `data/remote/RoboflowClient.kt`. OkHttp + Retrofit.
+### 5.3 `InferenceApi` (mobile-side)
+
+Lives in `data/remote/InferenceApi.kt`. Retrofit + OkHttp. Bearer-token auth is injected
+by the OkHttp interceptor wired in `InferenceModule`.
 
 ```kotlin
-interface RoboflowApi {
-    @POST("{project}/{version}")
-    suspend fun infer(
-        @Path("project") project: String,
-        @Path("version") version: Int,
-        @Query("api_key") apiKey: String,
-        @Query("confidence") confidence: Int = 40,
-        @Query("overlap") overlap: Int = 30,
-        @Body image: RequestBody,
-    ): Response<RoboflowInferenceDto>
+interface InferenceApi {
+    @POST("infer")
+    suspend fun infer(@Body image: RequestBody): Response<InferenceResponseDto>
 }
 ```
 
-`RoboflowInferenceDto` mirrors the response shape above. A `RoboflowMapper` translates predictions into local `Detection` domain models.
+`InferenceResponseDto` (in `data/remote/dto/`) mirrors the response shape above. A
+`InferenceMapper` (Sprint 1 work — jojseph) translates predictions into local `Detection`
+domain models.
 
 ### 5.4 Sampling and Backpressure
 
 Frame sampling is the mobile app's responsibility (see `03_MOBILE_APP_PLAN.md` §1). Default: **1 frame every 2 seconds.** The shutter does not produce frames directly — `ImageAnalysis` with `STRATEGY_KEEP_ONLY_LATEST` does, and the analyzer enforces the 2-second interval.
 
 If a frame upload is in flight when the next interval ticks, **skip** — don't queue. This keeps memory bounded and avoids stale-frame results when the medtech moves the slide.
+
+### 5.5 ROCm Validation Gate (DMKuZu)
+
+Before committing the Dockerfile to use `rocm/pytorch:latest`, DMKuZu must validate that
+the custom Ultralytics fork loads `best.pt` and runs inference on ROCm. If it doesn't
+(a real risk — Ultralytics on ROCm is unreliable for custom heads), switch the default
+to `pytorch/pytorch:2.x-cuda12-cudnn8-runtime` and use RunPod A5000 (~$0.69/hr) or
+Lambda Labs A10 (~$0.50/hr) instead. The image, server, and mobile client all stay the
+same — only the base image and provider change.
 
 ---
 
@@ -378,55 +393,44 @@ A WorkManager `SyncWorker` is **not** required for Phase 1 — the simplicity of
 
 ## 8. Local Development
 
-### 8.1 Supabase CLI
+### 8.1 Supabase (web dashboard — no CLI required)
+
+No local Supabase stack for Phase 1. Both debug and release builds hit the cloud project.
+See [01_ENVIRONMENT_SETUP.md §A.15](01_ENVIRONMENT_SETUP.md) for the full setup steps.
+
+Short version:
+1. Create a dev project at [supabase.com](https://supabase.com).
+2. Run `supabase/migrations/0001_init.sql` via **SQL Editor** in the dashboard.
+3. Copy **Project URL** + **Publishable (anon) key** from **Settings → API** into `local.properties`.
+4. `BuildConfig.SUPABASE_URL` (debug) reads `SUPABASE_URL_DEV` from `local.properties`.
+
+Schema changes: write a new `supabase/migrations/000N_*.sql` file, commit it to git, then run it manually in the SQL Editor.
+
+### 8.2 Inference container
+
+For development, DMKuZu spins up a GPU droplet, pulls the latest image from GHCR, and
+shares the IP + Bearer key via team chat. The mobile app reads these from `local.properties`.
+
+Smoke-test the endpoint manually before wiring the mobile client:
 
 ```bash
-# macOS / Linux
-brew install supabase/tap/supabase
+# Health check
+curl -i http://<droplet-ip>:8000/health
 
-# Initialize the local Supabase stack
-cd AgarthaVision
-supabase init               # creates supabase/ directory
-supabase start              # spins up local Postgres + Auth + Storage on Docker
-supabase db push            # apply migrations to local DB
-```
-
-Local dev URLs (printed by `supabase start`):
-
-| Service          | URL                                |
-|------------------|------------------------------------|
-| API              | `http://localhost:54321`           |
-| Studio (UI)      | `http://localhost:54323`           |
-| Inbucket (email) | `http://localhost:54324`           |
-
-The Android app's `BuildConfig.SUPABASE_URL` in `debug` builds should point to `http://10.0.2.2:54321` (the emulator alias for localhost).
-
-### 8.2 Roboflow
-
-There is no "local Roboflow." Use the hosted endpoint for dev too. Test the endpoint manually before wiring the mobile client:
-
-```bash
-curl -X POST \
-  "https://detect.roboflow.com/${ROBOFLOW_PROJECT_SLUG}/${ROBOFLOW_MODEL_VERSION}?api_key=${ROBOFLOW_API_KEY}&confidence=40" \
+# One inference against a known-positive JPEG
+curl -X POST "http://<droplet-ip>:8000/infer" \
+  -H "Authorization: Bearer ${INFERENCE_API_KEY}" \
   -H "Content-Type: image/jpeg" \
   --data-binary @sample.jpg
 ```
 
+When DMKuZu is done testing, **destroy the droplet** — GPU droplets bill by the second.
+The image stays on GHCR; the next session is one `docker pull` away.
+
 ### 8.3 Bun Scripts
 
-Add to the existing root `package.json`:
-
-```json
-{
-  "scripts": {
-    "db:start": "supabase start",
-    "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
-    "db:diff": "supabase db diff --use-migra",
-    "db:push": "supabase db push"
-  }
-}
-```
+No CLI-based database scripts for Phase 1 — schema changes go through the web dashboard.
+The only relevant script is the standard build/test cycle already in `package.json`.
 
 ---
 
@@ -435,45 +439,47 @@ Add to the existing root `package.json`:
 There is nothing to deploy for Phase 1.
 
 - **Supabase Production:** Create a project at [supabase.com](https://supabase.com), copy the URL + anon key into the mobile app's `release` `BuildConfig`, run `supabase db push --linked` to apply migrations.
-- **Roboflow:** Already hosted. The Public workspace is the production endpoint.
+- **Inference container:** spin up the demo droplet (DigitalOcean MI300X or NVIDIA fallback), `docker pull` the GHCR image, `docker run --gpus all -p 8000:8000 -e INFERENCE_API_KEY=...` and share the IP + key via team chat. Tear down after the demo.
 
-Promote a migration from local to production:
-
-```bash
-supabase link --project-ref <prod-project-ref>
-supabase db push
-```
+Promote a migration from dev to prod: paste the new `supabase/migrations/000N_*.sql` file
+into the prod project's SQL editor and run it.
 
 ---
 
 ## 10. Cost Envelope
 
-Phase 1 is designed to fit free tiers for the MVP demo window.
+Phase 1 is designed to keep cash burn near zero between demos.
 
-| Service              | Free tier limit                                                  | Risk                                              |
-|----------------------|------------------------------------------------------------------|---------------------------------------------------|
+| Service              | Cost                                                             | Risk / Mitigation                                |
+|----------------------|------------------------------------------------------------------|--------------------------------------------------|
 | Supabase Free        | 500 MB Postgres, 1 GB Storage, 50k MAU, 2 GB egress              | Storage fills first — JPEG ~500 KB × 4,000 samples ≈ 2 GB. Resize to 640×640 before upload (~80 KB) buys 25k samples. |
-| Roboflow Public      | Unlimited inferences (model is public)                           | Privacy of model + training data. Acceptable for demo window per ADR-002. |
-| Roboflow Private Free| ~1,000 inferences / month                                        | Insufficient for continuous mode (see ADR-002 math). |
+| GHCR (public)        | Free for public images                                           | Model weights are world-readable. Acceptable per ADR-003 (same trade-off as a Roboflow Public workspace). |
+| GPU droplet (testing)| DigitalOcean MI300X ≈ $1.99/hr. NVIDIA fallback: RunPod A5000 ≈ $0.69/hr, Lambda A10 ≈ $0.50/hr. | Bills by the second — **destroy after every test/demo session.** A 30-min demo at $1.99/hr costs $1. Leaving the droplet running 24h costs $48. |
+| Bandwidth (mobile→droplet) | Included in droplet egress allowance for any provider     | Negligible at 1 frame / 2s × ~80 KB JPEG ≈ 144 MB per hour of recording. |
 
-Verify current limits at [supabase.com/pricing](https://supabase.com/pricing) and [roboflow.com/pricing](https://roboflow.com/pricing) before each demo — both providers restructure tiers periodically.
+Verify pricing at [supabase.com/pricing](https://supabase.com/pricing) and your chosen
+GPU provider before each demo — pricing tiers shift periodically.
 
 ---
 
 ## 11. What This Doc Replaces (Phase 1)
 
-The previous version of this doc described a self-hosted FastAPI + Celery + YOLO + PostgreSQL + MinIO stack. All of that is **deferred to Phase 2** per [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). For Phase 1:
+The original SDD described a self-hosted FastAPI + Celery + YOLO + PostgreSQL + MinIO stack
+for the full team to deliver. Most of it is **deferred to Phase 2** per
+[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). The inference half then pivoted away
+from Roboflow per [ADR-003](adr/003-self-hosted-inference-container.md). The net Phase 1 surface:
 
-| Was                                  | Now                                       |
-|--------------------------------------|-------------------------------------------|
-| FastAPI app at `agarthavision-backend/` | No backend repo. Supabase project + Roboflow workspace. |
-| `POST /v1/inference/submit`          | `POST detect.roboflow.com/{project}/{version}` (called directly from mobile) |
-| `GET /v1/inference/{id}/status`      | Synchronous — Roboflow returns predictions in the same response |
-| `POST /v1/sync/validation`           | `supabase-kt`: `client.postgrest["samples"].insert(...)` |
-| Celery workers + Redis               | None. Inference is synchronous per frame. |
-| Alembic migrations                   | `supabase/migrations/` SQL files          |
-| MinIO / S3                           | Supabase Storage                          |
-| JWT issuance                         | Supabase Auth                             |
-| DOH-formatted PDF export             | Out of MVP scope — deferred                |
+| Was (original SDD)                      | Now (Phase 1)                                                         |
+|-----------------------------------------|-----------------------------------------------------------------------|
+| FastAPI app at `agarthavision-backend/` | A thin inference-only FastAPI in `inference/` (DMKuZu) + Supabase     |
+| `POST /v1/inference/submit`             | `POST <droplet>:8000/infer` (called directly from mobile)             |
+| `GET /v1/inference/{id}/status`         | Synchronous — inference returns predictions in the same response      |
+| `POST /v1/sync/validation`              | `supabase-kt`: `client.postgrest["samples"].insert(...)`              |
+| Celery workers + Redis                  | None. Inference is synchronous per frame.                             |
+| Alembic migrations                      | `supabase/migrations/` SQL files run via web dashboard                |
+| MinIO / S3                              | Supabase Storage                                                      |
+| JWT issuance                            | Supabase Auth                                                         |
+| DOH-formatted PDF export                | Out of MVP scope — deferred                                           |
 
-The deferred work isn't lost; it's tracked in [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) as the Phase 2 migration path.
+The deferred work isn't lost; it's tracked in
+[ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) as the Phase 2 migration path.

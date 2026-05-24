@@ -1,11 +1,13 @@
 # AgarthaVision · Mobile App Implementation Plan (Phase 1 MVP)
 
 > Sprint-by-sprint plan for the Android application. **Phase 1 MVP** ships
-> continuous-video capture with Roboflow inference and Supabase sync.
-> Phase 2 (self-hosted inference, DOH-formatted reports) is out of scope.
+> continuous-video capture with a self-hosted FastAPI inference container and
+> Supabase sync. Phase 2 (owned-hardware inference, DOH-formatted reports)
+> is out of scope.
 >
-> Authority: [AGENTS.md](../AGENTS.md) and [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md)
-> govern the architectural choices in this doc. Cloud architecture in
+> Authority: [AGENTS.md](../AGENTS.md), [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md),
+> and [ADR-003](adr/003-self-hosted-inference-container.md) govern the architectural
+> choices in this doc. Cloud architecture in
 > [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md).
 
 ---
@@ -18,8 +20,8 @@ the capture flow.
 
 | Sprint | Duration | Focus                                                              |
 |--------|----------|--------------------------------------------------------------------|
-| 0      | 1 week   | Project scaffold, CI, theming, navigation, Supabase + Roboflow keys|
-| 1      | 3 weeks  | Auth + continuous capture + Roboflow inference + verify + sync      |
+| 0      | 1 week   | Project scaffold, CI, theming, navigation, Supabase + Inference keys |
+| 1      | 3 weeks  | Auth + continuous capture + cloud inference + verify + sync         |
 | 2      | 2 weeks  | Records browser + session reports + CSV export                      |
 | 3      | 1 week   | Polish, integration testing, bug sweep, demo prep                   |
 
@@ -58,32 +60,30 @@ fun AgarthaVisionTheme(content: @Composable () -> Unit) {
 
 5. Wrap `MainActivity.setContent` with `AgarthaVisionTheme`.
 
-### 0.3 Supabase + Roboflow Configuration
+### 0.3 Supabase + Inference Configuration
 
-1. Create a Supabase project (see [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §8).
-2. Create a Roboflow Public workspace and import the egg-detection model.
-3. Add `BuildConfig` fields in `app/build.gradle.kts`:
+1. Use the Supabase project DMKuZu provisioned (URL + anon key shared via team chat — see [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md) §8).
+2. Use the inference container DMKuZu deployed (Bearer key + droplet IP shared via team chat — see [ADR-003](adr/003-self-hosted-inference-container.md)).
+3. `BuildConfig` fields in `app/build.gradle.kts` read from `local.properties`:
 
 ```kotlin
 buildTypes {
     debug {
-        buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<local dev anon key>\"")
-        buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
-        buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
-        buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+        buildConfigField("String", "SUPABASE_URL",      "\"${project.findProperty("SUPABASE_URL_DEV")      ?: ""}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"")
+        buildConfigField("String", "INFERENCE_URL",     "\"${project.findProperty("INFERENCE_URL_DEV")     ?: ""}\"")
+        buildConfigField("String", "INFERENCE_API_KEY", "\"${project.findProperty("INFERENCE_API_KEY")     ?: ""}\"")
     }
     release {
-        buildConfigField("String", "SUPABASE_URL",       "\"https://<ref>.supabase.co\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<prod anon key>\"")
-        buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
-        buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
-        buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+        buildConfigField("String", "SUPABASE_URL",      "\"${project.findProperty("SUPABASE_URL_PROD")      ?: ""}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"")
+        buildConfigField("String", "INFERENCE_URL",     "\"${project.findProperty("INFERENCE_URL_PROD")     ?: ""}\"")
+        buildConfigField("String", "INFERENCE_API_KEY", "\"${project.findProperty("INFERENCE_API_KEY")      ?: ""}\"")
     }
 }
 ```
 
-Real secrets live outside the repo — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONMENT_SETUP.md) §B.7.
+Real secrets live in `local.properties` (gitignored) — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONMENT_SETUP.md) §B.6.
 
 ### 0.4 Navigation Shell
 
@@ -107,7 +107,7 @@ Real secrets live outside the repo — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONM
 ### Acceptance Criteria — Sprint 0
 
 - App launches and shows the Login screen placeholder.
-- Supabase + Roboflow env vars are wired (debug build can `println(BuildConfig.SUPABASE_URL)` without crash).
+- Supabase + Inference env vars are wired (debug build can `println(BuildConfig.SUPABASE_URL)` and `println(BuildConfig.INFERENCE_URL)` without crash).
 - `bun run build` and `bun run lint` pass.
 - Room schema `1.json` exists in `app/schemas/`.
 
@@ -116,7 +116,7 @@ Real secrets live outside the repo — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONM
 ## Sprint 1 — Auth + Continuous Capture + Inference + Verify + Sync
 
 > The core MVP loop. A medtech logs in, starts a recording session, frames flow to
-> Roboflow at 1 fps every 2 seconds, detections surface as Sonner toasts, the medtech
+> the inference container at 1 fps every 2 seconds, detections surface as Sonner toasts, the medtech
 > taps to verify, verified samples sync to Supabase.
 
 ### Key Deliverables
@@ -124,7 +124,7 @@ Real secrets live outside the repo — see [01_ENVIRONMENT_SETUP.md](01_ENVIRONM
 - `LoginScreen` + `LoginViewModel` (Supabase Auth)
 - `CaptureScreen` + `CaptureViewModel` (continuous-frame `ImageAnalysis`)
 - `VerificationSheet` + `VerificationViewModel`
-- `RoboflowClient` (Retrofit + OkHttp)
+- `InferenceApi` (Retrofit + OkHttp) — talks to the self-hosted FastAPI container
 - `SupabaseSyncManager`
 - Room entities: `SampleEntity`, `DetectionEntity`, `SessionEntity`
 
@@ -200,7 +200,7 @@ class CameraManager @Inject constructor(
 
         val imageAnalysis = ImageAnalysis.Builder()
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .setTargetResolution(Size(640, 640))      // matches Roboflow input
+            .setTargetResolution(Size(640, 640))      // matches inference container input
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
             .apply {
@@ -262,24 +262,24 @@ class FrameSampler @Inject constructor(
 
 ### 1.4 Inference Call
 
-`InferFrameUseCase` is the only thing that talks to Roboflow.
+`InferFrameUseCase` is the only thing that talks to the inference container. The
+container endpoint is `POST /infer` with a raw JPEG body and a `Bearer` token
+header (injected by the OkHttp interceptor in `InferenceModule`). See
+[ADR-003](adr/003-self-hosted-inference-container.md).
 
 ```kotlin
 class InferFrameUseCase @Inject constructor(
-    private val roboflow: RoboflowApi,
+    private val inference: InferenceApi,
     private val flaggedFrameStore: FlaggedFrameStore,
 ) {
     suspend operator fun invoke(sessionId: UUID, jpegBytes: ByteArray) {
         val response = runCatching {
-            roboflow.infer(
-                project = BuildConfig.ROBOFLOW_PROJECT,
-                version = BuildConfig.ROBOFLOW_VERSION,
-                apiKey  = BuildConfig.ROBOFLOW_API_KEY,
-                image   = jpegBytes.toRequestBody("image/jpeg".toMediaType()),
+            inference.infer(
+                image = jpegBytes.toRequestBody("image/jpeg".toMediaType()),
             )
         }.getOrElse {
             // network error → bubble up; CaptureViewModel decides whether to stop the session
-            throw RoboflowConnectionException(it)
+            throw InferenceConnectionException(it)
         }
 
         val predictions = response.body()?.predictions.orEmpty()
@@ -396,7 +396,7 @@ If any step fails, status becomes `SYNC_FAILED` and a retry is attempted next ti
 
 ### 1.9 Connection-loss Handling
 
-A `NetworkMonitor` (`core/connectivity/NetworkMonitor.kt`) observes Roboflow connectivity. If `InferFrameUseCase` throws `RoboflowConnectionException`:
+A `NetworkMonitor` (`core/connectivity/NetworkMonitor.kt`) observes inference-container connectivity. If `InferFrameUseCase` throws `InferenceConnectionException`:
 
 1. The current recording session stops (`SessionManager.stopSession()`).
 2. A persistent `Alert` banner appears: *"Cloud connection lost. Recording stopped."*
@@ -417,7 +417,7 @@ GPS permission handling is the same as before: requested on first session start;
 | `device_id`   | `DeviceIdProvider.id` (`Settings.Secure.ANDROID_ID`)|
 | `gps_*`       | `LocationProvider.getCurrentLocation()` at verify   |
 | `storage_path`| Computed at upload                                  |
-| `roboflow_model_version` | `BuildConfig.ROBOFLOW_VERSION`           |
+| `inference_model_version` | Returned by `/infer` (or pinned via `BuildConfig` if the server reports a static version) |
 
 ### 1.11 Acceptance Criteria — Sprint 1
 
@@ -429,7 +429,7 @@ GPS permission handling is the same as before: requested on first session start;
 - Tapping the toast (or the in-app-bar verification chip) opens the Verification sheet **and stops recording**.
 - Verifying a flagged frame writes a row to Room (status `VERIFIED`) and uploads to Supabase (status → `SYNCED`).
 - Rejecting a flagged frame deletes it entirely — no trace in Room or Supabase.
-- Losing Roboflow connectivity mid-session stops recording and shows the "Cloud connection lost" banner; the capture preview stays visible.
+- Losing inference-container connectivity mid-session stops recording and shows the "Cloud connection lost" banner; the capture preview stays visible.
 - Tapping "Resume Recording" after connectivity returns restarts the session.
 - GPS coordinates populated on verify if permission granted; null if denied — never throws.
 
@@ -523,8 +523,8 @@ Walk through the full loop on a real device:
 |-----------------------------------------|----------------------------------------------------------|
 | Camera permission denied                | Show explanation; offer Retry button.                    |
 | Location permission denied              | Recording proceeds; GPS fields stay null.                |
-| Roboflow times out (> 10s per frame)   | Treat as detection-empty; do not crash.                  |
-| Roboflow returns error (4xx / 5xx)     | Stop session; show "Cloud connection lost" banner.       |
+| Inference times out (> 30s per frame)  | Treat as detection-empty; do not crash.                  |
+| Inference returns error (4xx / 5xx)    | Stop session; show "Cloud connection lost" banner.       |
 | Supabase upload fails on verify        | Mark `SYNC_FAILED`; retry on next session start.         |
 | App killed mid-session                  | Session marked `ended_at = null`; auto-closed on relaunch.|
 | Low storage                             | Block session start; show alert.                         |
@@ -567,11 +567,12 @@ workflow. ADR-002 cuts that down to MVP scope. Specifically dropped from Phase 1
 |------------------------------------------|------------------------------------------------------|
 | `BiologicalWindowChip` countdown timer   | Removed entirely. Window enforcement is off-app.     |
 | Snapshot capture via `ImageCapture`      | Continuous `ImageAnalysis` sampled at 2-second intervals. |
-| Own-backend payload upload pipeline      | Direct Roboflow inference + Supabase sync from mobile.|
+| Own-backend payload upload pipeline      | Direct self-hosted inference container + Supabase sync from mobile. |
 | Separate Validate/Approve/Edit/Reject sprint | Verify / Reject inline during capture.           |
 | `SyncQueueEntity` + `SyncWorker` retry   | One-shot retry at next session start. No WorkManager. |
 | EPG calculation, false-positive marking  | Deferred to Phase 2.                                  |
 | Admin dashboard, DOH PDF reports         | Deferred to Phase 2. CSV export only.                 |
 
-See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the migration path back
+See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) and
+[ADR-003](adr/003-self-hosted-inference-container.md) for the migration path back
 to the full SDD model in Phase 2.

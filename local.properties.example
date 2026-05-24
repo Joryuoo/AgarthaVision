@@ -1,0 +1,26 @@
+# AgarthaVision — local secrets template
+#
+# Copy this file to `local.properties` and fill in the values shared by DMKuZu.
+# `local.properties` is gitignored — never commit real keys.
+#
+# See docs/01_ENVIRONMENT_SETUP.md §B.6 for full setup.
+
+# ── Android SDK ─────────────────────────────────────────────────────────────
+# (auto-populated by Android Studio when you open the project — leave blank
+# here and let AS write it, or set explicitly if building from CLI only)
+# sdk.dir=/home/<you>/Android/Sdk
+
+# ── Supabase ────────────────────────────────────────────────────────────────
+# Dashboard → Settings → API → Project URL + Publishable (anon) key.
+# Two projects: agarthavision-dev and agarthavision-prod.
+SUPABASE_URL_DEV=https://<dev-project-ref>.supabase.co
+SUPABASE_ANON_KEY_DEV=sb_publishable_<dev-anon-key>
+SUPABASE_URL_PROD=https://<prod-project-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=sb_publishable_<prod-anon-key>
+
+# ── Inference (self-hosted FastAPI container on a rented GPU droplet) ────────
+# DMKuZu spins up the droplet, runs the inference container, and shares the
+# IP + bearer key over the team chat. See ADR-003.
+INFERENCE_URL_DEV=http://<droplet-ip>:8000
+INFERENCE_URL_PROD=http://<droplet-ip>:8000
+INFERENCE_API_KEY=<shared-secret>

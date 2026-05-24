@@ -17,6 +17,26 @@ All project rules, standards, and implementation requirements live in:
 
 Everything you do must align with those documents. If anything is missing or unclear, update the relevant doc first and use that as the authority for subsequent changes.
 
+## Current Context Docs
+
+When you need to understand the current state of the project — what has been decided, what
+is in progress, and what is not yet built — read these folders in addition to the source of
+truth docs above:
+
+**docs/adr/** — Architecture Decision Records. Each file captures a single architectural
+decision: the context that forced it, what was decided, why, and what trade-offs were
+accepted. Read the relevant ADR before touching any area it covers. ADRs are never edited
+retroactively — a superseding ADR will reference the one it replaces.
+
+**docs/progress/** — Sprint progress reports. Each file is a point-in-time audit of what
+the codebase actually contains vs. what the sprint spec requires. Read the latest progress
+report before starting any implementation work so you know what is already built, what is
+missing, and what legacy code must be cleaned up first.
+
+These folders are **read-only context** — they tell you where things stand. They do not
+override the source of truth docs. If a progress report says something is ❌ missing, the
+spec in docs/03_MOBILE_APP_PLAN.md is still the authority on what to build.
+
 ## Precedence Rules
 
 When there is overlap or conflict between docs:

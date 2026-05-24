@@ -82,12 +82,12 @@ com.agarthavision/
 ├── MainActivity.kt                      # Single-activity host
 │
 ├── core/                                # Shared utilities — no feature logic
-│   ├── di/                              # Hilt modules (DatabaseModule, SupabaseModule, RoboflowModule, LocationModule)
+│   ├── di/                              # Hilt modules (DatabaseModule, SupabaseModule, InferenceModule, LocationModule)
 │   ├── camera/                          # CameraManager (CameraX ImageAnalysis wrapper)
 │   ├── database/                        # Room database class, migrations
 │   ├── location/                        # LocationProvider (Fused), DeviceIdProvider
 │   ├── session/                         # SessionManager (active recording session)
-│   ├── connectivity/                    # NetworkMonitor (Roboflow reachability)
+│   ├── connectivity/                    # NetworkMonitor (inference container reachability)
 │   ├── datastore/                       # DataStore preferences wrapper
 │   └── util/                            # Extensions, formatters, UUID generator
 │
@@ -104,9 +104,9 @@ com.agarthavision/
 │   │   ├── entity/                      # SessionEntity, SampleEntity, DetectionEntity
 │   │   ├── dao/                         # SessionDao, SampleDao, DetectionDao
 │   │   └── mapper/                      # Entity ↔ Domain model mappers
-│   ├── remote/                          # Roboflow API + DTOs (Retrofit)
-│   │   ├── RoboflowApi.kt
-│   │   ├── dto/                         # RoboflowInferenceDto
+│   ├── remote/                          # Inference container API + DTOs (Retrofit)
+│   │   ├── InferenceApi.kt
+│   │   ├── dto/                         # InferenceResponseDto, PredictionDto, ImageMetaDto
 │   │   └── mapper/                      # DTO ↔ Domain mappers
 │   ├── supabase/                        # Supabase client wrapper + sync logic
 │   │   ├── SupabaseClientProvider.kt
@@ -130,11 +130,12 @@ com.agarthavision/
 └── worker/                              # WorkManager workers (Phase 2+; not used in Phase 1)
 ```
 
-> **Phase 1 (Supabase + Roboflow MVP) note:** the queue/validate/reports vertical
-> slices and the WorkManager workers are out of scope for the MVP. Inference is
-> synchronous per frame (Roboflow Hosted), and sync to Supabase is a one-shot
-> call at verify time — no background queue. See [03_MOBILE_APP_PLAN.md](03_MOBILE_APP_PLAN.md)
-> and [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md).
+> **Phase 1 MVP note:** the queue/validate/reports vertical slices and the WorkManager
+> workers are out of scope for the MVP. Inference is synchronous per frame against a
+> self-hosted FastAPI container ([ADR-003](adr/003-self-hosted-inference-container.md)),
+> and sync to Supabase is a one-shot call at verify time — no background queue.
+> See [03_MOBILE_APP_PLAN.md](03_MOBILE_APP_PLAN.md) and
+> [04_CLOUD_BACKEND_PLAN.md](04_CLOUD_BACKEND_PLAN.md).
 
 ### Why This Structure
 
@@ -304,19 +305,17 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "SUPABASE_URL",       "\"http://10.0.2.2:54321\"")
-            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<local dev anon key>\"")
-            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
-            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
-            buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+            buildConfigField("String", "SUPABASE_URL",      "\"${project.findProperty("SUPABASE_URL_DEV")      ?: ""}\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"")
+            buildConfigField("String", "INFERENCE_URL",     "\"${project.findProperty("INFERENCE_URL_DEV")     ?: ""}\"")
+            buildConfigField("String", "INFERENCE_API_KEY", "\"${project.findProperty("INFERENCE_API_KEY")     ?: ""}\"")
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "SUPABASE_URL",       "\"https://<ref>.supabase.co\"")
-            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"<prod anon key>\"")
-            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"<api key>\"")
-            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"<slug>\"")
-            buildConfigField("Integer","ROBOFLOW_VERSION",   "1")
+            buildConfigField("String", "SUPABASE_URL",      "\"${project.findProperty("SUPABASE_URL_PROD")      ?: ""}\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"")
+            buildConfigField("String", "INFERENCE_URL",     "\"${project.findProperty("INFERENCE_URL_PROD")     ?: ""}\"")
+            buildConfigField("String", "INFERENCE_API_KEY", "\"${project.findProperty("INFERENCE_API_KEY")      ?: ""}\"")
         }
     }
 
@@ -352,7 +351,7 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Network (used by Roboflow client)
+    // Network (used by InferenceApi → self-hosted FastAPI container)
     implementation(libs.retrofit)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
@@ -363,7 +362,7 @@ dependencies {
     implementation(libs.supabase.postgrest)
     implementation(libs.supabase.storage)
     implementation(libs.supabase.auth)
-    implementation(libs.ktor.client.android)
+    implementation(libs.ktor.client.okhttp)
 
     // CameraX
     implementation(libs.camerax.core)
@@ -441,24 +440,30 @@ object SupabaseModule {
     }
 }
 
-// RoboflowModule.kt
+// InferenceModule.kt — talks to the self-hosted FastAPI container (ADR-003).
 @Module
 @InstallIn(SingletonComponent::class)
-object RoboflowModule {
+object InferenceModule {
     @Provides @Singleton
     fun provideOkHttp(): OkHttpClient = OkHttpClient.Builder()
-        .addInterceptor(HttpLoggingInterceptor().apply { level = BODY })
+        .addInterceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header("Authorization", "Bearer ${BuildConfig.INFERENCE_API_KEY}")
+                .build()
+            chain.proceed(request)
+        }
+        .addInterceptor(HttpLoggingInterceptor().apply { level = HEADERS })
         .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)   // per-frame inference budget
+        .readTimeout(30, TimeUnit.SECONDS)   // per-frame inference budget
         .build()
 
     @Provides @Singleton
-    fun provideRoboflowApi(client: OkHttpClient): RoboflowApi = Retrofit.Builder()
-        .baseUrl("https://detect.roboflow.com/")
+    fun provideInferenceApi(client: OkHttpClient): InferenceApi = Retrofit.Builder()
+        .baseUrl(BuildConfig.INFERENCE_URL.let { if (it.endsWith("/")) it else "$it/" })
         .client(client)
         .addConverterFactory(GsonConverterFactory.create())
         .build()
-        .create(RoboflowApi::class.java)
+        .create(InferenceApi::class.java)
 }
 ```
 

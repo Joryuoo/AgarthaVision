@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.ktlint)
@@ -33,13 +34,49 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("Boolean", "USE_MOCK_API", "true")
-            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8000\"")
+            buildConfigField(
+                "String",
+                "SUPABASE_URL",
+                "\"${project.findProperty("SUPABASE_URL_DEV") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "SUPABASE_ANON_KEY",
+                "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "INFERENCE_URL",
+                "\"${project.findProperty("INFERENCE_URL_DEV") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "INFERENCE_API_KEY",
+                "\"${project.findProperty("INFERENCE_API_KEY") ?: ""}\"",
+            )
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("Boolean", "USE_MOCK_API", "false")
-            buildConfigField("String", "API_BASE_URL", "\"https://api.agarthavision.com\"")
+            buildConfigField(
+                "String",
+                "SUPABASE_URL",
+                "\"${project.findProperty("SUPABASE_URL_PROD") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "SUPABASE_ANON_KEY",
+                "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "INFERENCE_URL",
+                "\"${project.findProperty("INFERENCE_URL_PROD") ?: ""}\"",
+            )
+            buildConfigField(
+                "String",
+                "INFERENCE_API_KEY",
+                "\"${project.findProperty("INFERENCE_API_KEY") ?: ""}\"",
+            )
         }
     }
 
@@ -99,6 +136,13 @@ dependencies {
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+
+    // Supabase (BOM aligns all sub-module versions)
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.auth)
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.storage)
+    implementation(libs.ktor.client.okhttp)
 
     // Background + Async
     implementation(libs.workmanager)

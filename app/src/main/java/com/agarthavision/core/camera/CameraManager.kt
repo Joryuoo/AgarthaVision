@@ -1,112 +1,78 @@
 package com.agarthavision.core.camera
 
 import android.content.Context
+import android.util.Size
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
+import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.Executor
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
-import java.util.UUID
 
+/**
+ * Binds the device camera for **continuous frame analysis** (no shutter).
+ *
+ * Per docs/03_MOBILE_APP_PLAN.md §1.2 the Phase 1 capture flow uses CameraX's
+ * [ImageAnalysis] — frames flow into the supplied [ImageAnalysis.Analyzer], which
+ * the `FrameSampler` throttles to one frame every two seconds and dispatches to
+ * `InferFrameUseCase`. There is no `ImageCapture` use case in Phase 1.
+ */
 @Singleton
 class CameraManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
 
-    private var cameraProvider: ProcessCameraProvider? = null
-
-    suspend fun bindPreview(
+    /**
+     * Binds the [Preview] + [ImageAnalysis] use cases to [lifecycleOwner].
+     *
+     * @param analyzerExecutor where the [analyzer] runs — usually
+     *   `Dispatchers.IO.asExecutor()` or the main executor for low-latency UI overlays.
+     * @return the bound [Camera] so callers can adjust torch / zoom if needed.
+     */
+    suspend fun bindAnalysis(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
-    ): ImageCapture = suspendCancellableCoroutine { continuation ->
-
-        val cameraProviderFuture =
-            ProcessCameraProvider.getInstance(context)
+        analyzer: ImageAnalysis.Analyzer,
+        analyzerExecutor: Executor = ContextCompat.getMainExecutor(context),
+    ): Camera = suspendCancellableCoroutine { continuation ->
+        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
+            try {
+                val provider = cameraProviderFuture.get()
 
-            cameraProvider = cameraProviderFuture.get()
-
-            val preview = Preview.Builder()
-                .build()
-                .also {
-                    it.surfaceProvider = previewView.surfaceProvider
+                val preview = Preview.Builder().build().apply {
+                    surfaceProvider = previewView.surfaceProvider
                 }
 
-            val imageCapture = ImageCapture.Builder()
-                .setCaptureMode(
-                    ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
-                )
-                .build()
+                @Suppress("DEPRECATION") // setTargetResolution — Roboflow input dims
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .setTargetResolution(Size(640, 640))
+                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
+                    .build()
+                    .apply { setAnalyzer(analyzerExecutor, analyzer) }
 
-            try {
-
-                cameraProvider?.unbindAll()
-
-                cameraProvider?.bindToLifecycle(
+                provider.unbindAll()
+                val camera = provider.bindToLifecycle(
                     lifecycleOwner,
                     CameraSelector.DEFAULT_BACK_CAMERA,
                     preview,
-                    imageCapture,
+                    imageAnalysis,
                 )
-
-                continuation.resume(imageCapture)
-
+                continuation.resume(camera)
             } catch (e: Exception) {
                 continuation.resumeWithException(e)
             }
-
         }, ContextCompat.getMainExecutor(context))
-    }
-
-    suspend fun captureImage(
-        imageCapture: ImageCapture,
-    ): File = suspendCancellableCoroutine { continuation ->
-
-        val capturesDir = File(
-            context.filesDir,
-            "captures"
-        ).apply {
-            mkdirs()
-        }
-
-        val photoFile = File(
-            capturesDir,
-            "${UUID.randomUUID()}.jpg"
-        )
-
-        val outputOptions =
-            ImageCapture.OutputFileOptions.Builder(photoFile)
-                .build()
-
-        imageCapture.takePicture(
-            outputOptions,
-            ContextCompat.getMainExecutor(context),
-
-            object : ImageCapture.OnImageSavedCallback {
-
-                override fun onImageSaved(
-                    outputFileResults: ImageCapture.OutputFileResults
-                ) {
-                    continuation.resume(photoFile)
-                }
-
-                override fun onError(
-                    exception: ImageCaptureException
-                ) {
-                    continuation.resumeWithException(exception)
-                }
-            }
-        )
     }
 }

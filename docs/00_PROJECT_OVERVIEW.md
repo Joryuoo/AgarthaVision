@@ -7,8 +7,8 @@
 
 A medtech opens the app, logs in, and sees a live camera viewport trained on a microscope slide. They tap **Start Session** — the app begins sampling one frame every two seconds and sending each to a cloud AI model. When the model detects a parasite egg, a banner appears: *"Egg detected — tap to review."* The session continues running while the medtech reviews flagged frames, accepting or rejecting each detection. When they finish, verified samples and their bounding-box metadata sync to the cloud database. No manual counting, no paper forms mid-session.
 
-**Phase 1 (current MVP):** Mobile capture + Roboflow inference + Supabase storage. No dedicated server to operate.
-**Phase 2:** Self-hosted inference (local GPU), self-hosted PostgreSQL, EPG calculations, DOH-formatted reports, offline-first sync queue.
+**Phase 1 (current MVP):** Mobile capture + Supabase (Auth + Postgres + Storage) + a **self-hosted FastAPI inference container** running on a rented GPU droplet. Rebuildable on any GPU provider via a public image on GitHub Container Registry.
+**Phase 2:** Self-hosted inference on owned hardware (local GPU), self-hosted PostgreSQL in Philippine region, EPG calculations, DOH-formatted reports, offline-first sync queue.
 
 ---
 
@@ -22,7 +22,7 @@ No dedicated backend to operate. The mobile app talks directly to Supabase and R
 |------------|-----------------------------------|--------------|-----------------------------------------------------------|
 | 1A         | Mobile Capture Client             | **Yes**      | Android app — continuous capture, per-frame inference, verify + sync |
 | 2A         | Cloud Backend                     | **Supabase** | Managed Postgres + Auth + Storage; schema migrations owned by Joryuoo |
-| 2A (AI)    | Inference                         | **Roboflow** | Hosted egg-detection model; owned by Tabada               |
+| 2A (AI)    | Inference                         | **Self-hosted container** | FastAPI + custom Ultralytics (YOLOv26 head + EfficientNetV2 backbone) on a rented GPU droplet. Model trained by Tabada; container built/deployed by DMKuZu. Per [ADR-003](adr/003-self-hosted-inference-container.md). |
 | 3          | Verification (in-app)             | **Yes**      | `VerificationSheet` — medtech accepts or rejects flagged frames |
 | 4          | Reporting & Admin                 | **No**       | Phase 2                                                   |
 | 1B         | Dedicated Hardware Capture (IoT)  | No           | Phase 2 / SE2                                             |
@@ -97,15 +97,15 @@ Each General Objective from the Project Proposal maps to concrete MVP deliverabl
 | Min SDK        | 26                                                      |
 | Target SDK     | 35                                                      |
 
-### Phase 1 Cloud (managed — no server to operate)
+### Phase 1 Cloud
 
 | Concern        | Technology                                                   |
 |----------------|--------------------------------------------------------------|
 | Auth           | Supabase Auth (email/password, JWT, auto-refresh via supabase-kt) |
 | Database       | Supabase Postgres (managed) — `sessions`, `samples`, `detections` |
 | Object Storage | Supabase Storage — `samples` bucket (verified JPEGs)         |
-| Inference      | Roboflow Hosted Inference — Public workspace, unlimited free  |
-| SDK (Android)  | `supabase-kt` BOM + `ktor-client-okhttp`                     |
+| Inference      | Self-hosted FastAPI container on rented GPU droplet (default: DigitalOcean MI300X AMD). Public image on GHCR — `docker run` on any GPU provider. |
+| SDK (Android)  | `supabase-kt` BOM + `ktor-client-okhttp` + Retrofit (inference) |
 | Secrets        | `local.properties` (gitignored); CI via Gradle `-P` flags    |
 
 ### Phase 2 Cloud (self-hosted — deferred)
@@ -136,11 +136,19 @@ one person is the **point of contact** for each area.
 
 | Github Username  | Primary Area                                      | Secondary Area              |
 |------------------|---------------------------------------------------|-----------------------------|
-| Beansman         | Module 3 — In-app verification (VerificationSheet) | Design system / theming    |
-| Joryuoo          | Supabase project — schema migrations, RLS policies | API contracts               |
-| jojseph          | Module 1A — Mobile Capture Client + CameraX       | FrameSampler / inference flow |
-| IgnisFrostburn   | Module 4 — Records + Reporting (Phase 2)          | Sync queue / WorkManager    |
-| DMKuZu           | Architecture + DevOps + CI/CD                     | Git workflow, code review   |
+| Beansman         | Module 3 — In-app verification (VerificationSheet) + Login screen | Design system / theming |
+| Joryuoo          | Supabase schema migrations + `SyncSampleUseCase` (RLS policies) | API contracts |
+| IgnisFrostburn   | Module 1A — CameraX (`bindAnalysis`) + `FrameSampler` + `CaptureScreen` | Detection overlay |
+| jojseph          | Module 4 — Records + CSV export (Sprint 2)        | Sync queue / WorkManager (Phase 2) |
+| Tabada           | Model training (custom Ultralytics: YOLOv26 + EfficientNetV2) + handoff of `best.pt` | Model versioning |
+| DMKuZu           | Architecture + DevOps + CI/CD + **inference container** (Dockerfile, FastAPI server, GHCR image, GPU droplet ops) | Git workflow, code review |
+
+> **Phase 1 re-scope (May 2026):** Joryuoo's original "build FastAPI backend" scope was
+> replaced by "operate the Supabase project and own SQL schema migrations" per
+> [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). The Roboflow inference path was
+> then replaced by a self-hosted FastAPI container per
+> [ADR-003](adr/003-self-hosted-inference-container.md) because the team's custom model
+> (YOLOv26 + EfficientNetV2) is incompatible with Roboflow Hosted Inference.
 
 > **Phase 1 re-scope:** Joryuoo's original "build FastAPI backend" scope has been replaced by
 > "operate the Supabase project and own all SQL schema migrations" per
@@ -166,3 +174,4 @@ one person is the **point of contact** for each area.
 | `07_TEAM_CONVENTIONS.md`          | Kotlin standards, commit messages, documentation       |
 | `adr/001-fused-location-and-instant.md` | LocationProvider interface + Instant over Long   |
 | `adr/002-supabase-and-roboflow-for-mvp.md` | Phase 1 managed-services decision + Phase 2 migration path |
+| `adr/003-self-hosted-inference-container.md` | Pivot from Roboflow to self-hosted inference container (custom model) |
