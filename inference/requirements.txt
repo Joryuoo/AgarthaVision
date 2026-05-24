@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pillow
+numpy
+# Pin your custom Ultralytics fork by commit SHA once pushed to GitHub:
+# git+https://github.com/DMKuZu/ultralytics@<commit-sha>
