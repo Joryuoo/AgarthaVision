@@ -102,7 +102,7 @@ Runs in parallel with the teammate tracks. Mobile code reads `INFERENCE_URL` fro
 | Build + push to `ghcr.io/dmkuzu/agartha-inference:v1` | ✅ pushed 2026-05-25 |
 | Provision GPU droplet, run container, smoke-test `/infer` + `/health`, destroy | ✅ dev droplet validated and destroyed 2026-05-25 |
 | `inference/README.md` runbook + `inference/test.md` smoke-test reference | ✅ |
-| `v2` image: remove `CONFIDENCE_THRESHOLD` post-filter (per ADR-004) | ⬜ open (pending team review of ADR-004) |
+| `v2` image: remove `CONFIDENCE_THRESHOLD` post-filter (per ADR-004) | ✅ already absent in shipped `server.py` — no separate v2 needed |
 
 ---
 

@@ -113,17 +113,12 @@ Do this every time. The image is on GHCR — rebuilding takes one `docker run`.
 
 Run this once `server.py` is confirmed working on the droplet directly.
 
-### Build the image
+### Build the image and Push to GHCR
 
 ```bash
 # From repo root:
-docker build -t ghcr.io/DMKuZu/agartha-inference:v1 inference/
-```
-
-### Push to GHCR
-
-```bash
-docker push ghcr.io/DMKuZu/agartha-inference:v1
+docker build -t ghcr.io/dmkuzu/agartha-inference:v1 inference/
+docker push ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
 ### Run on a fresh GPU droplet
@@ -135,7 +130,6 @@ docker run \
   --group-add video \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
-  -e CONFIDENCE_THRESHOLD="0.4" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 

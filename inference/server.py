@@ -7,7 +7,6 @@ from PIL import Image
 from ultralytics import YOLO
 
 API_KEY = os.environ["INFERENCE_API_KEY"]
-CONFIDENCE_THRESHOLD = float(os.environ.get("CONFIDENCE_THRESHOLD", "0.4"))
 WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/best.pt")
 
 app = FastAPI()
@@ -43,8 +42,6 @@ async def infer(request: Request, _: None = Depends(verify_key)) -> dict:
     predictions = []
     for box in results.boxes:
         conf = float(box.conf)
-        if conf < CONFIDENCE_THRESHOLD:
-            continue
         cls_name = results.names[int(box.cls)]
         x, y, w, h = box.xywh[0].tolist()
         predictions.append({

@@ -154,7 +154,7 @@ create table public.samples (
 create table public.detections (
     id uuid primary key default uuid_generate_v4(),
     sample_id uuid not null references public.samples(id) on delete cascade,
-    class_label text not null,                       -- the model's predicted class, e.g. 'ascaris_lumbricoides'
+    class_label text not null,                       -- the model's predicted class, e.g. 'Ascaris lumbricoides'
     confidence real not null check (confidence between 0 and 1),
     bbox_x real not null,                            -- normalized 0-1
     bbox_y real not null,
@@ -279,33 +279,77 @@ Content-Type: image/jpeg
 Body: <raw JPEG bytes>
 ```
 
-Response (200):
+Response (200) — single detection:
 
 ```json
 {
   "predictions": [
     {
-      "class": "ascaris_lumbricoides",
-      "confidence": 0.91,
-      "x": 312, "y": 188,
-      "width": 64, "height": 48
+      "class": "Hookworm",
+      "confidence": 0.938,
+      "x": 2620.47, "y": 1693.42,
+      "width": 887.17, "height": 701.91
     }
   ],
-  "image": { "width": 640, "height": 640 }
+  "image": { "width": 5184, "height": 3456 }
 }
 ```
+
+Response (200) — multiple detections (cross-class overlap, same frame):
+
+```json
+{
+  "predictions": [
+    {
+      "class": "Trichuris trichiura",
+      "confidence": 0.8626,
+      "x": 2663.69, "y": 1686.46,
+      "width": 589.75, "height": 469.69
+    },
+    {
+      "class": "Ascaris lumbricoides",
+      "confidence": 0.3369,
+      "x": 2663.33, "y": 1689.74,
+      "width": 586.93, "height": 476.68
+    }
+  ],
+  "image": { "width": 5184, "height": 3456 }
+}
+```
+
+**Class labels emitted by the model** (verbatim strings as returned in the `class` field):
+
+| Label | Species |
+|---|---|
+| `Ascaris lumbricoides` | Roundworm egg (fertilised) |
+| `Trichuris trichiura` | Whipworm egg |
+| `Hookworm` | Hookworm egg |
+
+These are the only classes in `best.pt` as of 2026-05-25. Any string outside this list
+is a forward-incompatibility signal — `InferenceMapper` should treat an unknown class as
+`WRONG_CLASS`-candidate and preserve the raw string in `class_label`.
+
+**Coordinates** are in the original image's pixel space (not the model's 640×640 input
+space). Use `image.width` / `image.height` to normalise to 0–1 if needed.
+
+**Cross-class overlapping boxes.** YOLO's NMS is class-aware by default — it suppresses
+duplicate boxes of the *same* class, but two boxes of *different* classes on the same
+physical egg both survive. This is intentional: each becomes a separate `DetectionEntity`
+with its own per-box verdict, giving the retraining pipeline labeled evidence of model
+confusion. The expert handles them via the stepped Q1/Q2/Q3 flow in VerificationSheet
+(the high-confidence box is typically `CONFIRMED`; the cross-class duplicate is marked
+`WRONG_CLASS` with the correct species in Q3).
 
 The response shape intentionally matches Roboflow's so the mobile DTO is provider-agnostic.
 When `predictions` is empty, the mobile client discards the frame immediately — no toast,
 no local persistence.
 
-> **Server contract change (per [ADR-004](adr/004-verification-as-hitl-correction.md)) —
-> deferred implementation.** The `CONFIDENCE_THRESHOLD` env var and its post-filter in
-> `inference/server.py` are removed in the upcoming `v2` image. The expert sees every
-> candidate the model emits (the model's internal objectness threshold still
-> short-circuits "nothing here" frames to an empty `predictions[]`). This change ships
-> together with the verification-sheet rebuild — until then, the `v1` image keeps the
-> filter for backward compatibility.
+> **`CONFIDENCE_THRESHOLD` post-filter — already removed.** `inference/server.py` in the
+> current codebase has no confidence threshold post-filter. The server returns every
+> prediction the model emits; the model's internal objectness threshold still
+> short-circuits "nothing here" frames to an empty `predictions[]`. The ADR-004 note
+> about a separate "v2 image to remove the filter" is **no longer pending** — the shipped
+> `server.py` already reflects this behaviour.
 
 `GET /health` returns 200 OK once the model is loaded — used to verify the droplet is
 ready before pointing the mobile app at it. The mobile `NetworkMonitor` (see

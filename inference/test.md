@@ -7,6 +7,7 @@ ssh root@<droplet-ip>
 ```
 Prepare your Github Personal Access Token
 ```bash
+sudo apt-get update && sudo apt-get upgrade
 docker login ghcr.io
 ```
 
