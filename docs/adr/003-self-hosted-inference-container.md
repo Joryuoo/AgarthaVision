@@ -34,7 +34,7 @@ Docker-capable GPU host.
 | Runtime             | FastAPI + Uvicorn + custom Ultralytics fork + PyTorch                 |
 | Endpoint shape      | `POST /infer` (raw JPEG body, `Authorization: Bearer <key>`) + `GET /health` |
 | Response shape      | Roboflow-compatible (same JSON keys: `predictions[]`, `image`)        |
-| Distribution        | Public Docker image on **GitHub Container Registry** (`ghcr.io/joryuoo/agartha-inference:<tag>`) |
+| Distribution        | Public Docker image on **GitHub Container Registry** (`ghcr.io/dmkuzu/agartha-inference:<tag>`) |
 | Weights             | Baked into the image at build time (Git LFS in `inference/weights/`)  |
 | Default host        | DigitalOcean **MI300X (AMD)** GPU droplet — pending ROCm validation   |
 | NVIDIA fallback     | RunPod A5000 (~$0.69/hr) or Lambda Labs A10 (~$0.50/hr)               |

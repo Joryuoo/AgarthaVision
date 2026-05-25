@@ -1,8 +1,21 @@
 # Sprint 1 Progress Report
 
-**Last updated:** 2026-05-24
+**Last updated:** 2026-05-25
 **Spec authority:** [../03_MOBILE_APP_PLAN.md](../03_MOBILE_APP_PLAN.md) (Phase 1 MVP)
-**Architecture authority:** [../adr/002-supabase-and-roboflow-for-mvp.md](../adr/002-supabase-and-roboflow-for-mvp.md) · [../adr/003-self-hosted-inference-container.md](../adr/003-self-hosted-inference-container.md) · [../02_PROJECT_ARCHITECTURE.md](../02_PROJECT_ARCHITECTURE.md)
+**Architecture authority:** [../adr/002-supabase-and-roboflow-for-mvp.md](../adr/002-supabase-and-roboflow-for-mvp.md) · [../adr/003-self-hosted-inference-container.md](../adr/003-self-hosted-inference-container.md) · [../adr/004-verification-as-hitl-correction.md](../adr/004-verification-as-hitl-correction.md) · [../02_PROJECT_ARCHITECTURE.md](../02_PROJECT_ARCHITECTURE.md)
+
+> **2026-05-25 verification redesign — ADR-004.** The current spec's `Reject = delete`
+> behavior was a drift from the team's actual intent. Per ADR-004, all flagged samples
+> persist; each detection carries a per-box `verdict ∈ {CONFIRMED, FALSE_POSITIVE, WRONG_CLASS, BOX_INCORRECT}`;
+> VerificationSheet becomes a stepped 3-question dropdown flow; the server drops its
+> `CONFIDENCE_THRESHOLD` post-filter in the upcoming `v2` image. Schema migration
+> `0002_verification_fields.sql` is written but **not yet applied** — pending team review.
+
+> **2026-05-25 inference container live on GHCR.** DMKuZu built and pushed
+> `ghcr.io/dmkuzu/agartha-inference:v1`. ROCm validated on DigitalOcean MI300X; one
+> dev droplet was provisioned, smoke-tested (`/health` + `/infer` against an Ascaris
+> JPEG, response = 0.96 confidence), and destroyed. The mobile team can now connect.
+> Demo workflow documented in `inference/README.md` + `inference/test.md`.
 
 > **2026-05-24 architectural pivot — ADR-003.** Inference moved off **Roboflow Hosted**
 > and onto a **self-hosted FastAPI container** running on a rented GPU droplet
@@ -56,7 +69,8 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | 1.6  | `VerificationSheet` + `VerificationViewModel`                        | Beansman | ⬜ open |
 | 1.7  | `FlaggedFrame` model + `FlaggedFrameStore` (in-memory + disk cache)  | IgnisFrostburn | ⬜ open |
 | 1.8  | `SyncSampleUseCase` (Supabase Storage upload + Postgres insert)      | Joryuoo | ⬜ open |
-| 1.9  | `NetworkMonitor` + `InferenceConnectionException` handling           | DMKuZu (after inference container is live) | ⬜ open |
+| 1.9a | ADR-004 + amend `03_MOBILE_APP_PLAN.md` §1.6/§1.7/§1.9 + amend `04_CLOUD_BACKEND_PLAN.md` + write `0002_verification_fields.sql` | DMKuZu | ✅ docs written 2026-05-25 (migration not yet applied — pending team review) |
+| 1.9b | `NetworkMonitor` (active `/health` probe every 10s) + `InferenceConnectionException` + Retrofit→domain error mapper | DMKuZu (after 1.9a accepted by team) | ⬜ open |
 | 1.10 | Metadata binding per VERIFIED sample (`user_id`, `verified_at`, etc.) | Joryuoo (rolls into SyncSampleUseCase) | ⬜ open |
 
 ### Sprint 1 Acceptance Criteria
@@ -68,9 +82,9 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | Recording session activates frame sampling at 2s intervals | ⬜ |
 | Egg detection → Sonner toast within ~3s | ⬜ (requires the inference container to be live) |
 | Tapping toast opens VerificationSheet and stops recording | ⬜ |
-| Verify → Room `VERIFIED` row + Supabase `SYNCED` | ⬜ |
-| Reject → frame deleted, no Room/Supabase trace | ⬜ |
-| Connection loss → recording stops, banner shown, preview stays live | ⬜ |
+| Submit (any verdict mix) → Room `VERIFIED` row + per-detection verdicts + Supabase `SYNCED` | ⬜ |
+| All-FALSE_POSITIVE submit still persists (no deletion) | ⬜ (per [ADR-004](../adr/004-verification-as-hitl-correction.md)) |
+| Connection loss → recording stops, banner shown, preview stays live, already-flagged frames still verifiable | ⬜ |
 | GPS populated on verify if granted; null if denied | ⬜ |
 
 ---
@@ -82,12 +96,13 @@ Runs in parallel with the teammate tracks. Mobile code reads `INFERENCE_URL` fro
 
 | Step | Status |
 |------|--------|
-| ROCm validation of custom Ultralytics fork on MI300X (pivot to NVIDIA if it fails) | ⬜ open |
-| `inference/Dockerfile` + `inference/server.py` + `inference/requirements.txt` | ⬜ open |
-| `inference/weights/best.pt` (Tabada hands off; DMKuZu via Git LFS) | ⬜ open |
-| Build + push to `ghcr.io/joryuoo/agartha-inference:v1` | ⬜ open |
-| Provision GPU droplet, run container, share `INFERENCE_URL` + `INFERENCE_API_KEY` | ⬜ open |
-| `inference/README.md` runbook | ⬜ open |
+| ROCm validation of custom Ultralytics fork on MI300X (pivot to NVIDIA if it fails) | ✅ validated 2026-05-25 on DigitalOcean MI300X |
+| `inference/Dockerfile` + `inference/server.py` + `inference/requirements.txt` | ✅ |
+| `inference/weights/best.pt` (Tabada hands off; DMKuZu via Git LFS) | ✅ in repo via Git LFS |
+| Build + push to `ghcr.io/dmkuzu/agartha-inference:v1` | ✅ pushed 2026-05-25 |
+| Provision GPU droplet, run container, smoke-test `/infer` + `/health`, destroy | ✅ dev droplet validated and destroyed 2026-05-25 |
+| `inference/README.md` runbook + `inference/test.md` smoke-test reference | ✅ |
+| `v2` image: remove `CONFIDENCE_THRESHOLD` post-filter (per ADR-004) | ⬜ open (pending team review of ADR-004) |
 
 ---
 

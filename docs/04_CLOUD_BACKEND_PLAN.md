@@ -78,10 +78,11 @@ DMKuZu spins up for testing or demos.
 │                          │ user taps to verify                               │
 │                          ▼                                                   │
 │             ┌─────────────────────────┐                                      │
-│             │  Verification screen    │ (status → VERIFIED or REJECTED)      │
-│             │  (recording stops)      │                                      │
+│             │  Verification sheet     │ (per-box verdict ∈ CONFIRMED /       │
+│             │  (recording stops)      │  FALSE_POSITIVE / WRONG_CLASS /      │
+│             │  Per ADR-004            │  BOX_INCORRECT — sample persists)    │
 │             └────────────┬────────────┘                                      │
-│                          │ on verify                                         │
+│                          │ on submit                                         │
 └──────────────────────────┼───────────────────────────────────────────────────┘
                            │
                            │ supabase-kt SDK
@@ -129,33 +130,40 @@ create table public.sessions (
 );
 
 -- ── samples ─────────────────────────────────────────────────────────────────
--- A sample = a flagged frame the user verified. Pre-verification frames live only on-device.
+-- A sample = a flagged frame the expert submitted, regardless of verdict mix.
+-- Per ADR-004, samples persist even when every detection is FALSE_POSITIVE — that's
+-- the labeled-false-positive case, not a deletion. Pre-submit frames live only on-device.
 create table public.samples (
     id uuid primary key default uuid_generate_v4(),
     session_id uuid not null references public.sessions(id) on delete cascade,
     user_id uuid not null references public.profiles(id),
     captured_at timestamptz not null,                -- when the frame was captured on-device
-    verified_at timestamptz not null default now(),  -- when synced to cloud
+    verified_at timestamptz not null default now(),  -- when the expert submitted the sheet
     gps_latitude double precision,
     gps_longitude double precision,
     gps_accuracy real,
     storage_path text not null,                      -- Supabase Storage object key
-    roboflow_model_version text not null,  -- historical column name; per ADR-003 this now stores the self-hosted inference model version. Renaming is deferred to a follow-up migration.
+    inference_model_version text not null,           -- 0001 had roboflow_model_version; renamed in 0002 (ADR-004)
+    needs_reannotation boolean not null default false, -- set by frame-level Q4 (false negatives) — added in 0002
     user_note text
 );
 
 -- ── detections ──────────────────────────────────────────────────────────────
--- One detection per flagged egg in a verified sample. A sample can have many.
+-- One row per model-predicted bounding box on a submitted sample. Each row carries
+-- the expert's verdict (added in 0002). A sample can have many.
 create table public.detections (
     id uuid primary key default uuid_generate_v4(),
     sample_id uuid not null references public.samples(id) on delete cascade,
-    class_label text not null,                       -- e.g. 'ascaris_lumbricoides'
+    class_label text not null,                       -- the model's predicted class, e.g. 'ascaris_lumbricoides'
     confidence real not null check (confidence between 0 and 1),
     bbox_x real not null,                            -- normalized 0-1
     bbox_y real not null,
     bbox_w real not null,
     bbox_h real not null,
-    verified_by_user boolean not null default true   -- the user accepted this detection
+    verdict text not null default 'CONFIRMED'        -- expert's verdict per ADR-004; added in 0002
+        check (verdict in ('CONFIRMED','FALSE_POSITIVE','WRONG_CLASS','BOX_INCORRECT')),
+    expert_class text,                               -- expert's corrected class when verdict = WRONG_CLASS; added in 0002
+    verified_by_user boolean not null default true   -- DEPRECATED as of ADR-004 — read `verdict` instead. Kept for backward compatibility with rows written before 0002.
 );
 
 -- ── indexes ─────────────────────────────────────────────────────────────────
@@ -214,6 +222,22 @@ with check (
 );
 ```
 
+### 4.1.2 Verification Redesign — `0002_verification_fields.sql`
+
+Per [ADR-004](adr/004-verification-as-hitl-correction.md), every flagged sample
+persists (including false positives), and each detection carries a per-box expert
+verdict. The migration:
+
+- Renames `samples.roboflow_model_version` → `samples.inference_model_version` (the
+  column already stored the self-hosted version per ADR-003; only the name was stale).
+- Adds `samples.needs_reannotation boolean` (set by frame-level Q4 in the verification sheet).
+- Adds `detections.verdict text` with a `CHECK` constraint over `{CONFIRMED, FALSE_POSITIVE, WRONG_CLASS, BOX_INCORRECT}`.
+- Adds `detections.expert_class text` (nullable; populated only when `verdict = WRONG_CLASS`).
+- Marks `detections.verified_by_user` deprecated via a column comment; backfills any `false` rows to `verdict = FALSE_POSITIVE` for continuity.
+- Creates `detections_verdict_idx` so retraining queries by verdict are cheap.
+
+See [`supabase/migrations/0002_verification_fields.sql`](../supabase/migrations/0002_verification_fields.sql).
+
 ### 4.2 Storage Bucket
 
 Create a single private bucket `samples` via the Supabase dashboard or CLI:
@@ -235,7 +259,7 @@ deploys to a rented GPU droplet for testing and demo windows.
 ### 5.1 Container Image
 
 The image is built from `inference/Dockerfile` and published to
-**`ghcr.io/joryuoo/agartha-inference:<tag>`** (public).
+**`ghcr.io/dmkuzu/agartha-inference:<tag>`** (public).
 
 | Component | Detail |
 |-----------|--------|
@@ -273,8 +297,18 @@ The response shape intentionally matches Roboflow's so the mobile DTO is provide
 When `predictions` is empty, the mobile client discards the frame immediately — no toast,
 no local persistence.
 
+> **Server contract change (per [ADR-004](adr/004-verification-as-hitl-correction.md)) —
+> deferred implementation.** The `CONFIDENCE_THRESHOLD` env var and its post-filter in
+> `inference/server.py` are removed in the upcoming `v2` image. The expert sees every
+> candidate the model emits (the model's internal objectness threshold still
+> short-circuits "nothing here" frames to an empty `predictions[]`). This change ships
+> together with the verification-sheet rebuild — until then, the `v1` image keeps the
+> filter for backward compatibility.
+
 `GET /health` returns 200 OK once the model is loaded — used to verify the droplet is
-ready before pointing the mobile app at it.
+ready before pointing the mobile app at it. The mobile `NetworkMonitor` (see
+[03_MOBILE_APP_PLAN.md §1.9](03_MOBILE_APP_PLAN.md)) polls this endpoint every 10 seconds
+while a recording session is active.
 
 ### 5.3 `InferenceApi` (mobile-side)
 
@@ -369,12 +403,15 @@ Adding this trigger is part of `0001_init.sql`.
 
 ## 7. Sync Flow
 
-A verified sample syncs to Supabase via two operations:
+A submitted sample (per [ADR-004](adr/004-verification-as-hitl-correction.md), every
+sample — including ones with all `FALSE_POSITIVE` verdicts) syncs to Supabase via two
+operations:
 
 1. **Upload the JPEG to Storage** at path `{user_id}/{sample_id}.jpg`.
-2. **Insert rows** into `samples` + `detections` referencing that path.
+2. **Insert rows** into `samples` + `detections` referencing that path. Each
+   `detections` row carries its expert `verdict` (and `expert_class` when applicable).
 
-Both are wrapped in a single `SyncSampleUseCase` that runs after the medtech taps Verify on the verification sheet.
+Both are wrapped in a single `SyncSampleUseCase` that runs after the medtech submits the verification sheet.
 
 ```kotlin
 suspend fun syncSample(sample: VerifiedSample): Result<Unit> = runCatching {

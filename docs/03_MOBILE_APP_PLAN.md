@@ -313,7 +313,14 @@ If multiple frames flag in quick succession, the toasts collapse — `Sonner` de
 
 ### 1.6 Verification Sheet
 
-`VerificationSheet` is a `Drawer` (bottom sheet) showing one flagged frame at a time:
+> **Verification is human-in-the-loop correction, not a binary accept/reject.** Per
+> [ADR-004](adr/004-verification-as-hitl-correction.md), every flagged sample
+> persists — including ones the expert disagrees with — so the dataset captures
+> labeled false positives, misclassifications, and box-placement errors for the next
+> retraining cycle.
+
+`VerificationSheet` is a `Drawer` (bottom sheet) showing one flagged frame at a time,
+with a toggleable bounding-box overlay and a per-detection stepped questionnaire:
 
 ```
 ┌────────────────────────────────────────┐
@@ -321,33 +328,82 @@ If multiple frames flag in quick succession, the toasts collapse — `Sonner` de
 ├────────────────────────────────────────┤
 │                                        │
 │   [Frame with DetectionOverlay         │
-│    bounding boxes]                     │
+│    (toggleable bounding boxes)]        │
 │                                        │
 ├────────────────────────────────────────┤
-│  Detection: Ascaris lumbricoides       │
+│  Detection 1 of 2                      │
+│  Model predicted: Ascaris lumbricoides │
 │  Confidence: ████████░░ 0.91           │
 ├────────────────────────────────────────┤
-│  [Reject]                  [Verify]    │
+│  Q1. Is there a parasitic egg          │
+│      in this bounding box?             │
+│      [▼ Yes]                           │
+│                                        │
+│  Q2. Is the bounding box               │
+│      correctly placed?                 │
+│      [▼ Yes]                           │
+│                                        │
+│  Q3. What species?                     │
+│      [▼ Ascaris lumbricoides]          │
+│      (Other → free-text field appears) │
+├────────────────────────────────────────┤
+│  [Previous detection] [Next detection] │
+│                                        │
+│  Q4 (frame-level, optional):           │
+│  Did the model miss any eggs?          │
+│  [▼ No]                                │
+├────────────────────────────────────────┤
+│  [Cancel]                  [Submit]    │
 └────────────────────────────────────────┘
 ```
 
-Opening the sheet **stops the recording session** (per ADR-002 §UX). The capture window remains visible behind the sheet.
+Opening the sheet **stops the recording session** (per ADR-002 §UX). The capture window
+remains visible behind the sheet.
 
-| Action     | Effect                                                                       |
-|------------|------------------------------------------------------------------------------|
-| Verify     | Persist `SampleEntity` to Room (status `VERIFIED`), enqueue Supabase upload. |
-| Reject     | Discard the frame entirely (both in-memory and disk cache).                  |
-| Next / Prev| Navigate the flagged queue.                                                  |
-| Dismiss    | Sheet closes; flagged frames remain pending; session stays stopped.          |
+#### Question flow (per detection)
+
+Each model-predicted bounding box gets its own three-question pass. Answers branch as follows:
+
+| Q | Prompt | Options | Branching → `verdict` |
+|---|---|---|---|
+| Q1 | "Is there a parasitic egg in this bounding box?" | Yes / No | `No` → `FALSE_POSITIVE`, skip Q2/Q3 |
+| Q2 | "Is the bounding box correctly placed?" | Yes / No | `No` → `BOX_INCORRECT`, skip Q3 |
+| Q3 | "What species?" | Ascaris lumbricoides / Trichuris trichiura / Hookworm / Other (free text) | If `expert_class ≠ model_class` → `WRONG_CLASS`. Else → `CONFIRMED`. |
+
+Optional frame-level Q4 (one per frame, not per detection):
+
+| Q | Prompt | Options | Effect |
+|---|---|---|---|
+| Q4 | "Did the model miss any eggs in this frame?" | Yes / No | `Yes` sets `samples.needs_reannotation = true` so the sample is queued for offline annotation. Does not block submit. |
+
+In-app drawing of new or corrected bounding boxes is **out of scope for Phase 1** —
+`BOX_INCORRECT` and Q4=Yes samples are re-annotated offline (CVAT / Label Studio)
+before retraining.
+
+#### Submit / cancel actions
+
+| Action | Effect |
+|---|---|
+| Submit | Persist `SampleEntity` to Room (status `VERIFIED`) with one `DetectionEntity` per box, each carrying its expert `verdict` + `expert_class`. Enqueue Supabase upload regardless of verdict mix. |
+| Cancel | Sheet closes; flagged frame stays in `FlaggedFrameStore`; session stays stopped; expert can revisit later from the verification chip. |
+| Next / Prev (frame) | Navigate between flagged frames in the queue. Per-detection answers stay scoped to the frame they were entered against. |
+
+Submitting a frame where **every** detection is `FALSE_POSITIVE` still results in a
+persisted sample — that's the labeled-false-positive case, not a deletion. Reports
+later filter on the `verdict` column to compute precision and per-species accuracy.
 
 ### 1.7 Sample Lifecycle
+
+Per [ADR-004](adr/004-verification-as-hitl-correction.md), rejection is no longer a
+terminal "deleted" state — it's a `verdict = FALSE_POSITIVE` on a persisted detection.
+The sample-level lifecycle is now strictly forward-only once flagged:
 
 ```
 ┌─────────────────┐
 │  CANDIDATE      │  In-memory only. The current frame being analyzed.
 └────────┬────────┘
          │
-         ├─ no detection → discarded (no trace)
+         ├─ no model detection → discarded (no trace)
          │
          └─ predictions non-empty
                  ▼
@@ -355,32 +411,59 @@ Opening the sheet **stops the recording session** (per ADR-002 §UX). The captur
          │  FLAGGED        │  In-memory + small disk cache.
          │  (pending)      │  Surfaces in Sonner toast + Verification queue.
          └────────┬────────┘
-                  │
-       ┌──────────┼──────────┐
-       │                     │
-       ▼                     ▼
-┌─────────────┐       ┌──────────────┐
-│  REJECTED   │       │  VERIFIED    │  In Room + queued for Supabase sync.
-│  (deleted)  │       └──────┬───────┘
-└─────────────┘              │
-                             ▼
-                      ┌──────────────┐
-                      │   SYNCED     │  In Room + persisted in Supabase.
-                      └──────────────┘
+                  │ expert submits VerificationSheet
+                  ▼
+         ┌──────────────────────────────────┐
+         │  VERIFIED                        │  In Room.
+         │  - 1 SampleEntity                │  Each DetectionEntity carries a
+         │  - N DetectionEntity rows,       │  per-box verdict ∈
+         │    each with its own verdict     │  {CONFIRMED, FALSE_POSITIVE,
+         └──────────────┬───────────────────┘    WRONG_CLASS, BOX_INCORRECT}.
+                        │ enqueued for sync
+                        ▼
+                 ┌──────────────┐
+                 │   SYNCED     │  In Room + persisted in Supabase
+                 └──────────────┘  (samples + detections rows).
 ```
 
-Encode as `domain/model/SampleStatus.kt`:
+There is **no `REJECTED` sample state**. A "rejected" detection is just a persisted
+`DetectionEntity` with `verdict = FALSE_POSITIVE`. The sample-level decision "is this
+a positive finding?" is answered at read time by inspecting the child detections.
+
+Encode the sample state as `domain/model/SampleStatus.kt`:
 
 ```kotlin
 enum class SampleStatus(val value: String) {
-    FLAGGED("flagged"),               // persisted to Room only if cached to disk
-    VERIFIED("verified"),
-    SYNCED("synced"),
-    SYNC_FAILED("sync_failed"),
+    FLAGGED("flagged"),               // in FlaggedFrameStore (memory + disk cache)
+    VERIFIED("verified"),             // in Room, awaiting Supabase sync
+    SYNCED("synced"),                 // in Room + Supabase
+    SYNC_FAILED("sync_failed"),       // in Room, last sync attempt failed
 }
 ```
 
-Rejected and CANDIDATE states never reach Room — they're transient.
+Encode the per-detection verdict as `domain/model/DetectionVerdict.kt`:
+
+```kotlin
+enum class DetectionVerdict(val value: String) {
+    CONFIRMED("confirmed"),           // expert agrees on existence, box, and class
+    FALSE_POSITIVE("false_positive"), // expert says no egg in this box
+    WRONG_CLASS("wrong_class"),       // egg present but model picked the wrong species — see expert_class
+    BOX_INCORRECT("box_incorrect"),   // egg in frame but box is misplaced; queued for offline re-annotation
+}
+```
+
+`DetectionEntity` gains two new columns to mirror Supabase ([0002 migration](../supabase/migrations/0002_verification_fields.sql)):
+
+- `verdict: String` — non-null, defaults to `CONFIRMED` for migration compatibility
+- `expert_class: String?` — nullable; only set when `verdict = WRONG_CLASS`
+
+`SampleEntity` gains one new column:
+
+- `needs_reannotation: Boolean` — non-null, defaults to `false`; set to `true` when Q4 = Yes (false-negative flag)
+
+The CANDIDATE state and any in-flight inference frames never touch Room. The
+`FlaggedFrameStore` disk cache is still purely transient; rows graduate to Room only
+on Submit.
 
 ### 1.8 Supabase Sync
 
@@ -396,14 +479,39 @@ If any step fails, status becomes `SYNC_FAILED` and a retry is attempted next ti
 
 ### 1.9 Connection-loss Handling
 
-A `NetworkMonitor` (`core/connectivity/NetworkMonitor.kt`) observes inference-container connectivity. If `InferFrameUseCase` throws `InferenceConnectionException`:
+A `NetworkMonitor` (`core/connectivity/NetworkMonitor.kt`) observes **inference-container
+connectivity specifically** — not just OS-level network availability. It actively
+polls `GET <INFERENCE_URL>/health` every 10 seconds while a recording session is
+active. This probe style catches three failure modes a passive Android
+`ConnectivityManager` listener would miss:
+
+- The GPU droplet was destroyed (per the cost-control runbook in [`inference/README.md`](../inference/README.md), DMKuZu tears down the droplet after every session)
+- The container crashed or OOM'd but the droplet is still reachable
+- `INFERENCE_URL` in `local.properties` points at an old or wrong host
+
+When the probe fails twice in a row, or when `InferFrameUseCase` throws
+`InferenceConnectionException` (mapped from any Retrofit `IOException` /
+`HttpException` ≥ 500):
 
 1. The current recording session stops (`SessionManager.stopSession()`).
 2. A persistent `Alert` banner appears: *"Cloud connection lost. Recording stopped."*
 3. The capture preview remains live (like the system camera app — user can still see through the lens).
-4. A "Resume Recording" button surfaces. Tapping it re-checks connectivity and restarts the session if cloud is reachable.
+4. Already-flagged-but-unverified frames in `FlaggedFrameStore` remain available — the expert can still open `VerificationSheet` and submit verdicts for them; submission writes to Room locally and queues for Supabase sync.
+5. Records / Reports screens stay fully usable (read from Room).
+6. A "Resume Recording" button surfaces. Tapping it triggers an immediate `/health` probe; on success the session restarts, on failure the banner persists.
 
-GPS permission handling is the same as before: requested on first session start; on denial, GPS fields stay null. No first-capture race because there's no per-capture permission flow — the dialog appears before recording starts.
+`InferenceConnectionException` lives in `domain/usecase/inference/` and is thrown by a
+small mapping helper (e.g. `NetworkErrorMapper`) so `InferFrameUseCase` doesn't have
+to handle the Retrofit-to-domain translation inline.
+
+Supabase connectivity is **a separate concern** — losing Supabase (auth or sync)
+during a recording does not stop the session; it queues writes for later retry via
+`SyncSampleUseCase`. Only inference-container connectivity loss stops recording, because
+without inference the camera produces no usable signal.
+
+GPS permission handling is the same as before: requested on first session start; on
+denial, GPS fields stay null. No first-capture race because there's no per-capture
+permission flow — the dialog appears before recording starts.
 
 ### 1.10 Metadata Binding (per VERIFIED sample)
 
@@ -427,9 +535,9 @@ GPS permission handling is the same as before: requested on first session start;
 - Starting a recording session activates the camera preview and begins frame sampling at 2-second intervals.
 - A frame containing a detectable egg surfaces as a Sonner toast within ~3 seconds.
 - Tapping the toast (or the in-app-bar verification chip) opens the Verification sheet **and stops recording**.
-- Verifying a flagged frame writes a row to Room (status `VERIFIED`) and uploads to Supabase (status → `SYNCED`).
-- Rejecting a flagged frame deletes it entirely — no trace in Room or Supabase.
-- Losing inference-container connectivity mid-session stops recording and shows the "Cloud connection lost" banner; the capture preview stays visible.
+- Submitting the Verification sheet writes a row to Room (sample status `VERIFIED`) with one DetectionEntity per box (each carrying its expert `verdict`), and uploads to Supabase (sample status → `SYNCED`) — regardless of verdict mix, per [ADR-004](adr/004-verification-as-hitl-correction.md).
+- A frame whose detections are all marked `FALSE_POSITIVE` still persists and syncs — it becomes labeled training data, not a deletion.
+- Losing inference-container connectivity mid-session stops recording and shows the "Cloud connection lost" banner; the capture preview stays visible; already-flagged-but-unsubmitted frames remain available in the verification queue.
 - Tapping "Resume Recording" after connectivity returns restarts the session.
 - GPS coordinates populated on verify if permission granted; null if denied — never throws.
 

@@ -50,8 +50,8 @@ ssh root@<droplet-ip> "pip install -e /app/ultralytics"
 
 ```bash
 # From your local machine (repo root):
-scp inference/weights/best.pt root@<droplet-ip>:/app/weights/
-scp inference/server.py root@<droplet-ip>:/app/
+scp inference/weights/best.pt root@<droplet-ip>:/root/app/weights/
+scp inference/server.py root@<droplet-ip>:/root/app/
 ```
 
 ### 5. Run the server
@@ -136,7 +136,7 @@ docker run \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
   -e CONFIDENCE_THRESHOLD="0.4" \
-  ghcr.io/DMKuZu/agartha-inference:v1
+  ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
 ---

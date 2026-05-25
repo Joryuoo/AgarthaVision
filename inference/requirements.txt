@@ -2,5 +2,4 @@ fastapi
 uvicorn[standard]
 pillow
 numpy
-# Pin your custom Ultralytics fork by commit SHA once pushed to GitHub:
-# git+https://github.com/DMKuZu/ultralytics@<commit-sha>
+git+https://github.com/DMKuZu/ultralytics@c2b156345e2e1468f6113b60813ddb7eeab969d1
