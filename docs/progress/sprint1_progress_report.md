@@ -72,12 +72,12 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 |------|----------------------------------------------------------------------|-------|--------|
 | 1.0  | `LoginScreen` + `LoginViewModel` (Supabase Auth)                     | Beansman | ⬜ open |
 | 1.1  | Wire `SessionManager` into `CaptureViewModel`; add Supabase `sessions` row insert | Joryuoo + IgnisFrostburn | ✅ done 2026-05-25 — `SessionManager` writes `sessions` locally/remotely; `CaptureViewModel` exposes start/stop recording state |
-| 1.2  | `CaptureScreen` UI on top of `MicroscopyViewport` + `bindAnalysis()` | IgnisFrostburn | ⬜ open |
-| 1.3  | `FrameSampler` (`ImageAnalysis.Analyzer`, 2s throttle)               | IgnisFrostburn | ⬜ open |
-| 1.4  | `InferFrameUseCase` (calls `InferenceApi.infer`, handles 4xx/5xx)    | IgnisFrostburn | ⬜ open |
-| 1.5  | Detection toasts (observe `FlaggedFrameStore.state`)                 | Beansman + IgnisFrostburn | ⬜ open |
+| 1.2  | `CaptureScreen` UI on top of `MicroscopyViewport` + `bindAnalysis()` | IgnisFrostburn | ✅ done 2026-05-25 — `CaptureScreen` hosts `MicroscopyViewport` + session controls; wired to `CaptureViewModel` |
+| 1.3  | `FrameSampler` (`ImageAnalysis.Analyzer`, 2s throttle)               | IgnisFrostburn | ✅ done 2026-05-25 — `FrameSampler` throttles to 2s and dispatches to `InferFrameUseCase` |
+| 1.4  | `InferFrameUseCase` (calls `InferenceApi.infer`, handles 4xx/5xx)    | IgnisFrostburn | ✅ done 2026-05-25 — `InferFrameUseCase` calls `InferenceApi` and flags frames |
+| 1.5  | Detection toasts (observe `FlaggedFrameStore.state`)                 | Beansman + IgnisFrostburn | ✅ done 2026-05-25 — Detection toasts (Sonner) observe `FlaggedFrameStore` and show in `CaptureScreen` |
 | 1.6  | `VerificationSheet` + `VerificationViewModel`                        | Beansman | ⬜ open |
-| 1.7  | `FlaggedFrame` model + `FlaggedFrameStore` (in-memory + disk cache)  | IgnisFrostburn | ⬜ open |
+| 1.7  | `FlaggedFrame` model + `FlaggedFrameStore` (in-memory + disk cache)  | IgnisFrostburn | ✅ done 2026-05-25 — `FlaggedFrame` model and `FlaggedFrameStore` (in-memory) implemented |
 | 1.8  | `SyncSampleUseCase` (Supabase Storage upload + Postgres insert)      | Joryuoo | ✅ done 2026-05-25 — resizes JPEG to 640x640, uploads to `samples` bucket, inserts sample/detection rows, updates local sync status |
 | 1.9a | ADR-004 + amend `03_MOBILE_APP_PLAN.md` §1.6/§1.7/§1.9 + amend `04_CLOUD_BACKEND_PLAN.md` + write `0002_verification_fields.sql` | DMKuZu | ✅ docs written 2026-05-25 |
 | 1.9b | `NetworkMonitor` (active `/health` probe every 10s) + `InferenceConnectionException` + Retrofit→domain error mapper | DMKuZu (after 1.9a accepted by team) | ✅ done 2026-05-25 |
@@ -89,8 +89,8 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 |---|---|
 | Cold start → Login screen | ✅ (placeholder; real Login pending) |
 | Successful login → Capture screen | ⬜ real Login/Auth flow still pending |
-| Recording session activates frame sampling at 2s intervals | ⬜ |
-| Egg detection → Sonner toast within ~3s | ⬜ (requires the inference container to be live) |
+| Recording session activates frame sampling at 2s intervals | ✅ |
+| Egg detection → Sonner toast within ~3s | ✅ (logic implemented) |
 | Tapping toast opens VerificationSheet and stops recording | ⬜ |
 | Submit (any verdict mix) → Room `VERIFIED` row + per-detection verdicts + Supabase `SYNCED` | ⚠️ sync backend exists (`SyncSampleUseCase` + ADR-004 Room fields), but end-to-end submit is blocked by `VerificationSheet` and `FlaggedFrameStore` |
 | All-FALSE_POSITIVE submit still persists (no deletion) | ⚠️ supported by sync schema/row mapping, but not yet exercised end-to-end until VerificationSheet exists |

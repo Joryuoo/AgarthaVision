@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.model.FlaggedFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,13 +16,11 @@ import javax.inject.Inject
 
 /**
  * ViewModel boundary for the continuous-capture screen.
- *
- * It owns session start/stop intents and exposes the active recording state for
- * the future CameraX UI without implementing that UI itself.
  */
 @HiltViewModel
 class CaptureViewModel @Inject constructor(
     private val sessionManager: SessionManager,
+    private val flaggedFrameStore: FlaggedFrameStore,
 ) : ViewModel() {
     private val _state = MutableStateFlow(CaptureState())
 
@@ -30,6 +30,7 @@ class CaptureViewModel @Inject constructor(
     val state: StateFlow<CaptureState> = _state.asStateFlow()
 
     init {
+        // Observe Session State
         viewModelScope.launch {
             sessionManager.state.collect { sessionState ->
                 _state.update { current ->
@@ -44,6 +45,13 @@ class CaptureViewModel @Inject constructor(
                         )
                     }
                 }
+            }
+        }
+
+        // Observe Flagged Frames
+        viewModelScope.launch {
+            flaggedFrameStore.state.collect { frames ->
+                _state.update { it.copy(flaggedFrames = frames) }
             }
         }
     }
@@ -102,4 +110,9 @@ data class CaptureState(
      * Latest session-control error message, if any.
      */
     val errorMessage: String? = null,
+
+    /**
+     * Frames that have been flagged by inference but not yet verified.
+     */
+    val flaggedFrames: List<FlaggedFrame> = emptyList(),
 )

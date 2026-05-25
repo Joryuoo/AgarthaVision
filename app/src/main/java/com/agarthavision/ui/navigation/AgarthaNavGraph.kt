@@ -5,6 +5,9 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.agarthavision.core.camera.CameraManager
+import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.capture.CaptureScreenPlaceholder
 import com.agarthavision.ui.login.LoginScreenPlaceholder
 import com.agarthavision.ui.records.RecordsScreenPlaceholder
@@ -24,6 +27,8 @@ sealed class Screen(val route: String) {
  */
 @Composable
 fun AgarthaNavGraph(
+    cameraManager: CameraManager,
+    frameSampler: FrameSampler,
     navController: NavHostController = rememberNavController(),
 ) {
     NavHost(
@@ -31,7 +36,12 @@ fun AgarthaNavGraph(
         startDestination = Screen.Login.route,
     ) {
         composable(Screen.Login.route) { LoginScreenPlaceholder() }
-        composable(Screen.Capture.route) { CaptureScreenPlaceholder() }
+        composable(Screen.Capture.route) {
+            CaptureScreen(
+                cameraManager = cameraManager,
+                frameSampler = frameSampler
+            )
+        }
         composable(Screen.Records.route) { RecordsScreenPlaceholder() }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
     }
