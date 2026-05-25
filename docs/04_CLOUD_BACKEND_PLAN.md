@@ -192,6 +192,10 @@ create policy "sessions_insert_own"
 on public.sessions for insert
 with check ( auth.uid() = user_id );
 
+create policy "sessions_update_own"
+on public.sessions for update
+using ( auth.uid() = user_id );
+
 -- Samples: same scoping pattern.
 create policy "samples_select_own"
 on public.samples for select
