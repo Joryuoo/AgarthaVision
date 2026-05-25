@@ -4,6 +4,7 @@ import com.agarthavision.data.remote.dto.InferenceResponseDto
 import okhttp3.RequestBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.GET
 import retrofit2.http.POST
 
 /**
@@ -16,6 +17,9 @@ import retrofit2.http.POST
  * See docs/04_CLOUD_BACKEND_PLAN.md §5 and ADR-003.
  */
 interface InferenceApi {
+    @GET("health")
+    suspend fun health(): Response<Unit>
+
     @POST("infer")
     suspend fun infer(@Body image: RequestBody): Response<InferenceResponseDto>
 }

@@ -69,8 +69,8 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | 1.6  | `VerificationSheet` + `VerificationViewModel`                        | Beansman | ⬜ open |
 | 1.7  | `FlaggedFrame` model + `FlaggedFrameStore` (in-memory + disk cache)  | IgnisFrostburn | ⬜ open |
 | 1.8  | `SyncSampleUseCase` (Supabase Storage upload + Postgres insert)      | Joryuoo | ⬜ open |
-| 1.9a | ADR-004 + amend `03_MOBILE_APP_PLAN.md` §1.6/§1.7/§1.9 + amend `04_CLOUD_BACKEND_PLAN.md` + write `0002_verification_fields.sql` | DMKuZu | ✅ docs written 2026-05-25 (migration not yet applied — pending team review) |
-| 1.9b | `NetworkMonitor` (active `/health` probe every 10s) + `InferenceConnectionException` + Retrofit→domain error mapper | DMKuZu (after 1.9a accepted by team) | ⬜ open |
+| 1.9a | ADR-004 + amend `03_MOBILE_APP_PLAN.md` §1.6/§1.7/§1.9 + amend `04_CLOUD_BACKEND_PLAN.md` + write `0002_verification_fields.sql` | DMKuZu | ✅ docs written 2026-05-25 |
+| 1.9b | `NetworkMonitor` (active `/health` probe every 10s) + `InferenceConnectionException` + Retrofit→domain error mapper | DMKuZu (after 1.9a accepted by team) | ✅ done 2026-05-25 |
 | 1.10 | Metadata binding per VERIFIED sample (`user_id`, `verified_at`, etc.) | Joryuoo (rolls into SyncSampleUseCase) | ⬜ open |
 
 ### Sprint 1 Acceptance Criteria

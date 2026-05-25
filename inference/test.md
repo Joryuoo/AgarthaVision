@@ -5,6 +5,10 @@
 ```bash
 ssh root@<droplet-ip>
 ```
+Prepare your Github Personal Access Token
+```bash
+docker login ghcr.io
+```
 
 ```bash
 docker run --device=/dev/kfd --device=/dev/dri --group-add video \

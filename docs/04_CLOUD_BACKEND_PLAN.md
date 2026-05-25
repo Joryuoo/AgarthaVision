@@ -246,7 +246,9 @@ Create a single private bucket `samples` via the Supabase dashboard or CLI:
 supabase storage create samples --public=false
 ```
 
-Then add an RLS policy on `storage.objects` to scope reads/writes by user. Path convention: `{user_id}/{sample_id}.jpg`.
+RLS policies are defined in [`supabase/migrations/0003_storage_rls.sql`](../supabase/migrations/0003_storage_rls.sql) — apply after bucket creation. Three policies scope INSERT / SELECT / UPDATE to the authenticated user's own folder (`{user_id}/`). No DELETE policy is intentional: samples persist indefinitely per ADR-004.
+
+Path convention: `{user_id}/{sample_id}.jpg`.
 
 ---
 

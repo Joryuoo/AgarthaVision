@@ -38,7 +38,7 @@ class FusedLocationProviderTest {
             val result = provider.getCurrentLocation()
 
             assertNull(result)
-            verify(client, never()).getCurrentLocation(any(), any())
+            verify(client, never()).getCurrentLocation(any<Int>(), any())
         }
     }
 
