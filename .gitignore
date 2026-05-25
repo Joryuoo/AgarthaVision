@@ -34,3 +34,5 @@ Thumbs.db
 
 .venv
 roboflow.py
+
+temp-backup/
