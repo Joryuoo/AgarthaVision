@@ -15,9 +15,13 @@ import java.util.UUID
 data class Sample(
     val id: String = UUID.randomUUID().toString(),
     val timestamp: Long = System.currentTimeMillis(),
+    val verifiedAt: Long = timestamp,
     val deviceId: String,
     val sessionId: String,
     val filePath: String,
+    val storagePath: String? = null,
+    val inferenceModelVersion: String = "unknown",
+    val needsReannotation: Boolean = false,
     val latitude: Double?,
     val longitude: Double?,
     val accuracyMeters: Float? = null,

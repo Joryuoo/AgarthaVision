@@ -5,6 +5,7 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import com.agarthavision.domain.model.DetectionVerdict
 
 /**
  * Room entity for a single detection inside a verified sample.
@@ -22,7 +23,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("sample_id"), Index("class_label")],
+    indices = [Index("sample_id"), Index("class_label"), Index("verdict")],
 )
 data class DetectionEntity(
     @PrimaryKey
@@ -50,6 +51,12 @@ data class DetectionEntity(
     @ColumnInfo(name = "bbox_h")
     val bboxH: Float,
 
+    @ColumnInfo(name = "verdict", defaultValue = "'confirmed'")
+    val verdict: String = DetectionVerdict.CONFIRMED.value,
+
+    @ColumnInfo(name = "expert_class")
+    val expertClass: String? = null,
+
     @ColumnInfo(name = "verified_by_user")
-    val verifiedByUser: Boolean,
+    val verifiedByUser: Boolean = true,
 )

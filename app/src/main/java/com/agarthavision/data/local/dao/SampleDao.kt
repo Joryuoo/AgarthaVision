@@ -22,6 +22,19 @@ interface SampleDao {
     @Query("UPDATE samples SET status = :status WHERE sample_id = :sampleId")
     suspend fun updateStatus(sampleId: String, status: String)
 
+    @Query(
+        """
+        UPDATE samples
+        SET status = :status, storage_path = :storagePath
+        WHERE sample_id = :sampleId
+        """,
+    )
+    suspend fun updateSyncMetadata(
+        sampleId: String,
+        status: String,
+        storagePath: String,
+    )
+
     @Query("SELECT * FROM samples ORDER BY timestamp DESC LIMIT 1")
     fun observeLatestSample(): Flow<SampleEntity?>
 

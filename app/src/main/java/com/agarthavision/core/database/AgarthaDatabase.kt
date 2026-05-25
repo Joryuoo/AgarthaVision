@@ -16,7 +16,7 @@ import com.agarthavision.data.local.entity.SessionEntity
  * `samples`, and `detections` tables. See docs/03_MOBILE_APP_PLAN.md §1.7 +
  * docs/04_CLOUD_BACKEND_PLAN.md §4.
  *
- * Version 2 supersedes the v0 single-entity schema. There is no production data
+ * Version 3 adds ADR-004 verification/sync metadata. There is no production data
  * yet, so a destructive migration is acceptable.
  */
 @Database(
@@ -25,7 +25,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         SessionEntity::class,
         DetectionEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

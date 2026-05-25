@@ -26,8 +26,20 @@ data class SampleEntity(
     @ColumnInfo(name = "timestamp")
     val timestamp: Long,
 
+    @ColumnInfo(name = "verified_at", defaultValue = "0")
+    val verifiedAt: Long = 0L,
+
     @ColumnInfo(name = "image_path")
     val imagePath: String,
+
+    @ColumnInfo(name = "storage_path")
+    val storagePath: String? = null,
+
+    @ColumnInfo(name = "inference_model_version", defaultValue = "'unknown'")
+    val inferenceModelVersion: String = "unknown",
+
+    @ColumnInfo(name = "needs_reannotation", defaultValue = "0")
+    val needsReannotation: Boolean = false,
 
     @ColumnInfo(name = "gps_latitude")
     val gpsLatitude: Double?,
