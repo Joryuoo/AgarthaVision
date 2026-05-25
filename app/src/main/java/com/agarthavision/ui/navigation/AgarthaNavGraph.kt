@@ -6,7 +6,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.agarthavision.ui.capture.CaptureScreenPlaceholder
-import com.agarthavision.ui.login.LoginScreenPlaceholder
+import com.agarthavision.ui.login.LoginScreen
 import com.agarthavision.ui.records.RecordsScreenPlaceholder
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
 
@@ -30,7 +30,16 @@ fun AgarthaNavGraph(
         navController = navController,
         startDestination = Screen.Login.route,
     ) {
-        composable(Screen.Login.route) { LoginScreenPlaceholder() }
+        composable(Screen.Login.route) {
+            LoginScreen(
+                onLoggedIn = {
+                    navController.navigate(Screen.Capture.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
         composable(Screen.Capture.route) { CaptureScreenPlaceholder() }
         composable(Screen.Records.route) { RecordsScreenPlaceholder() }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }

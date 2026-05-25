@@ -60,7 +60,7 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 
 | §    | Deliverable                                                          | Owner | Status |
 |------|----------------------------------------------------------------------|-------|--------|
-| 1.0  | `LoginScreen` + `LoginViewModel` (Supabase Auth)                     | Beansman | ⬜ open |
+| 1.0  | `LoginScreen` + `LoginViewModel` (Supabase Auth)                     | Beansman | ✅ done 2026-05-25 — implemented + `gradlew.bat assembleDebug` green; live auth test pending local Supabase keys/test account |
 | 1.1  | Wire `SessionManager` into `CaptureViewModel`; add Supabase `sessions` row insert | Joryuoo + IgnisFrostburn | ⬜ open |
 | 1.2  | `CaptureScreen` UI on top of `MicroscopyViewport` + `bindAnalysis()` | IgnisFrostburn | ⬜ open |
 | 1.3  | `FrameSampler` (`ImageAnalysis.Analyzer`, 2s throttle)               | IgnisFrostburn | ⬜ open |
@@ -77,8 +77,8 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 
 | Criterion | Status |
 |---|---|
-| Cold start → Login screen | ✅ (placeholder; real Login pending) |
-| Successful login → Capture screen | ⬜ |
+| Cold start → Login screen | ✅ real Login implemented |
+| Successful login → Capture screen | ⚠️ implemented; pending live Supabase credential test |
 | Recording session activates frame sampling at 2s intervals | ⬜ |
 | Egg detection → Sonner toast within ~3s | ⬜ (requires the inference container to be live) |
 | Tapping toast opens VerificationSheet and stops recording | ⬜ |
