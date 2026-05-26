@@ -14,6 +14,7 @@
     "clean": "./gradlew clean",
     "sync": "./gradlew --refresh-dependencies",
     "emulator": "emulator -avd AgarthaVision_Test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "compile": "./gradlew :app:compileDebugKotlin"
   }
 }

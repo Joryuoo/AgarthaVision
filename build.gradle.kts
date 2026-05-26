@@ -7,3 +7,8 @@ plugins {
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
 }
+
+detekt {
+    config.from(files("$rootDir/detekt.yml"))
+    buildUponDefaultConfig = true
+}

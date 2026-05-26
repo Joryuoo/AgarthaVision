@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -7,6 +9,15 @@ plugins {
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
 }
+
+detekt {
+    config.from(files("${rootProject.rootDir}/detekt.yml"))
+    buildUponDefaultConfig = true
+}
+
+val localProperties = Properties()
+val localPropsFile = rootProject.file("local.properties")
+if (localPropsFile.exists()) localPropsFile.reader().use { reader -> localProperties.load(reader) }
 
 android {
     namespace = "com.agarthavision"
@@ -37,22 +48,22 @@ android {
             buildConfigField(
                 "String",
                 "SUPABASE_URL",
-                "\"${project.findProperty("SUPABASE_URL_DEV") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "SUPABASE_ANON_KEY",
-                "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_ANON_KEY") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_URL",
-                "\"${project.findProperty("INFERENCE_URL_DEV") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_URL") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_API_KEY",
-                "\"${project.findProperty("INFERENCE_API_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_API_KEY") ?: ""}\"",
             )
         }
         release {
@@ -60,22 +71,22 @@ android {
             buildConfigField(
                 "String",
                 "SUPABASE_URL",
-                "\"${project.findProperty("SUPABASE_URL_PROD") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "SUPABASE_ANON_KEY",
-                "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_ANON_KEY") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_URL",
-                "\"${project.findProperty("INFERENCE_URL_PROD") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_URL") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_API_KEY",
-                "\"${project.findProperty("INFERENCE_API_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_API_KEY") ?: ""}\"",
             )
         }
     }
@@ -148,6 +159,7 @@ dependencies {
     implementation(libs.workmanager)
     implementation(libs.coroutines.core)
     implementation(libs.coroutines.android)
+    implementation(libs.kotlinx.datetime)
 
     // Navigation + Lifecycle
     implementation(libs.navigation.compose)
@@ -167,6 +179,10 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockito.kotlin)
     testImplementation(libs.coroutines.test)
+    testImplementation(libs.turbine)
+    testImplementation(libs.supabase.auth)
+    testImplementation(libs.ktor.client.okhttp)
+    testImplementation(libs.kotlinx.datetime)
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.junit.ext)
     androidTestImplementation(libs.espresso.core)

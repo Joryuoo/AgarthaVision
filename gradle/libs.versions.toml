@@ -11,6 +11,7 @@ camerax = "1.6.1"
 workmanager = "2.10.0"
 datastore = "1.1.2"
 coroutines = "1.9.0"
+kotlinx-datetime = "0.6.1"
 navigation = "2.8.5"
 lifecycle = "2.8.7"
 coil = "2.7.0"
@@ -23,6 +24,7 @@ ksp = "2.2.10-2.0.2"
 ktlint-plugin = "12.1.2"
 play-services-location = "21.3.0"
 mockito-kotlin = "5.4.0"
+turbine = "1.1.0"
 detekt = "1.23.7"
 foundation-layout = "1.11.2"
 supabase = "3.0.3"
@@ -84,6 +86,7 @@ camerax-extensions = { group = "androidx.camera", name = "camera-extensions", ve
 workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
 coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-datetime = { group = "org.jetbrains.kotlinx", name = "kotlinx-datetime", version.ref = "kotlinx-datetime" }
 
 # Navigation
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
@@ -104,6 +107,7 @@ play-services-location = { group = "com.google.android.gms", name = "play-servic
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 mockito-kotlin = { group = "org.mockito.kotlin", name = "mockito-kotlin", version.ref = "mockito-kotlin" }
+turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }
 coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
 compose-test = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
