@@ -12,12 +12,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -41,9 +50,11 @@ import com.komoui.components.sooner.SonnerEvent
 import com.komoui.components.sooner.SonnerHost
 import com.komoui.components.sooner.SonnerVariant
 import com.komoui.components.sooner.showSonner
+import com.komoui.themes.styles
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
@@ -97,6 +108,42 @@ fun CaptureScreen(
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text("Capture") },
+                actions = {
+                    if (state.flaggedFrames.isNotEmpty()) {
+                        IconButton(
+                            onClick = {
+                                val latest = state.flaggedFrames.firstOrNull()
+                                if (latest != null) viewModel.onDetectionToastTap(latest)
+                            },
+                        ) {
+                            BadgedBox(
+                                badge = {
+                                    Badge(
+                                        containerColor = MaterialTheme.styles.primary,
+                                        contentColor = MaterialTheme.styles.primaryForeground,
+                                    ) {
+                                        Text(state.flaggedFrames.size.toString())
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FactCheck,
+                                    contentDescription = "Verify flagged frames",
+                                    tint = MaterialTheme.styles.foreground,
+                                )
+                            }
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.styles.background,
+                    titleContentColor = MaterialTheme.styles.foreground,
+                ),
+            )
+        },
         snackbarHost = {
             SonnerHost(
                 hostState = sonnerHostState,

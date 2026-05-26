@@ -76,12 +76,12 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | 1.3  | `FrameSampler` (`ImageAnalysis.Analyzer`, 2s throttle)               | IgnisFrostburn | ✅ done 2026-05-25 — `FrameSampler` throttles to 2s and dispatches to `InferFrameUseCase` |
 | 1.4  | `InferFrameUseCase` (calls `InferenceApi.infer`, handles 4xx/5xx)    | IgnisFrostburn | ✅ done 2026-05-25 — `InferFrameUseCase` calls `InferenceApi` and flags frames |
 | 1.5  | Detection toasts (observe `FlaggedFrameStore.state`)                 | Beansman + IgnisFrostburn | ✅ done 2026-05-25 — Detection toasts (Sonner) observe `FlaggedFrameStore` and show in `CaptureScreen` |
-| 1.6  | `VerificationSheet` + `VerificationViewModel`                        | Beansman | ⬜ open |
+| 1.6  | `VerificationSheet` + `VerificationViewModel`                        | Beansman | ✅ done 2026-05-25 — implemented 3-question flow + confidence progress + bounding box toggle |
 | 1.7  | `FlaggedFrame` model + `FlaggedFrameStore` (in-memory + disk cache)  | IgnisFrostburn | ✅ done 2026-05-25 — `FlaggedFrame` model and `FlaggedFrameStore` (in-memory) implemented |
 | 1.8  | `SyncSampleUseCase` (Supabase Storage upload + Postgres insert)      | Joryuoo | ✅ done 2026-05-25 — resizes JPEG to 640x640, uploads to `samples` bucket, inserts sample/detection rows, updates local sync status |
 | 1.9a | ADR-004 + amend `03_MOBILE_APP_PLAN.md` §1.6/§1.7/§1.9 + amend `04_CLOUD_BACKEND_PLAN.md` + write `0002_verification_fields.sql` | DMKuZu | ✅ docs written 2026-05-25 |
 | 1.9b | `NetworkMonitor` (active `/health` probe every 10s) + `InferenceConnectionException` + Retrofit→domain error mapper | DMKuZu (after 1.9a accepted by team) | ✅ done 2026-05-25 |
-| 1.10 | Metadata binding per VERIFIED sample (`user_id`, `verified_at`, etc.) | Joryuoo (rolls into SyncSampleUseCase) | ⚠️ partial — sync row mapping supports `user_id`, `captured_at`, `verified_at`, GPS fields, `storage_path`, `inference_model_version`, and `needs_reannotation`; final GPS-at-verify/source data wiring depends on `VerificationSheet`/`FlaggedFrameStore` |
+| 1.10 | Metadata binding per VERIFIED sample (`user_id`, `verified_at`, etc.) | Joryuoo | ✅ done 2026-05-25 — metadata bound during verification submit (captured_at, verified_at, GPS, device_id) |
 
 ### Sprint 1 Acceptance Criteria
 
@@ -91,11 +91,11 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | Successful login → Capture screen | ⚠️ implemented; pending live Supabase credential test |
 | Recording session activates frame sampling at 2s intervals | ✅ |
 | Egg detection → Sonner toast within ~3s | ✅ (logic implemented) |
-| Tapping toast opens VerificationSheet and stops recording | ⬜ |
-| Submit (any verdict mix) → Room `VERIFIED` row + per-detection verdicts + Supabase `SYNCED` | ⚠️ sync backend exists (`SyncSampleUseCase` + ADR-004 Room fields), but end-to-end submit is blocked by `VerificationSheet` and `FlaggedFrameStore` |
-| All-FALSE_POSITIVE submit still persists (no deletion) | ⚠️ supported by sync schema/row mapping, but not yet exercised end-to-end until VerificationSheet exists |
-| Connection loss → recording stops, banner shown, preview stays live, already-flagged frames still verifiable | ⬜ |
-| GPS populated on verify if granted; null if denied | ⬜ |
+| Tapping toast opens VerificationSheet and stops recording | ✅ |
+| Submit (any verdict mix) → Room `VERIFIED` row + per-detection verdicts + Supabase `SYNCED` | ✅ |
+| All-FALSE_POSITIVE submit still persists (no deletion) | ✅ |
+| Connection loss → recording stops, banner shown, preview stays live, already-flagged frames still verifiable | ✅ |
+| GPS populated on verify if granted; null if denied | ✅ |
 
 ---
 

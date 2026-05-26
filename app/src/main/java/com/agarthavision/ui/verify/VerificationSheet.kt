@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -103,11 +106,36 @@ private fun VerificationSheetContent(
         verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.md),
     ) {
         // Header
-        Text(
-            text = stringResource(R.string.verify_title, state.frameIndexInQueue, state.queueSize),
-            color = MaterialTheme.styles.foreground,
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.verify_title, state.frameIndexInQueue, state.queueSize),
+                color = MaterialTheme.styles.foreground,
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.verify_show_boxes_label),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.styles.mutedForeground,
+                    modifier = Modifier.padding(end = AgarthaSpacing.xs),
+                )
+                Switch(
+                    checked = state.showBoundingBoxes,
+                    onCheckedChange = { actions.onToggleBoundingBoxes() },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.styles.primary,
+                        checkedTrackColor = MaterialTheme.styles.primary.copy(alpha = 0.12f),
+                        uncheckedThumbColor = MaterialTheme.styles.mutedForeground,
+                        uncheckedTrackColor = MaterialTheme.styles.muted,
+                    ),
+                )
+            }
+        }
 
         // Frame image with boxes
         FrameWithBoxes(
@@ -158,15 +186,23 @@ private fun VerificationSheetContent(
         // Confidence label
         val prediction = frame.predictions.getOrNull(state.currentDetectionIndex)
         if (prediction != null) {
-            Text(
-                text = stringResource(
-                    R.string.verify_predicted,
-                    prediction.classLabel,
-                    "%.0f%%".format(prediction.confidence * 100),
-                ),
-                color = MaterialTheme.styles.mutedForeground,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xxs)) {
+                Text(
+                    text = stringResource(
+                        R.string.verify_predicted,
+                        prediction.classLabel,
+                        "%.0f%%".format(prediction.confidence * 100),
+                    ),
+                    color = MaterialTheme.styles.mutedForeground,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                LinearProgressIndicator(
+                    progress = { prediction.confidence },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.styles.primary,
+                    trackColor = MaterialTheme.styles.secondary,
+                )
+            }
         }
 
         // Per-detection questions
