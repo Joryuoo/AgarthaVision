@@ -2,6 +2,11 @@
 
 package com.agarthavision.ui.capture
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,11 +21,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
@@ -43,6 +52,24 @@ fun CaptureScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
+    var hasCameraPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
+                PackageManager.PERMISSION_GRANTED,
+        )
+    }
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        hasCameraPermission = granted
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
 
     LaunchedEffect(viewModel) {
         viewModel.state
@@ -90,11 +117,19 @@ fun CaptureScreen(
                         .fillMaxWidth()
                         .weight(0.8f),
                 ) {
-                    MicroscopyViewport(
-                        cameraManager = cameraManager,
-                        analyzer = frameSampler,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    if (hasCameraPermission) {
+                        MicroscopyViewport(
+                            cameraManager = cameraManager,
+                            analyzer = frameSampler,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    } else {
+                        CameraPermissionRequired(
+                            onRequestPermission = {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            },
+                        )
+                    }
 
                     if (state.isRecording) {
                         Text(
@@ -156,5 +191,30 @@ fun CaptureScreen(
             frame = target,
             onDismiss = viewModel::onVerificationDismissed,
         )
+    }
+}
+
+@Composable
+private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "Camera permission is required for recording.",
+                color = Color.White,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(
+                onClick = onRequestPermission,
+                modifier = Modifier.padding(top = 12.dp),
+            ) {
+                Text("Allow Camera")
+            }
+        }
     }
 }

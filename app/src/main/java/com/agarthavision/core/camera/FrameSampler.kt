@@ -1,5 +1,6 @@
 package com.agarthavision.core.camera
 
+import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.agarthavision.core.session.SessionManager
@@ -33,30 +34,41 @@ class FrameSampler @Inject constructor(
     private var inFlight = false
 
     override fun analyze(image: ImageProxy) {
-        val state = sessionManager.state.value
-        if (state !is SessionState.Recording) {
+        try {
+            val state = sessionManager.state.value
+            if (state !is SessionState.Recording) {
+                image.close()
+                return
+            }
+
+            val now = System.currentTimeMillis()
+            if (now - lastSentAt < intervalMs || inFlight) {
+                image.close()
+                return
+            }
+
+            lastSentAt = now
+            inFlight = true
+
+            val jpegBytes = image.toJpegBytes()
             image.close()
-            return
-        }
 
-        val now = System.currentTimeMillis()
-        if (now - lastSentAt < intervalMs || inFlight) {
-            image.close()
-            return
-        }
-
-        lastSentAt = now
-        inFlight = true
-
-        val jpegBytes = image.toJpegBytes()
-        image.close() // CRITICAL: Backpressure relies on this
-
-        scope.launch {
-            try {
-                inferFrameUseCase(state.session.sessionId, jpegBytes)
-            } finally {
+            scope.launch {
+                runCatching {
+                    inferFrameUseCase(state.session.sessionId, jpegBytes)
+                }.onFailure { throwable ->
+                    Log.w(TAG, "Frame inference failed; continuing capture.", throwable)
+                }
                 inFlight = false
             }
+        } catch (throwable: Throwable) {
+            image.close()
+            inFlight = false
+            Log.w(TAG, "Frame sampling failed; continuing capture.", throwable)
         }
+    }
+
+    private companion object {
+        private const val TAG = "FrameSampler"
     }
 }

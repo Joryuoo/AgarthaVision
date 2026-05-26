@@ -178,15 +178,29 @@ alter table public.sessions   enable row level security;
 alter table public.samples    enable row level security;
 alter table public.detections enable row level security;
 
+-- Helper avoids recursive policies on public.profiles.
+create or replace function public.is_admin(user_id uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select exists (
+        select 1 from public.profiles
+        where id = user_id and role = 'admin'
+    );
+$$;
+
 -- Profile: each user reads their own row; admins can read everyone.
 create policy "profiles_select_own"
 on public.profiles for select
-using ( auth.uid() = id or (select role from public.profiles where id = auth.uid()) = 'admin' );
+using ( auth.uid() = id or public.is_admin(auth.uid()) );
 
 -- Session: medtech reads + writes own; admin reads all.
 create policy "sessions_select_own"
 on public.sessions for select
-using ( auth.uid() = user_id or (select role from public.profiles where id = auth.uid()) = 'admin' );
+using ( auth.uid() = user_id or public.is_admin(auth.uid()) );
 
 create policy "sessions_insert_own"
 on public.sessions for insert
@@ -199,7 +213,7 @@ using ( auth.uid() = user_id );
 -- Samples: same scoping pattern.
 create policy "samples_select_own"
 on public.samples for select
-using ( auth.uid() = user_id or (select role from public.profiles where id = auth.uid()) = 'admin' );
+using ( auth.uid() = user_id or public.is_admin(auth.uid()) );
 
 create policy "samples_insert_own"
 on public.samples for insert
@@ -212,7 +226,7 @@ using (
     exists (
         select 1 from public.samples s
         where s.id = sample_id
-        and ( s.user_id = auth.uid() or (select role from public.profiles where id = auth.uid()) = 'admin' )
+        and ( s.user_id = auth.uid() or public.is_admin(auth.uid()) )
     )
 );
 
