@@ -8,7 +8,6 @@ import androidx.navigation.compose.rememberNavController
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.capture.CaptureScreen
-import com.agarthavision.ui.capture.CaptureScreenPlaceholder
 import com.agarthavision.ui.login.LoginScreen
 import com.agarthavision.ui.records.RecordsScreenPlaceholder
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
@@ -45,7 +44,9 @@ fun AgarthaNavGraph(
                 },
             )
         }
-        composable(Screen.Capture.route) { CaptureScreenPlaceholder() }
+        composable(Screen.Capture.route) {
+            CaptureScreen(cameraManager = cameraManager, frameSampler = frameSampler)
+        }
         composable(Screen.Records.route) { RecordsScreenPlaceholder() }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
     }

@@ -11,4 +11,29 @@
     <string name="login_submit">Log in</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
+
+    <string name="verify_title">Flagged Frame · %1$d of %2$d</string>
+    <string name="verify_detection_header">Detection %1$d of %2$d</string>
+    <string name="verify_predicted">Model predicted: %1$s · %2$s confidence</string>
+    <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
+    <string name="verify_q2">Is the bounding box correctly placed?</string>
+    <string name="verify_q3">What species?</string>
+    <string name="verify_q4">Did the model miss any eggs in this frame?</string>
+    <string name="verify_yes">Yes</string>
+    <string name="verify_no">No</string>
+    <string name="verify_other_label">Other species</string>
+    <string name="verify_other_hint">Type the observed species</string>
+    <string name="verify_prev_detection">Previous detection</string>
+    <string name="verify_next_detection">Next detection</string>
+    <string name="verify_show_boxes_label">Show bounding boxes</string>
+    <string name="verify_submit">Submit</string>
+    <string name="verify_cancel">Cancel</string>
+    <string name="verify_submitting">Submitting…</string>
+    <string name="verify_species_ascaris">Ascaris</string>
+    <string name="verify_species_trichuris">Trichuris</string>
+    <string name="verify_species_hookworm">Hookworm</string>
+    <string name="verify_species_other">Other</string>
+    <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
+    <string name="connection_lost_resume">Resume Recording</string>
+    <string name="connection_lost_probing">Checking connection…</string>
 </resources>

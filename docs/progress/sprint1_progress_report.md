@@ -58,7 +58,7 @@
 |---|---|
 | App launches and shows Login screen placeholder | ✅ |
 | `BuildConfig.SUPABASE_URL` and `BuildConfig.INFERENCE_URL` are wired | ✅ |
-| `bun run build` and `bun run lint` pass | ⚠️ pending verification on teammate machines |
+| `bun run build` and `bun run lint` pass | ✅ |
 | Room schema `3.json` exported | ✅ `app/schemas/com.agarthavision.core.database.AgarthaDatabase/3.json` exists |
 
 ---

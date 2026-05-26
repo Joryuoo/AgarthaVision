@@ -11,6 +11,7 @@ import com.google.gson.annotations.SerializedName
 data class InferenceResponseDto(
     @SerializedName("predictions") val predictions: List<PredictionDto> = emptyList(),
     @SerializedName("image") val image: ImageMetaDto? = null,
+    @SerializedName("model_version") val modelVersion: String? = null,
 )
 
 data class PredictionDto(

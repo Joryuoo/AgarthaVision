@@ -1,3 +1,5 @@
+@file:Suppress("FunctionNaming", "LongMethod")
+
 package com.agarthavision.ui.capture
 
 import androidx.compose.foundation.layout.Box
@@ -8,111 +10,151 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.verify.VerificationSheet
+import com.komoui.components.sooner.SonnerAction
+import com.komoui.components.sooner.SonnerEvent
 import com.komoui.components.sooner.SonnerHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import com.komoui.components.sooner.SonnerVariant
+import com.komoui.components.sooner.showSonner
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
-/**
- * Full-screen camera preview with continuous inference controls.
- */
 @Composable
 fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
-    cameraManager: CameraManager, // We'll pass these from NavGraph or inject
+    cameraManager: CameraManager,
     frameSampler: FrameSampler,
 ) {
-    val state by viewModel.state.collectAsState()
+    val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
 
-    // Toast for new detections
     LaunchedEffect(viewModel) {
         viewModel.state
-            .map { it.flaggedFrames.size }
+            .map { it.flaggedFrames.firstOrNull()?.capturedAt }
             .distinctUntilChanged()
-            .collect { size ->
-                if (size > 0) {
-                    val latest = viewModel.state.value.flaggedFrames.first()
+            .collect { capturedAt ->
+                if (capturedAt != null) {
+                    val latest = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
                     val eggType = latest.predictions.firstOrNull()?.classLabel ?: "egg"
                     val confidence = latest.predictions.firstOrNull()?.confidence ?: 0f
-                    sonnerHostState.showSnackbar(
-                        message = "$eggType detected · ${"%.2f".format(confidence)} · [view]",
-                        withDismissAction = true
+                    sonnerHostState.showSonner(
+                        SonnerEvent(
+                            message = "$eggType detected · ${"%.0f%%".format(confidence * 100)} confidence",
+                            action = SonnerAction(
+                                actionText = "View",
+                                execute = { viewModel.onDetectionToastTap(latest) },
+                            ),
+                            withDismissAction = true,
+                            variant = SonnerVariant.Default,
+                        ),
                     )
                 }
             }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Camera Viewport (80% height)
-            Box(
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            SonnerHost(
+                hostState = sonnerHostState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.8f)
-            ) {
-                MicroscopyViewport(
-                    cameraManager = cameraManager,
-                    analyzer = frameSampler,
-                    modifier = Modifier.fillMaxSize()
-                )
-                
-                if (state.isRecording) {
-                    Text(
-                        text = "REC",
-                        color = Color.Red,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(16.dp),
-                        style = MaterialTheme.typography.labelLarge
+                    .padding(horizontal = 20.dp),
+            )
+        },
+    ) { padding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.8f),
+                ) {
+                    MicroscopyViewport(
+                        cameraManager = cameraManager,
+                        analyzer = frameSampler,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                }
-            }
 
-            // Session Controls (20% height)
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(0.2f),
-                contentAlignment = Alignment.Center
-            ) {
-                if (state.isBusy) {
-                    CircularProgressIndicator()
-                } else {
-                    Button(
-                        onClick = {
-                            if (state.isRecording) viewModel.stopRecording()
-                            else viewModel.startRecording()
-                        }
-                    ) {
-                        Text(if (state.isRecording) "Stop Recording" else "Start Recording")
+                    if (state.isRecording) {
+                        Text(
+                            text = "REC",
+                            color = Color.Red,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
                     }
                 }
-                
-                state.errorMessage?.let { error ->
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.align(Alignment.BottomCenter).padding(8.dp)
-                    )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(0.2f),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (state.isBusy) {
+                        CircularProgressIndicator()
+                    } else {
+                        Button(
+                            onClick = {
+                                if (state.isRecording) viewModel.stopRecording()
+                                else viewModel.startRecording()
+                            },
+                        ) {
+                            Text(if (state.isRecording) "Stop Recording" else "Start Recording")
+                        }
+                    }
+
+                    state.errorMessage?.let { error ->
+                        Text(
+                            text = error,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(8.dp),
+                        )
+                    }
                 }
             }
-        }
 
-        SonnerHost(hostState = sonnerHostState)
+            ConnectionLossBanner(
+                visible = state.isConnectionLost,
+                isProbing = state.isProbingConnection,
+                onResume = viewModel::resumeConnection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter),
+            )
+        }
+    }
+
+    val target = state.verificationTarget
+    if (target != null) {
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
+        )
     }
 }

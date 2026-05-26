@@ -47,7 +47,8 @@ class InferFrameUseCase @Inject constructor(
                 sessionId = sessionId,
                 capturedAt = Instant.now(),
                 jpegBytes = jpegBytes,
-                predictions = predictions
+                predictions = predictions,
+                inferenceModelVersion = response.body()?.modelVersion,
             )
         )
     }
