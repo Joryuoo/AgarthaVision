@@ -15,7 +15,8 @@ docker login ghcr.io
 docker run --device=/dev/kfd --device=/dev/dri --group-add video \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
-  ghcr.io/dmkuzu/agartha-inference:v1
+  -e MODEL_VERSION="yolov26-efficientnetv2-v1" \
+  ghcr.io/dmkuzu/agartha-inference:v2
 ```
 
 Exit SSH after the container starts.
@@ -41,6 +42,7 @@ curl -X POST \
 Expected:
 ```json
 {
+  "model_version": "yolov26-efficientnetv2-v1",
   "predictions": [
     {"class": "Ascaris lumbricoides", "confidence": 0.96, "x": 2501.32, "y": 1686.82, "width": 800.79, "height": 793.18}
   ],
@@ -48,7 +50,7 @@ Expected:
 }
 ```
 
-Empty when nothing detected: `{"predictions": [], "image": {"width": ..., "height": ...}}`
+Empty when nothing detected: `{"model_version": "yolov26-efficientnetv2-v1", "predictions": [], "image": {"width": ..., "height": ...}}`
 
 ## 4. Destroy the droplet when done
 

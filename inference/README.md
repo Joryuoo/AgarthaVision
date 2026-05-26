@@ -130,6 +130,7 @@ docker run \
   --group-add video \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
+  -e MODEL_VERSION="yolov26-efficientnetv2-v1" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
