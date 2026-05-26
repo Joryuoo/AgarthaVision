@@ -7,6 +7,8 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.repository.SampleRepositoryImpl
+import com.agarthavision.data.repository.SupabaseAuthRepository
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.SampleRepository
 import dagger.Binds
 import dagger.Module
@@ -56,4 +58,12 @@ abstract class RepositoryModule {
     abstract fun bindSampleRepository(
         implementation: SampleRepositoryImpl,
     ): SampleRepository
+
+    /**
+     * Provides the Supabase-backed authentication repository.
+     */
+    @Binds
+    abstract fun bindAuthRepository(
+        implementation: SupabaseAuthRepository,
+    ): AuthRepository
 }
