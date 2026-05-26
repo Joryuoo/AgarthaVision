@@ -28,6 +28,7 @@ class SupabaseClientSmokeTest {
 
     @Test
     fun `SupabaseClient with Auth plugin can be constructed`() {
+        Class.forName("kotlinx.datetime.serializers.InstantIso8601Serializer")
         val client = createSupabaseClient(
             supabaseUrl = "https://example.supabase.co",
             supabaseKey = "test-anon-key",

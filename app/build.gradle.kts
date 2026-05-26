@@ -48,22 +48,22 @@ android {
             buildConfigField(
                 "String",
                 "SUPABASE_URL",
-                "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_URL_DEV") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "SUPABASE_ANON_KEY",
-                "\"${localProperties.getProperty("SUPABASE_ANON_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_URL",
-                "\"${localProperties.getProperty("INFERENCE_URL") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_URL_DEV") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_API_KEY_DEV") ?: ""}\"",
             )
         }
         release {
@@ -71,22 +71,22 @@ android {
             buildConfigField(
                 "String",
                 "SUPABASE_URL",
-                "\"${localProperties.getProperty("SUPABASE_URL") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_URL_PROD") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "SUPABASE_ANON_KEY",
-                "\"${localProperties.getProperty("SUPABASE_ANON_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_URL",
-                "\"${localProperties.getProperty("INFERENCE_URL") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_URL_PROD") ?: ""}\"",
             )
             buildConfigField(
                 "String",
                 "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY") ?: ""}\"",
+                "\"${localProperties.getProperty("INFERENCE_API_KEY_PROD") ?: ""}\"",
             )
         }
     }
