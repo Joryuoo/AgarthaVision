@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod")
+@file:Suppress("CyclomaticComplexMethod", "FunctionNaming", "LongMethod")
 
 package com.agarthavision.ui.capture
 
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -35,10 +36,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.components.MicroscopyViewport
@@ -64,10 +67,14 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
+    onRecordsClick: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
+    val detectionFallback = stringResource(R.string.capture_detection_fallback)
+    val detectionView = stringResource(R.string.capture_detection_view)
+    val detectionMessage = stringResource(R.string.capture_detection_message)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -93,13 +100,13 @@ fun CaptureScreen(
             .collect { capturedAt ->
                 if (capturedAt != null) {
                     val latest = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-                    val eggType = latest.predictions.firstOrNull()?.classLabel ?: "egg"
+                    val eggType = latest.predictions.firstOrNull()?.classLabel ?: detectionFallback
                     val confidence = latest.predictions.firstOrNull()?.confidence ?: 0f
                     sonnerHostState.showSonner(
                         SonnerEvent(
-                            message = "$eggType detected · ${"%.0f%%".format(confidence * 100)} confidence",
+                            message = detectionMessage.format(eggType, "%.0f".format(confidence * 100)),
                             action = SonnerAction(
-                                actionText = "View",
+                                actionText = detectionView,
                                 execute = { viewModel.onDetectionToastTap(latest) },
                             ),
                             withDismissAction = true,
@@ -114,7 +121,7 @@ fun CaptureScreen(
         containerColor = MaterialTheme.styles.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Capture") },
+                title = { Text(stringResource(R.string.capture_title)) },
                 actions = {
                     IconButton(onClick = viewModel::onQueueTap) {
                         BadgedBox(
@@ -131,7 +138,7 @@ fun CaptureScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.FactCheck,
-                                contentDescription = "Verify flagged frames",
+                                contentDescription = stringResource(R.string.capture_verify_action_desc),
                                 tint = MaterialTheme.styles.foreground,
                             )
                         }
@@ -176,7 +183,7 @@ fun CaptureScreen(
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp),
                         ) {
-                            Text("REC")
+                            Text(stringResource(R.string.capture_rec))
                         }
                     }
                 }
@@ -198,8 +205,27 @@ fun CaptureScreen(
                             size = ButtonSize.Lg,
                             variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
                         ) {
-                            Text(if (state.isRecording) "Stop Recording" else "Start Recording")
+                            Text(
+                                if (state.isRecording) {
+                                    stringResource(R.string.capture_stop)
+                                } else {
+                                    stringResource(R.string.capture_start)
+                                },
+                            )
                         }
+                    }
+
+                    IconButton(
+                        onClick = onRecordsClick,
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 24.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = stringResource(R.string.capture_records_action_desc),
+                            tint = MaterialTheme.styles.foreground,
+                        )
                     }
 
                     state.errorMessage?.let { error ->
@@ -267,7 +293,7 @@ private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "Camera permission is required for recording.",
+                text = stringResource(R.string.capture_permission_required),
                 color = MaterialTheme.styles.foreground,
                 style = MaterialTheme.typography.bodyMedium,
             )
@@ -276,7 +302,7 @@ private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
                 size = ButtonSize.Default,
                 modifier = Modifier.padding(top = 12.dp),
             ) {
-                Text("Allow Camera")
+                Text(stringResource(R.string.capture_allow_camera))
             }
         }
     }

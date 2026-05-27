@@ -28,6 +28,16 @@ interface SampleRepository {
     suspend fun getSampleById(sampleId: String): Sample?
 
     /**
+     * Observes samples in one session for the given user, newest first.
+     */
+    fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>>
+
+    /**
+     * Loads samples in one session for the given user, newest first.
+     */
+    suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample>
+
+    /**
      * Returns samples that haven't been successfully synced to Supabase for the given user.
      */
     suspend fun getSamplesPendingSync(userId: String): List<Sample>

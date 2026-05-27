@@ -19,6 +19,7 @@ import javax.inject.Inject
  * Enforces a 2-second interval between sampled frames while a session is active.
  * See docs/03_MOBILE_APP_PLAN.md §1.3.
  */
+@Suppress("TooGenericExceptionCaught")
 class FrameSampler @Inject constructor(
     private val inferFrameUseCase: InferFrameUseCase,
     private val sessionManager: SessionManager,

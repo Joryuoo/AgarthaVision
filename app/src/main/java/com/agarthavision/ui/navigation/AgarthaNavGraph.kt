@@ -10,12 +10,20 @@ import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.login.LoginScreen
 import com.agarthavision.ui.records.RecordsScreen
+import com.agarthavision.ui.records.SampleDetailScreen
+import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
 
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
     data object Capture : Screen("capture")
     data object Records : Screen("records")
+    data object SessionDetail : Screen("records/session/{sessionId}") {
+        fun createRoute(sessionId: String) = "records/session/$sessionId"
+    }
+    data object SampleDetail : Screen("records/sample/{sampleId}") {
+        fun createRoute(sampleId: String) = "records/sample/$sampleId"
+    }
     data object Settings : Screen("settings")
 }
 
@@ -45,9 +53,34 @@ fun AgarthaNavGraph(
             )
         }
         composable(Screen.Capture.route) {
-            CaptureScreen(cameraManager = cameraManager, frameSampler = frameSampler)
+            CaptureScreen(
+                cameraManager = cameraManager,
+                frameSampler = frameSampler,
+                onRecordsClick = {
+                    navController.navigate(Screen.Records.route) {
+                        launchSingleTop = true
+                    }
+                },
+            )
         }
-        composable(Screen.Records.route) { RecordsScreen() }
+        composable(Screen.Records.route) {
+            RecordsScreen(
+                onSessionClick = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId))
+                },
+            )
+        }
+        composable(Screen.SessionDetail.route) {
+            SessionDetailScreen(
+                onBack = { navController.popBackStack() },
+                onSampleClick = { sampleId ->
+                    navController.navigate(Screen.SampleDetail.createRoute(sampleId))
+                },
+            )
+        }
+        composable(Screen.SampleDetail.route) {
+            SampleDetailScreen(onBack = { navController.popBackStack() })
+        }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
     }
 }

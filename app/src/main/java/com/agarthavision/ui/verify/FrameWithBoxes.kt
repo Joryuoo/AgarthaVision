@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongParameterList")
 
 package com.agarthavision.ui.verify
 

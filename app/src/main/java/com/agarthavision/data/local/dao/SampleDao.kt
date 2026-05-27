@@ -44,9 +44,18 @@ interface SampleDao {
     @Query("SELECT * FROM samples WHERE sample_id = :sampleId LIMIT 1")
     suspend fun getSampleById(sampleId: String): SampleEntity?
 
-    @Query("SELECT * FROM samples WHERE session_id = :sessionId ORDER BY timestamp DESC")
-    fun observeSamplesForSession(sessionId: String): Flow<List<SampleEntity>>
+    @Query("SELECT * FROM samples WHERE session_id = :sessionId AND user_id = :userId ORDER BY timestamp DESC")
+    fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<SampleEntity>>
 
-    @Query("SELECT * FROM samples WHERE user_id = :userId AND status IN ('verified', 'sync_failed') ORDER BY timestamp ASC")
+    @Query("SELECT * FROM samples WHERE session_id = :sessionId AND user_id = :userId ORDER BY timestamp DESC")
+    suspend fun getSamplesForSession(sessionId: String, userId: String): List<SampleEntity>
+
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId AND status IN ('verified', 'sync_failed')
+        ORDER BY timestamp ASC
+        """,
+    )
     suspend fun getSamplesPendingSync(userId: String): List<SampleEntity>
 }

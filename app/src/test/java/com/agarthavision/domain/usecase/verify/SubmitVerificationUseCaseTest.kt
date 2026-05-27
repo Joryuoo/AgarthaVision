@@ -11,6 +11,7 @@ import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.LocationProvider
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,6 +37,7 @@ class SubmitVerificationUseCaseTest {
 
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
+    private val authRepository: AuthRepository = mock()
     private val sampleImageStore: SampleImageStore = mock()
     private val flaggedFrameStore: FlaggedFrameStore = mock()
     private val locationProvider: LocationProvider = mock()
@@ -43,6 +45,7 @@ class SubmitVerificationUseCaseTest {
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val useCase = SubmitVerificationUseCase(
+        authRepository = authRepository,
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         sampleImageStore = sampleImageStore,
@@ -73,8 +76,9 @@ class SubmitVerificationUseCaseTest {
     fun `submit persists sample with VERIFIED status and one detection per box`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
+            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any())).thenReturn("/data/samples/id.jpg")
+            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(
@@ -94,8 +98,9 @@ class SubmitVerificationUseCaseTest {
     fun `submit with all FALSE_POSITIVE still writes sample row`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
+            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any())).thenReturn("/data/samples/id.jpg")
+            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(VerificationAnswers(isEgg = false))
@@ -111,8 +116,9 @@ class SubmitVerificationUseCaseTest {
     fun `Q4 yes sets needsReannotation true on sample row`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
+            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any())).thenReturn("/data/samples/id.jpg")
+            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(
@@ -130,8 +136,9 @@ class SubmitVerificationUseCaseTest {
     fun `submit succeeds with null GPS when LocationProvider returns null`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
+            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any())).thenReturn("/data/samples/id.jpg")
+            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(VerificationAnswers(isEgg = false))

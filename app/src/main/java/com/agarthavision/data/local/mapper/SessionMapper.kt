@@ -1,11 +1,17 @@
 package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.domain.model.Session
 
 /**
- * Mappers for `SessionEntity` will land alongside the `Session` domain model
- * (Sprint 1 — Joryuoo + jojseph). This file is a placeholder so the package
- * exists and references compile.
+ * Converts a Room session row into the domain model used by records screens.
  */
-@Suppress("unused")
-private val SessionMapperPackageMarker: SessionEntity? = null
+fun SessionEntity.toDomain(): Session =
+    Session(
+        id = sessionId,
+        userId = userId,
+        deviceId = deviceId,
+        startedAt = startedAt,
+        endedAt = endedAt,
+        notes = notes,
+    )

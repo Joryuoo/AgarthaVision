@@ -30,7 +30,14 @@ class NetworkErrorMapper @Inject constructor() {
         } catch (e: IOException) {
             throw InferenceConnectionException(e)
         } catch (e: HttpException) {
-            if (e.code() >= 500) throw InferenceConnectionException(e) else throw e
+            throw e.toDomainException()
         }
+    }
+
+    private fun HttpException.toDomainException(): Throwable =
+        if (code() >= SERVER_ERROR_MIN_CODE) InferenceConnectionException(this) else this
+
+    private companion object {
+        private const val SERVER_ERROR_MIN_CODE = 500
     }
 }

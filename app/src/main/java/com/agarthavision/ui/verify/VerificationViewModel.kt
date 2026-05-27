@@ -79,6 +79,7 @@ sealed interface VerificationEvent {
  *
  * See docs/03_MOBILE_APP_PLAN.md §1.6 + ADR-004.
  */
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,

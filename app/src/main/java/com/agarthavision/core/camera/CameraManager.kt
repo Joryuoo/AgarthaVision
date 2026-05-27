@@ -27,6 +27,7 @@ import kotlin.coroutines.resumeWithException
  * `InferFrameUseCase`. There is no `ImageCapture` use case in Phase 1.
  */
 @Singleton
+@Suppress("TooGenericExceptionCaught")
 class CameraManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
@@ -57,7 +58,7 @@ class CameraManager @Inject constructor(
                 @Suppress("DEPRECATION") // setTargetResolution — Roboflow input dims
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setTargetResolution(Size(640, 640))
+                    .setTargetResolution(Size(INFERENCE_INPUT_SIZE_PX, INFERENCE_INPUT_SIZE_PX))
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .build()
                     .apply { setAnalyzer(analyzerExecutor, analyzer) }
@@ -74,5 +75,9 @@ class CameraManager @Inject constructor(
                 continuation.resumeWithException(e)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private companion object {
+        private const val INFERENCE_INPUT_SIZE_PX = 640
     }
 }

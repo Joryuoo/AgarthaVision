@@ -48,4 +48,70 @@
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$s%% · %2$d detection(s) · %3$s</string>
+
+    <string name="capture_title">Capture</string>
+    <string name="capture_rec">REC</string>
+    <string name="capture_start">Start Recording</string>
+    <string name="capture_stop">Stop Recording</string>
+    <string name="capture_verify_action_desc">Verify flagged frames</string>
+    <string name="capture_records_action_desc">View records</string>
+    <string name="capture_permission_required">Camera permission is required for recording.</string>
+    <string name="capture_allow_camera">Allow Camera</string>
+    <string name="capture_detection_fallback">egg</string>
+    <string name="capture_detection_message">%1$s detected · %2$s%% confidence</string>
+    <string name="capture_detection_view">View</string>
+
+    <string name="records_title">Records</string>
+    <string name="records_empty">No sessions found</string>
+    <string name="records_filter_start">Start date</string>
+    <string name="records_filter_end">End date</string>
+    <string name="records_filter_hint">YYYY-MM-DD</string>
+    <string name="records_filter_apply">Apply</string>
+    <string name="records_filter_clear">Clear</string>
+    <string name="records_species_all">All species</string>
+    <string name="records_species_other">Other</string>
+    <string name="records_session_title">Session %1$s</string>
+    <string name="records_session_summary">%1$d verified samples · %2$s</string>
+    <string name="records_session_no_species">No species labels</string>
+    <string name="records_session_time">%1$s → %2$s</string>
+    <string name="records_session_active">active</string>
+    <string name="records_session_open">Open</string>
+    <string name="records_no_gps">No GPS</string>
+    <string name="records_gps">%1$.5f, %2$.5f</string>
+
+    <string name="session_detail_title">Session Detail</string>
+    <string name="session_detail_empty">No verified samples in this session</string>
+    <string name="session_detail_export_csv">Export CSV</string>
+    <string name="session_detail_exporting">Exporting…</string>
+    <string name="session_detail_export_saved">CSV saved: %1$s</string>
+    <string name="session_detail_export_failed">CSV export failed: %1$s</string>
+    <string name="session_detail_unknown_detection">No detection</string>
+    <string name="session_detail_confidence">Confidence: %1$.2f</string>
+    <string name="session_detail_captured">Captured: %1$s</string>
+    <string name="session_detail_back">Back to records</string>
+    <string name="session_detail_open_sample">Open sample</string>
+
+    <string name="sample_detail_title">Sample Detail</string>
+    <string name="sample_detail_missing">Sample not found</string>
+    <string name="sample_detail_tab_image">Image</string>
+    <string name="sample_detail_tab_detections">Detections</string>
+    <string name="sample_detail_tab_metadata">Metadata</string>
+    <string name="sample_detail_image_desc">Verified microscopy sample image</string>
+    <string name="sample_detail_no_detections">No detections recorded</string>
+    <string name="sample_detail_detection_title">Detection %1$d</string>
+    <string name="sample_detail_verdict">Verdict: %1$s</string>
+    <string name="sample_detail_box">Box: x=%1$.2f y=%2$.2f w=%3$.2f h=%4$.2f</string>
+    <string name="sample_detail_sample_id">Sample ID</string>
+    <string name="sample_detail_session_id">Session ID</string>
+    <string name="sample_detail_device_id">Device ID</string>
+    <string name="sample_detail_status">Status</string>
+    <string name="sample_detail_captured_at">Captured at</string>
+    <string name="sample_detail_verified_at">Verified at</string>
+    <string name="sample_detail_gps">GPS</string>
+    <string name="sample_detail_storage_path">Storage path</string>
+    <string name="sample_detail_model_version">Model version</string>
+    <string name="sample_detail_needs_reannotation">Needs reannotation</string>
+    <string name="sample_detail_yes">Yes</string>
+    <string name="sample_detail_no">No</string>
+    <string name="sample_detail_back">Back to session</string>
 </resources>
