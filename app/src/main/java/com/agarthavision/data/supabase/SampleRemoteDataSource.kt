@@ -11,6 +11,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Writes verified sample images and metadata to Supabase Storage and Postgres.
@@ -43,6 +44,15 @@ class SampleRemoteDataSource @Inject constructor(
 
         return storagePath
     }
+
+    /**
+     * Creates a short-lived URL for reading a private sample image from Storage.
+     */
+    suspend fun createSignedSampleImageUrl(storagePath: String): String =
+        supabase.storage.from(SAMPLES_BUCKET).createSignedUrl(
+            path = storagePath,
+            expiresIn = SIGNED_URL_EXPIRY,
+        )
 
     private fun SampleEntity.toInsertRow(
         userId: String,
@@ -142,5 +152,6 @@ class SampleRemoteDataSource @Inject constructor(
         private const val SAMPLES_TABLE = "samples"
         private const val DETECTIONS_TABLE = "detections"
         private const val UNKNOWN_MODEL_VERSION = "unknown"
+        private val SIGNED_URL_EXPIRY = 15.minutes
     }
 }

@@ -39,15 +39,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.Sample
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.komoui.themes.styles
 import java.io.File
@@ -100,6 +104,7 @@ fun SampleDetailScreen(
         } else {
             SampleDetailContent(
                 item = item,
+                imageSource = state.imageSource,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
@@ -109,7 +114,11 @@ fun SampleDetailScreen(
 }
 
 @Composable
-private fun SampleDetailContent(item: SampleRecordItem, modifier: Modifier = Modifier) {
+private fun SampleDetailContent(
+    item: SampleRecordItem,
+    imageSource: SampleImageSource,
+    modifier: Modifier = Modifier,
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         stringResource(R.string.sample_detail_tab_image),
@@ -129,7 +138,7 @@ private fun SampleDetailContent(item: SampleRecordItem, modifier: Modifier = Mod
         }
 
         when (selectedTab) {
-            0 -> ImageTab(item = item)
+            0 -> ImageTab(item = item, imageSource = imageSource)
             1 -> DetectionsTab(detections = item.detections)
             else -> MetadataTab(sample = item.sample)
         }
@@ -137,7 +146,7 @@ private fun SampleDetailContent(item: SampleRecordItem, modifier: Modifier = Mod
 }
 
 @Composable
-private fun ImageTab(item: SampleRecordItem) {
+private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -150,19 +159,52 @@ private fun ImageTab(item: SampleRecordItem) {
         shape = MaterialTheme.shapes.medium,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = File(item.sample.filePath),
-                contentDescription = stringResource(R.string.sample_detail_image_desc),
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.fillMaxSize(),
-            )
-            NormalizedDetectionOverlay(
-                detections = item.detections,
-                modifier = Modifier.fillMaxSize(),
-            )
+            when (imageSource) {
+                is SampleImageSource.Local,
+                is SampleImageSource.RemoteSignedUrl,
+                -> {
+                    AsyncImage(
+                        model = imageSource.toCoilModel(),
+                        contentDescription = stringResource(R.string.sample_detail_image_desc),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    NormalizedDetectionOverlay(
+                        detections = item.detections,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                is SampleImageSource.Unavailable -> {
+                    Text(
+                        text = imageSource.reason.toDisplayText(),
+                        color = MaterialTheme.styles.mutedForeground,
+                        modifier = Modifier.padding(20.dp),
+                    )
+                }
+            }
         }
     }
 }
+
+@Composable
+private fun SampleImageSource.toCoilModel(): Any =
+    when (this) {
+        is SampleImageSource.Local -> File(path)
+        is SampleImageSource.RemoteSignedUrl -> ImageRequest.Builder(LocalContext.current)
+            .data(url)
+            .diskCacheKey(cacheKey)
+            .memoryCacheKey(cacheKey)
+            .build()
+        is SampleImageSource.Unavailable -> error("Unavailable sample images cannot be converted to Coil models.")
+    }
+
+@Composable
+private fun SampleImageUnavailableReason.toDisplayText(): String =
+    when (this) {
+        SampleImageUnavailableReason.SAMPLE_NOT_FOUND -> stringResource(R.string.sample_detail_missing)
+        SampleImageUnavailableReason.NO_STORAGE_PATH -> stringResource(R.string.sample_detail_image_no_storage_path)
+        SampleImageUnavailableReason.REMOTE_LOAD_FAILED -> stringResource(R.string.sample_detail_image_remote_failed)
+    }
 
 @Composable
 private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Modifier = Modifier) {

@@ -93,6 +93,8 @@
 
     <string name="sample_detail_title">Sample Detail</string>
     <string name="sample_detail_missing">Sample not found</string>
+    <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
+    <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
     <string name="sample_detail_tab_image">Image</string>
     <string name="sample_detail_tab_detections">Detections</string>
     <string name="sample_detail_tab_metadata">Metadata</string>

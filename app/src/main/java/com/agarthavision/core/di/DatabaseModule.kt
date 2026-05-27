@@ -11,8 +11,10 @@ import com.agarthavision.data.repository.DownloadsSessionReportRepository
 import com.agarthavision.data.repository.SampleRepositoryImpl
 import com.agarthavision.data.repository.SessionRepositoryImpl
 import com.agarthavision.data.repository.SupabaseAuthRepository
+import com.agarthavision.data.repository.SupabaseSampleImageRepository
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.SampleImageRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionReportRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -64,6 +66,11 @@ abstract class RepositoryModule {
     abstract fun bindSampleRepository(
         implementation: SampleRepositoryImpl,
     ): SampleRepository
+
+    @Binds
+    abstract fun bindSampleImageRepository(
+        implementation: SupabaseSampleImageRepository,
+    ): SampleImageRepository
 
     @Binds
     abstract fun bindDetectionRepository(
