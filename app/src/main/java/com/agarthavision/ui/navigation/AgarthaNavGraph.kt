@@ -68,6 +68,7 @@ fun AgarthaNavGraph(
                 onSessionClick = { sessionId ->
                     navController.navigate(Screen.SessionDetail.createRoute(sessionId))
                 },
+                onBackClick = { navController.popBackStack() },
             )
         }
         composable(Screen.SessionDetail.route) {

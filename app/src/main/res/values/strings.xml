@@ -62,6 +62,7 @@
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
+    <string name="records_back">Back to capture</string>
     <string name="records_empty">No sessions found</string>
     <string name="records_filter_start">Start date</string>
     <string name="records_filter_end">End date</string>

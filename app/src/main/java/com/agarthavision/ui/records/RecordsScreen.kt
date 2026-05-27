@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,13 +16,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -61,6 +67,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun RecordsScreen(
     onSessionClick: (String) -> Unit,
+    onBackClick: () -> Unit,
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -70,6 +77,15 @@ fun RecordsScreen(
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(R.string.records_title)) },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.records_back),
+                            tint = MaterialTheme.styles.foreground,
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.styles.background,
                     titleContentColor = MaterialTheme.styles.foreground,
@@ -117,76 +133,128 @@ fun RecordsScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterBar(
     state: RecordsState,
     onSpeciesSelected: (EggSpecies?) -> Unit,
     onDateRangeSelected: (LocalDate?, LocalDate?) -> Unit,
 ) {
-    var startText by remember(state.startDate) { mutableStateOf(state.startDate?.toString().orEmpty()) }
-    var endText by remember(state.endDate) { mutableStateOf(state.endDate?.toString().orEmpty()) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = state.selectedSpecies == null,
-                onClick = { onSpeciesSelected(null) },
-                label = { Text(stringResource(R.string.records_species_all)) },
-            )
-            EggSpecies.entries.forEach { species ->
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                KomoButton(
+                    onClick = { onSpeciesSelected(null) },
+                    variant = if (state.selectedSpecies == null) ButtonVariant.Default else ButtonVariant.Secondary,
+                    size = ButtonSize.Sm,
+                ) {
+                    Text(stringResource(R.string.records_species_all))
+                }
+            }
+            items(EggSpecies.entries.toTypedArray()) { species ->
                 val label = species.canonicalClass ?: stringResource(R.string.records_species_other)
-                FilterChip(
-                    selected = state.selectedSpecies == species,
+                KomoButton(
                     onClick = { onSpeciesSelected(species) },
-                    label = { Text(label) },
-                )
+                    variant = if (state.selectedSpecies == species) ButtonVariant.Default else ButtonVariant.Secondary,
+                    size = ButtonSize.Sm,
+                ) {
+                    Text(label)
+                }
             }
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(
-                value = startText,
-                onValueChange = { startText = it },
-                label = { Text(stringResource(R.string.records_filter_start)) },
-                placeholder = { Text(stringResource(R.string.records_filter_hint)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-            OutlinedTextField(
-                value = endText,
-                onValueChange = { endText = it },
-                label = { Text(stringResource(R.string.records_filter_end)) },
-                placeholder = { Text(stringResource(R.string.records_filter_hint)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             KomoButton(
-                onClick = {
-                    onDateRangeSelected(startText.toLocalDateOrNull(), endText.toLocalDateOrNull())
-                },
-                size = ButtonSize.Default,
-            ) {
-                Text(stringResource(R.string.records_filter_apply))
-            }
-            KomoButton(
-                onClick = {
-                    startText = ""
-                    endText = ""
-                    onDateRangeSelected(null, null)
-                },
+                onClick = { showDatePicker = true },
                 variant = ButtonVariant.Secondary,
-                size = ButtonSize.Default,
+                size = ButtonSize.Sm,
             ) {
-                Text(stringResource(R.string.records_filter_clear))
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp).size(16.dp)
+                )
+                val dateText = if (state.startDate != null && state.endDate != null) {
+                    "${state.startDate} → ${state.endDate}"
+                } else if (state.startDate != null) {
+                    "${state.startDate} → Present"
+                } else if (state.endDate != null) {
+                    "Any → ${state.endDate}"
+                } else {
+                    "All time"
+                }
+                Text(dateText)
             }
+            
+            if (state.startDate != null || state.endDate != null) {
+                KomoButton(
+                    onClick = { onDateRangeSelected(null, null) },
+                    variant = ButtonVariant.Ghost,
+                    size = ButtonSize.Sm,
+                ) {
+                    Text(stringResource(R.string.records_filter_clear))
+                }
+            }
+        }
+    }
+
+    if (showDatePicker) {
+        val dateRangePickerState = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = state.startDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
+            initialSelectedEndDateMillis = state.endDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                KomoButton(
+                    onClick = {
+                        showDatePicker = false
+                        val start = dateRangePickerState.selectedStartDateMillis?.let {
+                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        }
+                        val end = dateRangePickerState.selectedEndDateMillis?.let {
+                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
+                        }
+                        onDateRangeSelected(start, end)
+                    },
+                    size = ButtonSize.Sm
+                ) {
+                    Text(stringResource(R.string.records_filter_apply))
+                }
+            },
+            dismissButton = {
+                KomoButton(
+                    onClick = { showDatePicker = false },
+                    variant = ButtonVariant.Ghost,
+                    size = ButtonSize.Sm
+                ) {
+                    Text(stringResource(R.string.verify_cancel))
+                }
+            }
+        ) {
+            DateRangePicker(
+                state = dateRangePickerState,
+                title = {
+                    Text(
+                        text = "Select Date Range",
+                        modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
+                    )
+                },
+                showModeToggle = false,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
