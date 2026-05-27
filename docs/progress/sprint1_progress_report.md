@@ -88,7 +88,7 @@ and is independent of DMKuZu's inference-container work in Phase 1.
 | Criterion | Status |
 |---|---|
 | Cold start → Login screen | ✅ real Login implemented |
-| Successful login → Capture screen | ⚠️ implemented; pending live Supabase credential test |
+| Successful login → Capture screen | ✅ |
 | Recording session activates frame sampling at 2s intervals | ✅ |
 | Egg detection → Sonner toast within ~3s | ✅ (logic implemented) |
 | Tapping toast opens VerificationSheet and stops recording | ✅ |
@@ -124,7 +124,7 @@ Runs in parallel with the teammate tracks. Mobile code reads `INFERENCE_URL` fro
 | `supabase/migrations/0001_init.sql` applied to dev project | DMKuZu | ✅ |
 | `SUPABASE_URL_DEV` + `SUPABASE_ANON_KEY_DEV` shared with team | DMKuZu | ✅ |
 | Supabase prod project provisioned | DMKuZu / Joryuoo | ⬜ open (defer until demo) |
-| Test accounts provisioned via Supabase Auth dashboard | Joryuoo | ⬜ open |
+| Test accounts provisioned via Supabase Auth dashboard | Anyone | ✅ |
 | Roboflow workspace + model import | ~~Tabada~~ | ❌ obsolete (per ADR-003) |
 
 ---

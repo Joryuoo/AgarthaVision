@@ -6,7 +6,7 @@
     "stop" : "./gradlew --stop",
     "build": "./gradlew assembleDebug",
     "build:release": "./gradlew assembleRelease",
-    "install:device": "./gradlew installDebug",
+    "install:device": "./gradlew :app:installDebug",
     "test": "./gradlew testDebugUnitTest",
     "test:all": "./gradlew test",
     "lint": "./gradlew ktlintCheck detekt",

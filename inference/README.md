@@ -117,6 +117,7 @@ Run this once `server.py` is confirmed working on the droplet directly.
 
 ```bash
 # From repo root:
+git lfs install && git lfs pull
 docker build -t ghcr.io/dmkuzu/agartha-inference:v1 inference/
 docker push ghcr.io/dmkuzu/agartha-inference:v1
 ```
