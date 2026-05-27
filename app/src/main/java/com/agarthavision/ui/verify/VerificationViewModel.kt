@@ -118,6 +118,37 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    fun onFramePrev() {
+        val frames = flaggedFrameStore.state.value
+        val current = currentFrame ?: return
+        val idx = frames.indexOf(current)
+        if (idx <= 0) return
+        setFrame(frames[idx - 1])
+    }
+
+    fun onFrameNext() {
+        val frames = flaggedFrameStore.state.value
+        val current = currentFrame ?: return
+        val idx = frames.indexOf(current)
+        if (idx < 0 || idx >= frames.size - 1) return
+        setFrame(frames[idx + 1])
+    }
+
+    fun onDeleteFrame() {
+        val frames = flaggedFrameStore.state.value
+        val current = currentFrame ?: return
+        val idx = frames.indexOf(current)
+        // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
+        val nextFrame = frames.getOrNull(idx + 1) ?: frames.getOrNull(idx - 1)
+        flaggedFrameStore.remove(current)
+        if (nextFrame != null) {
+            setFrame(nextFrame)
+        } else {
+            currentFrame = null
+            viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+        }
+    }
+
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }

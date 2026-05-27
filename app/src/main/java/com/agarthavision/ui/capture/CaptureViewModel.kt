@@ -92,6 +92,25 @@ class CaptureViewModel @Inject constructor(
         _state.update { it.copy(verificationTarget = null) }
     }
 
+    fun onQueueTap() {
+        viewModelScope.launch {
+            if (_state.value.isRecording) runCatching { sessionManager.stopSession() }
+            _state.update { it.copy(isQueueOpen = true) }
+        }
+    }
+
+    fun onQueueDismiss() {
+        _state.update { it.copy(isQueueOpen = false) }
+    }
+
+    fun onQueueItemSelected(frame: FlaggedFrame) {
+        _state.update { it.copy(isQueueOpen = false, verificationTarget = frame) }
+    }
+
+    fun onQueueItemDeleted(frame: FlaggedFrame) {
+        flaggedFrameStore.remove(frame)
+    }
+
     fun resumeConnection() {
         viewModelScope.launch {
             _state.update { it.copy(isProbingConnection = true) }
@@ -115,4 +134,5 @@ data class CaptureState(
     val isConnectionLost: Boolean = false,
     val isProbingConnection: Boolean = false,
     val verificationTarget: FlaggedFrame? = null,
+    val isQueueOpen: Boolean = false,
 )

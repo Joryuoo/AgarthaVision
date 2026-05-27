@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.verify.VerificationQueueSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import com.komoui.components.sooner.SonnerAction
 import com.komoui.components.sooner.SonnerEvent
@@ -112,29 +113,24 @@ fun CaptureScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Capture") },
                 actions = {
-                    if (state.flaggedFrames.isNotEmpty()) {
-                        IconButton(
-                            onClick = {
-                                val latest = state.flaggedFrames.firstOrNull()
-                                if (latest != null) viewModel.onDetectionToastTap(latest)
-                            },
-                        ) {
-                            BadgedBox(
-                                badge = {
+                    IconButton(onClick = viewModel::onQueueTap) {
+                        BadgedBox(
+                            badge = {
+                                if (state.flaggedFrames.isNotEmpty()) {
                                     Badge(
                                         containerColor = MaterialTheme.styles.primary,
                                         contentColor = MaterialTheme.styles.primaryForeground,
                                     ) {
                                         Text(state.flaggedFrames.size.toString())
                                     }
-                                },
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.FactCheck,
-                                    contentDescription = "Verify flagged frames",
-                                    tint = MaterialTheme.styles.foreground,
-                                )
-                            }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FactCheck,
+                                contentDescription = "Verify flagged frames",
+                                tint = MaterialTheme.styles.foreground,
+                            )
                         }
                     }
                 },
@@ -230,6 +226,15 @@ fun CaptureScreen(
                     .align(Alignment.TopCenter),
             )
         }
+    }
+
+    if (state.isQueueOpen) {
+        VerificationQueueSheet(
+            frames = state.flaggedFrames,
+            onRowClick = viewModel::onQueueItemSelected,
+            onRowDelete = viewModel::onQueueItemDeleted,
+            onDismiss = viewModel::onQueueDismiss,
+        )
     }
 
     val target = state.verificationTarget

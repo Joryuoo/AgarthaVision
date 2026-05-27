@@ -39,7 +39,8 @@ class InferFrameUseCase @Inject constructor(
             throw InferenceConnectionException(Exception("Inference failed: ${response.code()}"))
         }
 
-        val predictions = response.body()?.predictions.orEmpty()
+        val body = response.body()
+        val predictions = body?.predictions.orEmpty()
         if (predictions.isEmpty()) return
 
         flaggedFrameStore.add(
@@ -48,7 +49,9 @@ class InferFrameUseCase @Inject constructor(
                 capturedAt = Instant.now(),
                 jpegBytes = jpegBytes,
                 predictions = predictions,
-                inferenceModelVersion = response.body()?.modelVersion,
+                inferenceModelVersion = body?.modelVersion,
+                imageWidth = body?.image?.width,
+                imageHeight = body?.image?.height,
             )
         )
     }

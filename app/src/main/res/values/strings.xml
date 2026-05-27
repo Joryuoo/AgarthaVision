@@ -36,4 +36,16 @@
     <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
     <string name="connection_lost_resume">Resume Recording</string>
     <string name="connection_lost_probing">Checking connection…</string>
+
+    <string name="verify_prev_frame">Previous frame</string>
+    <string name="verify_next_frame">Next frame</string>
+    <string name="verify_delete_frame">Delete</string>
+    <string name="verify_delete_confirm_title">Delete this flagged frame?</string>
+    <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
+
+    <string name="queue_sheet_title">Flagged Frames · %1$d</string>
+    <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
+    <string name="queue_row_delete">Remove from queue</string>
+    <string name="queue_row_unknown_class">Unknown detection</string>
+    <string name="queue_row_subtitle">%1$s%% · %2$d detection(s) · %3$s</string>
 </resources>

@@ -173,4 +173,59 @@ class CaptureViewModelTest {
 
             assertNull(vm.state.value.verificationTarget)
         }
+
+    @Test
+    fun `onQueueTap stops session and sets isQueueOpen`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeRecordingState()
+            advanceUntilIdle()
+
+            vm.onQueueTap()
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.isQueueOpen)
+            verify(sessionManager).stopSession()
+        }
+
+    @Test
+    fun `onQueueTap while idle does not stop session`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onQueueTap()
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.isQueueOpen)
+            verify(sessionManager, never()).stopSession()
+        }
+
+    @Test
+    fun `onQueueItemSelected sets verificationTarget and closes queue`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onQueueTap()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isQueueOpen)
+
+            val frame = makeFrame()
+            vm.onQueueItemSelected(frame)
+            advanceUntilIdle()
+
+            assertEquals(frame, vm.state.value.verificationTarget)
+            assertFalse(vm.state.value.isQueueOpen)
+        }
+
+    @Test
+    fun `onQueueDismiss clears isQueueOpen`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onQueueTap()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isQueueOpen)
+
+            vm.onQueueDismiss()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isQueueOpen)
+        }
 }

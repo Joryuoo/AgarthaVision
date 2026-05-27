@@ -51,6 +51,19 @@ class VerificationViewModelTest {
         )
     }
 
+    private fun makeFrameWithId(id: Int, predictions: Int = 1): FlaggedFrame {
+        // Distinct capturedAt so equals/hashCode see each frame as unique
+        val preds = List(predictions) {
+            PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
+        }
+        return FlaggedFrame(
+            sessionId = "session-1",
+            capturedAt = Instant.ofEpochMilli(id.toLong()),
+            jpegBytes = ByteArray(4),
+            predictions = preds,
+        )
+    }
+
     @Test
     fun `setFrame initialises answers list matching prediction count`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
@@ -175,5 +188,87 @@ class VerificationViewModelTest {
                 assertEquals("DB error", (event as VerificationEvent.ShowError).message)
             }
             assertFalse(vm.state.value.isSubmitting)
+        }
+
+    @Test
+    fun `onFrameNext advances currentFrame within queue`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frameA = makeFrameWithId(1)
+            val frameB = makeFrameWithId(2)
+            storeState.value = listOf(frameA, frameB)
+            val vm = viewModel()
+            vm.setFrame(frameA)
+            advanceUntilIdle()
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(frameB, vm.state.value.frame)
+        }
+
+    @Test
+    fun `onFrameNext clamps at last frame`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frameA = makeFrameWithId(1)
+            val frameB = makeFrameWithId(2)
+            storeState.value = listOf(frameA, frameB)
+            val vm = viewModel()
+            vm.setFrame(frameB)
+            advanceUntilIdle()
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(frameB, vm.state.value.frame)
+        }
+
+    @Test
+    fun `onFramePrev clamps at first frame`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frameA = makeFrameWithId(1)
+            val frameB = makeFrameWithId(2)
+            storeState.value = listOf(frameA, frameB)
+            val vm = viewModel()
+            vm.setFrame(frameA)
+            advanceUntilIdle()
+
+            vm.onFramePrev()
+            advanceUntilIdle()
+
+            assertEquals(frameA, vm.state.value.frame)
+        }
+
+    @Test
+    fun `onDeleteFrame removes current frame and advances to next`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frameA = makeFrameWithId(1)
+            val frameB = makeFrameWithId(2)
+            storeState.value = listOf(frameA, frameB)
+            val vm = viewModel()
+            vm.setFrame(frameA)
+            advanceUntilIdle()
+
+            vm.onDeleteFrame()
+            advanceUntilIdle()
+
+            verify(flaggedFrameStore).remove(frameA)
+            assertEquals(frameB, vm.state.value.frame)
+        }
+
+    @Test
+    fun `onDeleteFrame emits Dismiss when queue becomes empty`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val onlyFrame = makeFrameWithId(1)
+            storeState.value = listOf(onlyFrame)
+            val vm = viewModel()
+            vm.setFrame(onlyFrame)
+            advanceUntilIdle()
+
+            vm.events.test {
+                vm.onDeleteFrame()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.Dismiss, awaitItem())
+            }
+            verify(flaggedFrameStore).remove(onlyFrame)
         }
 }
