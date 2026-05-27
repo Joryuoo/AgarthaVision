@@ -23,4 +23,6 @@ class SupabaseAuthRepository @Inject constructor(
             this.password = password
         }
     }
+
+    override suspend fun getCurrentUserId(): String? = supabase.auth.currentUserOrNull()?.id
 }

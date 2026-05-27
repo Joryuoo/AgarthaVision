@@ -13,4 +13,9 @@ interface AuthRepository {
      * Signs in an existing dashboard-provisioned user with email and password.
      */
     suspend fun signIn(email: String, password: String)
+
+    /**
+     * Returns the current user's ID, or null if not logged in.
+     */
+    suspend fun getCurrentUserId(): String?
 }

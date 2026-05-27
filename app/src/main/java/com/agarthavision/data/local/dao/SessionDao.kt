@@ -22,8 +22,8 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE session_id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: String): SessionEntity?
 
-    @Query("SELECT * FROM sessions ORDER BY started_at DESC")
-    fun observeAllSessions(): Flow<List<SessionEntity>>
+    @Query("SELECT * FROM sessions WHERE user_id = :userId ORDER BY started_at DESC")
+    fun observeAllSessions(userId: String): Flow<List<SessionEntity>>
 
     @Query("SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1")
     suspend fun getOpenSession(): SessionEntity?

@@ -1,6 +1,6 @@
 # Sprint 2 Progress Report
 
-**Last updated:** 2026-05-27 (sprint kickoff)
+**Last updated:** 2026-05-28
 **Spec authority:** [../03_MOBILE_APP_PLAN.md §2](../03_MOBILE_APP_PLAN.md) (Sprint 2)
 **Architecture authority:** [../02_PROJECT_ARCHITECTURE.md](../02_PROJECT_ARCHITECTURE.md) · [../adr/004-verification-as-hitl-correction.md](../adr/004-verification-as-hitl-correction.md)
 

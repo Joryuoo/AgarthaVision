@@ -20,6 +20,9 @@ data class SampleEntity(
     @ColumnInfo(name = "session_id")
     val sessionId: String,
 
+    @ColumnInfo(name = "user_id")
+    val userId: String,
+
     @ColumnInfo(name = "device_id")
     val deviceId: String,
 

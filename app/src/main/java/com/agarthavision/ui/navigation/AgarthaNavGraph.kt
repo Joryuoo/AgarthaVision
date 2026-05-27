@@ -9,7 +9,7 @@ import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.login.LoginScreen
-import com.agarthavision.ui.records.RecordsScreenPlaceholder
+import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
 
 sealed class Screen(val route: String) {
@@ -47,7 +47,7 @@ fun AgarthaNavGraph(
         composable(Screen.Capture.route) {
             CaptureScreen(cameraManager = cameraManager, frameSampler = frameSampler)
         }
-        composable(Screen.Records.route) { RecordsScreenPlaceholder() }
+        composable(Screen.Records.route) { RecordsScreen() }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
     }
 }

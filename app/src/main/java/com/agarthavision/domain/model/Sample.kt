@@ -14,6 +14,7 @@ import java.util.UUID
  */
 data class Sample(
     val id: String = UUID.randomUUID().toString(),
+    val userId: String,
     val timestamp: Long = System.currentTimeMillis(),
     val verifiedAt: Long = timestamp,
     val deviceId: String,

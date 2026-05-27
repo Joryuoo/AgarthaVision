@@ -8,6 +8,7 @@ fun Sample.toEntity(): SampleEntity =
     SampleEntity(
         sampleId = id,
         sessionId = sessionId,
+        userId = userId,
         deviceId = deviceId,
         timestamp = timestamp,
         verifiedAt = verifiedAt,
@@ -24,6 +25,7 @@ fun Sample.toEntity(): SampleEntity =
 fun SampleEntity.toDomain(): Sample =
     Sample(
         id = sampleId,
+        userId = userId,
         timestamp = timestamp,
         verifiedAt = verifiedAt.takeIf { it > 0L } ?: timestamp,
         deviceId = deviceId,

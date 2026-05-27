@@ -19,11 +19,19 @@ class SampleRepositoryImpl @Inject constructor(
         sampleDao.insertSample(sample.toEntity())
     }
 
-    override fun observeLatestSample(): Flow<Sample?> =
-        sampleDao.observeLatestSample().map { entity ->
+    override fun observeLatestSample(userId: String): Flow<Sample?> =
+        sampleDao.observeLatestSample(userId).map { entity ->
             entity?.toDomain()
+        }
+
+    override fun observeAllSamples(userId: String): Flow<List<Sample>> =
+        sampleDao.observeAllSamples(userId).map { entities ->
+            entities.map { it.toDomain() }
         }
 
     override suspend fun getSampleById(sampleId: String): Sample? =
         sampleDao.getSampleById(sampleId)?.toDomain()
+
+    override suspend fun getSamplesPendingSync(userId: String): List<Sample> =
+        sampleDao.getSamplesPendingSync(userId).map { it.toDomain() }
 }
