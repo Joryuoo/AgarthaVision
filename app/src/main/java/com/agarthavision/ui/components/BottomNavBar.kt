@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.komoui.themes.styles
 
 // Surface + Row of IconButton — phone navigation, shown instead of Sidebar.
 // Destinations: Capture · Queue · Validate · Reports · Settings.
@@ -25,7 +26,7 @@ fun BottomNavBar(
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.styles.background,
         tonalElevation = 3.dp,
     ) {
         Row(

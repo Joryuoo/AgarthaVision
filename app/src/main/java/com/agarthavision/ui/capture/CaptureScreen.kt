@@ -111,7 +111,7 @@ fun CaptureScreen(
     }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = MaterialTheme.styles.background,
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Capture") },
@@ -205,7 +205,7 @@ fun CaptureScreen(
                     state.errorMessage?.let { error ->
                         Text(
                             text = error,
-                            color = MaterialTheme.colorScheme.error,
+                            color = MaterialTheme.styles.destructive,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(8.dp),

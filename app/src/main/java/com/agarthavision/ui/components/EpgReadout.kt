@@ -10,6 +10,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.agarthavision.ui.theme.EpgDisplayStyle
 import com.agarthavision.ui.theme.MonoSmallStyle
+import com.komoui.themes.styles
 
 // Composition of Text styles for the large "1,284 EPG" hero display.
 // EpgDisplayStyle (Geist 56 sp, tnum) for the numeral; MonoSmallStyle for the unit.
@@ -23,12 +24,12 @@ fun EpgReadout(
         Text(
             text = "%,d".format(epg),
             style = EpgDisplayStyle,
-            color = MaterialTheme.colorScheme.onBackground,
+            color = MaterialTheme.styles.foreground,
         )
         Text(
             text = "EPG",
             style = MonoSmallStyle,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = MaterialTheme.styles.mutedForeground,
         )
     }
 }

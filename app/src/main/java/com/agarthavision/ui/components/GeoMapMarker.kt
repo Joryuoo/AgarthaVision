@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.komoui.themes.styles
 
 // Canvas + Maps SDK — sample-site pin on the Reports map view.
 // Filled circle in primary color with Ink ring; size scales with sample count.
@@ -20,9 +21,9 @@ fun GeoMapMarker(
     isHighRisk: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
-    val fill = if (isHighRisk) MaterialTheme.colorScheme.error
-               else MaterialTheme.colorScheme.primary
-    val ring = MaterialTheme.colorScheme.onBackground
+    val fill = if (isHighRisk) MaterialTheme.styles.destructive
+               else MaterialTheme.styles.primary
+    val ring = MaterialTheme.styles.foreground
 
     Canvas(modifier = modifier.size(24.dp)) {
         val radius = (8 + (sampleCount.coerceAtMost(10) * 0.8f))

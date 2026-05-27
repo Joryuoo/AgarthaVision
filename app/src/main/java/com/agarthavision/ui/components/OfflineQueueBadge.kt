@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.theme.AgarthaRadius
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.agarthavision.ui.theme.MonoSmallStyle
+import com.komoui.themes.styles
 
 // Badge with leading live-dot — persistent queue counter in the app bar.
 // count = 0 hides the component; dot pulses AlertCoral while device is offline.
@@ -29,12 +30,12 @@ fun OfflineQueueBadge(
 ) {
     if (count == 0) return
 
-    val dotColor = if (isOffline) MaterialTheme.colorScheme.error
-                   else MaterialTheme.colorScheme.primary
+    val dotColor = if (isOffline) MaterialTheme.styles.destructive
+                   else MaterialTheme.styles.primary
 
     Row(
         modifier = modifier
-            .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(AgarthaRadius.full))
+            .background(MaterialTheme.styles.secondary, RoundedCornerShape(AgarthaRadius.full))
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -47,7 +48,7 @@ fun OfflineQueueBadge(
         Text(
             text = count.toString(),
             style = MonoSmallStyle,
-            color = MaterialTheme.colorScheme.onSecondary,
+            color = MaterialTheme.styles.secondaryForeground,
             modifier = Modifier.padding(start = 4.dp),
         )
     }

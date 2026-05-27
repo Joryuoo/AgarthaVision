@@ -17,6 +17,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.agarthavision.ui.theme.MonoSmallStyle
+import com.komoui.themes.styles
 
 data class AuditEvent(val timestamp: String, val actor: String, val action: String)
 
@@ -38,23 +39,23 @@ fun AuditTimeline(
                 Text(
                     text = event.timestamp,
                     style = MonoSmallStyle,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.styles.mutedForeground,
                 )
                 Spacer(modifier = Modifier.width(AgarthaSpacing.md))
                 Column {
                     Text(
                         text = event.actor,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onBackground,
+                        color = MaterialTheme.styles.foreground,
                     )
                     Text(
                         text = event.action,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = MaterialTheme.styles.mutedForeground,
                     )
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            HorizontalDivider(color = MaterialTheme.styles.border)
         }
     }
 }

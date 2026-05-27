@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.theme.AgarthaRadius
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.agarthavision.ui.theme.MonoSmallStyle
+import com.komoui.themes.styles
 import kotlinx.coroutines.delay
 
 // Badge + countdown LaunchedEffect — "BIO 47:12" app-bar timer.
@@ -41,8 +42,10 @@ fun BiologicalWindowChip(
     }
 
     val critical = remaining <= 600
-    val chipColor = if (critical) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.primary
+    val chipColor = if (critical) MaterialTheme.styles.destructive
+                    else MaterialTheme.styles.primary
+    val chipForeground = if (critical) MaterialTheme.styles.destructiveForeground
+                         else MaterialTheme.styles.primaryForeground
 
     val mm = remaining / 60
     val ss = remaining % 60
@@ -56,7 +59,7 @@ fun BiologicalWindowChip(
         Text(
             text = "BIO %02d:%02d".format(mm, ss),
             style = MonoSmallStyle,
-            color = MaterialTheme.colorScheme.onPrimary,
+            color = chipForeground,
         )
     }
 }
