@@ -299,6 +299,14 @@ class InferFrameUseCase @Inject constructor(
 
 `FlaggedFrameStore` is an in-memory `MutableStateFlow<List<FlaggedFrame>>` plus a write-through to a small disk cache (since frames are < 100 KB). It's *not* the Room database — flagged frames only become Room rows after the user verifies them.
 
+> **Phase 1 vs Phase 2 — persistence scope.** Phase 1 flagged frames are deliberately
+> **transient**: they live in memory + a session-scoped disk cache and do **not**
+> survive logout or app restart. The expectation that "I should see my previous
+> session's flagged frames after logging back in" is a **Phase 2** deliverable
+> (per-account persistent queue keyed by `user_id`, surviving restarts). Phase 1
+> keeps the surface area small — only **verified** samples graduate to Room and
+> can be revisited later (Sprint 2 Records screen).
+
 ### 1.5 Detection Toasts
 
 The Capture screen observes `flaggedFrameStore.state` and shows a `Sonner` toast each time a new flagged frame arrives:
@@ -309,7 +317,26 @@ The Capture screen observes `flaggedFrameStore.state` and shows a `Sonner` toast
 
 Tapping "view" opens the `VerificationSheet` (bottom sheet, snap point 95%) at the most recent flagged frame.
 
-If multiple frames flag in quick succession, the toasts collapse — `Sonner` debounces 1.5 seconds. The badge counter on the verification chip in the app bar shows the unverified count.
+If multiple frames flag in quick succession, the toasts collapse — `Sonner` debounces 1.5 seconds.
+
+#### Persistent verification badge + Queue Sheet
+
+The top-app-bar verification action (`FactCheck` icon) is **always visible**, not
+gated on queue-non-empty — it functions like a persistent inbox/hamburger
+affordance. When the queue is empty the count badge bubble is hidden but the icon
+stays interactive. The badge bubble appears when `flaggedFrames.size > 0` and
+shows the unverified count.
+
+Tapping the badge:
+1. Stops the recording session (parity with toast-tap).
+2. Opens the **`VerificationQueueSheet`** — a `Drawer` (bottom sheet) listing every
+   entry in `FlaggedFrameStore.state`. Each row: thumbnail · top-prediction label
+   · confidence · captured-at time · trailing delete `IconButton`.
+3. Tapping a row dismisses the queue sheet and opens `VerificationSheet` for that
+   frame. Tapping the row's trash icon removes the frame from the store (used for
+   duplicates the expert has already verified upstream).
+4. The Sonner toast remains the primary "new detection" surface during recording;
+   the queue sheet is the catch-up surface when the expert is ready to batch-verify.
 
 ### 1.6 Verification Sheet
 
@@ -386,11 +413,37 @@ before retraining.
 |---|---|
 | Submit | Persist `SampleEntity` to Room (status `VERIFIED`) with one `DetectionEntity` per box, each carrying its expert `verdict` + `expert_class`. Enqueue Supabase upload regardless of verdict mix. |
 | Cancel | Sheet closes; flagged frame stays in `FlaggedFrameStore`; session stays stopped; expert can revisit later from the verification chip. |
-| Next / Prev (frame) | Navigate between flagged frames in the queue. Per-detection answers stay scoped to the frame they were entered against. |
+| Next / Prev (frame) | Chevrons next to the "Flagged Frame · N of M" header. Navigate between flagged frames in the queue. Per-detection answers stay scoped to the frame they were entered against. Clamps at queue edges. |
+| Next / Prev (detection) | Buttons under the frame image. Navigate between detections **within** the current frame. Independent from frame-level navigation. |
+| Delete frame | Destructive button next to Cancel/Submit (Coral). Removes the current frame from `FlaggedFrameStore` after an `AlertDialog` confirmation. If the queue is non-empty afterwards, the sheet auto-advances to the next frame; otherwise the sheet dismisses. Use case: the expert recognises a duplicate of a previously-verified sample and wants to discard without persisting. |
 
 Submitting a frame where **every** detection is `FALSE_POSITIVE` still results in a
 persisted sample — that's the labeled-false-positive case, not a deletion. Reports
 later filter on the `verdict` column to compute precision and per-species accuracy.
+
+#### Q1 wording is canonical (do not paraphrase)
+
+Q1 must read **"Is there a parasitic egg in this bounding box?"** — not
+"in this frame". The verdict model in
+[ADR-004](adr/004-verification-as-hitl-correction.md) is **per-detection** (one
+verdict per box). Rephrasing to "frame" collapses the per-box semantic and breaks
+the `FALSE_POSITIVE` / `BOX_INCORRECT` / `WRONG_CLASS` / `CONFIRMED` branching.
+If "this bounding box" reads ambiguously on screen, the box-overlay rendering bug
+is the cause — fix the overlay, not the copy.
+
+#### Deferred UX improvements
+
+The following are not in Sprint 1 scope and live here so Sprint 2+ can pick them up:
+
+- **Lift Sonner above persistent bottom controls.** On `CaptureScreen` the default
+  bottom-center Sonner overlays the Stop Recording button. Either pad the host by
+  `cardPadding * 2` (≈ 48 dp) or move it to top-center for screens that have a
+  persistent action button. Cross-referenced in
+  [05_DESIGN_SYSTEM_KOMOUI.md](05_DESIGN_SYSTEM_KOMOUI.md) §"Sonner (toast)".
+- **Swipeable pager between flagged frames inside `VerificationSheet`.** Frame-level
+  prev/next chevrons cover the explicit case today; a horizontal pager would
+  feel smoother but is out of scope until the queue sheet pattern has been
+  observed in real medtech use.
 
 ### 1.7 Sample Lifecycle
 

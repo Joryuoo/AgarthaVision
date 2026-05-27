@@ -252,7 +252,7 @@ Internal padding `24.dp`, header gap `16.dp`.
 **Use for** non-destructive modal flows: EPG calibration, GPS override, Manual species edit. Title in Geist 22 sp / 500, body in Geist 16 sp / 400. Buttons right-aligned.
 
 ### Drawer (Bottom Sheet)
-**Use for** sample-quick-look on dashboard map and Capture-options sheet (lighting / exposure). Drag handle visible (24.dp pill in `mutedForeground`). Snap points at 30% / 60% / 95%.
+**Use for** sample-quick-look on dashboard map, Capture-options sheet (lighting / exposure), and the `VerificationQueueSheet` (badge → list of flagged frames → tap-row opens `VerificationSheet`). Drag handle visible (24.dp pill in `mutedForeground`). Snap points at 30% / 60% / 95%. Nested-sheet flow is permitted: queue sheet at 60% snap dismisses, then verification sheet opens at 95% snap.
 
 ### Dropdown Menu
 **Use for** kebab menu on each sample row (Re-scan · Export · Discard). Destructive items get Coral. Item height 36.dp, padding 12.dp.
@@ -283,6 +283,11 @@ Internal padding `24.dp`, header gap `16.dp`.
 
 ### Sonner (toast)
 **Use for** transient confirmations: "Sample queued", "Synced 7 samples". Bottom-center, 4-second auto-dismiss. `destructive` variant for failures. Never use for actions — that's an AlertDialog.
+
+> **Bottom-control overlap.** On screens with a persistent bottom action (e.g.
+> `CaptureScreen`'s Start/Stop Recording button), the default bottom-center Sonner
+> will overlay the button. Lift the host by `cardPadding * 2` (≈ 48 dp) — or move
+> it to top-center for that screen — so the action stays tappable.
 
 ### Switch
 **Use for** binary settings (Offline mode · Enable GPS · Auto-validate above 0.95). Track on = `primary`, off = `mutedForeground`.

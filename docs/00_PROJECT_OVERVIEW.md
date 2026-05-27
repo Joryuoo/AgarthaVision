@@ -27,6 +27,7 @@ No dedicated backend to operate. The mobile app talks directly to Supabase and R
 | 4          | Reporting & Admin                 | **No**       | Phase 2                                                   |
 | 1B         | Dedicated Hardware Capture (IoT)  | No           | Phase 2 / SE2                                             |
 | 2B         | On-Device AI Processor            | No           | Phase 2 (after model is locked)                           |
+| 3 (ext.)   | Persistent flagged-frame queue (per-account, survives restart) | No | Phase 2 — Phase 1 queue is transient by design; see [03_MOBILE_APP_PLAN.md §1.5](03_MOBILE_APP_PLAN.md) |
 
 ### Phase 2 (deferred — self-hosted stack)
 
@@ -34,6 +35,20 @@ Triggered by funding/support commitment or first deployment with real patient PH
 Self-hosted FastAPI + PostgreSQL + MinIO + YOLO; EPG calculations; DOH-formatted PDF reports;
 offline-first `SyncQueue` + WorkManager; advanced HITL dashboard.
 See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the migration path.
+
+**Mobile app role change in Phase 2.** The Android client's **camera capture
+module is removed** — capture moves to the dedicated hardware capture node
+(SRS Module 1B). The mobile app becomes a **verification + reporting client only**:
+it lets an authenticated expert MedTech accept/reject flagged samples streamed
+from the capture node, view EPG calculations, and generate DOH-formatted PDF
+reports. **Verified samples are persisted to the database only when the user is
+authenticated to an expert MedTech account**, ensuring every verified row is
+attributable to an accountable reviewer.
+
+Phase 2 also introduces a **per-account persistent flagged-frame queue**: flagged
+but unverified frames survive logout and app restart, keyed by `user_id`, so an
+expert can resume verification after closing the app. Phase 1 deliberately keeps
+this queue transient (see [03_MOBILE_APP_PLAN.md §1.5](03_MOBILE_APP_PLAN.md)).
 
 ---
 
