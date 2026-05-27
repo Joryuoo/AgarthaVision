@@ -45,7 +45,11 @@ fun AgarthaNavGraph(
             )
         }
         composable(Screen.Capture.route) {
-            CaptureScreen(cameraManager = cameraManager, frameSampler = frameSampler)
+            CaptureScreen(
+                cameraManager = cameraManager,
+                frameSampler = frameSampler,
+                navController = navController
+            )
         }
         composable(Screen.Records.route) { RecordsScreen() }
         composable(Screen.Settings.route) { SettingsScreenPlaceholder() }

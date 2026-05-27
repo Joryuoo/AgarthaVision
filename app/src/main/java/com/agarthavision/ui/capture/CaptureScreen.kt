@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FactCheck
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -64,6 +65,7 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
+    navController: androidx.navigation.NavHostController,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
@@ -185,21 +187,38 @@ fun CaptureScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(0.2f),
-                    contentAlignment = Alignment.Center,
                 ) {
-                    if (state.isBusy) {
-                        CircularProgressIndicator()
-                    } else {
-                        KomoButton(
-                            onClick = {
-                                if (state.isRecording) viewModel.stopRecording()
-                                else viewModel.startRecording()
-                            },
-                            size = ButtonSize.Lg,
-                            variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
-                        ) {
-                            Text(if (state.isRecording) "Stop Recording" else "Start Recording")
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (state.isBusy) {
+                            CircularProgressIndicator()
+                        } else {
+                            KomoButton(
+                                onClick = {
+                                    if (state.isRecording) viewModel.stopRecording()
+                                    else viewModel.startRecording()
+                                },
+                                size = ButtonSize.Lg,
+                                variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
+                            ) {
+                                Text(if (state.isRecording) "Stop Recording" else "Start Recording")
+                            }
                         }
+                    }
+
+                    IconButton(
+                        onClick = { navController.navigate(com.agarthavision.ui.navigation.Screen.Records.route) },
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .padding(end = 24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "View Records",
+                            tint = MaterialTheme.styles.foreground
+                        )
                     }
 
                     state.errorMessage?.let { error ->
