@@ -15,6 +15,28 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * State holder for the Capture screen.
+ *
+ * Owns the recording lifecycle (start/stop session via [SessionManager]) and the
+ * surface of flagged frames awaiting verification ([FlaggedFrameStore]). Reacts
+ * to inference-server reachability events from [NetworkMonitor] and latches a
+ * "Cloud connection lost" banner until the user explicitly resumes.
+ *
+ * **Upstream collectors** (wired in `init`):
+ * - [sessionManager].state → updates `isRecording` + `activeSessionId`.
+ * - [flaggedFrameStore].state → mirrors the queue into `flaggedFrames`.
+ * - [networkMonitor].status → on `Disconnected`, forces session stop and
+ *   latches `isConnectionLost = true`. The latch is cleared **only** by a
+ *   successful [resumeConnection] probe; reverting to `Connected` alone does
+ *   not auto-clear it (see docs/03_MOBILE_APP_PLAN.md §1.9).
+ *
+ * **Verification entry points:** [onDetectionToastTap] (single-frame, from
+ * Sonner) and [onQueueTap] / [onQueueItemSelected] (queue sheet). Both stop
+ * the recording session as a side effect, per ADR-002 §UX.
+ *
+ * See docs/03_MOBILE_APP_PLAN.md §1.1, §1.5, §1.6, §1.9.
+ */
 @HiltViewModel
 class CaptureViewModel @Inject constructor(
     private val sessionManager: SessionManager,
@@ -125,6 +147,30 @@ class CaptureViewModel @Inject constructor(
     }
 }
 
+/**
+ * Immutable UI state surface for the Capture screen.
+ *
+ * @property isRecording true while the active [SessionManager] state is `Recording`.
+ *   Drives the REC indicator and the Start/Stop button label.
+ * @property isBusy true while a start/stop call is in flight; hides the action
+ *   button behind a progress spinner.
+ * @property activeSessionId the Room sessionId of the in-flight session (null
+ *   when idle).
+ * @property errorMessage transient error surfaced under the action button
+ *   (e.g. "no Supabase session" on start failure).
+ * @property flaggedFrames mirror of [FlaggedFrameStore.state] for the badge
+ *   count and queue sheet. Cleared on logout / new session.
+ * @property isConnectionLost latched true when [NetworkMonitor] reports
+ *   `Disconnected`. NOT auto-cleared on reconnect — only [resumeConnection]
+ *   success clears it. While true the inline destructive banner shows.
+ * @property isProbingConnection true while [resumeConnection] is awaiting a
+ *   `/health` probe; drives the spinner in the banner's Resume button.
+ * @property verificationTarget the frame currently being verified, set by
+ *   either toast tap or queue-row tap. Non-null means [VerificationSheet]
+ *   is mounted.
+ * @property isQueueOpen true means the [VerificationQueueSheet] is mounted.
+ *   Set by [onQueueTap]; cleared by [onQueueDismiss] or [onQueueItemSelected].
+ */
 data class CaptureState(
     val isRecording: Boolean = false,
     val isBusy: Boolean = false,

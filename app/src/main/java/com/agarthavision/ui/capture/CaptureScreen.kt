@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +34,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -46,6 +44,11 @@ import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.verify.VerificationQueueSheet
 import com.agarthavision.ui.verify.VerificationSheet
+import com.komoui.components.Badge as KomoBadge
+import com.komoui.components.BadgeVariant
+import com.komoui.components.Button as KomoButton
+import com.komoui.components.ButtonSize
+import com.komoui.components.ButtonVariant
 import com.komoui.components.sooner.SonnerAction
 import com.komoui.components.sooner.SonnerEvent
 import com.komoui.components.sooner.SonnerHost
@@ -140,14 +143,6 @@ fun CaptureScreen(
                 ),
             )
         },
-        snackbarHost = {
-            SonnerHost(
-                hostState = sonnerHostState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-            )
-        },
     ) { padding ->
         Box(
             modifier = Modifier
@@ -175,14 +170,14 @@ fun CaptureScreen(
                     }
 
                     if (state.isRecording) {
-                        Text(
-                            text = "REC",
-                            color = Color.Red,
+                        KomoBadge(
+                            variant = BadgeVariant.Destructive,
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .padding(16.dp),
-                            style = MaterialTheme.typography.labelLarge,
-                        )
+                        ) {
+                            Text("REC")
+                        }
                     }
                 }
 
@@ -195,11 +190,13 @@ fun CaptureScreen(
                     if (state.isBusy) {
                         CircularProgressIndicator()
                     } else {
-                        Button(
+                        KomoButton(
                             onClick = {
                                 if (state.isRecording) viewModel.stopRecording()
                                 else viewModel.startRecording()
                             },
+                            size = ButtonSize.Lg,
+                            variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
                         ) {
                             Text(if (state.isRecording) "Stop Recording" else "Start Recording")
                         }
@@ -224,6 +221,19 @@ fun CaptureScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .align(Alignment.TopCenter),
+            )
+
+            // Sonner toast lifted to top-center (per 05_DESIGN_SYSTEM_KOMOUI.md
+            // "Bottom-control overlap" callout) so it never blocks the Stop
+            // Recording button. The toast and banner are mutually exclusive in
+            // practice — toasts only fire during recording, banner only shows
+            // after the session is forced-stopped.
+            SonnerHost(
+                hostState = sonnerHostState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
     }
@@ -251,18 +261,19 @@ private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.styles.background)
             .padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = "Camera permission is required for recording.",
-                color = Color.White,
+                color = MaterialTheme.styles.foreground,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Button(
+            KomoButton(
                 onClick = onRequestPermission,
+                size = ButtonSize.Default,
                 modifier = Modifier.padding(top = 12.dp),
             ) {
                 Text("Allow Camera")

@@ -18,6 +18,26 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+/**
+ * Immutable UI state surface for the verification flow.
+ *
+ * Tracks both the current frame under review and per-detection answers within
+ * that frame. The verdict model (Q1→Q2→Q3 branching + frame-level Q4) is
+ * documented in [ADR-004](../../../../../../../../docs/adr/004-verification-as-hitl-correction.md).
+ *
+ * @property isVisible whether the sheet is currently mounted.
+ * @property frameIndexInQueue 1-based position of [frame] in `FlaggedFrameStore`.
+ * @property queueSize total number of flagged frames in the store.
+ * @property frame the frame currently being verified.
+ * @property currentDetectionIndex which detection within [frame] is highlighted.
+ * @property showBoundingBoxes toggle for the box overlay on the frame image.
+ * @property answers per-detection answers (one entry per box in `frame.predictions`).
+ * @property missedEgg frame-level Q4 answer — sets `samples.needs_reannotation`.
+ * @property isSubmitting true while [SubmitVerificationUseCase] is in flight.
+ * @property errorMessage submission failure message; surfaced inline.
+ * @property canSubmit derived — true when every per-detection answer is complete
+ *   and we're not already submitting.
+ */
 data class VerificationUiState(
     val isVisible: Boolean = false,
     val frameIndexInQueue: Int = 0,
@@ -39,6 +59,26 @@ sealed interface VerificationEvent {
     data class ShowError(val message: String?) : VerificationEvent
 }
 
+/**
+ * State holder for the [VerificationSheet].
+ *
+ * Owns:
+ * - **Frame-level navigation** across the [FlaggedFrameStore] queue
+ *   ([onFramePrev], [onFrameNext], [onDeleteFrame]).
+ * - **Detection-level navigation** within the current frame
+ *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
+ *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
+ * - **Frame-level Q4** ("did the model miss any eggs?", via [onQ4Selected]).
+ * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
+ *   the frame is removed from the store; the verdict model (per ADR-004)
+ *   persists every detection regardless of mix (false positives, wrong
+ *   class, box-incorrect) so the dataset captures labeled corrections.
+ *
+ * The store collector (`init`) keeps `queueSize` + `frameIndexInQueue` in sync
+ * as frames are added/removed by other surfaces (Capture toast/queue, delete).
+ *
+ * See docs/03_MOBILE_APP_PLAN.md §1.6 + ADR-004.
+ */
 @HiltViewModel
 class VerificationViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,
