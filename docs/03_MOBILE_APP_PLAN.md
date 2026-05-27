@@ -297,10 +297,10 @@ class InferFrameUseCase @Inject constructor(
 }
 ```
 
-`FlaggedFrameStore` is an in-memory `MutableStateFlow<List<FlaggedFrame>>` plus a write-through to a small disk cache (since frames are < 100 KB). It's *not* the Room database — flagged frames only become Room rows after the user verifies them.
+`FlaggedFrameStore` is an in-memory `MutableStateFlow<List<FlaggedFrame>>`. It's *not* the Room database — flagged frames only become Room rows after the user verifies them. The store is cleared on logout or new-session start; flagged-but-unverified frames do not survive process death.
 
 > **Phase 1 vs Phase 2 — persistence scope.** Phase 1 flagged frames are deliberately
-> **transient**: they live in memory + a session-scoped disk cache and do **not**
+> **transient**: they live only in memory and do **not**
 > survive logout or app restart. The expectation that "I should see my previous
 > session's flagged frames after logging back in" is a **Phase 2** deliverable
 > (per-account persistent queue keyed by `user_id`, surviving restarts). Phase 1
@@ -461,7 +461,7 @@ The sample-level lifecycle is now strictly forward-only once flagged:
          └─ predictions non-empty
                  ▼
          ┌─────────────────┐
-         │  FLAGGED        │  In-memory + small disk cache.
+         │  FLAGGED        │  In-memory only (FlaggedFrameStore).
          │  (pending)      │  Surfaces in Sonner toast + Verification queue.
          └────────┬────────┘
                   │ expert submits VerificationSheet
@@ -487,7 +487,7 @@ Encode the sample state as `domain/model/SampleStatus.kt`:
 
 ```kotlin
 enum class SampleStatus(val value: String) {
-    FLAGGED("flagged"),               // in FlaggedFrameStore (memory + disk cache)
+    FLAGGED("flagged"),               // in FlaggedFrameStore (in-memory only)
     VERIFIED("verified"),             // in Room, awaiting Supabase sync
     SYNCED("synced"),                 // in Room + Supabase
     SYNC_FAILED("sync_failed"),       // in Room, last sync attempt failed
@@ -515,7 +515,7 @@ enum class DetectionVerdict(val value: String) {
 - `needs_reannotation: Boolean` — non-null, defaults to `false`; set to `true` when Q4 = Yes (false-negative flag)
 
 The CANDIDATE state and any in-flight inference frames never touch Room. The
-`FlaggedFrameStore` disk cache is still purely transient; rows graduate to Room only
+`FlaggedFrameStore` is purely in-memory and transient; rows graduate to Room only
 on Submit.
 
 ### 1.8 Supabase Sync

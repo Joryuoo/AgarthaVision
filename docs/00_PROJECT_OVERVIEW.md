@@ -16,7 +16,7 @@ A medtech opens the app, logs in, and sees a live camera viewport trained on a m
 
 ### Phase 1 (current — managed services)
 
-No dedicated backend to operate. The mobile app talks directly to Supabase and Roboflow.
+No dedicated backend to operate. The mobile app talks directly to Supabase and the self-hosted FastAPI inference container.
 
 | SRS Module | Name                              | Phase 1?     | Owner Deliverable                                         |
 |------------|-----------------------------------|--------------|-----------------------------------------------------------|
@@ -36,9 +36,13 @@ Self-hosted FastAPI + PostgreSQL + MinIO + YOLO; EPG calculations; DOH-formatted
 offline-first `SyncQueue` + WorkManager; advanced HITL dashboard.
 See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the migration path.
 
-**Mobile app role change in Phase 2.** The Android client's **camera capture
-module is removed** — capture moves to the dedicated hardware capture node
-(SRS Module 1B). The mobile app becomes a **verification + reporting client only**:
+**Mobile app role change in Phase 2.** The Android client's **on-device camera
+capture module is removed** — the phone's camera is no longer used. Frames
+originate from an **external modular capture device** that is physically attached
+to a **dedicated on-prem inference hardware** (the IoT capture node, SRS
+Module 1B). The inference hardware runs the model locally, and the mobile phone
+receives the resulting frame + detection output from the inference hardware over
+**USB OTG**. The mobile app becomes a **verification + reporting client only**:
 it lets an authenticated expert MedTech accept/reject flagged samples streamed
 from the capture node, view EPG calculations, and generate DOH-formatted PDF
 reports. **Verified samples are persisted to the database only when the user is
@@ -78,7 +82,7 @@ Each General Objective from the Project Proposal maps to concrete MVP deliverabl
 
 | Specific Objective                           | Phase 1 Implementation                                              | Phase 2 |
 |----------------------------------------------|---------------------------------------------------------------------|---------|
-| Reduce processing time ≥ 30%                 | Roboflow inference flags eggs in ~1-2 s per frame; medtech verifies flagged frames only — no manual counting | — |
+| Reduce processing time ≥ 30%                 | Self-hosted inference flags eggs in ~1-2 s per frame; medtech verifies flagged frames only — no manual counting | — |
 | Interactive verification                     | `VerificationSheet` — annotated JPEG + bounding boxes; accept or reject; syncs to Supabase on accept | Full HITL dashboard, reclassification, audit log |
 
 ### GO-4: Standardized Reporting & Mapping
@@ -110,7 +114,7 @@ Each General Objective from the Project Proposal maps to concrete MVP deliverabl
 | Design Tokens  | Clinical Pulse via KomoUI `ShadcnColors` / `ShadcnRadius` |
 | Fonts          | Geist (display/body) + JetBrains Mono (data/mono)       |
 | Min SDK        | 26                                                      |
-| Target SDK     | 35                                                      |
+| Target SDK     | 36                                                      |
 
 ### Phase 1 Cloud
 
@@ -160,15 +164,16 @@ one person is the **point of contact** for each area.
 
 > **Phase 1 re-scope (May 2026):** Joryuoo's original "build FastAPI backend" scope was
 > replaced by "operate the Supabase project and own SQL schema migrations" per
-> [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). The Roboflow inference path was
-> then replaced by a self-hosted FastAPI container per
-> [ADR-003](adr/003-self-hosted-inference-container.md) because the team's custom model
-> (YOLOv26 + EfficientNetV2) is incompatible with Roboflow Hosted Inference.
+> [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). The original hosted-inference
+> path documented in that ADR was subsequently replaced by a self-hosted FastAPI
+> container per [ADR-003](adr/003-self-hosted-inference-container.md) because the
+> team's custom model (YOLOv26 + EfficientNetV2) is incompatible with the previous
+> hosted-inference provider.
 
 > **Phase 1 re-scope:** Joryuoo's original "build FastAPI backend" scope has been replaced by
 > "operate the Supabase project and own all SQL schema migrations" per
-> [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). Tabada owns the Roboflow workspace
-> and model versioning.
+> [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md). Tabada owns model training
+> and versioning.
 
 > **Note:** These are suggested assignments. Adjust based on each member's strengths
 > and interests. The point is that every module has a single accountable owner.
@@ -183,10 +188,10 @@ one person is the **point of contact** for each area.
 | `01_ENVIRONMENT_SETUP.md`         | IDE setup (IntelliJ / VSCode / AS), SDK, Bun, emulator |
 | `02_PROJECT_ARCHITECTURE.md`      | MVVM layers, package structure, Gradle modules, DI     |
 | `03_MOBILE_APP_PLAN.md`           | Feature-by-feature Android implementation plan         |
-| `04_CLOUD_BACKEND_PLAN.md`        | Phase 1: Supabase + Roboflow setup, schema, API contracts; Phase 2 migration path |
+| `04_CLOUD_BACKEND_PLAN.md`        | Phase 1: Supabase + self-hosted inference container setup, schema, API contracts; Phase 2 migration path |
 | `05_DESIGN_SYSTEM_KOMOUI.md`      | Updated Clinical Pulse components guide (KomoUI 0.3.0) |
 | `06_GIT_WORKFLOW_AND_CI.md`       | Branching, PRs, GitHub Actions, release process        |
 | `07_TEAM_CONVENTIONS.md`          | Kotlin standards, commit messages, documentation       |
 | `adr/001-fused-location-and-instant.md` | LocationProvider interface + Instant over Long   |
 | `adr/002-supabase-and-roboflow-for-mvp.md` | Phase 1 managed-services decision + Phase 2 migration path |
-| `adr/003-self-hosted-inference-container.md` | Pivot from Roboflow to self-hosted inference container (custom model) |
+| `adr/003-self-hosted-inference-container.md` | Pivot from the original hosted-inference provider to a self-hosted inference container (custom model) |
