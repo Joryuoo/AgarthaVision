@@ -45,6 +45,7 @@ import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.components.ShutterButton
 import com.agarthavision.ui.verify.VerificationQueueSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import com.komoui.components.Badge as KomoBadge
@@ -197,22 +198,13 @@ fun CaptureScreen(
                     if (state.isBusy) {
                         CircularProgressIndicator()
                     } else {
-                        KomoButton(
+                        ShutterButton(
+                            isRecording = state.isRecording,
                             onClick = {
                                 if (state.isRecording) viewModel.stopRecording()
                                 else viewModel.startRecording()
-                            },
-                            size = ButtonSize.Lg,
-                            variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
-                        ) {
-                            Text(
-                                if (state.isRecording) {
-                                    stringResource(R.string.capture_stop)
-                                } else {
-                                    stringResource(R.string.capture_start)
-                                },
-                            )
-                        }
+                            }
+                        )
                     }
 
                     IconButton(
