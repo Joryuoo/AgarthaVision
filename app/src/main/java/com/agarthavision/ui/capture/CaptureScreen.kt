@@ -11,16 +11,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -58,6 +55,7 @@ import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.components.ShutterButton
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationQueueSheet
@@ -270,19 +268,10 @@ fun CaptureScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            KomoButton(
+                            ShutterButton(
                                 onClick = viewModel::onManualCapture,
-                                size = ButtonSize.Default,
-                                variant = ButtonVariant.Outline,
                                 enabled = state.activeSessionId != null,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PhotoCamera,
-                                    contentDescription = null,
-                                )
-                                Spacer(modifier = Modifier.width(AgarthaSpacing.xs))
-                                Text(stringResource(R.string.capture_manual))
-                            }
+                            )
                             KomoButton(
                                 onClick = { showEndConfirm = true },
                                 size = ButtonSize.Lg,
