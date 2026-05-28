@@ -82,4 +82,13 @@ data class SampleEntity(
      */
     @ColumnInfo(name = "is_repeat", defaultValue = "0")
     val isRepeat: Boolean = false,
+
+    @ColumnInfo(name = "predictions_json")
+    val predictionsJson: String? = null,
+
+    @ColumnInfo(name = "image_width")
+    val imageWidth: Int? = null,
+
+    @ColumnInfo(name = "image_height")
+    val imageHeight: Int? = null,
 )

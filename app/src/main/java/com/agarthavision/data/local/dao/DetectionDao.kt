@@ -38,6 +38,7 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.session_id = :sessionId
           AND s.user_id = :userId
+                    AND s.status != 'flagged'
           AND s.is_repeat = 0
           AND d.verdict != 'false_positive'
         GROUP BY species

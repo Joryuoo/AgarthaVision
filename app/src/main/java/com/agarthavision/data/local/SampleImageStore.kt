@@ -2,6 +2,8 @@ package com.agarthavision.data.local
 
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,5 +17,9 @@ class SampleImageStore @Inject constructor(
         val file = File(dir, "$sampleId.jpg")
         file.writeBytes(bytes)
         return file.absolutePath
+    }
+
+    suspend fun deleteJpeg(imagePath: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { File(imagePath).delete() }.getOrDefault(false)
     }
 }

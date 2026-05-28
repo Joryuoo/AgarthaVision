@@ -138,7 +138,9 @@ class VerificationViewModel @Inject constructor(
         val frame = currentFrame
         _state.update { it.copy(isRepeat = !it.isRepeat) }
         if (frame != null) {
-            flaggedFrameStore.toggleRepeat(frame)
+            viewModelScope.launch {
+                flaggedFrameStore.toggleRepeat(frame)
+            }
         }
     }
 
@@ -205,12 +207,14 @@ class VerificationViewModel @Inject constructor(
         val idx = frames.indexOf(current)
         // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
         val nextFrame = frames.getOrNull(idx + 1) ?: frames.getOrNull(idx - 1)
-        flaggedFrameStore.remove(current)
-        if (nextFrame != null) {
-            setFrame(nextFrame)
-        } else {
-            currentFrame = null
-            viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+        viewModelScope.launch {
+            flaggedFrameStore.remove(current)
+            if (nextFrame != null) {
+                setFrame(nextFrame)
+            } else {
+                currentFrame = null
+                _events.emit(VerificationEvent.Dismiss)
+            }
         }
     }
 

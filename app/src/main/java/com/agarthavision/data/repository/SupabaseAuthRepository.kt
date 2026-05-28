@@ -4,6 +4,8 @@ import com.agarthavision.domain.repository.AuthRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import javax.inject.Inject
 
 /**
@@ -12,6 +14,10 @@ import javax.inject.Inject
 class SupabaseAuthRepository @Inject constructor(
     private val supabase: SupabaseClient,
 ) : AuthRepository {
+    override val userIdFlow: Flow<String?> = flow {
+        emit(getCurrentUserId())
+    }
+
     override suspend fun hasActiveSession(): Boolean {
         supabase.auth.awaitInitialization()
         return supabase.auth.currentSessionOrNull() != null

@@ -1,12 +1,8 @@
 package com.agarthavision.domain.usecase.verify
 
-import com.agarthavision.core.util.DeviceIdProvider
-import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
-import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.remote.dto.PredictionDto
-import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -17,13 +13,12 @@ import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
-import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -38,20 +33,14 @@ class SubmitVerificationUseCaseTest {
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
     private val authRepository: AuthRepository = mock()
-    private val sampleImageStore: SampleImageStore = mock()
-    private val flaggedFrameStore: FlaggedFrameStore = mock()
     private val locationProvider: LocationProvider = mock()
-    private val deviceIdProvider: DeviceIdProvider = mock()
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val useCase = SubmitVerificationUseCase(
         authRepository = authRepository,
         sampleDao = sampleDao,
         detectionDao = detectionDao,
-        sampleImageStore = sampleImageStore,
-        flaggedFrameStore = flaggedFrameStore,
         locationProvider = locationProvider,
-        deviceIdProvider = deviceIdProvider,
         syncSampleUseCase = syncSampleUseCase,
     )
 
@@ -65,6 +54,7 @@ class SubmitVerificationUseCaseTest {
     )
 
     private val frame = FlaggedFrame(
+        sampleId = "sample-1",
         sessionId = "session-1",
         capturedAt = Instant.EPOCH,
         jpegBytes = ByteArray(10),
@@ -77,8 +67,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
-            whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(
@@ -88,9 +76,17 @@ class SubmitVerificationUseCaseTest {
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)
-            val captor = argumentCaptor<SampleEntity>()
-            verify(sampleDao).insertSample(captor.capture())
-            assertEquals(SampleStatus.VERIFIED.value, captor.firstValue.status)
+            verify(sampleDao).updateSampleOnVerify(
+                sampleId = eq("sample-1"),
+                status = eq(SampleStatus.VERIFIED.value),
+                verifiedAt = any(),
+                needsReannotation = eq(false),
+                userNote = isNull(),
+                isRepeat = eq(false),
+                gpsLatitude = isNull(),
+                gpsLongitude = isNull(),
+                gpsAccuracy = isNull(),
+            )
             verify(detectionDao).insertDetections(any())
         }
 
@@ -99,8 +95,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
-            whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(VerificationAnswers(isEgg = false))
@@ -108,8 +102,17 @@ class SubmitVerificationUseCaseTest {
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)
-            verify(sampleDao).insertSample(any())
-            verify(flaggedFrameStore).remove(frame)
+            verify(sampleDao).updateSampleOnVerify(
+                sampleId = eq("sample-1"),
+                status = eq(SampleStatus.VERIFIED.value),
+                verifiedAt = any(),
+                needsReannotation = eq(false),
+                userNote = isNull(),
+                isRepeat = eq(false),
+                gpsLatitude = isNull(),
+                gpsLongitude = isNull(),
+                gpsAccuracy = isNull(),
+            )
         }
 
     @Test
@@ -117,8 +120,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
-            whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(
@@ -127,9 +128,17 @@ class SubmitVerificationUseCaseTest {
             useCase(frame, answers, missedEgg = true)
             advanceUntilIdle()
 
-            val captor = argumentCaptor<SampleEntity>()
-            verify(sampleDao).insertSample(captor.capture())
-            assertTrue(captor.firstValue.needsReannotation)
+            verify(sampleDao).updateSampleOnVerify(
+                sampleId = eq("sample-1"),
+                status = eq(SampleStatus.VERIFIED.value),
+                verifiedAt = any(),
+                needsReannotation = eq(true),
+                userNote = isNull(),
+                isRepeat = eq(false),
+                gpsLatitude = isNull(),
+                gpsLongitude = isNull(),
+                gpsAccuracy = isNull(),
+            )
         }
 
     @Test
@@ -137,8 +146,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
-            whenever(deviceIdProvider.id).thenReturn("device-1")
-            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val answers = listOf(VerificationAnswers(isEgg = false))
@@ -146,9 +153,16 @@ class SubmitVerificationUseCaseTest {
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)
-            val captor = argumentCaptor<SampleEntity>()
-            verify(sampleDao).insertSample(captor.capture())
-            assertNull(captor.firstValue.gpsLatitude)
-            assertNull(captor.firstValue.gpsLongitude)
+            verify(sampleDao).updateSampleOnVerify(
+                sampleId = eq("sample-1"),
+                status = eq(SampleStatus.VERIFIED.value),
+                verifiedAt = any(),
+                needsReannotation = eq(false),
+                userNote = isNull(),
+                isRepeat = eq(false),
+                gpsLatitude = isNull(),
+                gpsLongitude = isNull(),
+                gpsAccuracy = isNull(),
+            )
         }
 }

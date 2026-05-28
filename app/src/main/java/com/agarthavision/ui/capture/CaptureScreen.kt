@@ -43,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -349,6 +350,7 @@ fun CaptureScreen(
         EndSessionConfirmDialog(
             initialNotes = "",
             isBusy = state.isBusy,
+            blockedCount = state.flaggedFrames.size,
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)
@@ -362,10 +364,12 @@ fun CaptureScreen(
 private fun EndSessionConfirmDialog(
     initialNotes: String,
     isBusy: Boolean,
+    blockedCount: Int,
     onConfirm: (notes: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var notes by rememberSaveable { mutableStateOf(initialNotes) }
+    val isBlocked = blockedCount > 0
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -373,7 +377,7 @@ private fun EndSessionConfirmDialog(
                 onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
                 variant = ButtonVariant.Destructive,
                 size = ButtonSize.Default,
-                enabled = !isBusy,
+                enabled = !isBusy && !isBlocked,
                 loading = isBusy,
             ) {
                 Text(stringResource(R.string.capture_end_session_confirm))
@@ -392,23 +396,35 @@ private fun EndSessionConfirmDialog(
         title = { Text(stringResource(R.string.capture_end_session_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.sm)) {
-                Text(
-                    text = stringResource(R.string.capture_end_session_body),
-                    color = MaterialTheme.styles.mutedForeground,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    text = stringResource(R.string.capture_end_session_notes_label),
-                    color = MaterialTheme.styles.foreground,
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Input(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    placeholder = stringResource(R.string.capture_end_session_notes_placeholder),
-                    singleLine = false,
-                    enabled = !isBusy,
-                )
+                if (isBlocked) {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.capture_end_blocked_body,
+                            blockedCount,
+                            blockedCount,
+                        ),
+                        color = MaterialTheme.styles.mutedForeground,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                } else {
+                    Text(
+                        text = stringResource(R.string.capture_end_session_body),
+                        color = MaterialTheme.styles.mutedForeground,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = stringResource(R.string.capture_end_session_notes_label),
+                        color = MaterialTheme.styles.foreground,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Input(
+                        value = notes,
+                        onValueChange = { notes = it },
+                        placeholder = stringResource(R.string.capture_end_session_notes_placeholder),
+                        singleLine = false,
+                        enabled = !isBusy,
+                    )
+                }
             }
         },
         containerColor = MaterialTheme.styles.popover,

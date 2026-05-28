@@ -4,6 +4,7 @@ import com.agarthavision.data.remote.dto.PredictionDto
 import java.time.Instant
 
 data class FlaggedFrame(
+    val sampleId: String = "",
     val sessionId: String,
     val capturedAt: Instant,
     val jpegBytes: ByteArray,
@@ -14,32 +15,7 @@ data class FlaggedFrame(
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
 ) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-        other as FlaggedFrame
-        if (sessionId != other.sessionId) return false
-        if (capturedAt != other.capturedAt) return false
-        if (!jpegBytes.contentEquals(other.jpegBytes)) return false
-        if (predictions != other.predictions) return false
-        if (source != other.source) return false
-        if (markedAsRepeat != other.markedAsRepeat) return false
-        if (inferenceModelVersion != other.inferenceModelVersion) return false
-        if (imageWidth != other.imageWidth) return false
-        if (imageHeight != other.imageHeight) return false
-        return true
-    }
+    override fun equals(other: Any?) = other is FlaggedFrame && sampleId == other.sampleId
 
-    override fun hashCode(): Int {
-        var result = sessionId.hashCode()
-        result = 31 * result + capturedAt.hashCode()
-        result = 31 * result + jpegBytes.contentHashCode()
-        result = 31 * result + predictions.hashCode()
-        result = 31 * result + source.hashCode()
-        result = 31 * result + markedAsRepeat.hashCode()
-        result = 31 * result + (inferenceModelVersion?.hashCode() ?: 0)
-        result = 31 * result + (imageWidth ?: 0)
-        result = 31 * result + (imageHeight ?: 0)
-        return result
-    }
+    override fun hashCode(): Int = sampleId.hashCode()
 }

@@ -46,6 +46,7 @@ class GetSampleDetailUseCaseTest {
 }
 
 private class DetailAuthRepository(private val userId: String?) : AuthRepository {
+    override val userIdFlow: Flow<String?> = flowOf(userId)
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId

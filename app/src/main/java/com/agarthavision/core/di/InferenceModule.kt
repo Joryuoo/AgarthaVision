@@ -2,6 +2,7 @@ package com.agarthavision.core.di
 
 import com.agarthavision.BuildConfig
 import com.agarthavision.data.remote.InferenceApi
+import com.google.gson.Gson
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -28,6 +29,10 @@ object InferenceModule {
 
     private const val CONNECT_TIMEOUT_SECONDS = 10L
     private const val READ_TIMEOUT_SECONDS = 30L
+
+    @Provides
+    @Singleton
+    fun provideGson(): Gson = Gson()
 
     @Provides
     @Singleton

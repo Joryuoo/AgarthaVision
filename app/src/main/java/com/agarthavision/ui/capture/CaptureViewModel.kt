@@ -136,7 +136,9 @@ class CaptureViewModel @Inject constructor(
     }
 
     fun onQueueItemDeleted(frame: FlaggedFrame) {
-        flaggedFrameStore.remove(frame)
+        viewModelScope.launch {
+            flaggedFrameStore.remove(frame)
+        }
     }
 
     /**
@@ -153,19 +155,21 @@ class CaptureViewModel @Inject constructor(
             _state.update { it.copy(errorMessage = "Waiting for a live frame.") }
             return
         }
-        flaggedFrameStore.add(
-            FlaggedFrame(
-                sessionId = sessionId,
-                capturedAt = Instant.now(),
-                jpegBytes = jpegBytes,
-                predictions = emptyList(),
-                source = FrameSource.MANUAL,
-                inferenceModelVersion = null,
-                imageWidth = null,
-                imageHeight = null,
-            ),
-        )
-        _state.update { it.copy(errorMessage = null) }
+        viewModelScope.launch {
+            flaggedFrameStore.add(
+                FlaggedFrame(
+                    sessionId = sessionId,
+                    capturedAt = Instant.now(),
+                    jpegBytes = jpegBytes,
+                    predictions = emptyList(),
+                    source = FrameSource.MANUAL,
+                    inferenceModelVersion = null,
+                    imageWidth = null,
+                    imageHeight = null,
+                ),
+            )
+            _state.update { it.copy(errorMessage = null) }
+        }
     }
 
     /**
@@ -173,7 +177,9 @@ class CaptureViewModel @Inject constructor(
      * pre-loads `VerificationViewModel.isRepeat` when the medtech opens the row.
      */
     fun onQueueItemToggleRepeat(frame: FlaggedFrame) {
-        flaggedFrameStore.toggleRepeat(frame)
+        viewModelScope.launch {
+            flaggedFrameStore.toggleRepeat(frame)
+        }
     }
 
     fun onQueueFilterSelected(filter: QueueFilter) {

@@ -108,7 +108,9 @@ class ManualCaptureViewModel @Inject constructor(
         val frame = currentFrame
         _state.update { it.copy(isRepeat = !it.isRepeat) }
         if (frame != null) {
-            flaggedFrameStore.toggleRepeat(frame)
+            viewModelScope.launch {
+                flaggedFrameStore.toggleRepeat(frame)
+            }
         }
     }
 
@@ -117,9 +119,11 @@ class ManualCaptureViewModel @Inject constructor(
      */
     fun onDeleteFrame() {
         val frame = currentFrame ?: return
-        flaggedFrameStore.remove(frame)
-        currentFrame = null
-        viewModelScope.launch { _events.emit(ManualCaptureEvent.Dismiss) }
+        viewModelScope.launch {
+            flaggedFrameStore.remove(frame)
+            currentFrame = null
+            _events.emit(ManualCaptureEvent.Dismiss)
+        }
     }
 
     /**

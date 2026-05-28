@@ -69,6 +69,10 @@
     <string name="capture_end_session">End Session</string>
     <string name="capture_end_session_title">End this session?</string>
     <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <plurals name="capture_end_blocked_body">
+        <item quantity="one">You have %1$d unverified frame. Verify or delete it before ending the session.</item>
+        <item quantity="other">You have %1$d unverified frames. Verify or delete them before ending the session.</item>
+    </plurals>
     <string name="capture_end_session_notes_label">Final notes (optional)</string>
     <string name="capture_end_session_notes_placeholder">Anything to record about this smear</string>
     <string name="capture_end_session_confirm">End session</string>

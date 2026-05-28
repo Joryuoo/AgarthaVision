@@ -5,6 +5,11 @@ package com.agarthavision.domain.repository
  */
 interface AuthRepository {
     /**
+     * Streams the current user's ID (null when signed out).
+     */
+    val userIdFlow: kotlinx.coroutines.flow.Flow<String?>
+
+    /**
      * Returns true when Supabase has a persisted authenticated session.
      */
     suspend fun hasActiveSession(): Boolean
