@@ -204,3 +204,103 @@ the enum still has exactly four values (`CONFIRMED`, `FALSE_POSITIVE`,
 - Multiplier=24 citation needs the exact paper/DOH bulletin reference written into ADR-005's footnote.
 - Phase 2 manual-capture data source (OTG-attached inference hardware) is the snapshot source once the phone camera is removed; ADR-005 lists this as open.
 - Three top-bar icons on Capture (Reports + History + Queue) is at the comfort limit — Settings/Help will need an overflow menu in future work.
+
+---
+
+## 2026-05-29 · Persisted session reports (ADR-006)
+
+Adds the Phase 1 `REPORTS` entity (Room + Supabase, row-only sync) and
+replaces the ad-hoc CSV export with a `GenerateSessionReportUseCase`-backed
+"Generate Report" flow on `SessionDetailScreen`. Closes the gap between
+the Sprint 2 ephemeral export and the SDD ERD's `REPORTS` table.
+
+### Schema
+
+- `supabase/migrations/0008_reports.sql` adds `public.reports` with
+  `report_type` ENUM (CHECK constrained to `'session'` for Phase 1),
+  `total_samples`, `total_eggs_confirmed`, `positive_species` (text[]),
+  `epg_per_species` (jsonb), `csv_file_path`, `generated_at`, plus indices
+  on `(session_id, generated_at desc)` and `(user_id, generated_at desc)`
+  and owner-scoped RLS. Commented revert ships in the file.
+- Room v6 → v7 with new `ReportEntity` (FK CASCADE on `sessions.session_id`)
+  + `ReportDao`. JSON columns are Gson-serialized client-side; domain
+  surface is `List<String>` / `Map<String, Int>`. Room-only
+  `supabase_status` mirrors the `samples.status` retry pattern.
+- New `7.json` Room schema exported to
+  `app/schemas/com.agarthavision.core.database.AgarthaDatabase/`.
+
+### Domain + use cases
+
+- `Report`, `ReportType`, `ReportSyncStatus` domain models.
+- `ReportRepository` (interface) + `LocalReportRepository` impl (Room).
+- `ReportFileStore` (interface) + `DownloadsReportFileStore` impl. Filename
+  is keyed off `reportId` (`agarthavision-session-{sessionId}-{reportId}.csv`)
+  so multiple reports for the same session don't collide.
+- `GenerateSessionReportUseCase` replaces `ExportSessionUseCase` and returns
+  `Result<Report>`. Computes aggregates from existing data (no new EPG
+  table — uses `EpgCalculator.epg` × `getConfirmedEggCountsForSession`),
+  writes the CSV, inserts the row, triggers sync.
+- `ReportCsvBuilder` formats the CSV with a comment-prefixed header block
+  + per-detection rows. New columns: `model_class`, `expert_class`,
+  `verdict`, `model_version`. Removed: `storage_path`. Renamed:
+  `confidence` → `model_confidence`. Unit-tested against a fixture session.
+- `SyncReportUseCase` + `ReportRemoteDataSource` mirror the row to Supabase
+  via supabase-kt. `epg_per_species` serializes as a `JsonObject` for the
+  jsonb column; `positive_species` as `List<String>` for the text[] column.
+  Auth-uid sourced from `supabase.auth.currentUserOrNull()`.
+- `ObserveSessionReportsUseCase` resolves the current user-id then proxies
+  to `reportRepository.observeForSession`.
+
+### UI
+
+- `SessionDetailScreen` Download icon replaced with a `Reports` card
+  above the EPG card. Card carries title, "Generate Report" button
+  (becomes "Generating…" while loading), and the list of past reports.
+  Each row shows timestamp + positive-species summary + sync badge
+  (Pending / Synced / Sync failed); tapping dispatches
+  `Intent.ACTION_SEND` with `text/csv` via FileProvider.
+- `SessionDetailViewModel` exposes `reports: List<Report>` via `combine`
+  with `getSessionSamplesUseCase` + `observeSessionReportsUseCase`, swaps
+  `exportCsv()` / `ExportState` for `generateReport()` / private
+  `GenerationState`, and emits a one-shot `SessionDetailEvent.ReportGenerated`
+  surfaced via `SharedFlow` so the screen can show a snackbar:
+  "Generated · shared to Downloads".
+- `AndroidManifest.xml` registers `androidx.core.content.FileProvider`
+  with authority `${applicationId}.fileprovider`; `res/xml/file_paths.xml`
+  covers `external-path` to Downloads, plus app-files fallbacks.
+- `strings.xml`: removed `session_detail_export_*`; added
+  `report_section_title`, `report_generate`, `report_generating`,
+  `report_empty`, `report_status_pending|synced|failed`,
+  `report_no_positive_species`, `report_generated_toast`,
+  `report_generation_failed`.
+
+### Removed
+
+- `ExportSessionUseCase.kt`, `SessionReportRepository.kt`,
+  `DownloadsSessionReportRepository.kt`. Bindings updated in
+  `DatabaseModule.kt`.
+
+### Verification
+
+- ✅ `./gradlew :app:compileDebugKotlin`
+- ✅ `./gradlew :app:assembleDebug`
+- ✅ `./gradlew :app:testDebugUnitTest` — **76 passing, 0 failing**
+  (added `SyncReportUseCaseTest`; `GenerateSessionReportUseCaseTest` and
+  `ReportCsvBuilderTest` arrived earlier in this rollout)
+- ⏳ Manual emulator pass (Reports card layout, snackbar timing, share
+  intent) — left for the implementer before merge
+- ⏳ `0008_reports.sql` push to Supabase. Sync will write `sync_failed`
+  until the migration lands; the medtech can still generate + share
+  locally in the meantime
+
+### Open / follow-up (this rollout)
+
+- Background retry of `sync_failed` reports on connectivity resume —
+  symmetric gap with samples; deferred to a future "sync robustness" track.
+  `NetworkMonitor` currently only probes inference reachability.
+- Administrative cross-session report variant — schema CHECK constraint
+  currently rejects it. Phase 2.
+- Optional `detections.rejection_note` column — captured in ADR-006 as
+  deferred; no schema change needed for Phase 1.
+- Shared `SyncStatus` enum + DAO helper to consolidate the
+  pending/synced/failed pattern across samples and reports.
