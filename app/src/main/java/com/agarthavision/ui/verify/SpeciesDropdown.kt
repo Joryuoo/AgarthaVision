@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+
 import com.komoui.themes.styles
 
 @Composable
@@ -47,7 +48,7 @@ fun SpeciesDropdown(
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = selected?.let { speciesLabel(it) } ?: "",
+                value = selected?.displayName ?: "",
                 onValueChange = {},
                 readOnly = true,
                 label = { Text(stringResource(R.string.verify_q3)) },
@@ -63,7 +64,7 @@ fun SpeciesDropdown(
             ) {
                 EggSpecies.entries.forEach { species ->
                     DropdownMenuItem(
-                        text = { Text(speciesLabel(species)) },
+                        text = { Text(species.displayName) },
                         onClick = {
                             onSpeciesSelected(species)
                             expanded = false
@@ -86,10 +87,3 @@ fun SpeciesDropdown(
     }
 }
 
-@Composable
-private fun speciesLabel(species: EggSpecies): String = when (species) {
-    EggSpecies.ASCARIS -> stringResource(R.string.verify_species_ascaris)
-    EggSpecies.TRICHURIS -> stringResource(R.string.verify_species_trichuris)
-    EggSpecies.HOOKWORM -> stringResource(R.string.verify_species_hookworm)
-    EggSpecies.OTHER -> stringResource(R.string.verify_species_other)
-}

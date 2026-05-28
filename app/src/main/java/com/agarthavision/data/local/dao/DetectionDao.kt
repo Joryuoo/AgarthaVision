@@ -39,11 +39,12 @@ interface DetectionDao {
         WHERE s.session_id = :sessionId
           AND s.user_id = :userId
           AND s.is_repeat = 0
-          AND d.verdict = 'confirmed'
+          AND d.verdict != 'false_positive'
         GROUP BY species
         ORDER BY species ASC
         """,
     )
+
     suspend fun getConfirmedEggCountsForSession(
         sessionId: String,
         userId: String,

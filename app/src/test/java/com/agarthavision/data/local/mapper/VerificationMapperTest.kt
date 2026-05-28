@@ -50,7 +50,7 @@ class VerificationMapperTest {
         )
         assertEquals(DetectionVerdict.WRONG_CLASS, computeVerdict(answers, "Ascaris"))
         val entity = prediction.toDetectionEntity("sample-1", answers)
-        assertEquals("Trichuris", entity.expertClass)
+        assertEquals("Trichuris trichiura", entity.expertClass)
     }
 
     @Test

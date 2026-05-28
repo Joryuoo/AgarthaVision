@@ -29,10 +29,7 @@
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
-    <string name="verify_species_ascaris">Ascaris</string>
-    <string name="verify_species_trichuris">Trichuris</string>
-    <string name="verify_species_hookworm">Hookworm</string>
-    <string name="verify_species_other">Other</string>
+
     <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
     <string name="connection_lost_resume">Resume Recording</string>
     <string name="connection_lost_probing">Checking connection…</string>
@@ -93,7 +90,7 @@
     <string name="records_filter_apply">Apply</string>
     <string name="records_filter_clear">Clear</string>
     <string name="records_species_all">All species</string>
-    <string name="records_species_other">Other</string>
+
     <string name="records_session_title">Session %1$s</string>
     <string name="records_session_summary">%1$d verified samples · %2$s</string>
     <string name="records_session_no_species">No species labels</string>

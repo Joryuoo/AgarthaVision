@@ -161,7 +161,7 @@ private fun FilterBar(
                 }
             }
             items(EggSpecies.entries.toTypedArray()) { species ->
-                val label = species.canonicalClass ?: stringResource(R.string.records_species_other)
+                val label = species.displayName
                 KomoButton(
                     onClick = { onSpeciesSelected(species) },
                     variant = if (state.selectedSpecies == species) ButtonVariant.Default else ButtonVariant.Secondary,

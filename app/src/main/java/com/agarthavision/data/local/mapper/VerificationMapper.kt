@@ -12,7 +12,7 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
     answers.isBoxCorrect != true -> DetectionVerdict.BOX_INCORRECT
     answers.species == null -> DetectionVerdict.FALSE_POSITIVE
     answers.species == EggSpecies.OTHER -> DetectionVerdict.WRONG_CLASS
-    answers.species.canonicalClass != modelClass -> DetectionVerdict.WRONG_CLASS
+    EggSpecies.fromClassLabel(modelClass) != answers.species -> DetectionVerdict.WRONG_CLASS
     else -> DetectionVerdict.CONFIRMED
 }
 
@@ -31,7 +31,7 @@ fun PredictionDto.toDetectionEntity(
     return DetectionEntity(
         detectionId = UUID.randomUUID().toString(),
         sampleId = sampleId,
-        classLabel = classLabel,
+        classLabel = EggSpecies.fromClassLabel(classLabel)?.canonicalClass ?: classLabel,
         confidence = confidence,
         bboxX = x,
         bboxY = y,
