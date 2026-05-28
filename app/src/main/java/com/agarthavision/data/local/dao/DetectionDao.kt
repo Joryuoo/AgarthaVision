@@ -48,6 +48,49 @@ interface DetectionDao {
         sessionId: String,
         userId: String,
     ): List<SessionEggCountRow>
+
+    /**
+     * Aggregates confirmed detections per species over a time window.
+     */
+    @Query(
+        """
+         SELECT COALESCE(d.expert_class, d.class_label) AS species,
+             COUNT(*) AS eggCount
+        FROM detections d
+        JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.user_id = :userId
+          AND s.timestamp >= :sinceTimestamp
+          AND s.is_repeat = 0
+          AND d.verdict = 'confirmed'
+        GROUP BY species
+        ORDER BY eggCount DESC
+        """,
+    )
+    fun observeConfirmedEggCountsSince(
+        userId: String,
+        sinceTimestamp: Long,
+    ): Flow<List<SessionEggCountRow>>
+
+    /**
+     * Fetches counts per sample over a time window for bucketing into daily totals.
+     */
+    @Query(
+        """
+         SELECT s.timestamp, COUNT(*) AS eggCount
+        FROM detections d
+        JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.user_id = :userId
+          AND s.timestamp >= :sinceTimestamp
+          AND s.is_repeat = 0
+          AND d.verdict = 'confirmed'
+        GROUP BY s.sample_id
+        ORDER BY s.timestamp ASC
+        """,
+    )
+    fun observeDailyEggCountsSince(
+        userId: String,
+        sinceTimestamp: Long,
+    ): Flow<List<DailyEggCountRow>>
 }
 
 /**
@@ -55,6 +98,12 @@ interface DetectionDao {
  */
 data class SessionEggCountRow(
     val species: String,
+    @ColumnInfo(name = "eggCount")
+    val eggCount: Int,
+)
+
+data class DailyEggCountRow(
+    val timestamp: Long,
     @ColumnInfo(name = "eggCount")
     val eggCount: Int,
 )

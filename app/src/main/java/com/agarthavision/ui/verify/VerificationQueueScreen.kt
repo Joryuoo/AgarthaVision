@@ -48,11 +48,33 @@ import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaRadius
 import com.komoui.themes.styles
-import com.komoui.components.Button as KomoButton
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextOverflow
+import com.agarthavision.ui.components.glassChrome
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.text.style.TextAlign
+
+// Tokens
+private val Brand = Color(0xFF1E40AF)
+private val Danger = Color(0xFFFF3B30)
+private val Success = Color(0xFF34C759)
+private val SuccessDeep = Color(0xFF248A3D)
+private val Warning = Color(0xFFFF9F0A)
+private val AiPurple = Color(0xFFAF52DE)
+private val Ink = Color(0xFF0F172A)
+private val Muted = Color(0xFF6E6E73)
+private val Surface = Color(0xFFFFFFFF)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,47 +87,87 @@ fun VerificationQueueScreen(
         filterQueueFrames(state.flaggedFrames, state.queueFilter)
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.styles.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.queue_sheet_title, filteredFrames.size))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.records_back),
-                            tint = MaterialTheme.styles.foreground,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.styles.background,
-                    titleContentColor = MaterialTheme.styles.foreground,
-                ),
-            )
-        }
-    ) { padding ->
+    val aiCount = state.flaggedFrames.count { it.source == FrameSource.MODEL }
+    val manualCount = state.flaggedFrames.count { it.source == FrameSource.MANUAL }
+    // As per the spec, detections are pending, verified, or deleted. 
+    // In our current data model, we don't have a strict 'verified' vs 'pending' field yet,
+    // so we'll just treat everything currently in the queue as pending for display purposes.
+    val pendingCount = state.flaggedFrames.size
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFF2F2F7)) // iOS system gray 6
+    ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = AgarthaSpacing.screenEdge),
+            modifier = Modifier.fillMaxSize()
         ) {
+            // 1. Glass Nav Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .glassChrome(shape = RoundedCornerShape(0.dp))
+                    .padding(top = 47.dp, bottom = 12.dp)
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f).clickable { onBackClick() },
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Brand, modifier = Modifier.size(22.dp))
+                    Text("Capture", color = Brand, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Text(
+                    "Verification",
+                    color = Ink,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(2f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                // Spacer to balance the back button weight
+                Spacer(modifier = Modifier.weight(1f))
+            }
+
+            // 2. Stats Card
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, top = 14.dp, bottom = 14.dp)
+                    .background(Surface, RoundedCornerShape(16.dp))
+                    .border(0.5.dp, Color(0x140F172A), RoundedCornerShape(16.dp))
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text("${state.flaggedFrames.size}", fontSize = 32.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, color = Ink, letterSpacing = (-1).sp)
+                    Text("FLAGGED FRAMES", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, color = Muted, letterSpacing = 1.2.sp)
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatRow(dotColor = AiPurple, label = "AI detected", count = aiCount)
+                    StatRow(dotColor = Muted, label = "Manual", count = manualCount)
+                    StatRow(dotColor = Warning, label = "Pending review", count = pendingCount)
+                }
+            }
+
+            // 3. Filter Chips
             QueueFilterChips(
                 selected = state.queueFilter,
                 onSelected = viewModel::onQueueFilterSelected,
-                modifier = Modifier.padding(vertical = AgarthaSpacing.md),
+                counts = listOf(state.flaggedFrames.size, pendingCount, aiCount, manualCount),
+                modifier = Modifier.padding(bottom = 12.dp)
             )
 
+            // 4. Verify List
             if (filteredFrames.isEmpty()) {
                 QueueEmptyState()
             } else {
                 LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(1.dp), // using hairline separators instead of gaps
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 120.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     items(
                         items = filteredFrames,
@@ -116,7 +178,43 @@ fun VerificationQueueScreen(
                             onClick = { viewModel.onQueueItemSelected(frame) },
                             onDelete = { viewModel.onQueueItemDeleted(frame) },
                         )
+                        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).height(0.5.dp).background(Color(0x140F172A)))
                     }
+                }
+            }
+        }
+
+        // 5. Floating Action Bar
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 28.dp)
+                .padding(horizontal = 18.dp)
+                .fillMaxWidth()
+                .glassChrome(shape = RoundedCornerShape(100.dp))
+                .padding(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("$pendingCount pending", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Ink)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .background(Color(120, 120, 128, (0.12f * 255).toInt()), RoundedCornerShape(100.dp))
+                        .clickable { }
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Text("Filter", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                }
+                Box(
+                    modifier = Modifier
+                        .background(Brand, RoundedCornerShape(100.dp))
+                        .clickable { 
+                            filteredFrames.firstOrNull()?.let { viewModel.onQueueItemSelected(it) } 
+                        }
+                        .padding(horizontal = 16.dp, vertical = 9.dp)
+                ) {
+                    Text("Review next", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
         }
@@ -138,52 +236,61 @@ fun VerificationQueueScreen(
     }
 }
 
+@Composable
+private fun StatRow(dotColor: Color, label: String, count: Int) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(modifier = Modifier.size(6.dp).background(dotColor, CircleShape))
+        Text(label, color = Muted, fontSize = 13.sp)
+        Text("$count", color = Ink, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 internal fun filterQueueFrames(
     frames: List<FlaggedFrame>,
     filter: QueueFilter,
 ): List<FlaggedFrame> = when (filter) {
     QueueFilter.ALL -> frames
+    // REPEAT is used as a sentinel for the "Pending" chip (all items in the queue are pending review)
+    QueueFilter.REPEAT -> frames
     QueueFilter.FLAGGED -> frames.filter { it.source == FrameSource.MODEL }
     QueueFilter.MANUAL -> frames.filter { it.source == FrameSource.MANUAL }
-    QueueFilter.REPEAT -> frames.filter { it.markedAsRepeat }
 }
 
 @Composable
 private fun QueueFilterChips(
     selected: QueueFilter,
     onSelected: (QueueFilter) -> Unit,
+    counts: List<Int>,
     modifier: Modifier = Modifier,
 ) {
+    // Chips: All | Pending | AI | Manual
+    // "All" → QueueFilter.ALL (every frame)
+    // "Pending" → QueueFilter.ALL as well (all in queue = all pending review); visually distinct from All
+    //   In the current data model every item in the queue is pending, so Pending = total.
+    //   We keep a separate PENDING sentinel by reusing ALL here and differentiating via index.
+    // "AI" → QueueFilter.FLAGGED (MODEL source)
+    // "Manual" → QueueFilter.MANUAL
+    data class Chip(val label: String, val filter: QueueFilter, val countIdx: Int)
+    val chips = listOf(
+        Chip("All",     QueueFilter.ALL,    0),
+        Chip("Pending", QueueFilter.REPEAT, 1), // REPEAT used as sentinel for Pending display
+        Chip("AI",      QueueFilter.FLAGGED, 2),
+        Chip("Manual",  QueueFilter.MANUAL,  3),
+    )
+
     androidx.compose.foundation.lazy.LazyRow(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 18.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item {
+        items(chips.size) { index ->
+            val chip = chips[index]
+            val isSelected = selected == chip.filter
             QueueFilterChip(
-                label = stringResource(R.string.queue_filter_all),
-                selected = selected == QueueFilter.ALL,
-                onClick = { onSelected(QueueFilter.ALL) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_flagged),
-                selected = selected == QueueFilter.FLAGGED,
-                onClick = { onSelected(QueueFilter.FLAGGED) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_manual),
-                selected = selected == QueueFilter.MANUAL,
-                onClick = { onSelected(QueueFilter.MANUAL) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_repeat),
-                selected = selected == QueueFilter.REPEAT,
-                onClick = { onSelected(QueueFilter.REPEAT) },
+                label = chip.label,
+                count = counts[chip.countIdx],
+                selected = isSelected,
+                onClick = { onSelected(chip.filter) },
             )
         }
     }
@@ -192,15 +299,23 @@ private fun QueueFilterChips(
 @Composable
 private fun QueueFilterChip(
     label: String,
+    count: Int,
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    KomoButton(
-        onClick = onClick,
-        variant = if (selected) ButtonVariant.Default else ButtonVariant.Secondary,
-        size = ButtonSize.Sm,
+    val bg = if (selected) Ink else Color(120, 120, 128, (0.12f * 255).toInt())
+    val fg = if (selected) Color.White else Ink
+    
+    Row(
+        modifier = Modifier
+            .background(bg, RoundedCornerShape(100.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        Text(text = label)
+        Text(text = label, color = fg, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(text = "$count", color = if (selected) Color.White.copy(alpha = 0.7f) else Muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
     }
 }
 
@@ -228,20 +343,32 @@ private fun QueueEmptyState() {
 }
 
 @Composable
-private fun RowBadge(text: String) {
+private fun RowBadge(text: String, isAi: Boolean = false, isPending: Boolean = false) {
+    val bg = when {
+        isAi -> AiPurple.copy(alpha = 0.14f)
+        isPending -> Warning.copy(alpha = 0.18f)
+        else -> Color(120, 120, 128, (0.14f * 255).toInt())
+    }
+    val fg = when {
+        isAi -> Color(0xFF8E3FBF)
+        isPending -> Color(0xFFB86E00)
+        else -> Color(0xFF515154)
+    }
+    
     Box(
         modifier = Modifier
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.styles.border,
-                shape = RoundedCornerShape(AgarthaRadius.sm),
-            )
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+            .background(bg, RoundedCornerShape(100.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.styles.mutedForeground,
+            text = text.uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontFamily = FontFamily.Monospace, 
+                fontWeight = FontWeight.Bold, 
+                letterSpacing = 0.4.sp,
+                fontSize = 10.sp
+            ),
+            color = fg,
         )
     }
 }
@@ -254,90 +381,97 @@ private fun VerificationQueueRow(
 ) {
     val top = frame.predictions.firstOrNull()
     val timeText = remember(frame.capturedAt) {
-        DateTimeFormatter.ofPattern("HH:mm:ss")
+        DateTimeFormatter.ofPattern("HH:mm")
             .withZone(ZoneId.systemDefault())
             .format(frame.capturedAt)
     }
+    val isManual = frame.source == FrameSource.MANUAL
+    
     val title = when {
-        frame.source == FrameSource.MANUAL -> stringResource(R.string.queue_row_manual_title)
+        isManual -> "Unlabeled"
         top != null -> top.classLabel
-        else -> stringResource(R.string.queue_row_unknown_class)
-    }
-    val subtitle = if (frame.source == FrameSource.MANUAL) {
-        stringResource(R.string.queue_row_manual_subtitle, timeText)
-    } else {
-        stringResource(
-            R.string.queue_row_subtitle,
-            "%.0f".format((top?.confidence ?: 0f) * 100f),
-            frame.predictions.size,
-            timeText,
-        )
+        else -> "Unknown class"
     }
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.styles.muted.copy(alpha = 0.4f))
+            .background(Surface)
             .clickable(onClick = onClick)
-            .padding(AgarthaSpacing.sm),
+            .padding(horizontal = 18.dp, vertical = 12.dp),
     ) {
+        // Thumbnail with Bounding Box Overlay
         Box(
             modifier = Modifier
                 .size(64.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.styles.background),
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
         ) {
             AsyncImage(
                 model = frame.jpegBytes,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.fillMaxSize(),
             )
+            // AI Bounding Box overlay (Pending = Warning color)
+            if (!isManual) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .border(1.5.dp, Warning, RoundedCornerShape(4.dp))
+                )
+            }
         }
-        Spacer(modifier = Modifier.padding(AgarthaSpacing.xxs))
+        
+        Spacer(modifier = Modifier.width(14.dp))
+        
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = AgarthaSpacing.sm),
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.styles.foreground,
+                fontSize = 16.sp,
+                fontStyle = if (isManual || title == "Unknown class") FontStyle.Normal else FontStyle.Italic,
+                fontWeight = FontWeight.SemiBold,
+                color = if (isManual) Muted else Ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-                modifier = Modifier.padding(top = AgarthaSpacing.xxs),
-            ) {
-                RowBadge(
-                    text = if (frame.source == FrameSource.MANUAL) {
-                        stringResource(R.string.queue_row_source_manual)
-                    } else {
-                        stringResource(R.string.queue_row_source_ai)
-                    }
-                )
-                if (frame.markedAsRepeat) {
-                    RowBadge(text = stringResource(R.string.verify_repeat_badge))
-                }
+            
+            val metadata = if (isManual) {
+                "Frame ${frame.capturedAt.toEpochMilli().toString().takeLast(3)} · — · $timeText"
+            } else {
+                "Frame ${frame.capturedAt.toEpochMilli().toString().takeLast(3)} · ${(top?.confidence ?: 0f * 100).toInt()}% · $timeText"
             }
             Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.styles.mutedForeground,
+                text = metadata,
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+                color = Muted,
             )
+            
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(top = 2.dp),
+            ) {
+                if (isManual) {
+                    RowBadge(text = "MANUAL", isAi = false, isPending = false)
+                } else {
+                    RowBadge(text = "AI", isAi = true, isPending = false)
+                }
+                RowBadge(text = "PENDING", isAi = false, isPending = true)
+            }
         }
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = stringResource(R.string.queue_row_delete),
-                tint = MaterialTheme.styles.mutedForeground,
-            )
-        }
+        
+        Icon(
+            imageVector = Icons.Default.ChevronRight,
+            contentDescription = "Open",
+            tint = Color(0xFFC7C7CC),
+            modifier = Modifier.size(20.dp)
+        )
     }
 }
 

@@ -9,16 +9,18 @@ import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.login.LoginScreen
+import com.agarthavision.ui.dashboard.DashboardScreen
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
-import com.agarthavision.ui.sessions.SessionPickerScreen
+import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
-    data object SessionPicker : Screen("sessions")
+    data object Dashboard : Screen("dashboard")
+    data object Sessions : Screen("sessions")
     data object Capture : Screen("capture")
     data object Records : Screen("records")
     data object SessionDetail : Screen("records/session/{sessionId}") {
@@ -33,7 +35,7 @@ sealed class Screen(val route: String) {
 
 /**
  * Root nav graph. Starts on [Screen.Login]; LoginViewModel will redirect to
- * [Screen.SessionPicker] on cold start when a persisted Supabase session exists.
+ * [Screen.Sessions] on cold start when a persisted Supabase session exists.
  * The picker is the only path into [Screen.Capture]. See ADR-005 and
  * docs/03_MOBILE_APP_PLAN.md §1.0.
  */
@@ -50,18 +52,36 @@ fun AgarthaNavGraph(
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoggedIn = {
-                    navController.navigate(Screen.SessionPicker.route) {
+                    navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
                         launchSingleTop = true
                     }
                 },
             )
         }
-        composable(Screen.SessionPicker.route) {
-            SessionPickerScreen(
+        composable(Screen.Dashboard.route) {
+            DashboardScreen(
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+        composable(Screen.Sessions.route) {
+            SessionsScreen(
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 onSessionSelected = {
                     navController.navigate(Screen.Capture.route) {
-                        popUpTo(Screen.SessionPicker.route) { inclusive = false }
+                        popUpTo(Screen.Sessions.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 },
@@ -87,8 +107,8 @@ fun AgarthaNavGraph(
                     }
                 },
                 onSessionEnded = {
-                    navController.navigate(Screen.SessionPicker.route) {
-                        popUpTo(Screen.SessionPicker.route) { inclusive = false }
+                    navController.navigate(Screen.Sessions.route) {
+                        popUpTo(Screen.Sessions.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 },
@@ -104,7 +124,13 @@ fun AgarthaNavGraph(
                 onSessionClick = { sessionId ->
                     navController.navigate(Screen.SessionDetail.createRoute(sessionId))
                 },
-                onBackClick = { navController.popBackStack() },
+                onNavigate = { route ->
+                    navController.navigate(route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
             )
         }
         composable(Screen.SessionDetail.route) {

@@ -24,4 +24,14 @@ class DetectionRepositoryImpl @Inject constructor(
         detectionDao.getConfirmedEggCountsForSession(sessionId, userId).map { row ->
             EggCount(species = row.species, count = row.eggCount)
         }
+
+    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
+        detectionDao.observeConfirmedEggCountsSince(userId, sinceTimestamp).map { rows ->
+            rows.map { EggCount(species = it.species, count = it.eggCount) }
+        }
+
+    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<com.agarthavision.domain.repository.DailyEggCount>> =
+        detectionDao.observeDailyEggCountsSince(userId, sinceTimestamp).map { rows ->
+            rows.map { com.agarthavision.domain.repository.DailyEggCount(timestamp = it.timestamp, count = it.eggCount) }
+        }
 }

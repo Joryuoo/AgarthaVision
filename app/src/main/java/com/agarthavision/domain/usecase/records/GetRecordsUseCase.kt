@@ -23,6 +23,7 @@ data class SessionRecordItem(
     val speciesLabels: List<String>,
     val latitude: Double?,
     val longitude: Double?,
+    val totalEpg: Int = 0,
 )
 
 /**

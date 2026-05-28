@@ -1,65 +1,66 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongMethod")
 
 package com.agarthavision.ui.records
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material3.*
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.agarthavision.R
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.Sample
+import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
-import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.records.SampleRecordItem
-import com.komoui.themes.styles
+import com.agarthavision.ui.components.glassChrome
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-/**
- * Shows a persisted sample image, detection overlay, and traceability metadata.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+// Design Tokens
+private val Brand = Color(0xFF1E40AF)
+private val BrandSecondary = Color(0xFF3B82F6)
+private val Success = Color(0xFF34C759)
+private val SuccessDeep = Color(0xFF248A3D)
+private val Danger = Color(0xFFFF3B30)
+private val Ink = Color(0xFF0F172A)
+private val Body = Color(0xFF3C3C43)
+private val Muted = Color(0xFF6E6E73)
+private val Bg = Color(0xFFF2F2F7)
+private val Surface = Color(0xFFFFFFFF)
+private val Hairline = Color(0x1E3C3C43)
+private val HairlineSoft = Color(0x143C3C43)
+private val IosFillThin = Color(0x1E787880) // rgba(120, 120, 128, 0.12)
+
 @Composable
 fun SampleDetailScreen(
     onBack: () -> Unit,
@@ -67,153 +68,217 @@ fun SampleDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val item = state.item
+    var selectedTab by remember { mutableIntStateOf(0) }
 
-    Scaffold(
-        containerColor = MaterialTheme.styles.background,
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.sample_detail_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = stringResource(R.string.sample_detail_back),
-                            tint = MaterialTheme.styles.foreground,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.styles.background,
-                    titleContentColor = MaterialTheme.styles.foreground,
-                ),
-            )
-        },
-    ) { padding ->
+    Box(modifier = Modifier.fillMaxSize().background(Bg)) {
         if (item == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(20.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.sample_detail_missing),
-                    color = MaterialTheme.styles.mutedForeground,
-                )
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Brand)
             }
         } else {
-            SampleDetailContent(
-                item = item,
-                imageSource = state.imageSource,
+            Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding),
-            )
+                    .padding(top = 103.dp) // Leave space for nav bar
+            ) {
+                // Segmented Control (Tabs)
+                SampleSegmentedControl(
+                    selectedTab = selectedTab,
+                    onTabSelected = { selectedTab = it }
+                )
+
+                // Tab Content
+                when (selectedTab) {
+                    0 -> ImageTab(item = item, imageSource = state.imageSource)
+                    1 -> DetectionsTab(detections = item.detections)
+                    else -> MetadataTab(sample = item.sample)
+                }
+            }
         }
+
+        // Top Navigation Bar
+        SampleDetailNavBar(
+            title = if (item != null) "Sample #${item.sample.id.take(4)}" else "Sample",
+            onBack = onBack
+        )
     }
 }
 
 @Composable
-private fun SampleDetailContent(
-    item: SampleRecordItem,
-    imageSource: SampleImageSource,
-    modifier: Modifier = Modifier,
-) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf(
-        stringResource(R.string.sample_detail_tab_image),
-        stringResource(R.string.sample_detail_tab_detections),
-        stringResource(R.string.sample_detail_tab_metadata),
-    )
-
-    Column(modifier = modifier) {
-        TabRow(selectedTabIndex = selectedTab, containerColor = MaterialTheme.styles.background) {
-            tabs.forEachIndexed { index, label ->
-                Tab(
-                    selected = selectedTab == index,
-                    onClick = { selectedTab = index },
-                    text = { Text(label) },
-                )
-            }
+fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(103.dp)
+            .glassChrome(
+                backgroundColor = Color(255, 255, 255, (0.72f * 255).toInt()),
+                shape = RoundedCornerShape(0.dp)
+            )
+            .padding(top = 47.dp)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Back Button
+        Row(
+            modifier = Modifier.clickable { onBack() }.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.ChevronLeft, contentDescription = "Back", tint = Brand, modifier = Modifier.size(28.dp))
+            Text("Back", color = Brand, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
         }
 
-        when (selectedTab) {
-            0 -> ImageTab(item = item, imageSource = imageSource)
-            1 -> DetectionsTab(detections = item.detections)
-            else -> MetadataTab(sample = item.sample)
+        Text(
+            text = title,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Ink,
+            fontFamily = FontFamily.Monospace,
+            letterSpacing = (-0.5).sp
+        )
+
+        // Spacer to balance the title in the center
+        Box(modifier = Modifier.size(44.dp))
+    }
+}
+
+@Composable
+fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    val tabs = listOf("IMAGE", "DETECTIONS", "METADATA")
+    TabRow(
+        selectedTabIndex = selectedTab,
+        containerColor = Color.Transparent,
+        contentColor = Brand,
+        indicator = { tabPositions ->
+            if (selectedTab < tabPositions.size) {
+                TabRowDefaults.SecondaryIndicator(
+                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                    color = Brand,
+                    height = 2.dp
+                )
+            }
+        },
+        divider = {
+            HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+        }
+    ) {
+        tabs.forEachIndexed { index, label ->
+            Tab(
+                selected = selectedTab == index,
+                onClick = { onTabSelected(index) },
+                text = {
+                    Text(
+                        text = label,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (selectedTab == index) Brand else Muted,
+                        letterSpacing = 0.8.sp
+                    )
+                }
+            )
         }
     }
 }
 
 @Composable
 private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
-    Card(
+    Column(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(20.dp)
-            .height(420.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.styles.card,
-            contentColor = MaterialTheme.styles.cardForeground,
-        ),
-        shape = MaterialTheme.shapes.medium,
+            .fillMaxSize()
+            .padding(top = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
+        // Image Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .aspectRatio(3f / 4f)
+                .background(Color.Black, RoundedCornerShape(16.dp))
+                .clip(RoundedCornerShape(16.dp))
+        ) {
             when (imageSource) {
-                is SampleImageSource.Local,
-                is SampleImageSource.RemoteSignedUrl,
-                -> {
+                is SampleImageSource.Local -> {
                     AsyncImage(
-                        model = imageSource.toCoilModel(),
-                        contentDescription = stringResource(R.string.sample_detail_image_desc),
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(File(imageSource.path))
+                            .build(),
+                        contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize()
                     )
                     NormalizedDetectionOverlay(
                         detections = item.detections,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                is SampleImageSource.RemoteSignedUrl -> {
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(imageSource.url)
+                            .build(),
+                        contentDescription = "Sample Image",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    NormalizedDetectionOverlay(
+                        detections = item.detections,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
                 is SampleImageSource.Unavailable -> {
-                    Text(
-                        text = imageSource.reason.toDisplayText(),
-                        color = MaterialTheme.styles.mutedForeground,
-                        modifier = Modifier.padding(20.dp),
-                    )
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "Image Unavailable",
+                            color = Color.White.copy(alpha = 0.5f),
+                            fontSize = 15.sp
+                        )
+                    }
                 }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Capture Metadata Strip
+        val timeStr = Instant.ofEpochMilli(item.sample.timestamp)
+            .atZone(ZoneId.systemDefault())
+            .format(DateTimeFormatter.ofPattern("MMM dd, yyyy · HH:mm:ss"))
+        
+        val provenanceText = if (item.detections.isNotEmpty()) "AI-Captured" else "Manually Captured"
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 18.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Capture Type", fontSize = 15.sp, color = Ink)
+                Text(provenanceText, fontSize = 15.sp, color = Muted)
+            }
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = HairlineSoft)
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Timestamp", fontSize = 15.sp, color = Ink)
+                Text(timeStr, fontSize = 15.sp, color = Muted)
             }
         }
     }
 }
 
 @Composable
-private fun SampleImageSource.toCoilModel(): Any =
-    when (this) {
-        is SampleImageSource.Local -> File(path)
-        is SampleImageSource.RemoteSignedUrl -> ImageRequest.Builder(LocalContext.current)
-            .data(url)
-            .diskCacheKey(cacheKey)
-            .memoryCacheKey(cacheKey)
-            .build()
-        is SampleImageSource.Unavailable -> error("Unavailable sample images cannot be converted to Coil models.")
-    }
-
-@Composable
-private fun SampleImageUnavailableReason.toDisplayText(): String =
-    when (this) {
-        SampleImageUnavailableReason.SAMPLE_NOT_FOUND -> stringResource(R.string.sample_detail_missing)
-        SampleImageUnavailableReason.NO_STORAGE_PATH -> stringResource(R.string.sample_detail_image_no_storage_path)
-        SampleImageUnavailableReason.REMOTE_LOAD_FAILED -> stringResource(R.string.sample_detail_image_remote_failed)
-    }
-
-@Composable
 private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Modifier = Modifier) {
-    val primary = MaterialTheme.styles.primary
-    val destructive = MaterialTheme.styles.destructive
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
-            // Per ADR-005, manual-capture detections have null bbox columns —
-            // skip drawing for those.
             val bx = detection.bboxX ?: return@forEach
             val by = detection.bboxY ?: return@forEach
             val bw = detection.bboxW ?: return@forEach
@@ -222,7 +287,7 @@ private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Mo
             val top = by.coerceIn(0f, 1f) * size.height
             val width = bw.coerceIn(0f, 1f) * size.width
             val height = bh.coerceIn(0f, 1f) * size.height
-            val color = if (detection.verifiedByUser) primary else destructive
+            val color = if (detection.verifiedByUser) Brand else Danger
             drawRect(
                 color = color,
                 topLeft = Offset(left, top),
@@ -236,18 +301,20 @@ private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Mo
 @Composable
 private fun DetectionsTab(detections: List<Detection>) {
     if (detections.isEmpty()) {
-        Text(
-            text = stringResource(R.string.sample_detail_no_detections),
-            color = MaterialTheme.styles.mutedForeground,
-            modifier = Modifier.padding(20.dp),
-        )
+        Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
+            Text(
+                text = "No detections on this sample.",
+                color = Muted,
+                fontSize = 15.sp
+            )
+        }
         return
     }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentPadding = PaddingValues(20.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         itemsIndexed(detections) { index, detection ->
             DetectionCard(index = index, detection = detection)
@@ -257,43 +324,72 @@ private fun DetectionsTab(detections: List<Detection>) {
 
 @Composable
 private fun DetectionCard(index: Int, detection: Detection) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.styles.secondary,
-            contentColor = MaterialTheme.styles.secondaryForeground,
-        ),
-        shape = MaterialTheme.shapes.medium,
+    val isVerified = detection.verifiedByUser
+    val aiGenerated = detection.bboxX != null
+    val provenanceText = if (aiGenerated) "AI Detection" else "Manual Annotation"
+    val speciesLabel = detection.expertClass ?: detection.classLabel
+    val isItalic = speciesLabel.contains("Ascaris") || speciesLabel.contains("Trichuris") || speciesLabel.contains(".")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(Surface)
+            .border(0.5.dp, HairlineSoft, RoundedCornerShape(14.dp))
     ) {
-        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                text = stringResource(R.string.sample_detail_detection_title, index + 1),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.styles.foreground,
-            )
-            Text(detection.expertClass ?: detection.classLabel, color = MaterialTheme.styles.foreground)
-            Text(
-                text = stringResource(R.string.session_detail_confidence, detection.confidence),
-                color = MaterialTheme.styles.mutedForeground,
-            )
-            Text(
-                text = stringResource(R.string.sample_detail_verdict, detection.verdict.value),
-                color = MaterialTheme.styles.mutedForeground,
-            )
-            // Per ADR-005, manual captures have null bbox columns — show a
-            // "No bounding box" line instead of the formatted geometry.
-            val bx = detection.bboxX
-            val by = detection.bboxY
-            val bw = detection.bboxW
-            val bh = detection.bboxH
-            Text(
-                text = if (bx != null && by != null && bw != null && bh != null) {
-                    stringResource(R.string.sample_detail_box, bx, by, bw, bh)
-                } else {
-                    stringResource(R.string.sample_detail_box_none)
-                },
-                color = MaterialTheme.styles.mutedForeground,
-            )
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier.size(24.dp).background(if (isVerified) Brand else Danger, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text((index + 1).toString(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Text(
+                    text = speciesLabel,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Ink,
+                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .background(IosFillThin, RoundedCornerShape(100.dp))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = provenanceText.uppercase(),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Muted,
+                    letterSpacing = 0.4.sp
+                )
+            }
+        }
+
+        HorizontalDivider(thickness = 0.5.dp, color = HairlineSoft)
+
+        // Fields
+        Column(modifier = Modifier.padding(start = 16.dp)) {
+            val aiGenerated = detection.bboxX != null
+            val confidenceStr = if (aiGenerated) "${(detection.confidence * 100).toInt()}%" else "—"
+            DetailRow(label = "Confidence", value = confidenceStr, isLast = false)
+            DetailRow(label = "Verdict", value = if (isVerified) "Verified" else "Rejected", valueColor = if (isVerified) SuccessDeep else Danger, isLast = false)
+            
+            val bboxStr = if (detection.bboxX != null) {
+                String.format("[%.3f, %.3f, %.3f, %.3f]", detection.bboxX, detection.bboxY, detection.bboxW, detection.bboxH)
+            } else {
+                "None"
+            }
+            DetailRow(label = "Bounding Box", value = bboxStr, isLast = true, valueFontFamily = FontFamily.Monospace)
         }
     }
 }
@@ -302,57 +398,97 @@ private fun DetectionCard(index: Int, detection: Detection) {
 private fun MetadataTab(sample: Sample) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        item { MetadataRow(stringResource(R.string.sample_detail_sample_id), sample.id) }
-        item { MetadataRow(stringResource(R.string.sample_detail_session_id), sample.sessionId) }
-        item { MetadataRow(stringResource(R.string.sample_detail_device_id), sample.deviceId) }
-        item { MetadataRow(stringResource(R.string.sample_detail_status), sample.status.value) }
-        item { MetadataRow(stringResource(R.string.sample_detail_user_note), sample.userNote.orEmpty()) }
-        item { MetadataRow(stringResource(R.string.sample_detail_captured_at), sample.timestamp.formatDateTime()) }
-        item { MetadataRow(stringResource(R.string.sample_detail_verified_at), sample.verifiedAt.formatDateTime()) }
         item {
-            MetadataRow(
-                label = stringResource(R.string.sample_detail_gps),
-                value = if (sample.latitude != null && sample.longitude != null) {
-                    stringResource(R.string.records_gps, sample.latitude, sample.longitude)
-                } else {
-                    stringResource(R.string.records_no_gps)
-                },
-            )
+            GroupedList(title = "IDENTITY") {
+                DetailRow(label = "Sample ID", value = sample.id, isLast = false, valueFontFamily = FontFamily.Monospace)
+                DetailRow(label = "Session ID", value = sample.sessionId, isLast = false, valueFontFamily = FontFamily.Monospace)
+                DetailRow(label = "Device ID", value = sample.deviceId, isLast = true, valueFontFamily = FontFamily.Monospace)
+            }
         }
-        item { MetadataRow(stringResource(R.string.sample_detail_storage_path), sample.storagePath.orEmpty()) }
-        item { MetadataRow(stringResource(R.string.sample_detail_model_version), sample.inferenceModelVersion) }
+        
         item {
-            MetadataRow(
-                stringResource(R.string.sample_detail_needs_reannotation),
-                if (sample.needsReannotation) {
-                    stringResource(R.string.sample_detail_yes)
+            GroupedList(title = "STATUS & TIMING") {
+                val statusStr = sample.status.name
+                val isSynced = sample.status == SampleStatus.SYNCED
+                DetailRow(label = "Sync Status", value = statusStr, isLast = false, valueColor = if (isSynced) SuccessDeep else Muted)
+                
+                val capturedAt = Instant.ofEpochMilli(sample.timestamp)
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                DetailRow(label = "Captured At", value = capturedAt, isLast = false, valueFontFamily = FontFamily.Monospace)
+                
+                val verifiedAt = Instant.ofEpochMilli(sample.verifiedAt)
+                    .atZone(ZoneId.systemDefault())
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                DetailRow(label = "Verified At", value = verifiedAt, isLast = true, valueFontFamily = FontFamily.Monospace)
+            }
+        }
+        
+        item {
+            GroupedList(title = "CAPTURE DATA") {
+                val locString = if (sample.latitude != null && sample.longitude != null) {
+                    String.format("%.4f, %.4f", sample.latitude, sample.longitude)
                 } else {
-                    stringResource(R.string.sample_detail_no)
-                },
-            )
+                    "None"
+                }
+                DetailRow(label = "Location", value = locString, isLast = false)
+                DetailRow(label = "Model Version", value = sample.inferenceModelVersion, isLast = false)
+                DetailRow(label = "Needs Reannotation", value = if (sample.needsReannotation) "Yes" else "No", isLast = true)
+            }
         }
     }
 }
 
 @Composable
-private fun MetadataRow(label: String, value: String) {
-    Column(
+fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column {
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = Muted,
+            letterSpacing = 0.5.sp,
+            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(Surface)
+        ) {
+            content()
+        }
+    }
+}
+
+@Composable
+fun DetailRow(
+    label: String, 
+    value: String, 
+    isLast: Boolean, 
+    valueColor: Color = Muted, 
+    valueFontFamily: FontFamily = FontFamily.Default
+) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .sizeIn(minHeight = 48.dp),
+            .padding(end = 16.dp, top = 12.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Text(label, fontSize = 15.sp, color = Ink)
         Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.styles.mutedForeground,
+            text = value,
+            fontSize = 15.sp,
+            color = valueColor,
+            fontFamily = valueFontFamily,
+            textAlign = TextAlign.End
         )
-        Text(
-            text = value.ifBlank { "-" },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.styles.foreground,
-        )
+    }
+    if (!isLast) {
+        HorizontalDivider(thickness = 0.5.dp, color = HairlineSoft)
     }
 }

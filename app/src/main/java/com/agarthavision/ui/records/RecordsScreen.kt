@@ -1,423 +1,470 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongMethod")
 
 package com.agarthavision.ui.records
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.DateRangePicker
-import androidx.compose.material3.rememberDateRangePickerState
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
-import com.komoui.components.Button as KomoButton
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
-import com.komoui.themes.styles
+import com.agarthavision.ui.components.AgarthaBottomBar
+import com.agarthavision.ui.components.glassChrome
+import com.agarthavision.ui.navigation.Screen
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-/**
- * Session-first records browser.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+// Design Tokens
+private val Brand = Color(0xFF1E40AF)
+private val BrandDeep = Color(0xFF1E3A8A)
+private val BrandSecondary = Color(0xFF3B82F6)
+private val Success = Color(0xFF34C759)
+private val SuccessDeep = Color(0xFF248A3D)
+private val Warning = Color(0xFFFF9F0A)
+private val Danger = Color(0xFFFF3B30)
+private val Ink = Color(0xFF0F172A)
+private val Body = Color(0xFF3C3C43)
+private val Muted = Color(0xFF6E6E73)
+private val Bg = Color(0xFFF2F2F7)
+private val Surface = Color(0xFFFFFFFF)
+private val Hairline = Color(0x1E3C3C43)
+private val HairlineSoft = Color(0x143C3C43)
+private val IosFillThin = Color(0x1E787880) // rgba(120, 120, 128, 0.12)
+
 @Composable
 fun RecordsScreen(
+    onNavigate: (String) -> Unit = {},
     onSessionClick: (String) -> Unit,
-    onBackClick: () -> Unit,
+    onBackClick: () -> Unit = {},
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-
-    Scaffold(
-        containerColor = MaterialTheme.styles.background,
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.records_title)) },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.records_back),
-                            tint = MaterialTheme.styles.foreground,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.styles.background,
-                    titleContentColor = MaterialTheme.styles.foreground,
-                ),
-            )
-        },
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 20.dp),
-        ) {
-            FilterBar(
-                state = state,
-                onSpeciesSelected = viewModel::onSpeciesSelected,
-                onDateRangeSelected = viewModel::onDateRangeSelected,
-            )
-
-            when {
-                state.isLoading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
-                state.sessions.isEmpty() -> Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = stringResource(R.string.records_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.styles.mutedForeground,
-                    )
-                }
-                else -> LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                ) {
-                    items(state.sessions, key = { it.session.id }) { item ->
-                        SessionCard(item = item, onClick = { onSessionClick(item.session.id) })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-@Composable
-private fun FilterBar(
-    state: RecordsState,
-    onSpeciesSelected: (EggSpecies?) -> Unit,
-    onDateRangeSelected: (LocalDate?, LocalDate?) -> Unit,
-) {
-    var showDatePicker by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
-    var showFiltersSheet by remember { mutableStateOf(false) }
-    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(modifier = Modifier.weight(1f)) {
-                com.komoui.components.Input(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = "Search records...",
-                    singleLine = true,
-                    leadingIcon = {
-                        Icon(
-                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = MaterialTheme.styles.mutedForeground
-                        )
-                    }
-                )
-            }
-            
-            androidx.compose.material3.IconButton(
-                onClick = { showFiltersSheet = true },
-            ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.FilterList,
-                    contentDescription = "Filters",
-                    tint = MaterialTheme.styles.foreground
-                )
-            }
-        }
-    }
-
-    if (showFiltersSheet) {
-        androidx.compose.material3.ModalBottomSheet(
-            onDismissRequest = { showFiltersSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.styles.background,
-            contentColor = MaterialTheme.styles.foreground,
-        ) {
+    Box(modifier = Modifier.fillMaxSize().background(Bg)) {
+        Scaffold(
+            bottomBar = { AgarthaBottomBar(activeRoute = Screen.Records.route, onNavigate = onNavigate) },
+            containerColor = Color.Transparent
+        ) { paddingValues ->
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp)
-                    .padding(bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(24.dp)
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .padding(top = 103.dp) // Leave space for nav bar
             ) {
-                Text(
-                    text = "Filters",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.styles.foreground
+                // Overview Cards
+                RecordsOverviewRow(
+                    thisWeekSessions = state.sessions.size, // Placeholder logic
+                    totalSamples = state.sessions.sumOf { it.sampleCount },
+                    avgEpg = if (state.sessions.isNotEmpty()) state.sessions.sumOf { it.totalEpg } / state.sessions.size else 0
                 )
-
-                // Species Filter
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Species",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.styles.foreground
-                    )
-                    androidx.compose.foundation.lazy.LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        item {
-                            KomoButton(
-                                onClick = { onSpeciesSelected(null) },
-                                variant = if (state.selectedSpecies == null) ButtonVariant.Default else ButtonVariant.Secondary,
-                                size = ButtonSize.Sm,
-                            ) {
-                                Text(stringResource(R.string.records_species_all))
-                            }
-                        }
-                        items(EggSpecies.entries.toTypedArray()) { species ->
-                            val label = species.canonicalClass ?: stringResource(R.string.records_species_other)
-                            KomoButton(
-                                onClick = { onSpeciesSelected(species) },
-                                variant = if (state.selectedSpecies == species) ButtonVariant.Default else ButtonVariant.Secondary,
-                                size = ButtonSize.Sm,
-                            ) {
-                                Text(label)
-                            }
-                        }
-                    }
+                
+                // Search Bar
+                RecordsSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it }
+                )
+                
+                // Filter Chips
+                RecordsFilterChips(
+                    selectedSpecies = state.selectedSpecies,
+                    onSpeciesSelected = viewModel::onSpeciesSelected
+                )
+                
+                // Records List
+                val filteredSessions = state.sessions.filter {
+                    (searchQuery.isEmpty() || it.session.id.contains(searchQuery, ignoreCase = true) || (it.session.label?.contains(searchQuery, ignoreCase = true) == true))
                 }
-
-                // Date Range Filter
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        text = "Date Range",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.styles.foreground
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                
+                if (filteredSessions.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No sessions found", color = Muted, fontSize = 15.sp)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp)
                     ) {
-                        KomoButton(
-                            onClick = { showDatePicker = true },
-                            variant = ButtonVariant.Secondary,
-                            size = ButtonSize.Sm,
-                        ) {
-                            Icon(
-                                imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
-                                contentDescription = null,
-                                modifier = Modifier.padding(end = 8.dp).size(16.dp)
-                            )
-                            val dateText = if (state.startDate != null && state.endDate != null) {
-                                "${state.startDate} → ${state.endDate}"
-                            } else if (state.startDate != null) {
-                                "${state.startDate} → Present"
-                            } else if (state.endDate != null) {
-                                "Any → ${state.endDate}"
-                            } else {
-                                "All time"
-                            }
-                            Text(dateText)
+                        // Grouping logic (Placeholder logic: just groups by day string)
+                        val grouped = filteredSessions.groupBy {
+                            Instant.ofEpochMilli(it.session.startedAt)
+                                .atZone(ZoneId.systemDefault())
+                                .format(DateTimeFormatter.ofPattern("MMM dd"))
                         }
                         
-                        if (state.startDate != null || state.endDate != null) {
-                            KomoButton(
-                                onClick = { onDateRangeSelected(null, null) },
-                                variant = ButtonVariant.Ghost,
-                                size = ButtonSize.Sm,
-                            ) {
-                                Text(stringResource(R.string.records_filter_clear))
+                        grouped.forEach { (day, sessions) ->
+                            item {
+                                Text(
+                                    text = day.uppercase(), // e.g., TODAY · MAY 28
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.2.sp,
+                                    color = Muted,
+                                    modifier = Modifier.padding(top = 12.dp, start = 4.dp, bottom = 8.dp)
+                                )
+                            }
+                            
+                            items(sessions, key = { it.session.id }) { sessionItem ->
+                                RecordRow(item = sessionItem, onClick = { onSessionClick(sessionItem.session.id) })
                             }
                         }
                     }
                 }
             }
         }
+        
+        RecordsNavBar(onHomeClick = { onNavigate(Screen.Dashboard.route) })
     }
+}
 
-    if (showDatePicker) {
-        val dateRangePickerState = rememberDateRangePickerState(
-            initialSelectedStartDateMillis = state.startDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli(),
-            initialSelectedEndDateMillis = state.endDate?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
-        )
-        DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                KomoButton(
-                    onClick = {
-                        showDatePicker = false
-                        val start = dateRangePickerState.selectedStartDateMillis?.let {
-                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                        }
-                        val end = dateRangePickerState.selectedEndDateMillis?.let {
-                            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
-                        }
-                        onDateRangeSelected(start, end)
-                    },
-                    size = ButtonSize.Sm
-                ) {
-                    Text(stringResource(R.string.records_filter_apply))
-                }
-            },
-            dismissButton = {
-                KomoButton(
-                    onClick = { showDatePicker = false },
-                    variant = ButtonVariant.Ghost,
-                    size = ButtonSize.Sm
-                ) {
-                    Text(stringResource(R.string.verify_cancel))
-                }
-            }
+@Composable
+fun RecordsNavBar(onHomeClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 47.dp)
+            .height(56.dp)
+            .glassChrome(
+                backgroundColor = Color(255, 255, 255, (0.72f * 255).toInt()),
+                shape = RoundedCornerShape(0.dp) // Flat bottom
+            )
+            .padding(horizontal = 18.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Left - Home
+        Box(
+            modifier = Modifier.size(32.dp).clickable { onHomeClick() },
+            contentAlignment = Alignment.Center
         ) {
-            DateRangePicker(
-                state = dateRangePickerState,
-                title = {
-                    Text(
-                        text = "Select Date Range",
-                        modifier = Modifier.padding(start = 24.dp, top = 24.dp, bottom = 8.dp)
-                    )
-                },
-                showModeToggle = false,
-                modifier = Modifier.weight(1f)
+            Icon(Icons.Filled.Home, contentDescription = "Home", tint = Brand, modifier = Modifier.size(24.dp))
+        }
+        
+        // Center - Title
+        Text(
+            text = "Records",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.4).sp,
+            color = Ink
+        )
+        
+        // Right - Export
+        Box(
+            modifier = Modifier.size(32.dp).clickable { /* Export logic */ },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Filled.Download, contentDescription = "Export", tint = Brand, modifier = Modifier.size(24.dp))
+        }
+    }
+}
+
+@Composable
+fun RecordsOverviewRow(thisWeekSessions: Int, totalSamples: Int, avgEpg: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 18.dp, end = 18.dp, top = 6.dp, bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Brand card
+        Box(
+            modifier = Modifier
+                .weight(1.5f)
+                .shadow(
+                    elevation = 20.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    spotColor = Brand.copy(alpha = 0.22f),
+                    ambientColor = Brand.copy(alpha = 0.14f)
+                )
+                .background(
+                    brush = Brush.linearGradient(listOf(Brand, BrandSecondary)),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Column {
+                Text("THIS WEEK", fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = Color.White.copy(alpha = 0.7f))
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(thisWeekSessions.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp, color = Color.White, lineHeight = 24.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Sessions completed", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Color.White.copy(alpha = 0.8f))
+            }
+        }
+        
+        // Samples Card
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .shadow(elevation = 2.dp, shape = RoundedCornerShape(16.dp), spotColor = Ink.copy(alpha = 0.05f))
+                .background(Surface, RoundedCornerShape(16.dp))
+                .border(0.5.dp, HairlineSoft, RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Column {
+                Text("SAMPLES", fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = Muted)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(totalSamples.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp, color = Ink, lineHeight = 24.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("+12%", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = SuccessDeep) // Placeholder
+            }
+        }
+        
+        // Avg EPG Card
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .shadow(elevation = 2.dp, shape = RoundedCornerShape(16.dp), spotColor = Ink.copy(alpha = 0.05f))
+                .background(Surface, RoundedCornerShape(16.dp))
+                .border(0.5.dp, HairlineSoft, RoundedCornerShape(16.dp))
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+        ) {
+            Column {
+                Text("AVG EPG", fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, color = Muted)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(avgEpg.toString(), fontSize = 24.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.8).sp, color = Ink, lineHeight = 24.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("7-day", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = Muted)
+            }
+        }
+    }
+}
+
+@Composable
+fun RecordsSearchBar(query: String, onQueryChange: (String) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp)
+            .padding(bottom = 12.dp)
+            .background(IosFillThin, RoundedCornerShape(12.dp))
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Default.Search, contentDescription = "Search", tint = Muted, modifier = Modifier.size(16.dp))
+        Spacer(modifier = Modifier.width(8.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            if (query.isEmpty()) {
+                Text("Search by ID, patient, or species", color = Muted, fontSize = 15.sp)
+            }
+            BasicTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = Ink, fontFamily = FontFamily.Default),
+                modifier = Modifier.fillMaxWidth(),
+                cursorBrush = SolidColor(Brand),
+                singleLine = true
             )
         }
     }
 }
 
 @Composable
-private fun SessionCard(item: SessionRecordItem, onClick: () -> Unit) {
-    val speciesText = item.speciesLabels.joinToString(", ").ifBlank {
-        stringResource(R.string.records_session_no_species)
-    }
-    Card(
+fun RecordsFilterChips(selectedSpecies: EggSpecies?, onSpeciesSelected: (EggSpecies?) -> Unit) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.styles.secondary,
-            contentColor = MaterialTheme.styles.secondaryForeground,
-        ),
-        shape = MaterialTheme.shapes.medium,
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 18.dp)
+            .padding(bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+        // All chip
+        Box(
+            modifier = Modifier
+                .background(if (selectedSpecies == null) Ink else IosFillThin, RoundedCornerShape(100.dp))
+                .clickable { onSpeciesSelected(null) }
+                .padding(horizontal = 14.dp, vertical = 7.dp)
+        ) {
+            Text("All", color = if (selectedSpecies == null) Color.White else Body, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        }
+        
+        val quickSpecies = listOf(
+            EggSpecies.ASCARIS to "A. lumbricoides",
+            EggSpecies.TRICHURIS to "T. trichiura",
+            EggSpecies.HOOKWORM to "Hookworm"
+        )
+        
+        quickSpecies.forEach { (species, label) ->
+            val isSelected = selectedSpecies == species
+            val isItalic = species != EggSpecies.HOOKWORM
+            Box(
+                modifier = Modifier
+                    .background(if (isSelected) Ink else IosFillThin, RoundedCornerShape(100.dp))
+                    .clickable { onSpeciesSelected(species) }
+                    .padding(horizontal = 14.dp, vertical = 7.dp)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.session.label?.takeIf { it.isNotBlank() }
-                            ?: stringResource(
-                                R.string.records_session_title,
-                                item.session.startedAt.formatRecordDate(),
-                            ),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.styles.foreground,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.records_session_summary,
-                            item.sampleCount,
-                            speciesText,
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.styles.mutedForeground,
-                    )
-                }
-                KomoBadge(variant = BadgeVariant.Secondary) {
-                    Text(stringResource(R.string.records_session_open))
-                }
+                Text(
+                    text = label, 
+                    color = if (isSelected) Color.White else Body, 
+                    fontSize = 13.sp, 
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
+                )
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = stringResource(
-                    R.string.records_session_time,
-                    item.session.startedAt.formatRecordDateTime(),
-                    item.session.endedAt?.formatRecordDateTime() ?: stringResource(R.string.records_session_active),
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.styles.mutedForeground,
-            )
-            Text(
-                text = if (item.latitude != null && item.longitude != null) {
-                    stringResource(R.string.records_gps, item.latitude, item.longitude)
-                } else {
-                    stringResource(R.string.records_no_gps)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.styles.mutedForeground,
-            )
         }
     }
 }
 
-private fun String.toLocalDateOrNull(): LocalDate? =
-    takeIf { it.isNotBlank() }?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-
-private fun Long.formatRecordDate(): String =
-    Instant.ofEpochMilli(this)
+@Composable
+fun RecordRow(item: SessionRecordItem, onClick: () -> Unit) {
+    val session = item.session
+    val timeStr = Instant.ofEpochMilli(session.startedAt)
         .atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-
-private fun Long.formatRecordDateTime(): String =
-    Instant.ofEpochMilli(this)
-        .atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+        .format(DateTimeFormatter.ofPattern("HH:mm"))
+        
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .shadow(elevation = 2.dp, shape = RoundedCornerShape(16.dp), spotColor = Ink.copy(alpha = 0.05f))
+            .background(Surface, RoundedCornerShape(16.dp))
+            .border(0.5.dp, HairlineSoft, RoundedCornerShape(16.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        // Body (Left)
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "#${session.id.take(4)}", // Mock ID format
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 15.sp,
+                letterSpacing = (-0.3).sp,
+                color = Ink,
+                modifier = Modifier.padding(bottom = 3.dp)
+            )
+            
+            Text(
+                text = "$timeStr · ${item.sampleCount} samples",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = Muted,
+                lineHeight = 16.sp
+            )
+            
+            // Species tags
+            if (item.speciesLabels.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                @OptIn(ExperimentalLayoutApi::class)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    item.speciesLabels.forEach { speciesLabel ->
+                        val isItalic = speciesLabel.contains("Ascaris") || speciesLabel.contains("Trichuris") || speciesLabel.contains(".")
+                        Box(
+                            modifier = Modifier
+                                .background(Color(120, 120, 128, (0.1f * 255).toInt()), RoundedCornerShape(100.dp))
+                                .padding(horizontal = 7.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = speciesLabel,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Body,
+                                fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+                                letterSpacing = (-0.1).sp
+                            )
+                        }
+                    }
+                }
+            } else if (item.totalEpg == 0) {
+                 Spacer(modifier = Modifier.height(6.dp))
+                 Box(
+                    modifier = Modifier
+                        .background(Color(120, 120, 128, (0.1f * 255).toInt()), RoundedCornerShape(100.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "Negative",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Body,
+                        fontStyle = FontStyle.Normal,
+                        letterSpacing = (-0.1).sp
+                    )
+                }
+            }
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // EPG Block (Middle)
+        Column(
+            modifier = Modifier.width(64.dp),
+            horizontalAlignment = Alignment.End
+        ) {
+            val epgColor = when {
+                item.totalEpg >= 250 -> Danger
+                item.totalEpg in 100..249 -> Warning
+                item.totalEpg in 1..99 -> Ink
+                else -> SuccessDeep
+            }
+            Text(
+                text = item.totalEpg.toString(),
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 22.sp,
+                letterSpacing = (-0.6).sp,
+                color = epgColor,
+                lineHeight = 22.sp
+            )
+            Text(
+                text = "EPG",
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 9.sp,
+                letterSpacing = 0.8.sp,
+                color = Muted,
+                modifier = Modifier.padding(top = 3.dp)
+            )
+        }
+        
+        Spacer(modifier = Modifier.width(12.dp))
+        
+        // Sync Status (Right)
+        Box(
+            modifier = Modifier.size(14.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            // Placeholder: All synced
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Synced",
+                tint = Success,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+    }
+}
