@@ -12,7 +12,7 @@
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
 
-    <string name="verify_title">Flagged Frame · %1$d of %2$d</string>
+    <string name="verify_title">Flagged Frame · %1$s</string>
     <string name="verify_detection_header">Detection %1$d of %2$d</string>
     <string name="verify_predicted">Model predicted: %1$s · %2$s confidence</string>
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>

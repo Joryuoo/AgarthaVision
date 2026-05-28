@@ -134,7 +134,7 @@ private fun VerificationSheetContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
+                /*IconButton(
                     onClick = actions.onFramePrev,
                     enabled = state.frameIndexInQueue > 1,
                 ) {
@@ -143,13 +143,13 @@ private fun VerificationSheetContent(
                         contentDescription = stringResource(R.string.verify_prev_frame),
                         tint = MaterialTheme.styles.foreground,
                     )
-                }
+                }*/
                 Text(
                     text = stringResource(R.string.verify_title, state.frameIndexInQueue, state.queueSize),
                     color = MaterialTheme.styles.foreground,
                     style = MaterialTheme.typography.titleMedium,
                 )
-                IconButton(
+                /*IconButton(
                     onClick = actions.onFrameNext,
                     enabled = state.frameIndexInQueue < state.queueSize,
                 ) {
@@ -158,7 +158,7 @@ private fun VerificationSheetContent(
                         contentDescription = stringResource(R.string.verify_next_frame),
                         tint = MaterialTheme.styles.foreground,
                     )
-                }
+                }*/
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,12 +170,12 @@ private fun VerificationSheetContent(
                         Text(stringResource(R.string.verify_repeat_badge))
                     }
                 }
-                Text(
+                /*Text(
                     text = stringResource(R.string.verify_show_boxes_label),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.styles.mutedForeground,
                     modifier = Modifier.padding(end = AgarthaSpacing.xs),
-                )
+                )*/
                 Switch(
                     checked = state.showBoundingBoxes,
                     onCheckedChange = { actions.onToggleBoundingBoxes() },
@@ -213,13 +213,23 @@ private fun VerificationSheetContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(
+                /*Button(
                     onClick = actions.onDetectionPrev,
                     size = ButtonSize.Sm,
                     variant = ButtonVariant.Ghost,
                     enabled = state.currentDetectionIndex > 0,
                 ) {
                     Text(stringResource(R.string.verify_prev_detection))
+                }*/
+                IconButton(
+                    onClick = actions.onDetectionPrev,
+                    enabled = state.currentDetectionIndex > 0,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
+                        contentDescription = stringResource(R.string.verify_prev_frame),
+                        tint = MaterialTheme.styles.foreground,
+                    )
                 }
                 Text(
                     text = stringResource(
@@ -230,13 +240,23 @@ private fun VerificationSheetContent(
                     color = MaterialTheme.styles.mutedForeground,
                     style = MaterialTheme.typography.labelMedium,
                 )
-                Button(
+                /*Button(
                     onClick = actions.onDetectionNext,
                     size = ButtonSize.Sm,
                     variant = ButtonVariant.Ghost,
                     enabled = state.currentDetectionIndex < frame.predictions.size - 1,
                 ) {
                     Text(stringResource(R.string.verify_next_detection))
+                }*/
+                IconButton(
+                    onClick = actions.onDetectionNext,
+                    enabled = state.currentDetectionIndex < frame.predictions.size - 1,
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                        contentDescription = stringResource(R.string.verify_next_frame),
+                        tint = MaterialTheme.styles.foreground,
+                    )
                 }
             }
         }
@@ -341,14 +361,14 @@ private fun VerificationSheetContent(
             ) {
                 Text(stringResource(R.string.verify_delete_frame))
             }
-            Button(
+            /*Button(
                 onClick = actions.onCancel,
                 size = ButtonSize.Lg,
                 variant = ButtonVariant.Ghost,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(stringResource(R.string.verify_cancel))
-            }
+            }*/
             Button(
                 onClick = actions.onSubmit,
                 size = ButtonSize.Lg,

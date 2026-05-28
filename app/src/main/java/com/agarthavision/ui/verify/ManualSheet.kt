@@ -159,13 +159,13 @@ private fun ManualSheetContent(
                     isRepeat = state.isRepeat,
                     onToggleRepeat = actions.onToggleRepeat,
                 )
-                IconButton(onClick = actions.onCancel) {
+                /*IconButton(onClick = actions.onCancel) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = stringResource(R.string.manual_sheet_close_desc),
                         tint = MaterialTheme.styles.foreground,
                     )
-                }
+                }*/
             }
         }
 
@@ -230,14 +230,14 @@ private fun ManualSheetContent(
             ) {
                 Text(stringResource(R.string.verify_delete_frame))
             }
-            KomoButton(
+            /*KomoButton(
                 onClick = actions.onCancel,
                 size = ButtonSize.Lg,
                 variant = ButtonVariant.Ghost,
                 modifier = Modifier.weight(1f),
             ) {
                 Text(stringResource(R.string.verify_cancel))
-            }
+            }*/
             KomoButton(
                 onClick = actions.onSubmit,
                 size = ButtonSize.Lg,

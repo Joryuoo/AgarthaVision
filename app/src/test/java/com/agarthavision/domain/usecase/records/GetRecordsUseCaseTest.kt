@@ -114,6 +114,7 @@ private fun session(id: String, userId: String): Session =
         startedAt = 1_000L,
         endedAt = 2_000L,
         notes = null,
+        label = null,
     )
 
 private fun sample(id: String, sessionId: String, userId: String): Sample =

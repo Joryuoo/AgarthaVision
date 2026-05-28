@@ -68,7 +68,12 @@ fun SessionDetailScreen(
         containerColor = MaterialTheme.styles.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.session_detail_title)) },
+                title = {
+                    Text(
+                        session?.session?.label?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.session_detail_title),
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

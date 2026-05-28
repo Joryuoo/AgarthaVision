@@ -282,10 +282,11 @@ private fun SessionCard(item: SessionRecordItem, onClick: () -> Unit) {
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = stringResource(
-                            R.string.records_session_title,
-                            item.session.startedAt.formatRecordDate(),
-                        ),
+                        text = item.session.label?.takeIf { it.isNotBlank() }
+                            ?: stringResource(
+                                R.string.records_session_title,
+                                item.session.startedAt.formatRecordDate(),
+                            ),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.styles.foreground,

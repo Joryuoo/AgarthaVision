@@ -14,4 +14,5 @@ fun SessionEntity.toDomain(): Session =
         startedAt = startedAt,
         endedAt = endedAt,
         notes = notes,
+        label = label,
     )
