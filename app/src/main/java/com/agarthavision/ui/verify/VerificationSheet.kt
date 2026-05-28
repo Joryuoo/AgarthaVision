@@ -2,6 +2,7 @@
 
 package com.agarthavision.ui.verify
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,12 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,7 +18,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -38,11 +33,11 @@ import coil.compose.AsyncImage
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.ui.records.AppColors
 import com.agarthavision.ui.components.glassChrome
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VerificationSheet(
     frame: FlaggedFrame,
@@ -64,47 +59,34 @@ fun VerificationSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    BackHandler(onBack = viewModel::onCancel)
 
-    ModalBottomSheet(
-        onDismissRequest = viewModel::onCancel,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        scrimColor = Color(15, 23, 42, (0.32f * 255).toInt()),
-        dragHandle = null,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Gray200)
+            .systemBarsPadding()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassChrome(
-                    backgroundColor = Color(248, 248, 250, (0.96f * 255).toInt())
-                )
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                .heightIn(max = screenHeightDp * 0.95f)
-                .navigationBarsPadding()
-        ) {
-            VerificationSheetContent(
-                state = state,
-                actions = VerificationSheetActions(
-                    onQ1Selected = viewModel::onQ1Selected,
-                    onQ2Selected = viewModel::onQ2Selected,
-                    onSpeciesSelected = viewModel::onSpeciesSelected,
-                    onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
-                    onQ4Selected = viewModel::onQ4Selected,
-                    onDetectionPrev = viewModel::onDetectionPrev,
-                    onDetectionNext = viewModel::onDetectionNext,
-                    onFramePrev = viewModel::onFramePrev,
-                    onFrameNext = viewModel::onFrameNext,
-                    onDeleteFrame = viewModel::onDeleteFrame,
-                    onToggleBoundingBoxes = viewModel::onToggleBoundingBoxes,
-                    onSubmit = viewModel::onSubmit,
-                    onCancel = viewModel::onCancel,
-                    onToggleRepeat = viewModel::onToggleRepeat,
-                    onUserNoteChanged = viewModel::onUserNoteChanged,
-                ),
-            )
-        }
+        VerificationSheetContent(
+            state = state,
+            actions = VerificationSheetActions(
+                onQ1Selected = viewModel::onQ1Selected,
+                onQ2Selected = viewModel::onQ2Selected,
+                onSpeciesSelected = viewModel::onSpeciesSelected,
+                onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
+                onQ4Selected = viewModel::onQ4Selected,
+                onDetectionPrev = viewModel::onDetectionPrev,
+                onDetectionNext = viewModel::onDetectionNext,
+                onFramePrev = viewModel::onFramePrev,
+                onFrameNext = viewModel::onFrameNext,
+                onDeleteFrame = viewModel::onDeleteFrame,
+                onToggleBoundingBoxes = viewModel::onToggleBoundingBoxes,
+                onSubmit = viewModel::onSubmit,
+                onCancel = viewModel::onCancel,
+                onToggleRepeat = viewModel::onToggleRepeat,
+                onUserNoteChanged = viewModel::onUserNoteChanged,
+            ),
+        )
     }
 }
 
@@ -129,325 +111,185 @@ private fun VerificationSheetContent(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, start = 22.dp, end = 22.dp, bottom = 32.dp)
+            .padding(bottom = 32.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            SheetDragHandle()
-        }
-
-        SheetTitleRow(
+        ScreenTopBar(
             title = "Verify detection",
             metaText = "FRAME ${frame.capturedAt.toEpochMilli().toString().takeLast(3)}",
-            isManual = false
+            onBack = actions.onCancel
         )
 
-        // Image Preview (Height 170px for verification)
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(170.dp)
-                .padding(bottom = 18.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
-        ) {
-            AsyncImage(
-                model = frame.jpegBytes,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+        Column(modifier = Modifier.padding(horizontal = 22.dp)) {
 
-            // Bounding Box
-            if (currentPrediction != null) {
-                // Approximate representation based on absolute positioned bounding box 40/38, 28/26 width height
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .fillMaxWidth(0.28f)
-                            .fillMaxHeight(0.26f)
-                            .border(2.dp, SheetWarning, RoundedCornerShape(6.dp))
-                    )
-                }
-            }
-
-            // AI Tag (Top Right)
-            Row(
-                modifier = Modifier
-                    .padding(12.dp)
-                    .align(Alignment.TopEnd)
-                    .background(Color(175, 82, 222, (0.96f * 255).toInt()), RoundedCornerShape(100.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                // Sparkle Icon (using generic vector, assuming we have one or just text)
-                Text(
-                    text = "✨ AI · ${"%.0f".format(confidence * 100)}%",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 0.4.sp
-                )
-            }
-
-            // Frame Tag (Bottom Left)
+            // Image Preview (Height 170px for verification)
             Box(
                 modifier = Modifier
-                    .padding(12.dp)
-                    .align(Alignment.BottomStart)
-                    .background(Color(0, 0, 0, (0.6f * 255).toInt()), RoundedCornerShape(100.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = "$timeLabel · $speciesName",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.3.sp
-                )
-            }
-        }
-
-        // Model Prediction Summary Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-                .background(SheetSurface, RoundedCornerShape(14.dp))
-                .border(0.5.dp, SheetHairline, RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-        ) {
-            Row(
-                modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .height(170.dp)
+                    .padding(bottom = 18.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
             ) {
-                Text(
-                    text = "MODEL PREDICTED",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SheetMuted,
-                    letterSpacing = 0.8.sp
+                AsyncImage(
+                    model = frame.jpegBytes,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
+
+                // Bounding Box
+                if (currentPrediction != null) {
+                    Box(
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .fillMaxWidth(0.3f)
+                                .fillMaxHeight(0.35f)
+                                .border(1.dp, AppColors.Blue, RoundedCornerShape(4.dp))
+                        )
+                    }
+                }
+            }
+            
+            // Just displaying confidence roughly as it was before, updated to AppColors
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
                     text = speciesName,
-                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 18.sp,
+                    color = AppColors.Gray900
+                )
+                Text(
+                    text = "${(confidence * 100).toInt()}% Conf",
+                    color = AppColors.Blue,
                     fontWeight = FontWeight.Bold,
-                    fontStyle = FontStyle.Italic,
-                    color = SheetBrand,
-                    letterSpacing = (-0.2).sp
+                    fontSize = 14.sp
                 )
             }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(6.dp)
-                        .background(Color(120, 120, 128, (0.16f * 255).toInt()), RoundedCornerShape(100.dp))
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxHeight()
-                            .fillMaxWidth(confidence)
-                            .background(Brush.horizontalGradient(listOf(SheetWarning, SheetSuccess)), RoundedCornerShape(100.dp))
-                    )
-                }
-                Text(
-                    text = "${"%.0f".format(confidence * 100)}%",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SheetInk,
-                    letterSpacing = (-0.2).sp
-                )
-            }
-        }
 
-        // Yes/No Questions Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-                .background(SheetSurface, RoundedCornerShape(14.dp))
-                .border(0.5.dp, SheetHairline, RoundedCornerShape(14.dp))
-        ) {
-            // Q1
-            QuestionRow(
-                text = "Is there a parasitic egg in this bounding box?",
-                isYes = currentAnswers?.isEgg,
-                onSelect = actions.onQ1Selected,
-                isNeutralNo = false,
-                hasBottomBorder = true
+            // Q1: Is there a parasite in the box?
+            QuestionSection(
+                title = "1. PARASITE PRESENT?",
+                options = listOf(true to "Yes", false to "No"),
+                selected = currentAnswers?.isEgg,
+                onSelect = actions.onQ1Selected
             )
-            // Q2
-            QuestionRow(
-                text = "Is the bounding box correctly placed?",
-                isYes = currentAnswers?.isBoxCorrect,
-                onSelect = actions.onQ2Selected,
-                isNeutralNo = false,
-                hasBottomBorder = true
-            )
-            // Q3 (formerly Q4: Did the model miss any eggs)
-            QuestionRow(
-                text = "Did the model miss any eggs in this frame?",
-                isYes = state.missedEgg,
-                onSelect = actions.onQ4Selected,
-                isNeutralNo = true,
-                hasBottomBorder = false
-            )
-        }
-
-        // Species Row Card
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 10.dp)
-                .background(SheetSurface, RoundedCornerShape(14.dp))
-                .border(0.5.dp, SheetHairline, RoundedCornerShape(14.dp))
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { 
-                        // Mocking dropdown selection by cycling species for now, 
-                        // as SpeciesDropdown component logic was inlined, 
-                        // or we would use a sub-sheet picker.
-                    }
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "Species",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = SheetInk
+            
+            if (currentAnswers?.isEgg == true) {
+                // Q2: Correct species?
+                QuestionSection(
+                    title = "2. IS IT $speciesName?",
+                    options = listOf(true to "Yes", false to "No"),
+                    selected = currentAnswers?.isBoxCorrect,
+                    onSelect = actions.onQ2Selected
                 )
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    val currentSelectionText = currentAnswers?.species?.name 
-                        ?: currentAnswers?.otherSpeciesText 
-                        ?: speciesName
-                        
+                
+                if (currentAnswers?.isBoxCorrect == false) {
+                    // Q3: Select correct species
                     Text(
-                        text = currentSelectionText,
-                        fontSize = 14.sp,
+                        text = "3. SELECT CORRECT SPECIES",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        fontStyle = FontStyle.Italic,
-                        color = SheetBrand
+                        color = AppColors.Gray500,
+                        letterSpacing = 0.8.sp,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp, top = 8.dp)
                     )
-                    // Chevron icon placeholder (we'll just use text or omit for now if we don't have the icon, but let's assume we have it or use a default)
-                    Text("▾", color = SheetBrand, fontSize = 14.sp)
+                    @OptIn(ExperimentalLayoutApi::class)
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val quickSpecies = listOf(
+                            EggSpecies.ASCARIS to "Ascaris",
+                            EggSpecies.TRICHURIS to "Trichuris",
+                            EggSpecies.HOOKWORM to "Hookworm",
+                            EggSpecies.OTHER to "Other..."
+                        )
+
+                        quickSpecies.forEach { (species, label) ->
+                            val selected = currentAnswers.species == species
+                            Box(
+                                modifier = Modifier
+                                    .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+                                    .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                                    .clickable { actions.onSpeciesSelected(species) }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = AppColors.Gray900,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontStyle = if (label == "Other...") FontStyle.Normal else FontStyle.Italic,
+                                    letterSpacing = (-0.1).sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
-        }
 
-        SheetActionRow(
-            primaryLabel = "Submit",
-            secondaryLabel = "Cancel",
-            onPrimaryClick = actions.onSubmit,
-            onSecondaryClick = actions.onCancel,
-            primaryLoading = state.isSubmitting,
-            primaryEnabled = state.canSubmit
-        )
-    }
-}
+            Spacer(Modifier.height(8.dp))
 
-@Composable
-fun QuestionRow(
-    text: String,
-    isYes: Boolean?,
-    onSelect: (Boolean) -> Unit,
-    isNeutralNo: Boolean,
-    hasBottomBorder: Boolean
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (hasBottomBorder) Modifier.border(
-                    width = 0.5.dp,
-                    color = SheetHairlineSoft,
-                    shape = RoundedCornerShape(0.dp)
-                ) else Modifier
-            )
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Text(
-            text = text,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Medium,
-            color = SheetInk,
-            lineHeight = 19.6.sp,
-            letterSpacing = (-0.2).sp,
-            modifier = Modifier.padding(bottom = 9.dp)
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            YesNoButton(
-                label = "Yes",
-                isSelected = isYes == true,
-                isNeutral = false, // Yes is always brand if selected
-                onClick = { onSelect(true) }
-            )
-            YesNoButton(
-                label = "No",
-                isSelected = isYes == false,
-                isNeutral = isNeutralNo,
-                onClick = { onSelect(false) }
+            SheetActionRow(
+                primaryLabel = "Submit",
+                secondaryLabel = "Discard",
+                onPrimaryClick = actions.onSubmit,
+                onSecondaryClick = actions.onCancel,
+                primaryLoading = state.isSubmitting,
+                primaryEnabled = true
             )
         }
     }
 }
 
 @Composable
-fun YesNoButton(
-    label: String,
-    isSelected: Boolean,
-    isNeutral: Boolean,
-    onClick: () -> Unit
+private fun <T> QuestionSection(
+    title: String,
+    options: List<Pair<T, String>>,
+    selected: T?,
+    onSelect: (T) -> Unit
 ) {
-    val bg = if (isSelected) {
-        if (isNeutral) SheetMuted else SheetBrand
-    } else {
-        Color(120, 120, 128, (0.14f * 255).toInt())
-    }
-    
-    val fg = if (isSelected) Color.White else SheetInk
-    
-    val border = if (isSelected) {
-        if (isNeutral) SheetMuted else SheetBrand
-    } else {
-        Color.Transparent
-    }
-
-    Box(
-        modifier = Modifier
-            .background(bg, RoundedCornerShape(10.dp))
-            .border(0.5.dp, border, RoundedCornerShape(10.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 22.dp, vertical = 7.dp)
+    Text(
+        text = title,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AppColors.Gray500,
+        letterSpacing = 0.8.sp,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = label,
-            color = fg,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = (-0.1).sp
-        )
+        options.forEach { (value, label) ->
+            val isSelected = selected == value
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(if (isSelected) AppColors.Blue else AppColors.White, RoundedCornerShape(8.dp))
+                    .border(1.dp, if (isSelected) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(8.dp))
+                    .clickable { onSelect(value) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    color = if (isSelected) AppColors.White else AppColors.Gray900,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
     }
 }

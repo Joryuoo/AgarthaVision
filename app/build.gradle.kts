@@ -126,6 +126,7 @@ dependencies {
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
     implementation(libs.compose.tooling.preview)
+    implementation(libs.compose.ui.text.google.fonts)
     debugImplementation(libs.compose.tooling)
     debugImplementation(libs.compose.test.manifest)
 

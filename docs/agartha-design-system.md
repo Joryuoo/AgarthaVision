@@ -1,1143 +1,923 @@
-# AgarthaVision — iOS Design System
+# AgarthaVision · System Design
 
-**Version:** 1.0
-**Last updated:** 2026-05-28
-**Platform:** iOS (light mode)
-**Aesthetic:** Clinical, iOS-native, glass surfaces, restrained color, monospaced precision for technical data
-
-This document is the single source of truth for designing every screen of the AgarthaVision iOS app. It is written to be consumable by both human designers and AI design assistants. Every value is concrete — hex codes, pixel sizes, font weights, spacing — so a downstream tool can reproduce a screen by reading the relevant section.
+A complete design specification for the AgarthaVision clinical microscopy mobile app, derived from the interactive HTML prototype.
 
 ---
 
-## Table of Contents
+## Table of contents
 
-1. [Product Overview](#1-product-overview)
-2. [Design Principles](#2-design-principles)
-3. [Design Tokens](#3-design-tokens)
-4. [Iconography](#4-iconography)
-5. [Components](#5-components)
-6. [Patterns](#6-patterns)
-7. [Screen Specifications](#7-screen-specifications)
-8. [Content & Voice](#8-content--voice)
-9. [Implementation Notes](#9-implementation-notes)
-
----
-
-## 1. Product Overview
-
-**AgarthaVision** is an iOS mobile app for medical technologists ("medtechs") performing parasitology examinations. The app runs live AI inference on a microscope feed to detect parasite eggs (helminths) in stool/fecal smear samples, then routes flagged frames into a human-in-the-loop verification queue. All results are organized by patient-level "smear sessions" and synced to a backend record system.
-
-**Primary user:** A licensed medtech in a Philippine health facility (RHU, hospital lab, OPD), often working long shifts under variable lighting and connectivity. Speed, confidence, and clarity matter more than visual flourish.
-
-**Primary jobs to be done:**
-- Sign in to a provisioned account
-- Start or resume a smear session (one per patient)
-- Capture microscope frames — AI auto-flags, medtech can also manual-capture
-- Verify each flagged frame (Yes/No questionnaire + species confirmation)
-- Browse past sessions and individual samples
-- Read out final EPG (Eggs Per Gram) and species composition
-
-**Tech context:** SwiftUI / UIKit, deployed for iPhone (notch + Dynamic Island devices supported). On-device AI inference for the live detection; results sync to Supabase backend when online.
+1. [Product overview](#1-product-overview)
+2. [Design principles](#2-design-principles)
+3. [Design tokens](#3-design-tokens)
+4. [Information architecture](#4-information-architecture)
+5. [Navigation](#5-navigation)
+6. [Screen specifications](#6-screen-specifications)
+7. [Modal sheets](#7-modal-sheets)
+8. [Component library](#8-component-library)
+9. [Interaction patterns](#9-interaction-patterns)
+10. [Brand](#10-brand)
+11. [Implementation notes](#11-implementation-notes)
 
 ---
 
-## 2. Design Principles
+## 1. Product overview
 
-1. **The work is the point.** Chrome (nav, tab bar, buttons) is light translucent glass; the microscope image, the EPG number, and the species are always the loudest things on screen.
-2. **Clinical, not consumer.** Restrained brand color, monospaced fonts for technical data, italicized binomial species names. Avoid playful gradients on data; reserve gradients for the brand layer (hero cards, the logomark).
-3. **No invented features.** Every interactive element must correspond to an actual app capability. If the AI can't be overridden, don't show an "Edit" button. If a status doesn't exist, don't show a badge for it.
-4. **iOS-native first.** When in doubt, do what Apple's first-party apps do: grouped lists for settings, glass tab bar at the bottom, bottom sheets for forms, large titles for tab roots, push-stack for drill-downs.
-5. **Numbers are heroes.** EPG, confidence %, frame counts, durations — these get large monospaced display weight. Never make a medtech squint at a tiny percentage.
-6. **One color per state.** Brand blue = primary / interactive. Green = verified / synced / live. Amber = pending / warning. Red = danger / destructive. Purple = AI provenance. Don't mix.
+**AgarthaVision** is a mobile clinical microscopy assistant for medical technologists working with parasitic stool samples. It pairs real-time AI parasite detection on the microscope feed with a structured workflow for capturing, verifying, and archiving findings.
+
+**Primary user**: medical technologists in clinical labs and field sites.
+
+**Core jobs to be done**:
+
+1. Capture parasitic egg detections during microscope examination.
+2. Verify AI detections (confirm / reject) to build clean clinical data.
+3. Manually flag specimens the AI missed.
+4. Review past sessions and individual sample details.
+5. Generate clinical reports (eggs per gram, species mix).
+
+**Platform**: iOS / Android native. The prototype is a mobile-frame HTML mockup at 390×844 (iPhone 14 reference).
 
 ---
 
-## 3. Design Tokens
+## 2. Design principles
 
-### 3.1 Color Palette
+1. **Clinical clean, not playful.** Restrained whitespace, hairline borders, no decorative ornament.
+2. **Single accent color.** A cobalt blue used sparingly for primary actions, active states, focus rings, and AI bounding boxes. Semantic colors (red, green, amber) only for specific states.
+3. **Tabular numerals for all data.** Session IDs, timestamps, GPS coords, confidence scores, and EPG counts align in columns.
+4. **Italicized binomial nomenclature.** Proper scientific typography — *Ascaris lumbricoides*, not Ascaris lumbricoides.
+5. **Tool mode vs. browse mode.** The Capture screen is dark and immersive (camera tool); every other screen is light and structured (browsing).
+6. **No heavy shadows.** Flat design. Hairline borders separate elements. Only modal sheets and the Active Session hero use real shadows.
+7. **No charting library.** Small data viz is hand-crafted inline SVG to keep the file self-contained and consistent with the rest of the UI.
 
-#### Brand
+---
 
-| Token | Hex | Use |
-|---|---|---|
-| `--brand` | `#1E40AF` | Primary actions, links, active states, logomark |
-| `--brand-deep` | `#1E3A8A` | Hover/pressed states, deeper accents |
-| `--brand-soft` | `#DBE7FF` | Soft tints on brand-themed cards |
-| `--brand-tint` | `#EEF2FF` | Backgrounds for badges, soft buttons |
+## 3. Design tokens
 
-The brand color is a clinical, slightly desaturated navy-leaning blue. It is **not** iOS systemBlue (`#007AFF`) — that reads too consumer for a medical app.
+### 3.1 Color
 
-#### Neutrals (iOS-flavored)
+```
+Brand
+  --blue          #1E3FD9   Primary accent — CTAs, active states, focus rings, AI bboxes
+  --blue-hover    #1A36BF
+  --blue-pressed  #15309F
+  --blue-tint     #E6EBFC   Active card backgrounds
+  --blue-tint-2   #F1F4FE   Hint/info banner backgrounds
 
-| Token | Hex | Use |
-|---|---|---|
-| `--ink` | `#0F172A` | Primary text, headings |
-| `--ink-soft` | `#1D1D1F` | Slightly softer headings |
-| `--body` | `#3C3C43` | Body copy |
-| `--muted` | `#6E6E73` | Labels, metadata, secondary text |
-| `--subtle` | `#8E8E93` | Placeholder text, inactive icons |
-| `--faint` | `#C7C7CC` | Chevrons, disabled |
+Neutrals
+  --white         #FFFFFF
+  --off-white     #FAFBFC
+  --gray-50       #F7F8FA   Subtle surfaces
+  --gray-100      #EEF0F4   Dividers, light borders
+  --gray-200      #E2E5EB   Standard borders
+  --gray-300      #CBD0DA   Chevrons, disabled icons
+  --gray-400      #9CA3AF
+  --gray-500      #6B7280   Secondary text
+  --gray-700      #374151   Standard body text
+  --gray-900      #0F172A   Primary text
 
-#### Surfaces
+Semantic
+  --red           #DC2626   Destructive, REC indicator, errors
+  --red-tint      #FEE2E2
+  --green         #16A34A   Sync OK, confirmed detections
+  --green-tint   #DCFCE7
+  --amber         #D97706   Manual captures, pending review, sync warning
+  --amber-tint    #FEF3C7
+```
 
-| Token | Hex / Value | Use |
-|---|---|---|
-| `--bg` | `#F2F2F7` | Screen background (iOS system gray 6) |
-| `--surface` | `#FFFFFF` | Cards, list items, sheet surfaces |
-| `--grouped` | `#F5F5F7` | Grouped list backgrounds (Settings) |
-| `--glass` | `rgba(255, 255, 255, 0.72)` | Floating chrome with blur(40px) saturate(180%) |
-| `--glass-strong` | `rgba(255, 255, 255, 0.86)` | More opaque glass (modal headers, dock chrome) |
-
-#### Lines
-
-| Token | Value | Use |
-|---|---|---|
-| `--hairline` | `rgba(60, 60, 67, 0.12)` | Card borders, section dividers |
-| `--hairline-soft` | `rgba(60, 60, 67, 0.08)` | Subtler row separators inside cards |
-| `--separator` | `rgba(60, 60, 67, 0.16)` | Stronger separators between major sections |
-
-#### Semantic
-
-| Token | Hex | Use |
-|---|---|---|
-| `--success` | `#34C759` | Verified, synced, live, confirmed |
-| `--success-deep` | `#248A3D` | Success text on light bg |
-| `--warning` | `#FF9F0A` | Pending, AI flag |
-| `--danger` | `#FF3B30` | Destructive, recording (REC dot), reject |
-| `--danger-deep` | `#D70015` | Danger text on light bg |
-| `--info` | `#007AFF` | iOS info blue (rare; default to `--brand`) |
-| `--ai-accent` | `#AF52DE` | AI-detected provenance (purple) |
+> The logo uses a slightly brighter blue (`#036BFC`) than the app accent (`#1E3FD9`). Both are kept distinct on purpose — the logo retains its standalone identity, the app uses a deeper, more "clinical" shade for actions.
 
 ### 3.2 Typography
 
-#### Font stacks
+**Font**: Inter (Google Fonts), with system fallback.
+**Features**: `cv11`, `ss01`, `ss03`. Tabular numerals enabled on all data fields.
 
-```css
---font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
---font-text:    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
---font-mono:    'JetBrains Mono', 'SF Mono', Menlo, ui-monospace, monospace;
-```
-
-On Apple devices SF Pro and SF Mono load natively. Inter and JetBrains Mono are web fallbacks.
-
-#### Type scale & usage
-
-| Role | Family | Size | Weight | Letter-spacing | Used on |
-|---|---|---|---|---|---|
-| Hero number | display | 72px | 800 | -3px | EPG hero on Session Detail |
-| Display L | display | 32-36px | 700-800 | -0.8 to -1.4px | Resume card session ID, big EPG |
-| Display M | display | 22-28px | 700 | -0.4 to -0.7px | Section h2, sheet titles, large titles |
-| Display S | display | 18-22px | 700 | -0.3 to -0.5px | Card headings, species name |
-| Body L | text | 17px | 600 | -0.4px | Nav bar titles, status bar time |
-| Body M | text | 15px | 400-600 | -0.2px | Default body, list rows, button labels |
-| Body S | text | 13-14px | 400-500 | -0.1px | Sub-rows, captions |
-| Caption | text | 11-12px | 500 | 0 | Inline meta |
-| Eyebrow | mono | 10-11px | 600-700 | 0.8-1.6px UPPERCASE | Section labels, monospace meta |
-| Mono L | mono | 22-24px | 600-700 | -0.5 to -0.8px | Counters (324), session IDs (#324) |
-| Mono M | mono | 13-15px | 600-700 | -0.1 to -0.3px | Timestamps, telemetry, IDs |
-| Mono S | mono | 9-11px | 600-700 | 0.4-1.2px UPPERCASE | Labels above mono values |
-
-#### Special: italic binomial nomenclature
-
-Species names are **always italic** when written in full Linnean form:
-- `<i>Ascaris lumbricoides</i>` ✓
-- `<i>Trichuris trichiura</i>` ✓
-- Common names (Hookworm) — not italic
-- Abbreviated form (A. lumbricoides) — italic on the species, not the abbreviation
-
-### 3.3 Spacing & Radii
-
-#### Spacing scale (px)
-
-`2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 48, 56, 72, 88`
-
-Most spacing falls into a few common values:
-- `4-8px` — inline gaps, icon-text padding
-- `12-16px` — card internal padding, gaps between sibling rows
-- `18-22px` — card-to-card vertical rhythm, screen edge padding
-- `28-36px` — section-level spacing
-- `48-88px` — between major page sections (gallery doc only; never inside a phone)
-
-#### Border radii
-
-| Token | Value | Use |
-|---|---|---|
-| Tight | 6-8px | Small icon badges, tags |
-| Medium | 10-14px | Buttons, input fields, mini cards |
-| Card | 14-18px | Standard cards, list items |
-| Large | 18-22px | Resume hero card, prominent CTAs |
-| Sheet | 28-30px | Bottom sheet top corners |
-| Phone | 46px / 56px | Phone screen / phone bezel (mockup only) |
-| Pill | 100px | Chips, badges, full pills |
-
-### 3.4 Elevation & Shadows
-
-| Token | Value | Use |
-|---|---|---|
-| `--shadow-sm` | `0 1px 2px rgba(15, 23, 42, 0.05)` | List rows, subtle cards |
-| `--shadow-md` | `0 6px 18px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04)` | Standard cards, modals |
-| `--shadow-lg` | `0 24px 60px rgba(15, 23, 42, 0.12), 0 8px 18px rgba(15, 23, 42, 0.05)` | Floating sheets, popovers |
-| `--shadow-brand` | `0 6-12px 18-32px rgba(30, 64, 175, 0.22-0.32)` | Primary CTAs, hero cards |
-
-Shadows are always soft and downward; never offset diagonally.
-
-### 3.5 Animation & Motion
-
-- Standard transition: `0.15-0.2s ease`
-- Pulse animation (REC dot, live indicator): `1.6s ease-in-out infinite`, scales 1.0 → 0.92 with `box-shadow` expanding ring fading out
-- Hover/press: subtle scale 0.97 (record button), no major motion
-- Sheet animation: slide up from bottom with overshoot easing (system default)
-
----
-
-## 4. Iconography
-
-**Library:** SF Symbols (system) when shipping; for design mockups use inline SVG with Lucide / Feather-style outlines.
-
-**Style:**
-- Outlined (`fill: none, stroke: currentColor`)
-- Stroke width: `1.8` for nav/list, `2-2.5` for emphasis (large icons, status indicators)
-- Stroke linecap: `round`
-- Stroke linejoin: `round`
-- Standard size: 17-22px in list rows, 24-26px in tab bar, 14-18px inside buttons
-
-**Color convention:**
-- Default: `--ink` or `--body`
-- Active/interactive: `--brand`
-- Destructive: `--danger`
-- Inside circular icon tiles in Settings: white on colored background
-
-**Standard icons used:**
-
-| Concept | Lucide / SF Symbol |
-|---|---|
-| Back | chevron-left |
-| Close | x |
-| Search | search |
-| Filter | filter / sliders |
-| Plus / new | plus |
-| More | more-vertical (3 dots) / ellipsis |
-| Check / verified | check |
-| AI / sparkle | sparkle (star burst) |
-| Camera | camera |
-| Camera flip | camera-rotate |
-| Photo / image | image |
-| Bar chart | bar-chart |
-| History | clock-rewind |
-| Download / export | download |
-| Share | share |
-| Settings | settings (gear) |
-| Eye | eye |
-| Bell | bell |
-| Home | house |
-| Layers / sessions | layers / stack |
-| Cube / records | box / package |
-| Sync | refresh-cw |
-| Wifi | wifi |
-| Trash / delete | trash |
-| Edit | edit-2 (pencil square) |
-| Play | play |
-| Stop | square (filled) |
-
----
-
-## 5. Components
-
-### 5.1 Navigation
-
-#### 5.1.1 Status bar
-- Height: 54px
-- Position: top of every screen
-- Content: Left "9:41" time (17px, 600, color `--ink`); Right cluster (signal/wifi/battery icons, color `--ink` or `#fff` on dark)
-- Padding: `20px 28px 0`
-
-#### 5.1.2 Dynamic Island
-- Compact: 126×38px black pill centered at top: 11px
-- Live Activity (Recording): expands to include left red pulsing dot + right monospaced time code `00:02:47`
-  - Height stays 38px, width grows to fit content
-  - Background: `#0A0A0B`
-  - Pulsing dot animation defined in §3.5
-
-#### 5.1.3 Nav bar (UINavigationBar)
-- Height: 56px
-- Top position: 47px (below status bar)
-- Background variants:
-  - **Glass**: `--glass` with `backdrop-filter: blur(40px) saturate(180%)` + bottom hairline. Default for most screens.
-  - **Transparent**: `background: transparent` and no border. Used on Sample Detail (the screen background shows through).
-  - **Dark glass**: `rgba(0, 0, 0, 0.45)` + blur. Used on Sample Detail with full-bleed photo.
-- Three-column layout:
-  - Left (`min-width: 60px`): back button or icon button
-  - Center: title (`17px, 600, --ink`, letter-spacing -0.4px)
-  - Right (`min-width: 60px`): icon button(s)
-- Back button: SF Symbol chevron-left + label in `--brand`, no border
-
-#### 5.1.4 Large title area (alternative to nav bar)
-- Used when the screen is a tab root (Sessions, Records)
-- Title: 34px display 700, -0.8px letter-spacing
-- Sub: 13px, `--muted`, 500
-- Padding: 8px 22px 12px
-
-#### 5.1.5 Bottom tab bar
-- Height: 83px (10px top padding + ~45px content + 28px home-indicator safe area)
-- Background: `--glass-strong` with `blur(40px) saturate(180%)`
-- Top hairline border
-- 4 equal tabs as `display: grid; grid-template-columns: repeat(4, 1fr)`
-- Tab content:
-  - Icon: outlined 24×24, stroke-width 1.8
-  - Label: 10px, 600
-  - Active: color `--brand`
-  - Inactive: color `--muted`
-- **Tabs:** Today (house icon), Sessions (layers icon), Records (cube icon), Settings (gear icon)
-
-**Where it appears:** Today, Session Picker, Records Dashboard, Settings (the four tab root screens).
-**Where it does NOT appear:** Capture (full-immersion), Verification Queue (drill from Capture), Session Detail (drill-down), Sample Detail (drill-down), Modal sheets, Login (pre-auth).
-
-#### 5.1.6 Top segmented tabs (used on Sample Detail)
-- Position: directly below nav bar, full width
-- 3 equal flex children
-- Each tab: 14px vertical padding, brand blue text, 15px / 600
-- Active tab: underline indicator — 3px tall bar, brand blue, 25% width margins (so it doesn't span full tab width), bottom-aligned to the hairline
-- Inactive tabs: text color `rgba(30, 64, 175, 0.5)` (brand at 50% opacity)
-- Bottom hairline border across the whole row
-
-#### 5.1.7 Home indicator
-- 134×5px pill, `rgba(0, 0, 0, 0.55)` (light variant: `rgba(255, 255, 255, 0.55)`)
-- Position: `bottom: 9px`, centered horizontally
-- z-index above main content, below modals
-
-### 5.2 Buttons
-
-#### Primary
-- Background: `--brand`
-- Color: `#fff`
-- Padding: 16px vertical
-- Border-radius: 14px
-- Font: 16px, 600, -0.2px letter-spacing
-- Shadow: `0 6px 18px rgba(30, 64, 175, 0.28), 0 2px 6px rgba(30, 64, 175, 0.18)`
-- Icon (if any): 18×18 leading, gap 8px
-
-#### Secondary
-- Background: `--brand-tint` (`#EEF2FF`)
-- Color: `--brand`
-- Same dimensions as primary
-- No shadow
-
-#### Ghost / Tertiary
-- Background: `rgba(120, 120, 128, 0.12-0.14)` (iOS system gray fill)
-- Color: `--ink`
-- Used for utility buttons (Filter, Switch camera, Camera flip)
-
-#### Danger (destructive)
-- Background: `rgba(255, 59, 48, 0.12-0.14)`
-- Color: `--danger`
-- Border: `0.5px solid rgba(255, 59, 48, 0.16-0.18)`
-- Same dimensions as primary
-
-#### Pill button (small inline action)
-- Padding: 7-9px vertical, 12-18px horizontal
-- Border-radius: 100px
-- Font: 12-14px, 600-700
-- Used for tabbed CTAs ("Review", "Review next"), context menu items
-
-### 5.3 Form Inputs
-
-#### Text field
-- Background: `#fff`
-- Border: `0.5px solid --hairline`
-- Border-radius: 14px
-- Padding: 15px right, 16px bottom, 15px top, 44px left (for icon)
-- Font: 15px, body color
-- Leading icon: 18×18, `--muted`, positioned left: 14px
-- Placeholder: color `--subtle`
-- Shadow: subtle `0 1px 2px rgba(15, 23, 42, 0.04)`
-
-#### Search bar
-- Background: `rgba(120, 120, 128, 0.12)` (iOS chrome material thin)
-- Border-radius: 12px
-- Padding: 9-10px vertical, 12px horizontal
-- Leading magnifying glass icon, 16×16, `--muted`
-- Placeholder text 15px, `--muted`
-
-#### Dropdown / picker row
-- Used inside grouped lists or sheets
-- Layout: label on left, value on right, chevron indicator
-- Value color: `--brand` (interactive) or `--ink` (static)
-- Chevron: `chevron-down` 14×14, `--brand`
-
-#### Yes/No segmented group
-- Two inline pill buttons, `display: flex; gap: 8px`
-- Each button: 7px vertical, 22px horizontal padding, 10px radius, 13px / 700 font
-- Selected: brand background, white text, brand shadow
-- Unselected: `rgba(120, 120, 128, 0.14)` background, `--ink` text
-- Used for binary questions on Verification Sheet
-
-#### Slider (iOS UISlider style)
-- Track: 4px tall, `rgba(120, 120, 128, 0.16)` rail
-- Fill: `--brand`, from 0 to value position
-- Knob: 24×24 white circle, `0 1px 4px rgba(0,0,0,0.2)` shadow
-- Used for AI confidence threshold on Settings
-
-#### Toggle (iOS UISwitch style)
-- 51×31px pill
-- ON: `--success` background, knob at right (`left: 22px`)
-- OFF: `rgba(120, 120, 128, 0.16)` background, knob at left (`left: 2px`)
-- Knob: 27×27 white circle with subtle shadow
-- Transition: 0.2s
-
-### 5.4 Cards
-
-#### Standard card
-- Background: `--surface` (`#fff`)
-- Border: `0.5px solid --hairline-soft`
-- Border-radius: 14-18px
-- Padding: 14-18px
-- Shadow: `--shadow-sm`
-
-#### Hero / brand card
-- Background: `linear-gradient(135deg, var(--brand) 0%, #3B82F6 50-100%)`
-- Color: `#fff`
-- Border-radius: 22px
-- Padding: 16-18px
-- Shadow: brand-tinted, e.g. `0 12px 32px rgba(30, 64, 175, 0.28)`
-- Often includes a radial highlight: `radial-gradient(circle, rgba(255,255,255,0.18) 0%, transparent 60%)` in a corner
-
-#### Stat tile (KPI)
-- Background: `--surface`
-- Border-radius: 14px
-- Padding: 11-12px
-- Text-align: center
-- 3 stacked elements: large number → uppercase mono label → tiny delta tag
-
-### 5.5 Lists (iOS grouped)
-
-#### List section
-- Section label: 10-13px uppercase, `--muted`, letter-spacing 1.2px, padding 12-14px / 6px
-- Section card: `--surface` background, 14px radius, `0.5px solid --hairline-soft` border
-- Section footer (optional): 11-12px, `--muted`, after the card
-
-#### Row
-- Padding: 11-13px vertical, 14-16px horizontal
-- Bottom border: `0.5px solid --hairline-soft` (except last)
-- Layout: optional icon tile → label → trailing value → chevron
-- Min height: 44px (iOS HIG touch target)
-
-#### Icon tile (within list row)
-- 28-30×28-30px rounded square (7-8px radius)
-- Colored background: brand / success / amber / danger / etc.
-- White SF Symbol icon centered, 15-17px
-
-#### Disclosure chevron
-- `chevron-right` 11-14×17-20px
-- Color: `--faint` (`#C7C7CC`)
-
-### 5.6 Sheets & Modals
-
-#### Bottom sheet
-- Position: `position: absolute; bottom: 0; left: 0; right: 0`
-- Background: `rgba(248, 248, 250, 0.96)` with `backdrop-filter: blur(60px) saturate(180%)`
-- Border-radius: 30px on top corners only
-- Padding: 8px top, 22px horizontal, 32px bottom
-- Shadow: `0 -16px 48px rgba(15, 23, 42, 0.22)`
-- Drag handle: 36×5px pill, `rgba(60, 60, 67, 0.3)`, margin 0 auto 14-18px
-
-#### Dim layer (behind sheet)
-- `position: absolute; inset: 0`
-- Background: `rgba(15, 23, 42, 0.32)`
-- `backdrop-filter: blur(6px)`
-- z-index: just below sheet
-
-#### Context menu (iOS popover)
-- Background: `rgba(248, 248, 250, 0.92)` + `blur(40px) saturate(180%)`
-- Border: `0.5px solid --hairline`
-- Border-radius: 14px
-- Shadow: `0 18px 36px rgba(15, 23, 42, 0.18)`
-- Item: 11px vertical / 14px horizontal padding, 15px / 400, bottom hairline
-- Destructive item: color `--danger`
-
-### 5.7 Badges & Pills
-
-| Variant | Background | Text | Use |
+| Style | Size / line | Weight | Used for |
 |---|---|---|---|
-| `ai` | `rgba(175, 82, 222, 0.14)` | `#8E3FBF` | AI provenance |
-| `manual` | `rgba(120, 120, 128, 0.14)` | `#515154` | Manual capture provenance |
-| `verified` | `rgba(52, 199, 89, 0.16)` | `--success-deep` | Verified status |
-| `pending` | `rgba(255, 159, 10, 0.18)` | `#B86E00` | Pending review |
-| `live` | `rgba(52, 199, 89, 0.16)` | `--success-deep` | Live indicator (with leading green dot, glowing) |
+| Display | 32 / 40 | 700 | Hero numbers (EPG count, large session IDs) |
+| Headline | 22 / 28 | 700 | App bar titles |
+| Subhead | 17 / 22 | 700 | Card titles, greeting |
+| Body | 15 / 22 | 500 | Default text |
+| Label | 13 / 18 | 500 | Form labels |
+| Caption | 12 / 16 | 500 | Metadata, timestamps |
+| Micro / eyebrow | 10–11 / 14 | 600 | Uppercase section labels |
 
-Common spec: 3-4px vertical, 8-9px horizontal padding, 100px radius, 11px / 700 font, 0.3-0.4px letter-spacing, UPPERCASE.
+- Italic for *binomial species names*.
+- Tabular numerals on every data field that displays numbers in a column.
 
-**Important:** There is **no "rejected" badge.** Detections are either verified, pending, or deleted (removed from queue entirely).
+### 3.3 Spacing scale
 
-### 5.8 Status Indicators
+`4 · 8 · 12 · 16 · 20 · 24 · 32 · 48` (px). 8-px grid.
 
-#### Pulsing dot (recording)
-- 9×9 circle, `--danger`
-- Expanding box-shadow ring fading out
-- Animation: `pulse 1.6s ease-in-out infinite`
+### 3.4 Radius
 
-#### Live dot (sync, status)
-- 6-8×6-8 circle, `--success`
-- Glowing shadow: `0 0 6-8px var(--success)`
-
-#### Confidence bar
-- 100px wide × 6px tall, 100px radius
-- Background: `rgba(120, 120, 128, 0.16)`
-- Fill: `linear-gradient(90deg, var(--warning), var(--success))` (yellow-to-green for the percentage value)
-
-### 5.9 Charts & Data Viz
-
-#### Sparkline (Today: EPG this week)
-- 320×70 viewBox SVG
-- Filled area: `linear-gradient(180deg, brand-28% → brand-0%)`
-- Line: brand stroke, 2.5 width, rounded caps/joins
-- 7 data points marked with white-filled brand-stroked circles (2.5 radius)
-- Today's point: larger filled brand circle (5.5 radius) with inset white circle (2.5)
-- Grid lines: 3 horizontal lines at 25/50/75%, very faint `rgba(60,60,67,0.07)`
-- Axis labels below: 9px mono, `--muted`, centered, with "Today" in brand color and 700 weight
-
-#### Horizontal bar chart (Today: species distribution)
-- Each row: 100px label (italic species name) → flex bar track → 32px mono value
-- Bar track: 8px tall, 100px radius, light gray
-- Bar fill: per-species gradient (e.g. brand → lighter brand, indigo → lighter indigo, purple → lighter purple)
-
-#### EPG hero number
-- Display font, 72px, 800 weight, -3px letter-spacing
-- Color: `--brand-deep`
-- Delta tag inline: smaller badge with `--success-deep` text on green tint, up/down arrow icon
-
----
-
-## 6. Patterns
-
-### 6.1 Navigation patterns
-
-- **Tab bar persistence:** Tab bar visible on the 4 root screens (Today, Sessions, Records, Settings). Tab bar hidden on detail/drill-down (Session Detail, Sample Detail), full-screen experiences (Capture, Sample Detail Image view if going full-bleed), and all modals/sheets.
-- **Push transitions:** Drill-down screens get a back button with the parent screen's name (e.g., "Records" on Session Detail).
-- **Modal sheets:** Always slide up from bottom, dim the underlying screen with blur, drag handle at top.
-- **Context menu:** Triggered by a "•••" button on rows. Replaces older "long-press" pattern with a more discoverable affordance.
-
-### 6.2 Form patterns
-
-- **Bottom-of-sheet action row:** Always 2 buttons. Secondary on left (smaller, ghost or danger), primary on right (larger, brand-filled). Common pairs:
-  - **Verification Sheet:** Cancel + Submit
-  - **Manual Sheet:** Discard + Save label
-  - Login: (no secondary, full-width Log in)
-- **Quick-pick chips:** For high-frequency selections (top 4-5 species). Chip = pill, italic species name, brand-filled when selected.
-- **Yes/No questions:** Question text on its own line, Yes/No buttons below. Default state: no answer pre-selected unless there's a clear "expected good" outcome.
-
-### 6.3 Color semantics (canonical reference)
-
-| Color | What it means | Examples |
+| Token | Value | Used for |
 |---|---|---|
-| `--brand` (blue) | Primary, interactive, active state | Buttons, links, active tab, Yes (positive) |
-| `--success` (green) | Verified, synced, live, confirmed, good state | Verified badge, sync icon, Live dot |
-| `--warning` (amber) | Pending, AI flag, low-confidence | Pending badge, AI bounding box, warning EPG levels |
-| `--danger` (red) | Destructive, recording, error | Delete button, REC dot, error states |
-| `--ai-accent` (purple) | AI provenance | AI badge, AI bounding boxes when AI source is the emphasis, AI toast |
-| `--muted` (gray) | Inactive, secondary, manual provenance | Manual badge, inactive tab text, metadata |
+| `--radius-sm` | 8px | Inputs, tiny tiles |
+| `--radius-md` | 12px | Cards, list items |
+| `--radius-lg` | 16px | Hero cards, modal sheet top corners |
+| `--radius-pill` | 999px | Buttons, badges, chips |
 
-Never use a color outside its semantic meaning. Don't use red just because it's "loud" — use it when something is destructive or recording.
+### 3.5 Elevation
 
-### 6.4 Data formatting
-
-- **Session IDs:** `#324` (mono, hash prefix)
-- **Sample IDs / UUIDs:** full UUID in 12px mono, word-break: break-all
-- **Timestamps (display):** `2026-05-28 · 22:03` or `19:42:18 · 4032×3024`
-- **Durations (capture):** `00:02:47` mono time-code style
-- **Percentages:** `94%` mono, no decimal
-- **EPG values:** `312` mono (no decimal)
-- **Counts:** `142` mono in stat tiles, integer body in card descriptions ("142 captured")
-- **Species names:** italic binomial when full (`Ascaris lumbricoides`); common name (Hookworm) not italic; chip-form abbreviated as `A. lumbricoides`
-
----
-
-## 7. Screen Specifications
-
-### 7.1 Login
-
-**Purpose:** Authenticate a provisioned medtech. Pre-auth screen; no tab bar.
-
-**Layout (top → bottom):**
-1. Status bar
-2. Dynamic Island (compact)
-3. Background: vertical gradient `#FFFFFF → #F0F4FF → #E8EFFF`
-4. Brand row (top-left, padding 100px from top): logomark + "AgarthaVision" wordmark with "Parasitology · Mobile" eyebrow below
-5. Heading: "Welcome back." (30px display 700, -0.8px tracking)
-6. Sub: "Sign in with your provisioned medtech account to begin a session."
-7. Email field with email icon + autofill placeholder (e.g., `m.santos@laguna-rhu.ph`)
-8. Password field with lock icon + show/hide eye toggle on right + "Forgot?" link in field label row
-9. Primary "Log in" button (full width, brand-filled)
-10. Security note (subtle brand-tinted info banner with shield icon): "Access is restricted to medical technologists provisioned by your facility's administrator."
-11. Footer at bottom: "AgarthaVision v2.4 · Build 1182" + "Need access? Contact your admin" link
-
-**Functionality:**
-- Tap "Log in" → authenticate via Supabase → on success navigate to Today
-- Email/password fields use iOS UITextField with appropriate keyboard types and `textContentType` for autofill
-- "Forgot?" link → password reset flow
-- "Contact your admin" link → mailto: or in-app support
-- If already authenticated → skip Login, go straight to Today
-
-**States:**
-- Loading (after Log in tapped): button shows spinner, fields disabled
-- Error: shake animation + red field border + error text below
-
----
-
-### 7.2 Today (Home Dashboard)
-
-**Purpose:** First screen after login. The medtech's daily briefing. Resume any active session in one tap, scan today's numbers, see weekly EPG trend and species mix, clear the pending verification queue.
-
-**Layout (top → bottom):**
-1. Status bar
-2. Dynamic Island (compact)
-3. Header row (10px / 22px padding):
-   - Avatar circle 44×44, brand gradient bg, white "MS" initials in display 700
-   - Stack: "GOOD EVENING" (10px mono uppercase, muted) → "M. Santos" (22px display 700) → "Wednesday, May 28 · Day 12" (12px, muted)
-   - Notification bell button 38×38 (white circle, hairline border) with red 9×9 badge dot at top-right
-4. Active session resume card (margin 0 18px 14):
-   - Background: brand gradient with radial highlight
-   - "ACTIVE SESSION" mono label (top-left) + "Recording" live pill with pulsing dot (top-right, on white-tinted bg)
-   - "#324" session ID in 36px display 800 white
-   - "Started 47 min ago · Patient 23424" meta line in white 12px 85% opacity
-   - 4 inline mono stats: Frames 142, Verified 87, EPG 312, Pending 12 (each with uppercase 9px label below in 72% opacity white)
-   - "▶ Resume capture" full-width white pill button with brand text and play icon
-5. KPI row (grid of 4 equal tiles, 6px gap, padding 0 18px):
-   - Sessions `3` / `+1`
-   - Samples `224` / `+38%`
-   - Verified `179` / `80%`
-   - EPG avg `203` / `Heavy` (warn-amber delta)
-6. "EPG this week" dash card with sparkline chart (see §5.9), 70px tall SVG, 7 day labels below
-7. "Top species this week" dash card: 3 horizontal bars (A. lumbricoides 48%, T. trichiura 31%, Hookworm 21%)
-8. Pending action card (amber-tinted shadow):
-   - Left: 42×42 amber-tinted icon tile with warning icon
-   - Body: "12 frames awaiting review" (13px / 700) + "Across 2 sessions · 7 high-confidence" sub
-   - Right: brand pill button "Review"
-9. Tab bar (Today active, see §5.1.5)
-
-**Functionality:**
-- "Resume capture" → Capture screen with active session loaded
-- KPI tile tap → opens daily detail (not yet designed)
-- Sparkline tap → opens analytics (future)
-- Species bar tap → filter Records by that species
-- "Review" button → Verification Queue
-- Notification bell → opens notifications (future)
-- Avatar tap → opens Settings
-- Tab bar switch → root screens
-
-**States:**
-- No active session: hide Resume card, show "Start new session" CTA in its place
-- No KPI data: show "—" in number slots
-- No pending review: hide pending action card
-- Greeting: changes based on time of day (Good morning / afternoon / evening)
-
----
-
-### 7.3 Session Picker
-
-**Purpose:** Browse and select a session to work on, or start a new one. Tab root screen.
-
-**Layout:**
-1. Status bar, Dynamic Island
-2. Large title "Sessions" + sub "Wednesday, May 28 · 3 active" (padding 0 22px 14px)
-3. Search bar "Search by ID or label" (iOS chrome material thin style)
-4. Session feed (flex 1, padding 0 18px):
-   - **Active session card** (elevated treatment):
-     - Background: `linear-gradient(180deg, #fff 0%, #F4F7FF 100%)`
-     - Border: `0.5px solid rgba(30, 64, 175, 0.18)`
-     - Brand-tinted shadow
-     - Top row: `#324` mono 22px 700 + `SMEAR-2026-0528` mono 10px uppercase muted + on right: "Active" live badge + "•••" overflow button
-     - Sub: "Started 19:16 · 47 min ago" mono 11px muted
-     - Body: "Patient 23424 · Fecal smear · Resp ward" 14px body
-     - Stat row (border-top hairline): Samples 142, Verified 87 (green), EPG 312, Sync `✓ Live` (right-aligned, green)
-   - **Secondary cards** (regular surface, no elevation):
-     - Same structure but without the brand tint
-     - No active badge, optionally "Paused" or "Draft" status in right-aligned val
-5. Floating "+ New session" CTA (above tab bar): full-width brand button with plus icon, `bottom: 95px`
-6. Tab bar (Sessions active)
-
-**Context menu state (variant):**
-- Underlying feed dimmed to 0.45 opacity
-- Tab bar dimmed to 0.45 opacity
-- Floating context menu (iOS popover) anchored near "•••" button
-- Menu items: Resume (▶), Rename (✏), Export samples (↓), End session (red — destructive)
-
-**Functionality:**
-- Tap a session card → navigates to Capture (if Active) or Session Detail (if older/completed)
-- "•••" overflow → context menu
-- "+ New session" → opens new session creation flow (not yet detailed)
-- Search → filter feed in real time
-- Tab bar persists
-
-**States:**
-- Empty (no sessions yet): centered illustration + "Start your first session" CTA
-- Loading: skeleton placeholders for first 2-3 cards
-- Search returning nothing: "No matches" empty state
-
----
-
-### 7.4 Capture
-
-**Purpose:** The core microscopy capture screen. Live AI inference runs over the camera feed and surfaces detections. Manual capture button available. This is where the medtech spends most of their session time.
-
-**Layout:**
-1. Background: full-bleed live camera feed (microscope through phone camera)
-2. Status bar (light-mode chrome over photo): time + status icons in `--ink`
-3. Dynamic Island with **expanded Live Activity**: red pulsing dot + monospaced timecode `00:02:47`
-4. Top chrome (glass, floating, padding 12px / 20px):
-   - Counter block: "CAPTURED" 10px mono uppercase label → row: 24px mono `324` + small 11px `frames` muted
-   - Icon group (3 icons, each 38×38 rounded with subtle gray fill): Bar chart (stats), Clock-rewind (history), Check-square (export)
-5. AI detection toast (centered, top: 130px): purple pill with sparkle icon + species name + confidence chip
-6. Side rail of chips (right edge, top: 184): "4K · 60 fps" (green dot prefix), "AI · auto" (sparkle prefix)
-7. Focus reticle (decorative): 84×84 square outline, center of viewfinder
-8. Bottom capture dock (glass, floating, bottom: 28px):
-   - Meta row (border-bottom hairline): "Live" badge + "Session #324 · 142 captured" / right: "2.3 GB · 47%" mono
-   - Controls grid (1fr auto 1fr):
-     - Left: gallery/photos icon button 52×52
-     - Center: **Record button** — 72×72 white circle with brand-tinted record indicator (red rounded square 30×30 inside) and 4px transparent black border ring
-     - Right: "End Session" pill — red-tinted with red text, stop square icon
-9. Home indicator (light variant — over photo background)
-
-**Functionality:**
-- Tap record button → captures a frame manually (queue as "Manual" provenance)
-- Tap "End Session" → confirmation dialog → ends session, returns to Today
-- Tap "Live" badge → could expand to show session details
-- Tap AI toast → opens Verification Queue, optionally jumping to the just-detected frame
-- Tap counter or stats icon → opens stats overlay
-- Tap clock-rewind → opens Verification Queue (recent flags)
-- Tap export icon → exports current session frames
-
-**Tab bar:** HIDDEN (full-immersion screen).
-
-**States:**
-- Idle (no recording): no Live Activity in Dynamic Island; "Start Session" CTA in place of "End Session"
-- AI detection: toast appears for 3 seconds with detected species + confidence
-- Low storage: warning chip appears in bottom dock
-- Bad focus: warning toast at top
-
----
-
-### 7.5 Verification Queue
-
-**Purpose:** Inbox of all flagged frames from the current session (both AI detections and manual captures), with status indicators. Reached from Capture or the pending action card on Today.
-
-**Layout:**
-1. Status bar, Dynamic Island (compact)
-2. Nav bar (glass): Left "← Capture" / Center "Verification" / Right filter icon
-3. Stats card (margin 4 18 14):
-   - Left: `47` (display 700) + "FLAGGED FRAMES" (mono uppercase label)
-   - Right breakdown: 3 small rows with colored dot, label, mono count
-     - Purple dot · AI detected · 31
-     - Gray dot · Manual · 16
-     - Amber dot · Pending review · 12
-4. Filter chips row (overflowing horizontal): All (active, dark pill) / Pending / AI / Manual — each with count appended
-5. Verify list (padding 0 18 100):
-   - Each row: 64×64 thumbnail with AI bounding box overlay (color-coded by status) → body: species (italic), Frame # · confidence% · timestamp (mono) → status badges (AI/Manual + Pending/Verified) → right chevron
-   - Example rows:
-     - `Ascaris lumbricoides` · Frame 324 · 94% · 19:42 · [AI] [PENDING]
-     - `Trichuris trichiura` · Frame 287 · 88% · 19:38 · [AI] [VERIFIED]
-     - `Unlabeled` (muted) · Frame 263 · — · 19:31 · [MANUAL] [PENDING]
-     - `Hookworm` · Frame 241 · 62% · 19:26 · [AI] [PENDING]
-     - `Ascaris lumbricoides` · Frame 198 · 96% · 19:18 · [AI] [VERIFIED]
-6. Floating action bar (glass, bottom: 28):
-   - Left: "12 pending" (14px / 600 ink)
-   - Right: "Filter" (ghost) + "Review next" (primary)
-
-**Note:** **There is no "Rejected" status.** Detections are either pending, verified, or deleted entirely.
-
-**Functionality:**
-- Row tap → opens Verification Sheet (for AI) or Manual Sheet (for Manual provenance)
-- Filter chip tap → filter list
-- Filter icon (top-right) → advanced filter modal
-- "Review next" → opens Verification Sheet for the next pending frame
-
-**Tab bar:** HIDDEN (drill-down from Capture).
-
-**States:**
-- All verified (zero pending): empty state with "All caught up" message
-- Only AI / only Manual / etc.: list filtered accordingly
-
----
-
-### 7.6 Verification Sheet (modal)
-
-**Purpose:** A guided questionnaire for confirming or rejecting an AI detection. Replaces "edit the bounding box" interfaces — the medtech can't adjust the bounding box, they answer structured questions about it. Submitted answers train the next model version.
-
-**Layout (bottom sheet):**
-1. Drag handle (centered, 36×5)
-2. Title row: "Verify detection" (22px display 700) + "FRAME 324" (mono pill, surface bg, hairline border)
-3. Image preview (170px tall, 18px radius card):
-   - Microscope frame
-   - Amber bounding box outline (no edit handles — user cannot adjust)
-   - Top-right tag: "✨ AI · 96%" (purple)
-   - Bottom-left tag: "19:42:18 · Trichuris trichiura" (mono dark pill)
-4. **Model prediction summary card** (`.model-pred`):
-   - "MODEL PREDICTED" mono uppercase label / Species in italic brand color
-   - Confidence bar (flex) + "96%" mono value
-5. **Yes/No questions card** (`.q-card`, 3 rows):
-   - "Is there a parasitic egg in this bounding box?" → [Yes selected] [No]
-   - "Is the bounding box correctly placed?" → [Yes selected] [No]
-   - "Did the model miss any eggs in this frame?" → [Yes] [No selected — neutral gray, not brand]
-6. **Species row** (sheet-row card):
-   - "Species" label / Italic brand value "Trichuris trichiura" with chevron-down (dropdown)
-7. **Action row** (2-column grid, 10px gap):
-   - Cancel button (red-tinted ghost)
-   - Submit button (brand-filled primary)
-
-**Functionality:**
-- Yes/No buttons toggle answer
-- Species row → opens species picker (sheet within sheet, or push to full list)
-- Submit → records answers, updates frame status to Verified (or Rejected internally based on Q1 answer), closes sheet
-- Cancel → closes sheet without saving
-
-**Important design notes:**
-- The bounding box image is **read-only** — no corner handles, no resize affordance
-- The "no" answer on "missed any eggs" uses a neutral gray (not red) because "no" here means "no problem"
-- Confidence bar shows the AI's confidence; the user is answering whether they agree, not editing the confidence
-
-**Tab bar:** HIDDEN (modal overlay).
-
----
-
-### 7.7 Manual Sheet (modal)
-
-**Purpose:** Labeling a manually-captured frame. Simpler than Verification Sheet because there's no AI prediction to verify — just species selection and note.
-
-**Layout (bottom sheet):**
-1. Drag handle
-2. Title: "Label sample" + "MANUAL · 263" pill (gray-tinted)
-3. Image preview (200px tall):
-   - Microscope frame (no bounding box)
-   - Top-right: "📷 Manual capture" tag (gray-tinted)
-   - Bottom-left: "19:31:04 · 4032×3024 · Manual" mono pill
-4. Species section:
-   - Mono uppercase label "SPECIES"
-   - Quick-pick chips row (5 chips, wrap): `A. lumbricoides`, `T. trichiura` (selected — brand-filled), `Hookworm`, `S. mansoni`, `Other…` (last one not italic, marks "open picker")
-5. Note section (`.sheet-notes`):
-   - "NOTE" mono uppercase label
-   - Body text (filled example): "Slight barrel shape, polar plugs visible. Confirmed against atlas plate 14."
-6. Action row:
-   - Discard (red-tinted ghost)
-   - Save label (brand-filled primary)
-
-**Functionality:**
-- Chip tap → select species
-- "Other…" → opens full species picker
-- Note tap → opens text input
-- Save → records label, updates frame status, closes sheet
-- Discard → closes sheet without saving the label (frame returns to queue unlabeled)
-
-**Design notes:**
-- No Stage / Count fields — the app does not collect those
-- "Discard" instead of "Cancel" because the user was actively labeling (creating something) and is throwing that work away
-
-**Tab bar:** HIDDEN (modal overlay).
-
----
-
-### 7.8 Records Dashboard
-
-**Purpose:** Historical browser of all sessions. Search, filter by species, see weekly performance at a glance. Tab root screen.
-
-**Layout:**
-1. Status bar, Dynamic Island
-2. Nav bar (glass): Left home icon (returns to Today) / Center "Records" / Right download/export icon
-3. Overview cards row (grid 1.5fr 1fr 1fr, 8px gap, margin 6 18 12):
-   - **Brand-gradient card** (largest): "THIS WEEK" / `42` / "Sessions completed"
-   - White card: "SAMPLES" / `3,184` / "+12%" (green delta)
-   - White card: "AVG EPG" / `218` / "7-day"
-4. Search bar "Search by ID, patient, or species"
-5. Filter chips row: All (dark active), A. lumbricoides, T. trichiura, Hookworm
-6. Grouped records list (overflow hidden, padding 0 18 95 — bottom 95 to clear tab bar):
-   - Day separator: "TODAY · MAY 28" mono uppercase 10px label
-   - Record rows:
-     - Layout: body (id mono + meta + species tags) | EPG block (right-aligned big mono number + "EPG" label) | sync icon
-     - Color coding for EPG: high values red (`#FF3B30`), medium amber (`#FF9F0A`), low/zero green (`--success-deep`)
-     - Sync icon: green check-circle if synced, amber refresh-cw if pending, gray if offline
-   - Day separator: "YESTERDAY · MAY 27"
-   - More records
-7. Tab bar (Records active)
-
-**Functionality:**
-- Row tap → Session Detail
-- Search → filter
-- Filter chips → species filter
-- Export icon → export sessions
-- Tab bar persists
-
-**States:**
-- No records: empty illustration + "No sessions yet" message
-- Search empty: "No matches"
-
----
-
-### 7.9 Session Detail
-
-**Purpose:** Detail view of a single session. EPG hero number, session metadata, gallery of all verified samples.
-
-**Layout:**
-1. Status bar, Dynamic Island
-2. Nav bar (glass): Left "← Records" back / Center "Session #324" / Right download icon
-3. **Session hero card** (margin 4 18 14, 22px radius):
-   - Background: light brand-tinted gradient
-   - Soft radial highlight in top-right corner
-   - Top: "EGGS PER GRAM" 10px mono uppercase brand label
-   - Hero number: `312` 72px display 800, brand-deep color
-   - Inline delta tag: green badge "↑ Heavy" with arrow icon
-   - Body: "Total confirmed eggs: 89 · 87 verified samples" 13px body muted
-   - Stat row (border-top): Captured 142, Verified 87, Duration 12m, Synced ●
-4. **Metadata card** (4 rows, 14 16 vertical padding each):
-   - Patient: `23424` (mono)
-   - Started: `19:16` (mono)
-   - Operator: `M. Santos` (text)
-   - Location: `Laguna RHU · Resp. ward` (text)
-5. Gallery header: "Samples" h3 + "See all (87)" brand link
-6. Gallery grid (3 cols, 4px gap, padding 0 18):
-   - Square thumbnails of microscope frames
-   - Each tile has a top-left mini badge (AI 94% with purple bg, or MAN with gray bg)
-   - White corner indicators on the bbox
-
-**Functionality:**
-- Tile tap → Sample Detail
-- "See all" → full gallery view
-- Download → export PDF report
-
-**Tab bar:** HIDDEN (drill-down).
-
----
-
-### 7.10 Sample Detail · Image tab
-
-**Purpose:** View the full microscope image of a single sample. First tab of Sample Detail.
-
-**Layout:**
-1. Status bar, Dynamic Island
-2. Nav bar (transparent — bg shows through): Left chevron-left back / Center "Sample Detail" / Right empty
-3. **Top segmented tabs**: Image (active, underlined) / Detections (inactive) / Metadata (inactive)
-4. Content area (light gray bg, padding 18px):
-   - **Image card** (white, 16px radius, 14px padding):
-     - 4:3 aspect-ratio microscope frame, 10px inner radius, inset hairline
-     - If AI detection: green bounding box overlay with `Species · 96%` tag above
-     - If manual capture: no bounding box
-     - Below the image: capture metadata row — "CAPTURED" label / "2026-05-28 · 22:03 · 4032×3024" mono value
-
-**Functionality:**
-- Pinch zoom on image
-- Tab tap → switch tab
-- Back → returns to Session Detail
-- Image long-press → save to camera roll
-
-**Tab bar:** HIDDEN (drill-down).
-
----
-
-### 7.11 Sample Detail · Detections tab
-
-**Purpose:** Per-detection record cards.
-
-**Layout:**
-- Same nav bar and top tabs as Image tab
-- Content area:
-  - **Detection card**(s) — one per detection:
-    - Header row: "DETECTION 1" mono uppercase label / provenance badge (AI or MANUAL)
-    - Species (display 700 italic, 22px): "Hookworm"
-    - Field rows (4 rows, hairline separators):
-      - "Confidence" / `100%` mono
-      - "Verdict" / `✓ Confirmed` (green, with check icon)
-      - "Bounding box" / `None · manual capture` (italic muted)
-
-**Functionality:**
-- One card per detection in the sample
-- For samples with multiple detections, cards stack vertically
-- No interactions besides scrolling
-
-**Tab bar:** HIDDEN.
-
----
-
-### 7.12 Sample Detail · Metadata tab
-
-**Purpose:** Complete technical metadata for the sample — IDs, timestamps, device info, storage path.
-
-**Layout:**
-- Same nav bar and top tabs as Image tab
-- Content (no horizontal padding on container, groups handle their own margins):
-
-**Group 1: Identity**
-- Sample ID: `3465fc00-85b5-4e12-b39f-0cc87e71c121`
-- Session ID: `83359c2f-e17e-4354-a291-571ddac04bc0`
-- Device ID: `107af6652ba9549b`
-
-**Group 2: Status & timing**
-- Status: `Synced` (green dot with glow)
-- Captured at: `2026-05-28 · 22:03`
-- Verified at: `2026-05-28 · 22:10`
-- User note: `None` (italic muted if empty)
-
-**Group 3: Capture**
-- GPS: `Not recorded` (italic muted)
-- Model version: `Manual capture`
-- Storage path: `1c51605b-af11-422a-9d8d-3c27ad7a9eac/3465fc00-85b5-4e12-b39f-0cc87e71c121.jpg` (smaller font, 11px, word-break: break-all)
-
-Each row spec:
-- Padding: 10px vertical, 14px horizontal
-- Label: 10px mono uppercase, muted color, 4px margin-bottom
-- Value: 12-13px mono, ink color, word-break: break-all
-- Bottom hairline (except last)
-
-**Functionality:**
-- Tap-and-hold a value (UUID, path) → copy to clipboard (iOS context menu)
-
-**Tab bar:** HIDDEN.
-
----
-
-### 7.13 Settings
-
-**Purpose:** App configuration. Profile, capture preferences, AI settings, sync, about. Tab root screen.
-
-**Layout:**
-1. Status bar, Dynamic Island
-2. Nav bar (glass): empty left / Center "Settings" / Right info icon
-3. Profile card (white, 18px radius, 16-18px padding):
-   - Avatar 56×56 brand-gradient circle, white "MS" initials (display 22px 700)
-   - Body: "M. Santos" (17px 700) → email mono small → role pill "🛡 MEDTECH II"
-   - Right: chevron
-4. **Group: Capture**
-   - **Slider row**: "AI confidence threshold" + "75%" brand-colored mono on right; horizontal slider below
-   - Toggle row: purple icon (sparkle) + "Live detection overlays" + green toggle ON
-   - Disclosure row: teal icon (camera) + "Capture resolution" + "4K · 60fps" mono trailing + chevron
-5. **Group: AI Inference**
-   - Toggle: indigo icon (cube) + "On-device inference" + ON
-   - Toggle: gray icon (×) + "Server fallback" + OFF
-   - Disclosure: purple icon (globe) + "Model" + "v2.4 · Helminth" mono + chevron
-6. **Group: Sync & Storage** (with footer)
-   - Toggle: green icon (refresh) + "Auto sync" + ON
-   - Toggle: amber icon (wifi) + "Wi-Fi only" + ON
-   - Footer text: "Last synced 47 seconds ago · 2.3 GB cached locally."
-7. Tab bar (Settings active)
-
-**Functionality:**
-- Toggles change preferences immediately
-- Slider drag → updates AI confidence threshold (affects what surfaces in queue)
-- Profile row tap → opens account screen (future)
-- Disclosure rows → navigate to detail screens
-
-**Tab bar:** Settings tab active.
-
----
-
-## 8. Content & Voice
-
-### 8.1 Voice principles
-
-- **Direct and clinical.** Medtechs are busy professionals; they want information density, not encouragement.
-- **Concise.** "12 frames awaiting review" not "You have twelve detections that need your attention."
-- **Trustworthy.** "Model predicted Trichuris trichiura" not "AI thinks this might be...".
-- **No emoji.** No marketing fluff. No exclamation points.
-
-### 8.2 Terminology (canonical)
-
-| Use this | Not this |
+| Surface | Treatment |
 |---|---|
-| Session | Encounter, exam |
-| Sample | Image, frame (when stored), capture |
-| Frame | Photo, snapshot |
-| Detection | Match, hit, result |
-| Species | Type, kind, parasite type |
-| Verified | Confirmed, validated, approved |
-| Pending | Unreviewed, queued |
-| Delete | Reject, dismiss, discard (Discard is reserved for unsaved work in Manual Sheet) |
-| EPG | Eggs/g, eggs per gram |
-| Confidence | Score, certainty, likelihood |
-| Medtech | User, operator, technician, lab tech |
-| Bounding box | Box, region, ROI |
-| Provenance: AI vs Manual | Source, origin |
+| Plain card | No shadow; 1px hairline border (`--gray-100`) |
+| Active Session hero | `0 10px 28px -10px rgba(30, 63, 217, 0.45)` |
+| Modal sheet | `0 -16px 32px -8px rgba(15, 23, 42, 0.12)` |
+| Floating glass UI (Capture) | `0 4px 14px -4px rgba(0, 0, 0, 0.35)` |
+| Shutter button | `0 6px 22px -2px rgba(30, 63, 217, 0.5), 0 0 0 1.5px rgba(0, 0, 0, 0.5)` |
 
-### 8.3 Microcopy examples
+### 3.6 Motion
 
-- Empty session list: "Start your first session"
-- All verified: "All caught up" (not "No items")
-- Sync done: "Synced" (not "Successfully synced")
-- Recording: "Recording" (not "Now recording")
-- Error: state the constraint, not the failure — "Sign-in requires an internet connection." not "Login failed."
+| Pattern | Duration / curve |
+|---|---|
+| Default UI transition | 150ms ease |
+| Sheet slide-up | 320ms cubic-bezier(0.32, 0.72, 0, 1) |
+| Scrim fade | 250ms ease |
+| Toast slide-down | 400ms cubic-bezier(0.32, 0.72, 0, 1) |
+| Pulse (REC dot) | 1500ms ease-in-out, infinite |
+| Recording halo | 1500ms recPulse keyframes |
 
 ---
 
-## 9. Implementation Notes
+## 4. Information architecture
 
-### 9.1 iOS technical conventions
+### 4.1 Screen list
 
-- Use **SF Pro Display / Text / Rounded** via `Font.system` or `UIFont.preferredFont(forTextStyle:)`
-- **SF Symbols** for all standard icons (search, chevron, ellipsis, settings, etc.). Custom SVG only for logomark and any domain-specific glyphs (microscope, parasite icon if added).
-- **UIBlurEffect(style: .systemMaterial)** for glass surfaces; .systemUltraThinMaterial for lighter chrome
-- **Dynamic Type** support: scale display sizes; mono fonts can stay fixed for technical data legibility
-- **Dark mode**: not currently designed, but tokens should be defined per-mode (e.g., `--bg` dark = `#1C1C1E`); follow iOS HIG for dark mode treatments
+| # | Screen | Purpose |
+|---|---|---|
+| 1 | Login | Authentication entry point |
+| 2 | Dashboard | Home / today's activity, lands after sign-in |
+| 3 | Session Picker | Pick or start a session |
+| 4 | Capture | Live microscope feed with AI detection |
+| 5 | Verify Queue | List of flagged frames awaiting review |
+| 6 | Records | Historical session browser |
+| 7 | Session Detail | One session's results gallery |
+| 7b | Session Detail (empty) | Variant for sessions with no findings |
+| 8 | Sample Detail | One sample image with metadata |
+| 9 | Settings | App config, account |
 
-### 9.2 Accessibility
+### 4.2 Modal sheets
 
-- All interactive elements ≥ 44×44pt touch target
-- Color contrast: text on `--bg` should be ≥ 4.5:1 (body) and 3:1 (large display)
-- Mono fonts can fall below text contrast for purely decorative labels; ensure values are still legible
-- VoiceOver labels for every icon button
-- Reduce Motion: disable pulse animations on REC dot and live indicator when enabled
+| Sheet | Trigger | Purpose |
+|---|---|---|
+| New Session | Sessions tab → "+ New session" | Set label + note before scanning |
+| Verify (AI) | Capture toast Review, Verify Queue AI rows | Confirm/reject AI detection, change species |
+| Manual | Verify Queue manual rows | Label a manually captured frame |
 
-### 9.3 Brand asset
+### 4.3 Primary flow (happy path)
 
-The AgarthaVision logomark is a lung-and-eye symbol:
-- Two blue lung shapes flanking a central eye
-- A small blue trachea (vertical rectangle) at top center
-- The eye: white ring outer, dark iris (#0E0E12), small white catchlight upper-left
+```
+Login
+  → Dashboard
+       Active Session hero  →  Capture
+                                 ↓
+                          AI detects egg
+                                 ↓
+                          Toast "Review"  →  Verify sheet  →  Confirm
+                                                              ↓
+                                                          Sample saved
+                                 ↓
+                          End session     →  Session Detail
+                                              ↓
+                                          Sample Detail
+```
 
-Three SVG variants exist:
-- `agartha-logo.svg` — with light rounded-square background (web favicons, marketing)
-- `agartha-logo-transparent.svg` — no background (overlay on any surface)
-- `agartha-logo-appicon.svg` — 1024×1024 full-bleed (App Store submission)
+### 4.4 Browse flow
 
-Brand color: `#1F66FF` (slightly different from `--brand: #1E40AF` — the logomark uses the more vibrant blue; the app chrome uses the deeper clinical blue).
+```
+Dashboard  →  Records  →  Session Detail  →  Sample Detail
+       ↘
+        Records tab (bottom nav)  →  same flow
+```
 
-### 9.4 Where this design system lives
+### 4.5 New session flow
 
-- Source of truth: this document
-- Reference mockup gallery: `agartha-redesign.html` (visual prototype of all screens)
-- Logo SVGs: `agartha-logo*.svg`
-
-When generating new designs from this document, prioritize matching the patterns and tokens defined here. If an existing screen conflicts with this doc, the doc wins. If a new screen needs a pattern not defined here, extend the doc rather than diverge.
+```
+Sessions tab  →  + New session  →  New Session sheet
+                                      ↓
+                                Fill label + note  →  Start session  →  Capture
+```
 
 ---
 
-## Appendix A: Quick reference card
+## 5. Navigation
+
+### 5.1 Bottom tab bar
+
+Persistent on every screen except **Login** (no auth) and **Capture** (immersive tool mode).
 
 ```
-PRIMARY BLUE:    #1E40AF
-DEEP BLUE:       #1E3A8A
-LOGO BLUE:       #1F66FF
-SUCCESS GREEN:   #34C759
-WARNING AMBER:   #FF9F0A
-DANGER RED:      #FF3B30
-AI PURPLE:       #AF52DE
-INK:             #0F172A
-BODY:            #3C3C43
-MUTED:           #6E6E73
-BG:              #F2F2F7
-SURFACE:         #FFFFFF
-HAIRLINE:        rgba(60, 60, 67, 0.12)
-GLASS:           rgba(255, 255, 255, 0.72) + blur(40px) saturate(180%)
-SHADOW SM:       0 1px 2px rgba(15, 23, 42, 0.05)
-SHADOW MD:       0 6px 18px rgba(15, 23, 42, 0.06)
-SHADOW BRAND:    0 8-12px 24-32px rgba(30, 64, 175, 0.22-0.32)
-
-PHONE:           390 × 844 (iPhone 15/14/13 Pro)
-SCREEN RADIUS:   46px (inner) / 56px (outer bezel)
-STATUS BAR:      54px tall
-NAV BAR:         56px tall, top: 47px
-DYNAMIC ISLAND:  126 × 38 (compact), expands for Live Activities
-TAB BAR:         83px tall, includes 28px home indicator safe area
-HOME INDICATOR:  134 × 5 pill at bottom: 9px
-
-CARD RADIUS:     14-18px (standard) / 22px (hero)
-BUTTON RADIUS:   12-14px
-PILL RADIUS:     100px
-SHEET RADIUS:    30px (top corners only)
-
-CANONICAL SPACES: 4 · 8 · 12 · 14 · 16 · 18 · 22 · 28 · 36
+Home  ·  Sessions  ·  Records  ·  Settings
 ```
+
+- Active tab: blue icon + blue label.
+- Inactive: `--gray-500` icon, `--gray-700` label.
+- Bar height: 64px content + 18px iOS home indicator strip.
+- iOS home indicator: 134×4 dark pill at the bottom, 55% opacity.
+
+Each tab owns a primary screen + its drill-downs:
+
+| Tab | Owns | Drill-down preserves tab |
+|---|---|---|
+| Home | Dashboard | n/a |
+| Sessions | Session Picker, Capture, Verify Queue | Yes |
+| Records | Records, Session Detail, Sample Detail | Yes |
+| Settings | Settings | n/a |
+
+### 5.2 Top app bar pattern
+
+```
+[← Back?]  [Title]                       [Icon actions]
+           [Sub-meta (caption, tabular)]
+```
+
+- Back arrow shown on drill-down screens.
+- Title: Headline 22/28.
+- Sub-meta: Caption 12, `--gray-500`, tabular numerals.
+
+### 5.3 Modal sheet behavior
+
+- Slide up from bottom over the current screen + tab bar.
+- Drag handle (gray pill) at the top.
+- Scrim: `rgba(15, 23, 42, 0.4)` with 2px backdrop blur.
+- Header: title + optional subtitle + close button (× in gray-100 circle).
+- Body: scrollable.
+- Footer: 1–2 buttons, sticky, with top hairline border.
+- Max height: 86% of phone height.
+
+---
+
+## 6. Screen specifications
+
+### 6.1 Login
+
+**Purpose**: authenticate the technologist.
+
+**Layout** (centered vertical stack, 28px horizontal padding):
+
+- Status bar (light, dark text).
+- 32px breathing space.
+- **App mark**: 64×64, 16px radius, AgarthaVision logo on its cream canvas, soft drop shadow.
+- 28px gap.
+- **Title**: "AgarthaVision" — display 30, -0.025em letter-spacing.
+- **Subtitle**: "Sign in to continue your clinical work." — body, `--gray-500`.
+- 32px gap.
+- **Email** input (pre-filled `tech@agarthavision.app` for demo).
+- **Password** input (masked).
+- **Primary CTA**: "Sign in" — pill, full-width.
+- Bottom: "Forgot password?" — blue text link.
+
+**Tab bar**: hidden.
+
+**Navigation**: Sign in → Dashboard.
+
+**Future states**: loading state on Sign in; error state on auth failure (red banner above form).
+
+---
+
+### 6.2 Dashboard
+
+**Purpose**: at-a-glance overview of today's activity + entry into the active session.
+
+**Layout** (top → bottom, scrollable):
+
+#### 1. Personalized top bar
+- 40×40 blue avatar circle with "MR" initials.
+- Greeting: "Good evening, Maria" — subhead 17.
+- Date: "Thursday · May 28" — caption, `--gray-500`, tabular.
+- Right: bell icon with red unread dot.
+
+#### 2. Active Session hero card *(when a session is active)*
+- Full-width card with gradient blue background (`#1E3FD9 → #2A56E8 → #3B68F5`), 16px radius.
+- Decorative radial highlights top-right and bottom-left.
+- Status badge: pulsing white dot + "LIVE SESSION" (micro caps, 0.12em letter-spacing).
+- Session ID: display 32, tabular bold.
+- Meta: "**00:12:34** elapsed · **147** frames" with bold values.
+- Right: 56×56 white circle "Resume" button with blue play icon.
+- Tap → Capture screen.
+
+#### 3. Today's activity KPI grid (2×2)
+- **Sessions** · **Eggs found** · **Pending** · **Samples**.
+- Each tile: 11px gray-500 label, 28px tabular value, 11px trend caption.
+- Up trends in green with ↑ arrow.
+
+#### 4. 7-day activity sparkline card
+- Hand-crafted inline SVG: 320×56 viewBox.
+- Blue line over soft blue gradient fill (18% → 0% opacity).
+- White-bordered start dot, larger filled end dot.
+- Weekday axis: Thu · Fri · Sat · Sun · Mon · Tue · Today (Today in gray-700, others in gray-400).
+- Header: "7-day activity" + "Eggs found per day" + green "↑ 38%" delta pill.
+
+#### 5. Today's findings card (species mix)
+- Single horizontal segmented bar — 10px tall, pill-shaped.
+- 3 colored segments proportional to species counts: Ascaris blue (64.3%), Trichuris cyan #0EA5E9 (21.4%), Necator amber (14.3%).
+- 2px white separators between segments.
+- Legend row: colored dots + italic species names + bold tabular counts.
+
+#### 6. Recent sessions (3 mini-cards)
+- Compact rows: session ID + meta on left, big tabular number + "eggs" caption on right.
+- "See all" link → Records.
+
+#### 7. Verify queue alert row
+- Amber-tinted warning icon, "3 frames awaiting verification", "Oldest pending · 18s ago", chevron right.
+- Tap → Verify Queue.
+
+#### 8. Sync status row
+- Green-tinted check icon, "All samples synced", "Last sync just now · 87 samples".
+
+**Variants**: no-active-session state (future) — replace the hero with a "Start new session" CTA card that opens the New Session sheet.
+
+---
+
+### 6.3 Session Picker
+
+**Purpose**: pick an existing session or start a new one.
+
+**Layout**:
+
+- **App bar**: "Sessions" title + "3 sessions · 1 active" sub-meta + Records icon + Settings icon.
+- **Scrollable list** of session cards. Each card:
+  - Session ID (subhead 19, tabular).
+  - Meta: "2026-05-28 · 19:16 · PID 23424" (caption, tabular).
+  - Right side:
+    - Status badge: blue "Active" pill with white pulse dot (for active), or green "14 eggs", or gray "0 eggs" (for completed).
+    - Kebab menu on active sessions: **Resume capture · Export · End session** (destructive red).
+  - Active card has `--blue-tint-2` background and `--blue-tint` border.
+- **Sticky bottom CTA**: "+ New session" (primary pill, full-width, above tab bar).
+
+**Behavior**:
+- Tap active card → Capture.
+- Tap historical card → Session Detail.
+- Tap "+ New session" → New Session sheet.
+
+---
+
+### 6.4 Capture (transparent floating UI)
+
+**Purpose**: live microscope feed with real-time AI detection and capture controls.
+
+**Visual register**: the only dark screen. Camera feed extends edge-to-edge under the status bar. All chrome floats over the feed as glass elements with backdrop blur + saturation.
+
+**Layout** (z-stack, bottom to top):
+
+#### 1. Camera viewport — `position: absolute; inset: 0`
+- Background: subtle dark radial gradient (microscope vignette).
+- Contents:
+  - One faint specimen shape (so the AI box has a subject to detect).
+  - Subtle focus reticle at the center (4 thin white lines, opacity 0.25).
+  - AI bounding box with **corner brackets** in white and "Ascaris · 94%" label.
+  - Live detection toast.
+
+#### 2. Top chrome — floating, transparent background
+- Glass-circle back button (40×40).
+- **Session pill** (glass): pulsing red REC dot with halo + "Session" eyebrow + "324" tabular ID.
+- Right cluster: 3 glass-circle action buttons (Stats, History, Verify queue with blue "8" badge).
+
+#### 3. Bottom chrome — 3-column grid, transparent background
+- **Frame count glass pill** (left): "FRAMES" eyebrow + "147" tabular.
+- **Shutter** (center): 74×74 blue circle with 4px white ring + soft blue glow + 1.5px dark outline. Active scale: 0.92.
+- **End session glass-red pill** (right): stop-square icon + "End session".
+
+#### 4. Live detection toast (when AI hits)
+- Slides in from top below the chrome.
+- Glass background (rgba 15,23,42,0.78), white text.
+- Blue check-circle icon, "*Ascaris lumbricoides* detected", "94% confidence · just now", blue "Review" action.
+- Tap Review → Verify sheet opens.
+
+**Status bar**: forced light (white text).
+**Tab bar**: hidden.
+
+---
+
+### 6.5 Verify Queue
+
+**Purpose**: review and triage all flagged frames (AI + manual).
+
+**Layout**:
+
+- **App bar**: back arrow + "Verify Queue" + "8 items · 3 pending" sub-meta + filter icon.
+- **Filter chips** (horizontal, scrollable, with tabular counts): All (8), Pending (3), AI (6), Manual (2), Confirmed (4), Rejected (1). Active chip: dark `--gray-900` background.
+- **Frame list** rows:
+  - 52×52 thumbnail with colored bbox:
+    - Blue solid = AI detection.
+    - Amber dashed = manual capture.
+    - Green = confirmed.
+    - Red dashed = rejected.
+  - Italic species name + small confidence pill (gray, tabular %).
+  - Source ("AI" / "Manual") · time ago · status pill (amber / green / red).
+  - Chevron right.
+
+**Behavior**:
+- Tap pending AI row → Verify sheet.
+- Tap pending manual row → Manual sheet.
+- Tap confirmed / rejected row → Sample Detail.
+
+---
+
+### 6.6 Records
+
+**Purpose**: browse historical sessions; filter by search, species, status.
+
+**Layout**:
+
+- **App bar**: back arrow + "Records" + "Past 30 days" + Export icon.
+- **Search input**: "Search sessions, patient ID, species…" with leading search icon, `--gray-50` background, blue focus glow.
+- **3-column stat tiles**:
+  - Sessions (42, +8 this week, green).
+  - Eggs found (196, +24, green).
+  - Accuracy (94%, +2.1%, green).
+- **Species filter chips** (horizontal, scrollable): All species, *Ascaris*, *Trichuris*, *Necator*, *Hymenolepis*.
+- **Record cards**:
+  - Session ID (subhead 17, tabular).
+  - Time + PID (caption, tabular).
+  - Right: status badge — green "Synced" or amber "Pending sync".
+  - Bottom row (above hairline): eggs · species · samples — bold tabular numbers + gray label.
+
+---
+
+### 6.7 Session Detail (populated)
+
+**Purpose**: view one session's results — EPG, gallery, sync status, export.
+
+**Layout**:
+
+- **App bar**: back arrow + "Session 3242" + "2026-05-28 · 19:13 · PID 34343" + Export icon.
+- **EPG hero card**:
+  - Light gray surface, "EGGS PER GRAM" micro caps label.
+  - Display value: "14" — 56px tabular bold.
+  - Meta row: "**14** confirmed · **2** species · **38** samples".
+  - Soft blue radial accent in top-right.
+- **Sync banner**: green-tinted row with check icon, "Synced to cloud · 2026-05-28 19:42 · 38 samples uploaded".
+- "Verified samples · 14 of 38" section header.
+- **3-column gallery**:
+  - Each tile: dark microscope-feel gradient + colored bbox.
+  - Bottom-left species badge (blue Ascaris, amber Manual).
+  - Top-right confidence chip (e.g. "94%" or "M" for manual).
+  - Tap → Sample Detail.
+
+---
+
+### 6.7b Session Detail (empty state)
+
+**Layout**:
+- Same app bar.
+- EPG hero shows "0" with sub "No confirmed eggs yet".
+- **Empty state graphic** below:
+  - 56×56 gray-50 circle with thin outline icon.
+  - Title: "No verified samples yet".
+  - Sub: "Captured frames will appear here once verified."
+
+---
+
+### 6.8 Sample Detail
+
+**Purpose**: zoom into one captured frame; show bounding boxes, confidence, and full metadata.
+
+**Layout**:
+
+- **App bar**: back + "Sample 14" + "Frame 28 of 38" + Share + More.
+- **Microscopy image** (square aspect):
+  - Dark gradient with two specimen shapes.
+  - Two labeled blue AI bounding boxes ("Ascaris · 94%" and "Ascaris · 87%").
+  - **Floating glass image toolbar**: zoom · toggle boxes · edit · download (4 buttons in a glass strip at the bottom of the image).
+- **Sample metadata**:
+  - Species heading: *Ascaris lumbricoides* (italic, 22px) + green "Confirmed" badge.
+  - **Confidence bar**: thin progress bar + "94% confidence · 2 detections".
+  - **2-column meta grid**:
+    | Field | Value |
+    |---|---|
+    | Captured | 19:14:22 / 2026-05-28 |
+    | Verified by | M. Reyes / 19:15:08 |
+    | AI model | AgarthaNet v2.3 (monospace) |
+    | Magnification | 400× |
+    | Location *(full-width)* | 14.5995° N, 120.9842° E — Manila, Philippines · ±5m |
+
+---
+
+### 6.9 Settings
+
+**Purpose**: configure capture, privacy, data, account.
+
+**Layout**:
+
+- **App bar**: back + "Settings".
+- **Account row** (own card): blue 40×40 avatar + name + email + chevron.
+- **Capture** section:
+  - Offline mode (toggle).
+  - Auto-flag detections (toggle, default on).
+  - AI confidence threshold (slider, 75%, with sub "Lower = more sensitivity, more noise").
+- **Privacy** section:
+  - GPS tracking (toggle, on).
+  - Patient data encryption (toggle, on + disabled + "enforced by policy").
+- **Data** section:
+  - Sync status — "Up to date" (green), chevron.
+  - Storage used — "3.1%", chevron.
+  - Export all sessions — chevron.
+- **About** section:
+  - Version — "2.3.1 · build 4421".
+  - AI model — "AgarthaNet v2.3", chevron.
+  - Sign out — destructive red text + red logout chevron.
+- **Footer**: 36×36 AgarthaVision logo + "AgarthaVision · Clinical Microscopy Assistant".
+
+---
+
+## 7. Modal sheets
+
+### 7.1 New Session sheet
+
+**Trigger**: "+ New session" on Session Picker.
+
+**Title**: "New session"
+**Subtitle**: "Set the label and a note before scanning"
+
+**Body**:
+- **Label** input — text, **required**. Pill marker "Required".
+- **Note** textarea — 3 rows, **required**. Pill marker "Required".
+- **Hint banner** (blue-tinted): info icon + "Both fields are required by lab protocol. You can edit them later from Session Detail."
+- **Error banner** (hidden by default, red-tinted): "Please fill in both fields to continue." Shown when validation fails.
+
+**Footer**: Cancel (secondary) + Start session (primary with arrow icon).
+
+**Validation**:
+- On Start session, both fields trimmed and checked.
+- Empty fields get `input-error` red border + light red background.
+- Error banner appears.
+- First invalid field auto-focuses.
+- Typing into a field clears its error state instantly; error banner clears once both fields have content.
+- On valid submission: sheet slides down (280ms) then `showScreen('capture')` is called.
+
+---
+
+### 7.2 Verify sheet — AI
+
+**Trigger**: Capture toast "Review" link; Verify Queue pending AI rows.
+
+**Title**: "Verify detection"
+**Subtitle**: "Frame 087 · captured 19:14:22" (tabular)
+
+**Body**:
+- **Preview**: 16:10 aspect rectangle with dark microscope gradient + blue bounding box overlay + "94% confidence" pill (top-right, glass) + "x: 412, y: 280" coordinate (bottom-left, monospace).
+- **AI suggests** section: 2-column grid of species chips. Pre-selected: *Ascaris*. Others: *Trichuris*, *Necator*, *Hymenolepis*. Full-width "Other species · Search the full library" chip at the bottom.
+- Selected chip: blue border + blue tint background + blue check-circle in top-right corner.
+- **Edit bounding box** dashed-border link button.
+
+**Footer**: Reject (secondary) + Confirm (primary with check icon).
+
+---
+
+### 7.3 Manual sheet
+
+**Trigger**: Verify Queue pending Manual rows.
+
+**Title**: "Label manual capture"
+**Subtitle**: "Frame 094 · captured 19:14:48" (tabular)
+
+**Body**:
+
+- **Preview**: same shape as Verify sheet, but the bbox is dashed amber + "Manual" pill in amber.
+- **Search input**: "Search species…"
+- **Select species** section label with "Required" pill.
+- **Species list** (6 items, radio-style, italic names where applicable):
+  1. *Ascaris lumbricoides* — "Roundworm · most common at this site" (pre-selected).
+  2. *Trichuris trichiura* — "Whipworm"
+  3. *Necator americanus* — "Hookworm"
+  4. *Hymenolepis nana* — "Dwarf tapeworm"
+  5. **Other species** — blue "+" icon, blue label, "Type a custom species name below"
+  6. **Unknown / artifact** — "Mark for later review"
+
+- **Custom species input** (revealed when "Other species" is selected):
+  - Slides in below the list as a blue-tinted dashed-border panel.
+  - Label: "Custom species name · Required".
+  - Input: "e.g. *Strongyloides stercoralis*" placeholder.
+  - Auto-focuses after 120ms.
+
+- **Note** textarea — 3 rows, **optional**. Italic "Optional" marker. Placeholder: "Notes on the capture, sample quality, or anything else worth flagging…"
+
+**Footer**: Cancel (secondary) + Save label (primary).
+
+**Validation**:
+- If "Other species" is selected and custom field is empty → red border on custom field + auto-focus + sheet stays open.
+- Otherwise sheet closes.
+
+---
+
+## 8. Component library
+
+### 8.1 Buttons
+
+```
+.btn               base — pill, 14/20 padding, 600 weight, 15px font
+.btn-primary       --blue background, white text
+.btn-secondary     --gray-100 background, --gray-900 text
+.btn-destructive   --red background, white text
+.btn-block         100% width
+.btn-sm            10/16 padding, 13px font
+```
+
+### 8.2 Inputs
+
+```
+.input             white, --gray-200 border, 12px radius, 13/16 padding
+.input:focus       --blue border + 3px blue glow
+.input.textarea    resize off, min-height 88, 3 rows
+.input.input-error red border, light red tint background, red focus glow
+```
+
+**Labels**: 13px, weight 500, `--gray-700`.
+**Required marker**: small uppercase pill, gray-100 background.
+**Optional marker**: italic caption, `--gray-500`.
+
+### 8.3 Badges
+
+```
+.badge              pill, 11px, 600 weight, 4/9 padding
+.badge-blue         --blue bg, white text
+.badge-blue-tint    --blue-tint bg, --blue text
+.badge-gray         --gray-100 bg, --gray-700 text
+.badge-green        --green-tint bg, dark green text
+.badge-amber        --amber-tint bg, dark amber text
+.badge-red          --red-tint bg, --red text
+```
+
+### 8.4 Cards
+
+Plain card: white background, `--gray-100` border, 12px radius, 16px padding, no shadow.
+
+**Active variant**: `--blue-tint-2` bg, `--blue-tint` border.
+
+**Hover state**: border → `--gray-300`, bg → `--gray-50`.
+
+### 8.5 List items
+
+- Hairline divider between items, no divider on last child.
+- Touch target: ≥ 44px.
+- Chevron right (`--gray-300`, 18×18) for navigable rows.
+
+### 8.6 Toggles
+
+- 44×26 pill, `--gray-200` off, `--blue` on.
+- 22×22 white thumb with subtle shadow, 2px from edges, 200ms transition.
+- Disabled state: 0.5 opacity.
+
+### 8.7 Slider
+
+- 4px-tall `--gray-200` track, `--blue` fill.
+- 18×18 white thumb with 2px blue border.
+
+### 8.8 Tab bar item
+
+- Equal flex, ~6px horizontal padding, 6px top padding.
+- Inactive: gray-500 icon (22×22), gray-700 label (10px / 600).
+- Active: blue icon + blue label.
+- Optional badge: small red pill in the top-right of the icon area.
+
+### 8.9 Glass UI (Capture)
+
+```
+background:       rgba(20, 28, 42, 0.55)
+backdrop-filter:  blur(20px) saturate(160%)
+border:           1px solid rgba(255, 255, 255, 0.08)
+color:            white
+box-shadow:       0 4px 14px -4px rgba(0, 0, 0, 0.35)
+```
+
+Used on: top bar icon buttons, session pill, frame count pill, end-session pill, toast, image toolbar.
+
+### 8.10 Sparkline (Dashboard)
+
+Hand-crafted inline SVG, no library:
+
+```html
+<svg viewBox="0 0 320 56" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="sparkFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#1E3FD9" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#1E3FD9" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path   d="M0,42 L53,30 L107,34 L160,18 L213,22 L267,12 L320,6 L320,56 L0,56 Z"
+          fill="url(#sparkFill)"/>
+  <polyline points="0,42 53,30 107,34 160,18 213,22 267,12 320,6"
+            fill="none" stroke="#1E3FD9" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="0"   cy="42" r="2.5" fill="white" stroke="#1E3FD9" stroke-width="1.5"/>
+  <circle cx="320" cy="6"  r="4"   fill="#1E3FD9" stroke="white" stroke-width="2"/>
+</svg>
+```
+
+### 8.11 Species mix bar
+
+Single pill-shaped div with 3 colored segment divs, widths proportional to counts. 2px white border separators. Legend row below with colored dots + italic species names + bold counts.
+
+### 8.12 Detection bounding box
+
+```
+.det-box                  2px solid --blue, 4px radius, soft blue glow
+.det-box::before          attr(data-label) chip, blue, top-left
+.det-box-corner.tl/tr/bl/br   white L-shaped corner brackets
+```
+
+### 8.13 Modal sheet
+
+```
+.sheet                    bottom-anchored, slides up via transform
+.sheet-handle             36×4 gray pill, centered
+.sheet-header             title + close button (× in gray-100 circle)
+.sheet-body               scrollable, scrollbar hidden
+.sheet-footer             1-2 buttons with top hairline border
+.sheet-scrim              rgba(15,23,42,0.4) + 2px blur, fades in/out
+```
+
+---
+
+## 9. Interaction patterns
+
+### 9.1 Touch feedback
+
+- Buttons: subtle background darkening on hover; `scale(0.92–0.99)` on press for critical actions (shutter, hero card).
+- Cards / rows: border + background change on hover.
+
+### 9.2 Modal sheet behavior
+
+- Tap outside (scrim) → close.
+- Drag handle is decorative (no drag in prototype; real app should support).
+- Sheet open: scrim fades in (250ms), sheet slides up (320ms cubic-bezier).
+- Sheet close: reverse.
+- Sheet covers the tab bar.
+
+### 9.3 Empty state pattern
+
+- 56×56 `--gray-50` circle with `--gray-300` outline icon, centered.
+- Title: subhead 14, `--gray-700`.
+- Sub: caption, `--gray-500`.
+
+### 9.4 Validation pattern
+
+- Error border on inputs (red).
+- Optional inline error banner above the form for sheet-wide errors.
+- Auto-focus first invalid field.
+- Error clears as user types valid input.
+
+### 9.5 Status bar handling
+
+- Default: dark text (`--gray-900`) on light screens.
+- Capture screen: forced white text via `.status-bar.dark`.
+
+### 9.6 Navigation transitions
+
+- For the prototype: instant screen swap.
+- For the real app: slide-from-right for forward drill-downs, slide-back for back, fade for tab switches.
+
+---
+
+## 10. Brand
+
+### 10.1 Logo
+
+The AgarthaVision logo is a square mark:
+- Cream background (`#F8F7F7`).
+- A stylized blue "A" composed of two interlocking forms.
+- A dark focal element (the "lens" of the A) in `#1D1D1E`.
+
+**Sizes in product**:
+
+| Surface | Size | Radius |
+|---|---|---|
+| Login app mark | 64×64 | 16px |
+| Settings footer | 36×36 | 9px |
+| Meta header (above phone, prototype only) | 28×28 | 7px |
+
+Embedded once as an inline SVG `<symbol id="agartha-logo">`, referenced via `<use href="#agartha-logo">` everywhere — keeps the file size flat as the logo gets reused.
+
+### 10.2 Naming
+
+- **App**: AgarthaVision.
+- **AI model**: AgarthaNet (versioned, e.g. v2.3).
+- **Tagline / sub**: "Clinical Microscopy Assistant".
+
+### 10.3 Voice
+
+- **Clinical** — restrained, never playful.
+- **Specifically scientific** where it matters: italic binomials, precise units (× magnification, EPG, GPS coords).
+- **Friendly without casual** — "Good evening, Maria" is fine; "Hey there!" is not.
+- **Direct prompts** — "Set the label and a note before scanning" beats "Please fill out the following form below".
+
+---
+
+## 11. Implementation notes
+
+### 11.1 File structure (prototype)
+
+A single self-contained HTML file:
+
+```
+prototype.html
+├─ <head>
+│   ├─ Inter font (Google Fonts)
+│   └─ <style> — design tokens, components, screens, sheets
+└─ <body>
+    ├─ <svg> #agartha-logo (hidden symbol)
+    ├─ .stage
+    │   ├─ .meta-header (outside phone)
+    │   ├─ .screen-selector (jump chips for prototype review)
+    │   └─ .phone-stage > .phone
+    │       ├─ .notch, .status-bar
+    │       ├─ .screens > 9 .screen children
+    │       ├─ .tab-bar
+    │       ├─ .sheet-scrim
+    │       └─ 3 .sheet children (newsession, verify, manual)
+    └─ <script> — showScreen, openSheet, validation, etc.
+```
+
+### 11.2 Navigation logic
+
+```js
+const TAB_FOR_SCREEN = {
+  dashboard: 'dashboard',
+  sessions:  'sessions',
+  capture:   'sessions',
+  queue:     'sessions',
+  records:   'records',
+  'session-detail':       'records',
+  'session-detail-empty': 'records',
+  'sample-detail':        'records',
+  settings:  'settings'
+};
+const NO_TAB_BAR = ['login', 'capture'];
+
+function showScreen(name) {
+  // Switch screen, update tab bar visibility, mark active tab,
+  // adjust status bar color, reset scroll, close kebabs + sheets.
+}
+```
+
+### 11.3 Sheets
+
+Sheets are siblings of `.screens` inside `.phone`. They slide up over the tab bar. Scrim closes on tap-outside or close button. `closeSheet()` removes the `.open` class from scrim and every open sheet.
+
+### 11.4 Status bar
+
+Fixed overlay at the top of the phone frame, z-index 90, with `.dark` class added on Capture only.
+
+### 11.5 No external libraries
+
+- **No charting library** — sparkline + species mix bar are inline SVG and CSS.
+- **No icon library** — all icons are inline SVG, lucide-style outline at 1.5–1.8 stroke.
+- **No JS framework** — vanilla JS handles all state.
+- **One external font** — Inter from Google Fonts.
+
+### 11.6 Accessibility
+
+- Touch targets ≥ 44px (iOS HIG).
+- Color contrast: body text on white ≥ 4.5:1; large text ≥ 3:1.
+- Required fields marked visually + with text label ("Required").
+- All icon buttons have `title` attributes.
+- Focus rings on inputs (3px blue glow).
+- **Future**: ARIA roles, keyboard navigation, `prefers-reduced-motion` support.
+
+### 11.7 Responsive
+
+The phone frame is fixed at 390×844 (iPhone 14 reference). For a native build, the same tokens and components scale to other devices; key layouts (KPI grid, sample grid, tab bar) are already grid-based and will reflow.
+
+### 11.8 Data model sketch (for backend planning)
+
+```
+Session
+  id, label, note, patientId, technologistId,
+  startedAt, endedAt, status (active|ended|synced),
+  location { lat, lng, accuracyMeters },
+  framesTotal, samplesVerified, eggsPerGram
+
+Sample
+  id, sessionId, frameNumber, capturedAt,
+  capturedBy (ai|manual), thumbnailUrl, fullImageUrl,
+  status (pending|confirmed|rejected),
+  species (Ascaris|Trichuris|Necator|Hymenolepis|Other|Unknown),
+  customSpeciesName?, note?, confidence?,
+  detections: [{ bbox: [x,y,w,h], species, confidence }],
+  verifiedBy, verifiedAt, aiModelVersion (e.g. "AgarthaNet v2.3")
+
+User
+  id, name, email, avatar, role (tech|admin)
+```
+
+### 11.9 Known cleanup items
+
+- The prototype's demo email is still `tech@parascope.app` in two places (Login input, Settings account row); should be `tech@agarthavision.app`.
+- The prototype's REC visual treatment was consolidated into the session pill on Capture — the legacy `.rec-pill` CSS may be removable.
+
+---
+
+## Appendix · Screen inventory at a glance
+
+| Screen | Tab bar | Status bar | Has scroll | Has sticky CTA |
+|---|---|---|---|---|
+| Login | hidden | light | no | no |
+| Dashboard | visible (Home active) | light | yes | no |
+| Session Picker | visible (Sessions active) | light | yes | yes (New session) |
+| Capture | hidden | dark | no | no (floating chrome) |
+| Verify Queue | visible (Sessions active) | light | yes | no |
+| Records | visible (Records active) | light | yes | no |
+| Session Detail | visible (Records active) | light | yes | no |
+| Sample Detail | visible (Records active) | light | yes | no |
+| Settings | visible (Settings active) | light | yes | no |

@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -40,26 +41,10 @@ import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleRecordItem
-import com.agarthavision.ui.components.glassChrome
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-// Design Tokens
-private val Brand = Color(0xFF1E40AF)
-private val BrandSecondary = Color(0xFF3B82F6)
-private val Success = Color(0xFF34C759)
-private val SuccessDeep = Color(0xFF248A3D)
-private val Danger = Color(0xFFFF3B30)
-private val Ink = Color(0xFF0F172A)
-private val Body = Color(0xFF3C3C43)
-private val Muted = Color(0xFF6E6E73)
-private val Bg = Color(0xFFF2F2F7)
-private val Surface = Color(0xFFFFFFFF)
-private val Hairline = Color(0x1E3C3C43)
-private val HairlineSoft = Color(0x143C3C43)
-private val IosFillThin = Color(0x1E787880) // rgba(120, 120, 128, 0.12)
 
 @Composable
 fun SampleDetailScreen(
@@ -70,16 +55,16 @@ fun SampleDetailScreen(
     val item = state.item
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    Box(modifier = Modifier.fillMaxSize().background(Bg)) {
+    Box(modifier = Modifier.fillMaxSize().background(AppColors.Gray50)) {
         if (item == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Brand)
+                CircularProgressIndicator(color = AppColors.Blue)
             }
         } else {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(top = 103.dp) // Leave space for nav bar
+                    .padding(top = 80.dp) // Leave space for nav bar
             ) {
                 // Segmented Control (Tabs)
                 SampleSegmentedControl(
@@ -97,10 +82,12 @@ fun SampleDetailScreen(
         }
 
         // Top Navigation Bar
-        SampleDetailNavBar(
-            title = if (item != null) "Sample #${item.sample.id.take(4)}" else "Sample",
-            onBack = onBack
-        )
+        if (item != null) {
+            SampleDetailNavBar(
+                title = "Sample #${item.sample.id.take(4)}",
+                onBack = onBack
+            )
+        }
     }
 }
 
@@ -109,57 +96,52 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(103.dp)
-            .glassChrome(
-                backgroundColor = Color(255, 255, 255, (0.72f * 255).toInt()),
-                shape = RoundedCornerShape(0.dp)
-            )
-            .padding(top = 47.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+            .height(80.dp)
+            .background(AppColors.Gray50)
+            .padding(top = 32.dp, start = 8.dp, end = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         // Back Button
         Row(
             modifier = Modifier.clickable { onBack() }.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "Back", tint = Brand, modifier = Modifier.size(28.dp))
-            Text("Back", color = Brand, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
+            Icon(Icons.Default.ChevronLeft, contentDescription = "Back", tint = AppColors.Blue, modifier = Modifier.size(28.dp))
+            Text("Back", color = AppColors.Blue, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
         }
+
+        Spacer(Modifier.weight(1f))
 
         Text(
             text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Ink,
-            fontFamily = FontFamily.Monospace,
-            letterSpacing = (-0.5).sp
+            style = AppTypography.titleLarge,
+            color = AppColors.Gray900,
+            modifier = Modifier.offset(x = (-24).dp)
         )
-
-        // Spacer to balance the title in the center
-        Box(modifier = Modifier.size(44.dp))
+        
+        Spacer(Modifier.weight(1f))
     }
 }
 
 @Composable
 fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
     val tabs = listOf("IMAGE", "DETECTIONS", "METADATA")
+    
     TabRow(
         selectedTabIndex = selectedTab,
-        containerColor = Color.Transparent,
-        contentColor = Brand,
+        containerColor = AppColors.Gray50,
+        contentColor = AppColors.Blue,
         indicator = { tabPositions ->
             if (selectedTab < tabPositions.size) {
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = Brand,
+                    color = AppColors.Blue,
                     height = 2.dp
                 )
             }
         },
         divider = {
-            HorizontalDivider(color = HairlineSoft, thickness = 0.5.dp)
+            HorizontalDivider(color = AppColors.Gray200, thickness = 0.5.dp)
         }
     ) {
         tabs.forEachIndexed { index, label ->
@@ -171,7 +153,7 @@ fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         text = label,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (selectedTab == index) Brand else Muted,
+                        color = if (selectedTab == index) AppColors.Blue else AppColors.Gray500,
                         letterSpacing = 0.8.sp
                     )
                 }
@@ -193,7 +175,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
-                .aspectRatio(3f / 4f)
+                .aspectRatio(1f) // Changed to 1f based on screenshot
                 .background(Color.Black, RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
         ) {
@@ -252,24 +234,25 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(12.dp))
+                .background(AppColors.White)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Capture Type", fontSize = 15.sp, color = Ink)
-                Text(provenanceText, fontSize = 15.sp, color = Muted)
+                Text("Capture Type", fontSize = 15.sp, color = AppColors.Gray900)
+                Text(provenanceText, fontSize = 15.sp, color = AppColors.Gray500)
             }
-            HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = HairlineSoft)
+            HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = AppColors.Gray200)
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Timestamp", fontSize = 15.sp, color = Ink)
-                Text(timeStr, fontSize = 15.sp, color = Muted)
+                Text("Timestamp", fontSize = 15.sp, color = AppColors.Gray900)
+                Text(timeStr, fontSize = 15.sp, color = AppColors.Gray500, style = TextStyle(fontFeatureSettings = "tnum"))
             }
         }
     }
@@ -287,7 +270,7 @@ private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Mo
             val top = by.coerceIn(0f, 1f) * size.height
             val width = bw.coerceIn(0f, 1f) * size.width
             val height = bh.coerceIn(0f, 1f) * size.height
-            val color = if (detection.verifiedByUser) Brand else Danger
+            val color = if (detection.verifiedByUser) AppColors.Blue else AppColors.Red
             drawRect(
                 color = color,
                 topLeft = Offset(left, top),
@@ -304,7 +287,7 @@ private fun DetectionsTab(detections: List<Detection>) {
         Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
             Text(
                 text = "No detections on this sample.",
-                color = Muted,
+                color = AppColors.Gray500,
                 fontSize = 15.sp
             )
         }
@@ -326,16 +309,16 @@ private fun DetectionsTab(detections: List<Detection>) {
 private fun DetectionCard(index: Int, detection: Detection) {
     val isVerified = detection.verifiedByUser
     val aiGenerated = detection.bboxX != null
-    val provenanceText = if (aiGenerated) "AI Detection" else "Manual Annotation"
+    val provenanceText = if (aiGenerated) "AI DETECTION" else "MANUAL ANNOTATION"
     val speciesLabel = detection.expertClass ?: detection.classLabel
-    val isItalic = speciesLabel.contains("Ascaris") || speciesLabel.contains("Trichuris") || speciesLabel.contains(".")
+    val isItalic = speciesLabel.contains("Ascaris") || speciesLabel.contains("Trichuris") || speciesLabel.contains("Necator") || speciesLabel.contains("Hymenolepis") || speciesLabel.contains(".")
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(Surface)
-            .border(0.5.dp, HairlineSoft, RoundedCornerShape(14.dp))
+            .background(AppColors.White)
+            .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(14.dp))
     ) {
         // Header
         Row(
@@ -347,42 +330,41 @@ private fun DetectionCard(index: Int, detection: Detection) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
-                    modifier = Modifier.size(24.dp).background(if (isVerified) Brand else Danger, CircleShape),
+                    modifier = Modifier.size(24.dp).background(if (aiGenerated) AppColors.Blue else AppColors.Blue, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text((index + 1).toString(), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text((index + 1).toString(), color = AppColors.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
                 Text(
                     text = speciesLabel,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Ink,
+                    color = AppColors.Gray900,
                     fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
                 )
             }
             Box(
                 modifier = Modifier
-                    .background(IosFillThin, RoundedCornerShape(100.dp))
+                    .background(AppColors.Gray100, RoundedCornerShape(100.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
-                    text = provenanceText.uppercase(),
+                    text = provenanceText,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Muted,
+                    color = AppColors.Gray500,
                     letterSpacing = 0.4.sp
                 )
             }
         }
 
-        HorizontalDivider(thickness = 0.5.dp, color = HairlineSoft)
+        HorizontalDivider(thickness = 0.5.dp, color = AppColors.Gray200)
 
         // Fields
         Column(modifier = Modifier.padding(start = 16.dp)) {
-            val aiGenerated = detection.bboxX != null
             val confidenceStr = if (aiGenerated) "${(detection.confidence * 100).toInt()}%" else "—"
-            DetailRow(label = "Confidence", value = confidenceStr, isLast = false)
-            DetailRow(label = "Verdict", value = if (isVerified) "Verified" else "Rejected", valueColor = if (isVerified) SuccessDeep else Danger, isLast = false)
+            DetailRow(label = "Confidence", value = confidenceStr, isLast = false, valueFontFamily = FontFamily.Monospace)
+            DetailRow(label = "Verdict", value = if (isVerified) "Verified" else "Rejected", valueColor = if (isVerified) AppColors.Green else AppColors.Red, isLast = false)
             
             val bboxStr = if (detection.bboxX != null) {
                 String.format("[%.3f, %.3f, %.3f, %.3f]", detection.bboxX, detection.bboxY, detection.bboxW, detection.bboxH)
@@ -411,18 +393,18 @@ private fun MetadataTab(sample: Sample) {
         
         item {
             GroupedList(title = "STATUS & TIMING") {
-                val statusStr = sample.status.name
+                val statusStr = sample.status.name.uppercase()
                 val isSynced = sample.status == SampleStatus.SYNCED
-                DetailRow(label = "Sync Status", value = statusStr, isLast = false, valueColor = if (isSynced) SuccessDeep else Muted)
+                DetailRow(label = "Sync Status", value = statusStr, isLast = false, valueColor = if (isSynced) AppColors.Green else AppColors.Gray500)
                 
                 val capturedAt = Instant.ofEpochMilli(sample.timestamp)
                     .atZone(ZoneId.systemDefault())
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
                 DetailRow(label = "Captured At", value = capturedAt, isLast = false, valueFontFamily = FontFamily.Monospace)
                 
                 val verifiedAt = Instant.ofEpochMilli(sample.verifiedAt)
                     .atZone(ZoneId.systemDefault())
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
                 DetailRow(label = "Verified At", value = verifiedAt, isLast = true, valueFontFamily = FontFamily.Monospace)
             }
         }
@@ -449,7 +431,7 @@ fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
             text = title,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = Muted,
+            color = AppColors.Gray500,
             letterSpacing = 0.5.sp,
             modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
         )
@@ -457,7 +439,8 @@ fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .background(Surface)
+                .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(12.dp))
+                .background(AppColors.White)
         ) {
             content()
         }
@@ -469,7 +452,7 @@ fun DetailRow(
     label: String, 
     value: String, 
     isLast: Boolean, 
-    valueColor: Color = Muted, 
+    valueColor: Color = AppColors.Gray500, 
     valueFontFamily: FontFamily = FontFamily.Default
 ) {
     Row(
@@ -479,16 +462,26 @@ fun DetailRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 15.sp, color = Ink)
+        Text(label, fontSize = 15.sp, color = AppColors.Gray900)
+        
+        // Handle long monospace strings like UUIDs by breaking them
+        val textModifier = if (valueFontFamily == FontFamily.Monospace) {
+            Modifier.fillMaxWidth(0.6f)
+        } else {
+            Modifier
+        }
+        
         Text(
             text = value,
             fontSize = 15.sp,
             color = valueColor,
             fontFamily = valueFontFamily,
-            textAlign = TextAlign.End
+            textAlign = TextAlign.End,
+            modifier = textModifier,
+            style = if (valueFontFamily == FontFamily.Monospace) TextStyle(fontFeatureSettings = "tnum") else TextStyle.Default
         )
     }
     if (!isLast) {
-        HorizontalDivider(thickness = 0.5.dp, color = HairlineSoft)
+        HorizontalDivider(thickness = 0.5.dp, color = AppColors.Gray200)
     }
 }

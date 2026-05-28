@@ -36,6 +36,10 @@ data class DashboardUiState(
     val epgSparklineData: List<Float> = emptyList(), // Array of exactly 7 items
     val topSpecies: List<SpeciesData> = emptyList(),
     val pendingReviewCount: Int = 0,
+    val oldestPendingAgo: String = "",
+    val allSynced: Boolean = true,
+    val lastSyncLabel: String = "—",
+    val syncedSamplesCount: Int = 0,
 )
 
 data class ActiveSessionState(
@@ -59,6 +63,14 @@ data class SpeciesData(
     val name: String,
     val ratio: Float,
     val formattedPercentage: String
+)
+
+data class PendingAndSync(
+    val pendingCount: Int,
+    val oldestPendingAgo: String,
+    val allSynced: Boolean,
+    val lastSyncLabel: String,
+    val syncedSamplesCount: Int
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -97,11 +109,56 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Pending Reviews
-    private val pendingReviewCountFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
-        flow {
-            val pending = sampleRepository.getSamplesPendingSync(userId)
-            emit(pending.size)
+    // Pending Reviews + Sync Status
+    private val pendingAndSyncFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
+        combine(
+            flow { emit(sampleRepository.getSamplesPendingSync(userId)) },
+            sampleRepository.observeAllSamples(userId)
+        ) { pendingSamples, allSamples ->
+            val pendingCount = pendingSamples.size
+
+            // Oldest pending: find the earliest timestamp among unverified flagged samples
+            val oldestPendingMs = pendingSamples.minOfOrNull { it.timestamp }
+            val oldestPendingAgo = if (oldestPendingMs != null) {
+                val diffMs = System.currentTimeMillis() - oldestPendingMs
+                when {
+                    diffMs < 60_000L             -> "${diffMs / 1_000}s ago"
+                    diffMs < 3_600_000L          -> "${diffMs / 60_000}m ago"
+                    diffMs < 86_400_000L         -> "${diffMs / 3_600_000}h ago"
+                    else                         -> "${diffMs / 86_400_000}d ago"
+                }
+            } else ""
+
+            // Sync status: all synced when no VERIFIED (unsynced) samples exist
+            val unsyncedCount = allSamples.count {
+                it.status == com.agarthavision.domain.model.SampleStatus.VERIFIED
+            }
+            val syncedSamples = allSamples.count {
+                it.status == com.agarthavision.domain.model.SampleStatus.SYNCED
+            }
+            val allSynced = unsyncedCount == 0
+
+            // Last sync label: time since the most recently synced sample
+            val lastSyncedMs = allSamples
+                .filter { it.status == com.agarthavision.domain.model.SampleStatus.SYNCED }
+                .maxOfOrNull { it.verifiedAt }
+            val lastSyncLabel = if (lastSyncedMs != null) {
+                val diffMs = System.currentTimeMillis() - lastSyncedMs
+                when {
+                    diffMs < 60_000L    -> "just now"
+                    diffMs < 3_600_000L -> "${diffMs / 60_000}m ago"
+                    diffMs < 86_400_000L -> "${diffMs / 3_600_000}h ago"
+                    else                -> "${diffMs / 86_400_000}d ago"
+                }
+            } else "never"
+
+            PendingAndSync(
+                pendingCount    = pendingCount,
+                oldestPendingAgo = oldestPendingAgo,
+                allSynced       = allSynced,
+                lastSyncLabel   = lastSyncLabel,
+                syncedSamplesCount = syncedSamples
+            )
         }
     }
 
@@ -180,17 +237,21 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> = combine(
         kpiStateFlow,
-        pendingReviewCountFlow,
+        pendingAndSyncFlow,
         activeSessionStateFlow,
         historicalDataFlow
-    ) { kpis, pending, activeSession, (topSpecies, sparkline) ->
+    ) { kpis, pendingSync, activeSession, (topSpecies, sparkline) ->
         DashboardUiState(
-            isLoading = false,
-            kpis = kpis,
-            pendingReviewCount = pending,
-            activeSession = activeSession,
-            topSpecies = topSpecies,
-            epgSparklineData = sparkline
+            isLoading           = false,
+            kpis                = kpis,
+            pendingReviewCount  = pendingSync.pendingCount,
+            oldestPendingAgo    = pendingSync.oldestPendingAgo,
+            allSynced           = pendingSync.allSynced,
+            lastSyncLabel       = pendingSync.lastSyncLabel,
+            syncedSamplesCount  = pendingSync.syncedSamplesCount,
+            activeSession       = activeSession,
+            topSpecies          = topSpecies,
+            epgSparklineData    = sparkline
         )
     }.stateIn(
         scope = viewModelScope,

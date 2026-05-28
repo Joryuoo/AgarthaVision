@@ -6,46 +6,48 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.FactCheck
-import androidx.compose.material.icons.filled.History
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -55,47 +57,97 @@ import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.MicroscopyViewport
-import com.agarthavision.ui.components.ShutterButton
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
 import com.komoui.components.Button as KomoButton
 import com.komoui.components.ButtonSize
 import com.komoui.components.ButtonVariant
 import com.komoui.components.Input
-import com.komoui.components.sooner.SonnerAction
-import com.komoui.components.sooner.SonnerEvent
-import com.komoui.components.sooner.SonnerHost
-import com.komoui.components.sooner.SonnerVariant
-import com.komoui.components.sooner.showSonner
 import com.komoui.themes.styles
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
-import com.agarthavision.ui.components.glassChrome
-import com.agarthavision.ui.components.glassChromeStrong
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.draw.shadow
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SvgIcon(
+    pathData: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.White,
+    strokeWidth: Float = 1.6f,
+    drawExtras: (DrawScope.(Color) -> Unit)? = null
+) {
+    val path = remember(pathData) {
+        PathParser().parsePathString(pathData).toPath()
+    }
+    Canvas(modifier = modifier) {
+        val scale = size.width / 24f // assuming 24x24 viewBox
+        scale(scale, scale, pivot = Offset.Zero) {
+            if (pathData.isNotEmpty()) {
+                drawPath(
+                    path = path,
+                    color = color,
+                    style = Stroke(
+                        width = strokeWidth,
+                        cap = StrokeCap.Round,
+                        join = StrokeJoin.Round
+                    )
+                )
+            }
+            drawExtras?.invoke(this, color)
+        }
+    }
+}
+
+@Composable
+fun PulsingDot() {
+    val infiniteTransition = rememberInfiniteTransition()
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(750, easing = EaseInOut),
+            repeatMode = RepeatMode.Reverse
+        )
+    )
+    
+    val opacity = 1f - progress * 0.35f
+    val haloSize = progress * 5f
+    val haloAlpha = 0.55f * (1f - progress)
+
+    Box(
+        modifier = Modifier
+            .size(8.dp)
+            .background(Color(0xFFDC2626).copy(alpha = opacity), CircleShape)
+            .drawBehind {
+                if (haloAlpha > 0f) {
+                    drawCircle(
+                        color = Color(0xFFDC2626).copy(alpha = haloAlpha),
+                        radius = (size.width / 2) + haloSize.dp.toPx()
+                    )
+                }
+            }
+    )
+}
+
+@Composable
+private fun IconButtonGlass(
+    pathData: String,
+    onClick: () -> Unit,
+    drawExtras: (DrawScope.(Color) -> Unit)? = null
+) {
+    Box(
+        modifier = Modifier
+            .size(40.dp)
+            .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+            .background(Color(20, 28, 42, (0.55f * 255).toInt()), CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        SvgIcon(pathData, color = Color.White, strokeWidth = 1.8f, modifier = Modifier.size(22.dp), drawExtras = drawExtras)
+    }
+}
+
 @Composable
 fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
@@ -105,14 +157,26 @@ fun CaptureScreen(
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
     onSessionEnded: () -> Unit,
+    onNavigateBack: () -> Unit = {}
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val sonnerHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
-    val detectionFallback = stringResource(R.string.capture_detection_fallback)
-    val detectionView = stringResource(R.string.capture_detection_view)
-    val detectionMessage = stringResource(R.string.capture_detection_message)
+    val view = LocalView.current
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
+
+    // Hide the system navigation bar while on Capture screen (immersive sticky)
+    DisposableEffect(Unit) {
+        val window = (context as? androidx.activity.ComponentActivity)?.window
+        val controller = window?.let { WindowInsetsControllerCompat(it, view) }
+        controller?.let {
+            it.hide(WindowInsetsCompat.Type.navigationBars())
+            it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            // Restore nav bar when leaving Capture screen
+            controller?.show(WindowInsetsCompat.Type.navigationBars())
+        }
+    }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -131,9 +195,6 @@ fun CaptureScreen(
         }
     }
 
-    // Auto-pause inference whenever Capture leaves the foreground (back to picker,
-    // app backgrounded, etc.) and resume on return. Sheets/overlays handle their
-    // own pause/resume — see CaptureViewModel.resumeInferenceIfNoOverlay().
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -155,53 +216,8 @@ fun CaptureScreen(
         }
     }
 
-    LaunchedEffect(viewModel) {
-        viewModel.state
-            .map { it.flaggedFrames.firstOrNull()?.capturedAt }
-            .distinctUntilChanged()
-            .collect { capturedAt ->
-                if (capturedAt != null) {
-                    val latest = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-                    if (latest.source != FrameSource.MODEL) return@collect
-                    val eggType = latest.predictions.firstOrNull()?.classLabel ?: detectionFallback
-                    val confidence = latest.predictions.firstOrNull()?.confidence ?: 0f
-                    sonnerHostState.showSonner(
-                        SonnerEvent(
-                            message = detectionMessage.format(eggType, "%.0f".format(confidence * 100)),
-                            action = SonnerAction(
-                                actionText = detectionView,
-                                execute = { viewModel.onDetectionToastTap(latest) },
-                            ),
-                            withDismissAction = true,
-                            variant = SonnerVariant.Default,
-                        ),
-                    )
-                }
-            }
-    }
-
-    // Design system tokens
-    val Brand = Color(0xFF1E40AF)
-    val Danger = Color(0xFFFF3B30)
-    val Success = Color(0xFF34C759)
-    val SuccessDeep = Color(0xFF248A3D)
-    val Ink = Color(0xFF0F172A)
-    val Muted = Color(0xFF6E6E73)
-    val BodyColor = Color(0xFF3C3C43)
-    val AiPurple = Color(0xFFAF52DE)
-    
     // Animation states
     val isRecording = state.isInferenceRunning
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.92f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = EaseInOut),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulseScale"
-    )
 
     // Full screen container
     Box(
@@ -209,7 +225,7 @@ fun CaptureScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // 1. Full-bleed Viewfinder
+        // 1. Full-bleed Viewfinder (z-1)
         if (hasCameraPermission) {
             MicroscopyViewport(
                 cameraManager = cameraManager,
@@ -224,212 +240,116 @@ fun CaptureScreen(
             )
         }
 
-        // Viewfinder Vignette Overlay
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.White.copy(alpha = 0.18f),
-                        0.18f to Color.Transparent,
-                        0.82f to Color.Transparent,
-                        1.0f to Color.White.copy(alpha = 0.18f)
-                    )
-                )
-        )
-
-        // 2. Dynamic Island Emulation (Recording Live Activity)
-        if (isRecording) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 11.dp)
-                    .clip(RoundedCornerShape(100.dp))
-                    .background(Color(0xFF0A0A0B))
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Pulsing Dot
-                    Box(
-                        modifier = Modifier
-                            .size(9.dp)
-                            .clip(CircleShape)
-                            .background(Danger)
-                            .shadow(if (pulseScale > 0.95f) 8.dp else 0.dp, CircleShape, spotColor = Danger)
-                    )
-                    Text("00:00:00", color = Color.White, fontSize = 13.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
-                }
-            }
-        }
-
-        // 3. Top Chrome Bar
-        Row(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 60.dp)
-                .padding(horizontal = 14.dp)
-                .fillMaxWidth()
-                .glassChrome(shape = RoundedCornerShape(22.dp))
-                .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Counter
-            Column {
-                Text("CAPTURED", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp, color = Muted, fontFamily = FontFamily.Default)
-                Spacer(modifier = Modifier.height(5.dp))
-                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("${state.flaggedFrames.size}", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.8).sp, color = Ink, fontFamily = FontFamily.Monospace, lineHeight = 24.sp)
-                    Text("frames", fontSize = 11.sp, fontWeight = FontWeight.Medium, color = Muted, fontFamily = FontFamily.Default)
-                }
-            }
-            
-            // Icon Group
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Stats
-                Box(modifier = Modifier.size(38.dp).background(Color(120, 120, 128, (0.12f * 255).toInt()), RoundedCornerShape(13.dp)).border(0.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(13.dp)).clickable { }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Assessment, contentDescription = "Stats", tint = Ink, modifier = Modifier.size(19.dp))
-                }
-                // History / Verify Queue
-                Box(modifier = Modifier.size(38.dp).background(Color(120, 120, 128, (0.12f * 255).toInt()), RoundedCornerShape(13.dp)).border(0.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(13.dp)).clickable { onVerifyQueueClick() }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.History, contentDescription = "History", tint = Ink, modifier = Modifier.size(19.dp))
-                }
-                // Export
-                Box(modifier = Modifier.size(38.dp).background(Color(120, 120, 128, (0.12f * 255).toInt()), RoundedCornerShape(13.dp)).border(0.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(13.dp)).clickable { state.activeSessionId?.let(onReportsClick) }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.FactCheck, contentDescription = "Export", tint = Ink, modifier = Modifier.size(19.dp))
-                }
-            }
-        }
-
-        // 4. Side Rail Chips
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 184.dp, end = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .glassChromeStrong(shape = RoundedCornerShape(100.dp))
-                    .padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                Box(modifier = Modifier.size(7.dp).shadow(6.dp, CircleShape, spotColor = Success, ambientColor = Success).background(Success, CircleShape))
-                Text("4K · 60 fps", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-            }
-            Row(
-                modifier = Modifier
-                    .glassChromeStrong(shape = RoundedCornerShape(100.dp))
-                    .padding(start = 10.dp, end = 12.dp, top = 7.dp, bottom = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                Icon(Icons.Default.FactCheck, contentDescription = null, tint = AiPurple, modifier = Modifier.size(14.dp))
-                Text("AI · auto", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-            }
-        }
-
-        // 5. Focus Reticle
+        // 5. Focus Reticle (z-3)
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(84.dp)
-                .border(1.5.dp, Color.White.copy(alpha = 0.85f), RoundedCornerShape(6.dp))
-                .shadow(0.dp, RoundedCornerShape(6.dp), spotColor = Color.Black.copy(alpha = 0.15f))
-        )
-
-        // 6. Bottom Capture Dock
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 28.dp)
-                .padding(horizontal = 14.dp)
-                .fillMaxWidth()
-                .glassChrome(shape = RoundedCornerShape(30.dp))
-                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 14.dp)
+                .size(56.dp)
         ) {
-            // Meta row
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    // Live badge
-                    Row(
-                        modifier = Modifier.background(Success.copy(alpha = 0.16f), RoundedCornerShape(100.dp)).padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Box(modifier = Modifier.size(5.dp).shadow(5.dp, CircleShape, spotColor = Success, ambientColor = Success).background(Success, CircleShape))
-                        Text("LIVE", color = SuccessDeep, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.3.sp)
-                    }
-                    val sessionName = state.activeSessionLabel ?: state.activeSessionId?.take(4) ?: "None"
-                    Text("Session $sessionName · ${state.flaggedFrames.size} captured", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = BodyColor)
-                }
-                Text("2.3 GB · 47%", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = BodyColor, fontFamily = FontFamily.Monospace)
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val alpha = 0.25f
+                drawLine(
+                    color = Color.White.copy(alpha = alpha),
+                    start = Offset(0f, size.height / 2),
+                    end = Offset(size.width, size.height / 2),
+                    strokeWidth = 1f
+                )
+                drawLine(
+                    color = Color.White.copy(alpha = alpha),
+                    start = Offset(size.width / 2, 0f),
+                    end = Offset(size.width / 2, size.height),
+                    strokeWidth = 1f
+                )
             }
-            
-            Spacer(modifier = Modifier.height(14.dp).fillMaxWidth().background(Color(0xFF3C3C43).copy(alpha = 0.12f)))
-            Spacer(modifier = Modifier.height(14.dp))
+        }
 
-            // Controls grid
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        // Z-5: AI Detection Box
+        val latestModelFrame = state.flaggedFrames.firstOrNull { it.source == FrameSource.MODEL }
+        if (latestModelFrame != null) {
+            val confidence = latestModelFrame.predictions.firstOrNull()?.confidence ?: 0f
+            val species = latestModelFrame.predictions.firstOrNull()?.classLabel ?: "Unknown"
+            
+            // Dummy coordinates for the visual placeholder as described in prompt
+            // top: 40%; left: 36%; width: 96px; height: 80px;
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
             ) {
-                // Left: Gallery
-                Box(modifier = Modifier.size(52.dp).background(Color(120, 120, 128, (0.12f * 255).toInt()), RoundedCornerShape(16.dp)).border(0.5.dp, Color.White.copy(alpha = 0.4f), RoundedCornerShape(16.dp)).clickable { onRecordsClick() }, contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.History, contentDescription = "Gallery", tint = Ink, modifier = Modifier.size(22.dp))
-                }
-                
-                // Center: Record
                 Box(
                     modifier = Modifier
-                        .size(72.dp)
-                        .background(Color.White, CircleShape)
-                        .border(4.dp, Color.Black.copy(alpha = 0.08f), CircleShape)
-                        .shadow(8.dp, CircleShape, spotColor = Color(0xFF14161E).copy(alpha = 0.12f))
-                        .clickable(enabled = state.activeSessionId != null) { viewModel.onManualCapture() },
-                    contentAlignment = Alignment.Center
+                        .offset(x = 130.dp, y = 280.dp) // Approximate for 36% and 40% on standard phone
+                        .size(96.dp, 80.dp)
+                        .border(2.dp, Color(0xFF1E3FD9), RoundedCornerShape(4.dp))
+                        .shadow(20.dp, RoundedCornerShape(4.dp), spotColor = Color(0xFF1E3FD9).copy(alpha = 0.15f))
                 ) {
-                    val innerShape = if (isRecording) RoundedCornerShape(8.dp) else CircleShape
-                    Box(
+                    // Corner Brackets
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val bracketSize = 14.dp.toPx()
+                        val stroke = 2.dp.toPx()
+                        val color = Color.White
+                        
+                        // TL
+                        drawLine(color, Offset(0f, 0f), Offset(bracketSize, 0f), stroke)
+                        drawLine(color, Offset(0f, 0f), Offset(0f, bracketSize), stroke)
+                        // TR
+                        drawLine(color, Offset(size.width, 0f), Offset(size.width - bracketSize, 0f), stroke)
+                        drawLine(color, Offset(size.width, 0f), Offset(size.width, bracketSize), stroke)
+                        // BL
+                        drawLine(color, Offset(0f, size.height), Offset(bracketSize, size.height), stroke)
+                        drawLine(color, Offset(0f, size.height), Offset(0f, size.height - bracketSize), stroke)
+                        // BR
+                        drawLine(color, Offset(size.width, size.height), Offset(size.width - bracketSize, size.height), stroke)
+                        drawLine(color, Offset(size.width, size.height), Offset(size.width, size.height - bracketSize), stroke)
+                    }
+
+                    // Label Tag
+                    Text(
+                        text = "$species · ${(confidence * 100).toInt()}%",
                         modifier = Modifier
-                            .size(30.dp)
-                            .shadow(14.dp, innerShape, spotColor = Danger.copy(alpha = 0.35f))
-                            .background(Danger, innerShape)
+                            .offset(x = (-2).dp, y = (-24).dp)
+                            .background(Color(0xFF1E3FD9), RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 4.dp, bottomEnd = 0.dp))
+                            .padding(horizontal = 7.dp, vertical = 3.dp),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = 0.02.sp
                     )
                 }
-                
-                // Right: End Session
-                if (state.activeSessionId != null) {
-                    Row(
-                        modifier = Modifier
-                            .background(Danger.copy(alpha = 0.14f), RoundedCornerShape(100.dp))
-                            .border(0.5.dp, Danger.copy(alpha = 0.18f), RoundedCornerShape(100.dp))
-                            .clickable { showEndConfirm = true }
-                            .padding(start = 11.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+            }
+
+            // Z-9: Live detection toast
+            AnimatedVisibility(
+                visible = true, // Shows when latestModelFrame exists
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 108.dp).padding(horizontal = 14.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(36.dp, RoundedCornerShape(12.dp), spotColor = Color.Black.copy(alpha = 0.5f))
+                        .background(Color(15, 23, 42, (0.78f * 255).toInt()), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Toast Icon
+                    Box(
+                        modifier = Modifier.size(32.dp).background(Color(0xFF1E3FD9), RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(modifier = Modifier.size(14.dp).background(Danger, RoundedCornerShape(2.dp)))
-                        Text("End Session", color = Danger, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        SvgIcon("M9 12l2 2 4-4", drawExtras = { c -> drawCircle(c, 9f, Offset(12f, 12f), style = Stroke(1.8f)) }, color = Color.White, modifier = Modifier.size(18.dp))
                     }
-                } else {
-                    Row(
-                        modifier = Modifier
-                            .background(Brand, RoundedCornerShape(100.dp))
-                            .clickable { } // TODO: route to Session Picker
-                            .padding(start = 11.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Text("Start Session", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+
+                    // Toast Text
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("$species detected", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, fontStyle = FontStyle.Italic)
+                        Text("${(confidence * 100).toInt()}% confidence · just now", color = Color.White.copy(alpha = 0.65f), fontSize = 12.sp)
                     }
+
+                    // Toast Action
+                    Text("Review", color = Color(0xFF93B0FF), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { viewModel.onDetectionToastTap(latestModelFrame) }.padding(4.dp))
                 }
             }
         }
@@ -440,38 +360,124 @@ fun CaptureScreen(
             onResume = viewModel::resumeConnection,
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.TopCenter),
+                .align(Alignment.TopCenter)
+                .padding(top = 108.dp)
+                .padding(horizontal = 14.dp),
         )
 
-        // Custom AI Detection Toast (replaces SonnerHost)
-        AnimatedVisibility(
-            visible = state.verificationTarget != null && state.verificationTarget?.source == FrameSource.MODEL,
-            enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 130.dp)
+        // Z-10: Floating Top Chrome
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 48.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val target = state.verificationTarget
-            val confidence = target?.predictions?.firstOrNull()?.confidence ?: 0f
-            val species = target?.predictions?.firstOrNull()?.classLabel ?: "Ascaris egg detected"
-            
+            // Back
+            IconButtonGlass("M 15 18 L 9 12 L 15 6", onClick = onNavigateBack)
+
+            // Session Pill
             Row(
                 modifier = Modifier
-                    .shadow(28.dp, RoundedCornerShape(100.dp), spotColor = AiPurple.copy(alpha = 0.32f), ambientColor = AiPurple.copy(alpha = 0.2f))
-                    .background(AiPurple.copy(alpha = 0.96f), RoundedCornerShape(100.dp))
-                    .clickable { 
-                        // It's already open in verificationTarget state, but we can do custom action
-                    }
-                    .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                    .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+                    .background(Color(20, 28, 42, (0.55f * 255).toInt()), CircleShape)
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+                    .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(modifier = Modifier.size(22.dp).background(Color.White.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.FactCheck, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                PulsingDot()
+                Text("SESSION", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color.White.copy(alpha = 0.6f), letterSpacing = 1.sp)
+                val sessionName = state.activeSessionLabel ?: state.activeSessionId?.take(3) ?: "---"
+                Text(sessionName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = (-0.15).sp)
+            }
+
+            // Top Actions
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Stats
+                IconButtonGlass("", drawExtras = { c -> 
+                    drawRoundRect(c, Offset(3f, 11f), Size(4f, 10f), CornerRadius(0.5f, 0.5f))
+                    drawRoundRect(c, Offset(10f, 6f), Size(4f, 15f), CornerRadius(0.5f, 0.5f))
+                    drawRoundRect(c, Offset(17f, 3f), Size(4f, 18f), CornerRadius(0.5f, 0.5f))
+                }, onClick = { /* Stats overlay */ })
+                
+                // History
+                IconButtonGlass("M 12 7 L 12 12 L 15 14", drawExtras = { c -> drawCircle(c, 9f, Offset(12f,12f), style = Stroke(1.6f)) }, onClick = onRecordsClick)
+                
+                // Verify Queue
+                Box {
+                    IconButtonGlass("M9 12l2 2 4-4", drawExtras = { c -> drawRoundRect(c, Offset(3f,3f), Size(18f,18f), CornerRadius(2f,2f), style = Stroke(1.6f)) }, onClick = onVerifyQueueClick)
+                    val verifyCount = state.flaggedFrames.size
+                    if (verifyCount > 0) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 6.dp, y = (-6).dp)
+                                .background(Color(0xFF1E3FD9), CircleShape)
+                                .border(2.dp, Color(20, 28, 42, (0.85f * 255).toInt()), CircleShape)
+                                .padding(horizontal = 5.dp)
+                                .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("$verifyCount", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
-                Text(species, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp)
-                Box(modifier = Modifier.background(Color.White.copy(alpha = 0.18f), RoundedCornerShape(100.dp)).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                    Text("${(confidence * 100).toInt()}%", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+
+        // Z-10: Floating Bottom Chrome
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = 28.dp)
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left: Frame Count Pill (weight=1, aligned to start)
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Column(
+                    modifier = Modifier
+                        .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.35f))
+                        .background(Color(20, 28, 42, (0.55f * 255).toInt()), RoundedCornerShape(16.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                        .defaultMinSize(minWidth = 64.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("FRAMES", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.55f), letterSpacing = 1.2.sp)
+                    Text("${state.flaggedFrames.size}", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = (-0.15).sp)
                 }
+            }
+
+            // Center: Shutter (no weight — stays exactly centered)
+            Box(
+                modifier = Modifier
+                    .size(100.dp)
+                    .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
+                    .background(Color.White, CircleShape)
+                    .clickable(enabled = state.activeSessionId != null) { viewModel.onManualCapture() }
+            )
+
+            // Right: End Session (weight=1, aligned to end)
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .offset(x = (-30).dp)
+                        .shadow(14.dp, RoundedCornerShape(12.dp), spotColor = Color(0xFFDC2626).copy(alpha = 0.4f))
+                        .background(Color(0xFFDC2626), RoundedCornerShape(12.dp))
+                        .clickable { showEndConfirm = true }
+                )
             }
         }
     }

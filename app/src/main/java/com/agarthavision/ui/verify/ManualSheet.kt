@@ -2,6 +2,7 @@
 
 package com.agarthavision.ui.verify
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -9,17 +10,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -38,12 +40,12 @@ import coil.compose.AsyncImage
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.ui.records.AppColors
 import com.agarthavision.ui.components.glassChrome
 import com.komoui.components.Input
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualSheet(
     frame: FlaggedFrame,
@@ -65,39 +67,26 @@ fun ManualSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    BackHandler(onBack = viewModel::onCancel)
 
-    ModalBottomSheet(
-        onDismissRequest = viewModel::onCancel,
-        sheetState = sheetState,
-        containerColor = Color.Transparent,
-        scrimColor = Color(15, 23, 42, (0.32f * 255).toInt()),
-        dragHandle = null, // We build our own
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Gray200)
+            .systemBarsPadding()
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .glassChrome(
-                    backgroundColor = Color(248, 248, 250, (0.96f * 255).toInt())
-                )
-                .clip(RoundedCornerShape(topStart = 30.dp, topEnd = 30.dp))
-                .heightIn(max = screenHeightDp * 0.95f)
-                .navigationBarsPadding()
-        ) {
-            ManualSheetContent(
-                state = state,
-                actions = ManualSheetActions(
-                    onSpeciesSelected = viewModel::onSpeciesSelected,
-                    onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
-                    onUserNoteChanged = viewModel::onUserNoteChanged,
-                    onToggleRepeat = viewModel::onToggleRepeat,
-                    onDeleteFrame = viewModel::onDeleteFrame,
-                    onSubmit = viewModel::onSubmit,
-                    onCancel = viewModel::onCancel,
-                ),
-            )
-        }
+        ManualSheetContent(
+            state = state,
+            actions = ManualSheetActions(
+                onSpeciesSelected = viewModel::onSpeciesSelected,
+                onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
+                onUserNoteChanged = viewModel::onUserNoteChanged,
+                onToggleRepeat = viewModel::onToggleRepeat,
+                onDeleteFrame = viewModel::onDeleteFrame,
+                onSubmit = viewModel::onSubmit,
+                onCancel = viewModel::onCancel,
+            ),
+        )
     }
 }
 
@@ -123,180 +112,175 @@ private fun ManualSheetContent(
             .format(frame.capturedAt)
     }
 
+    var showCustomSpeciesDialog by remember { mutableStateOf(false) }
+    var customSpeciesText by remember { mutableStateOf("") }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, start = 22.dp, end = 22.dp, bottom = 32.dp)
+            .padding(bottom = 32.dp)
             .verticalScroll(rememberScrollState()),
     ) {
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            SheetDragHandle()
-        }
-
-        SheetTitleRow(
+        ScreenTopBar(
             title = "Label sample",
             metaText = "MANUAL · ${frame.capturedAt.toEpochMilli().toString().takeLast(3)}",
-            isManual = true
+            onBack = actions.onCancel
         )
 
-        // Image preview
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .padding(bottom = 14.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
-        ) {
-            AsyncImage(
-                model = frame.jpegBytes,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
+        Column(modifier = Modifier.padding(horizontal = 22.dp)) {
 
-            // Manual Tag (Top Right)
-            Row(
-                modifier = Modifier
-                    .padding(12.dp)
-                    .align(Alignment.TopEnd)
-                    .background(Color(120, 120, 128, (0.92f * 255).toInt()), RoundedCornerShape(100.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Close, // Using Close for now, will replace with proper icon if needed
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(12.dp)
-                )
-                Text("Manual capture", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-            }
-
-            // Frame Tag (Bottom Left)
+            // Image preview
             Box(
                 modifier = Modifier
-                    .padding(12.dp)
-                    .align(Alignment.BottomStart)
-                    .background(Color(0, 0, 0, (0.6f * 255).toInt()), RoundedCornerShape(100.dp))
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(bottom = 14.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
             ) {
-                Text(
-                    text = "$timeLabel · ${frame.imageWidth}x${frame.imageHeight} · Manual",
-                    color = Color.White,
-                    fontSize = 11.sp,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.3.sp
+                AsyncImage(
+                    model = frame.jpegBytes,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
-        }
 
-        // Species Section
-        Text(
-            text = "SPECIES",
-            fontFamily = FontFamily.Monospace,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = SheetMuted,
-            letterSpacing = 0.8.sp,
-            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
-        )
-
-        // Quick Chips
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            val quickSpecies = listOf(
-                EggSpecies.ASCARIS to "Ascaris",
-                EggSpecies.TRICHURIS to "Trichuris",
-                EggSpecies.HOOKWORM to "Hookworm"
+            // Species Section
+            Text(
+                text = "SPECIES",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.Gray500,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
             )
 
-            quickSpecies.forEach { (species, label) ->
-                val selected = state.selectedSpecies == species
+            // Quick Chips
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val quickSpecies = listOf(
+                    EggSpecies.ASCARIS to "Ascaris",
+                    EggSpecies.TRICHURIS to "Trichuris",
+                    EggSpecies.HOOKWORM to "Hookworm"
+                )
+
+                quickSpecies.forEach { (species, label) ->
+                    val selected = state.selectedSpecies == species
+                    Box(
+                        modifier = Modifier
+                            .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+                            .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                            .clickable { actions.onSpeciesSelected(species) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            color = AppColors.Gray900,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = FontStyle.Italic,
+                            letterSpacing = (-0.1).sp
+                        )
+                    }
+                }
+
+                // Other... chip
+                val isOtherSelected = state.selectedSpecies != null && quickSpecies.none { it.first == state.selectedSpecies }
                 Box(
                     modifier = Modifier
-                        .background(if (selected) SheetBrand else SheetSurface, RoundedCornerShape(100.dp))
-                        .border(0.5.dp, if (selected) SheetBrand else SheetHairline, RoundedCornerShape(100.dp))
-                        .clickable { actions.onSpeciesSelected(species) }
+                        .background(if (isOtherSelected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+                        .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                        .clickable { 
+                            showCustomSpeciesDialog = true
+                        }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = label,
-                        color = if (selected) Color.White else Color(0xFF3C3C43),
+                        text = if (isOtherSelected) state.selectedSpecies?.name ?: "Other..." else "Other...",
+                        color = AppColors.Gray900,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        fontStyle = FontStyle.Italic,
+                        fontStyle = FontStyle.Normal, // Not italic
                         letterSpacing = (-0.1).sp
                     )
                 }
             }
 
-            // Other... chip (mocking behavior for now, just sets it to another species or we'd open a picker)
-            val isOtherSelected = state.selectedSpecies != null && quickSpecies.none { it.first == state.selectedSpecies }
-            Box(
+            // Note section
+            Column(
                 modifier = Modifier
-                    .background(if (isOtherSelected) SheetBrand else SheetSurface, RoundedCornerShape(100.dp))
-                    .border(0.5.dp, if (isOtherSelected) SheetBrand else SheetHairline, RoundedCornerShape(100.dp))
-                    .clickable { 
-                        // TODO: Open full species picker.
-                        actions.onSpeciesSelected(EggSpecies.OTHER) 
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+                    .background(Color.Transparent, RoundedCornerShape(14.dp))
+                    .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 Text(
-                    text = if (isOtherSelected) state.selectedSpecies?.name ?: "Other..." else "Other...",
-                    color = if (isOtherSelected) Color.White else Color(0xFF3C3C43),
-                    fontSize = 12.sp,
+                    text = "NOTE",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontStyle = FontStyle.Normal, // Not italic
-                    letterSpacing = (-0.1).sp
+                    color = AppColors.Gray500,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                Input(
+                    value = state.userNote,
+                    onValueChange = actions.onUserNoteChanged,
+                    placeholder = "Add an observation about morphology, color, or staining.",
+                    singleLine = false,
+                    enabled = !state.isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
-        }
 
-        // Note section
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 14.dp)
-                .background(SheetSurface, RoundedCornerShape(14.dp))
-                .border(0.5.dp, SheetHairline, RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-        ) {
-            Text(
-                text = "NOTE",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = SheetMuted,
-                letterSpacing = 0.8.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-            Input(
-                value = state.userNote,
-                onValueChange = actions.onUserNoteChanged,
-                placeholder = "Add an observation about morphology, color, or staining.",
-                singleLine = false,
-                enabled = !state.isSubmitting,
-                modifier = Modifier.fillMaxWidth(),
+            SheetActionRow(
+                primaryLabel = "Submit",
+                secondaryLabel = "Discard",
+                onPrimaryClick = actions.onSubmit,
+                onSecondaryClick = actions.onCancel,
+                primaryLoading = state.isSubmitting,
+                primaryEnabled = state.canSubmit
             )
         }
+    }
 
-        SheetActionRow(
-            primaryLabel = "Save label",
-            secondaryLabel = "Discard",
-            onPrimaryClick = actions.onSubmit,
-            onSecondaryClick = actions.onCancel,
-            primaryLoading = state.isSubmitting,
-            primaryEnabled = state.canSubmit
+    if (showCustomSpeciesDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomSpeciesDialog = false },
+            title = { Text("Custom Species") },
+            text = {
+                OutlinedTextField(
+                    value = customSpeciesText,
+                    onValueChange = { customSpeciesText = it },
+                    label = { Text("Species name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        actions.onSpeciesSelected(EggSpecies.OTHER)
+                        actions.onOtherSpeciesChanged(customSpeciesText)
+                        showCustomSpeciesDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomSpeciesDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }

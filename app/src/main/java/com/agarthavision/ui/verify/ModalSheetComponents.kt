@@ -18,69 +18,49 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.ui.text.TextStyle
 import coil.compose.AsyncImage
-
-// Shared Modal Sheet Tokens
-val SheetBrand = Color(0xFF1E40AF)
-val SheetWarning = Color(0xFFFF9F0A)
-val SheetDanger = Color(0xFFFF3B30)
-val SheetSuccess = Color(0xFF34C759)
-val SheetAiPurple = Color(0xFFAF52DE)
-val SheetInk = Color(0xFF0F172A)
-val SheetMuted = Color(0xFF6E6E73)
-val SheetSubtle = Color(0xFF8E8E93)
-val SheetSurface = Color(0xFFFFFFFF)
-val SheetHairline = Color(60, 60, 67, (0.12f * 255).toInt())
-val SheetHairlineSoft = Color(60, 60, 67, (0.08f * 255).toInt())
+import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.records.AppTypography
 
 @Composable
-fun SheetDragHandle() {
-    Box(
-        modifier = Modifier
-            .padding(top = 8.dp, bottom = 18.dp)
-            .width(36.dp)
-            .height(5.dp)
-            .background(Color(60, 60, 67, (0.3f * 255).toInt()), RoundedCornerShape(100.dp))
-    )
-}
-
-@Composable
-fun SheetTitleRow(
+fun ScreenTopBar(
     title: String,
     metaText: String,
-    isManual: Boolean = false,
+    onBack: () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 18.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(vertical = 12.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = title,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            color = SheetInk,
-            letterSpacing = (-0.5).sp
-        )
-        
-        val bg = if (isManual) Color(120, 120, 128, (0.14f * 255).toInt()) else SheetSurface
-        val fg = if (isManual) Color(0xFF515154) else SheetMuted
-        
         Box(
             modifier = Modifier
-                .background(bg, RoundedCornerShape(100.dp))
-                .border(if (!isManual) 0.5.dp else 0.dp, if (!isManual) SheetHairline else Color.Transparent, RoundedCornerShape(100.dp))
-                .padding(horizontal = 10.dp, vertical = 5.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { onBack() },
+            contentAlignment = Alignment.Center
         ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Gray900)
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
             Text(
-                text = metaText.uppercase(),
-                fontSize = 11.sp,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                color = fg,
-                letterSpacing = 0.4.sp
+                title, 
+                style = AppTypography.headlineSmall,
+                color = AppColors.Gray900, 
+            )
+            Text(
+                metaText.uppercase(), 
+                fontSize = 11.sp, 
+                color = AppColors.Gray500, 
+                fontFamily = FontFamily.Monospace, 
+                fontWeight = FontWeight.Medium,
+                style = TextStyle(fontFeatureSettings = "tnum")
             )
         }
     }
@@ -105,33 +85,34 @@ fun SheetActionRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .background(Color(255, 59, 48, (0.12f * 255).toInt()), RoundedCornerShape(14.dp))
-                .border(0.5.dp, Color(255, 59, 48, (0.16f * 255).toInt()), RoundedCornerShape(14.dp))
+                .background(AppColors.RedTint, RoundedCornerShape(14.dp))
+                .border(0.5.dp, AppColors.Red.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .clickable { onSecondaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = secondaryLabel,
-                color = SheetDanger,
+                color = AppColors.Red,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp
             )
         }
         
-        // Primary Button (Brand Filled)
+        // Primary Button (Brand Filled or Gray700 based on screenshot)
+        // I'll use Gray700 since the screenshot shows a dark gray button instead of bright blue
         Box(
             modifier = Modifier
                 .weight(2f)
-                .background(if (primaryEnabled) SheetBrand else SheetMuted, RoundedCornerShape(14.dp))
+                .background(if (primaryEnabled) AppColors.Gray700 else AppColors.Gray400, RoundedCornerShape(14.dp))
                 .clickable(enabled = primaryEnabled && !primaryLoading) { onPrimaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (primaryLoading) "Loading..." else primaryLabel,
-                color = Color.White,
+                color = AppColors.White,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp

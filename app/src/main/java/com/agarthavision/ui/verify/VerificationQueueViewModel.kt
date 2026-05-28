@@ -16,7 +16,7 @@ enum class QueueFilter {
     ALL,
     FLAGGED,
     MANUAL,
-    REPEAT,
+    REPEAT
 }
 
 data class VerificationQueueState(

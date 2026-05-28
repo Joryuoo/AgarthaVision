@@ -1,6 +1,6 @@
 package com.agarthavision.ui.dashboard
 
-import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -9,31 +9,27 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Inventory2
-import androidx.compose.material.icons.outlined.Layers
-import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -42,7 +38,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,407 +45,343 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agarthavision.ui.components.AgarthaBottomBar
+import com.agarthavision.R
 import com.agarthavision.ui.navigation.Screen
-import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.records.AgarthaTheme
+import com.agarthavision.ui.records.Spacing
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
-// Design Tokens
-private val Brand = Color(0xFF1E40AF)
-private val BrandSecondary = Color(0xFF3B82F6)
-private val BrandLight = Color(0xFF4F8EE8)
-private val SuccessDeep = Color(0xFF248A3D)
-private val Warning = Color(0xFFFF9F0A)
-private val Danger = Color(0xFFFF3B30)
-private val AiAccent = Color(0xFFAF52DE)
-private val Violet2 = Color(0xFF5856D6)
-private val Ink = Color(0xFF0F172A)
-private val Muted = Color(0xFF6E6E73)
-private val Bg = Color(0xFFF2F2F7)
-private val Surface = Color(0xFFFFFFFF)
-private val Hairline = Color(0x1E3C3C43)
-private val HairlineSoft = Color(0x143C3C43)
+// Species colors for the mix bar
+private val SpeciesBlue  = AppColors.Blue
+private val SpeciesCyan  = Color(0xFF0EA5E9)
+private val SpeciesAmber = AppColors.Amber
 
 @Composable
 fun DashboardScreen(
     onNavigate: (String) -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    Scaffold(
-        bottomBar = { AgarthaBottomBar(activeRoute = Screen.Dashboard.route, onNavigate = onNavigate) },
-        containerColor = Bg
-    ) { paddingValues ->
-        Column(
+    AgarthaTheme {
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues)
-                .verticalScroll(rememberScrollState())
+                .background(AppColors.White)
         ) {
-            Spacer(modifier = Modifier.height(10.dp))
-            TodayHeader(uiState.userName, uiState.dateString)
-            Spacer(modifier = Modifier.height(14.dp))
-            if (uiState.activeSession != null) {
-                ResumeActiveSessionCard(uiState.activeSession!!)
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = Spacing.xxl)
+            ) {
+                // 1. Status Bar Padding
+                item {
+                    Spacer(Modifier.statusBarsPadding().height(Spacing.md))
+                }
+
+                // 2. Active Session Hero (only when active)
+                state.activeSession?.let { session ->
+                    item {
+                        ActiveSessionHero(
+                            sessionId    = session.label,
+                            elapsed      = session.startedAtAgo,
+                            frameCount   = session.totalFrames.toIntOrNull() ?: 0,
+                            onResume     = { onNavigate(Screen.Capture.route) },
+                            modifier     = Modifier.padding(horizontal = Spacing.xl)
+                        )
+                        Spacer(Modifier.height(Spacing.lg))
+                    }
+                }
+
+                // 3. Today's Activity KPI Grid
+                item {
+                    SectionLabel(
+                        "Today's activity",
+                        modifier = Modifier.padding(horizontal = Spacing.xl)
+                    )
+                }
+                item {
+                    Spacer(Modifier.height(Spacing.sm))
+                    KpiGrid(
+                        kpis = state.kpis,
+                        modifier = Modifier.padding(horizontal = Spacing.xl)
+                    )
+                }
+
+                // 4. Sparkline card
+                item {
+                    Spacer(Modifier.height(Spacing.lg))
+                    SparklineCard(
+                        values = if (state.epgSparklineData.size == 7) state.epgSparklineData
+                                 else List(7) { 0f },
+                        delta  = "+38%",
+                        modifier = Modifier.padding(horizontal = Spacing.xl)
+                    )
+                }
+
+                // 5. Species mix card
+                if (state.topSpecies.isNotEmpty()) {
+                    item {
+                        Spacer(Modifier.height(Spacing.lg))
+                        SpeciesMixCard(
+                            speciesData = state.topSpecies,
+                            modifier    = Modifier.padding(horizontal = Spacing.xl)
+                        )
+                    }
+                }
+
+                // 6. Verify alert row
+                if (state.pendingReviewCount > 0) {
+                    item {
+                        Spacer(Modifier.height(Spacing.lg))
+                        VerifyAlertRow(
+                            pendingCount = state.pendingReviewCount,
+                            oldestAgo    = state.oldestPendingAgo,
+                            onClick      = { onNavigate(Screen.VerificationQueue.route) },
+                            modifier     = Modifier.padding(horizontal = Spacing.xl)
+                        )
+                    }
+                }
+
+                // 7. Sync status row
+                item {
+                    Spacer(Modifier.height(Spacing.md))
+                    SyncStatusRow(
+                        allSynced      = state.allSynced,
+                        lastSyncLabel  = state.lastSyncLabel,
+                        samplesSynced  = state.syncedSamplesCount,
+                        modifier       = Modifier.padding(horizontal = Spacing.xl)
+                    )
+                }
             }
-            KpiRow(uiState.kpis)
-            EpgThisWeekCard(uiState.epgSparklineData)
-            TopSpeciesCard(uiState.topSpecies)
-            PendingReviewActionCard(uiState.pendingReviewCount)
-            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
-@Composable
-fun TodayHeader(userName: String, dateString: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp, end = 22.dp, bottom = 14.dp, start = 22.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Avatar
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .shadow(4.dp, CircleShape, spotColor = Brand)
-                .background(Brush.linearGradient(listOf(Brand, BrandSecondary)), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("MS", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.3).sp)
-        }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Greeting Stack
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "GOOD EVENING", 
-                color = Muted, 
-                fontSize = 10.sp, 
-                fontWeight = FontWeight.Bold, 
-                letterSpacing = 1.1.sp, 
-                fontFamily = FontFamily.Monospace
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                userName, 
-                color = Ink, 
-                fontSize = 22.sp, 
-                fontWeight = FontWeight.Bold, 
-                letterSpacing = (-0.6).sp, 
-                lineHeight = 22.sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                dateString, 
-                color = Muted, 
-                fontSize = 12.sp, 
-                fontWeight = FontWeight.Medium
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Notification Bell
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .border(0.5.dp, Hairline, CircleShape)
-                .background(Surface, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Outlined.Notifications, contentDescription = "Notifications", tint = Ink, modifier = Modifier.size(18.dp))
-            
-            // Badge dot
-            Box(
-                modifier = Modifier
-                    .size(9.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = (-6).dp, y = 6.dp)
-                    .background(Danger, CircleShape)
-                    .border(1.5.dp, Surface, CircleShape)
-            )
-        }
-    }
-}
+// ─── Sub-composables ─────────────────────────────────────────────────────────
 
 @Composable
-fun ResumeActiveSessionCard(state: ActiveSessionState) {
-    val infiniteTransition = rememberInfiniteTransition()
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.92f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ), label = "pulse"
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AppColors.Gray500,
+        letterSpacing = 1.1.sp,
+        modifier = modifier
     )
+}
 
+@Composable
+private fun ActiveSessionHero(
+    sessionId: String,
+    elapsed: String,
+    frameCount: Int,
+    onResume: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(AppColors.Blue)
+            .clickable(onClick = onResume)
+            .padding(18.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PulsingDot(color = AppColors.White, size = 6.dp)
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "LIVE SESSION",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.White.copy(alpha = 0.92f),
+                    letterSpacing = 1.2.sp
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                sessionId,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.White,
+                letterSpacing = (-0.7).sp,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 30.sp
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(elapsed,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.White,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
+                Text("  ·  ", fontSize = 12.sp, color = AppColors.White.copy(alpha = 0.5f))
+                Text(frameCount.toString(),
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.White,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
+                Text(" frames", fontSize = 12.sp, color = AppColors.White.copy(alpha = 0.85f))
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(AppColors.White, CircleShape)
+                .clickable(onClick = onResume),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_play),
+                contentDescription = "Resume",
+                tint = AppColors.Blue,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PulsingDot(color: Color, size: Dp) {
+    val transition = rememberInfiniteTransition(label = "pulse")
+    val alpha by transition.animateFloat(
+        initialValue = 1f,
+        targetValue  = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation  = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse-alpha"
+    )
     Box(
         modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .padding(bottom = 14.dp)
-            .shadow(12.dp, RoundedCornerShape(22.dp), spotColor = Brand)
-            .background(
-                brush = Brush.linearGradient(
-                    colors = listOf(Brand, BrandSecondary, BrandLight),
-                    start = Offset(0f, 0f),
-                    end = Offset(Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY)
-                ),
-                shape = RoundedCornerShape(22.dp)
-            )
-            .clip(RoundedCornerShape(22.dp))
-    ) {
-        // Radial highlight
-        Box(
-            modifier = Modifier
-                .size(160.dp)
-                .align(Alignment.TopEnd)
-                .offset(x = 30.dp, y = (-40).dp)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(Color(0x33FFFFFF), Color.Transparent)
-                    )
-                )
-        )
-        
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "ACTIVE SESSION", 
-                    color = Color.White.copy(alpha = 0.85f), 
-                    fontSize = 10.sp, 
-                    fontWeight = FontWeight.Bold, 
-                    letterSpacing = 1.2.sp, 
-                    fontFamily = FontFamily.Monospace
-                )
-                
-                // Live indicator
-                Row(
-                    modifier = Modifier
-                        .background(Color.White.copy(alpha = 0.18f), RoundedCornerShape(100.dp))
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size((6 * pulseScale).dp)
-                            .shadow(8.dp, CircleShape, ambientColor = Color.White)
-                            .background(Color.White, CircleShape)
-                    )
-                    Text("RECORDING", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
-                }
-            }
-            
-            Text(
-                state.label, 
-                color = Color.White, 
-                fontSize = 36.sp, 
-                fontWeight = FontWeight.ExtraBold, 
-                letterSpacing = (-1.4).sp, 
-                lineHeight = 36.sp, 
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
-            Text(
-                state.startedAtAgo, 
-                color = Color.White.copy(alpha = 0.85f), 
-                fontSize = 12.sp, 
-                fontWeight = FontWeight.Medium, 
-                modifier = Modifier.padding(bottom = 14.dp)
-            )
-            
-            // Stats Row
-            Row(
-                modifier = Modifier.padding(bottom = 14.dp),
-                horizontalArrangement = Arrangement.spacedBy(18.dp)
-            ) {
-                StatCol(state.totalFrames, "FRAMES")
-                StatCol(state.verifiedFrames, "VERIFIED")
-                StatCol(state.totalEpg, "EPG")
-                StatCol(state.pendingFrames, "PENDING")
-            }
-            
-            // Resume btn
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White, RoundedCornerShape(12.dp))
-                    .padding(vertical = 11.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = Brand, modifier = Modifier.size(13.dp))
-                Spacer(modifier = Modifier.width(7.dp))
-                Text("Resume capture", color = Brand, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp)
-            }
+            .size(size)
+            .background(color.copy(alpha = alpha), CircleShape)
+    )
+}
+
+@Composable
+private fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            KpiTile("Sessions",    kpis.sessionsCount, null, true,  Modifier.weight(1f))
+            KpiTile("Samples",     kpis.samplesCount,  null, true,  Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            KpiTile("Verified",    kpis.verifiedRatio, null, true,  Modifier.weight(1f))
+            KpiTile("EPG avg",     kpis.epgAvgStatus,  null, false, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-fun StatCol(value: String, label: String) {
-    Column {
-        Text(value, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp, fontFamily = FontFamily.Monospace)
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(label, color = Color.White.copy(alpha = 0.72f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp, fontFamily = FontFamily.Monospace)
-    }
-}
-
-@Composable
-fun KpiRow(state: KpiState) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).padding(bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        KpiTile(Modifier.weight(1f), state.sessionsCount, "SESSIONS", "", SuccessDeep)
-        KpiTile(Modifier.weight(1f), state.samplesCount, "SAMPLES", "", SuccessDeep)
-        KpiTile(Modifier.weight(1f), state.verifiedRatio, "VERIFIED", "", SuccessDeep)
-        KpiTile(Modifier.weight(1f), state.epgAvgStatus, "EPG AVG", "", Warning)
-    }
-}
-
-@Composable
-fun KpiTile(modifier: Modifier, num: String, lbl: String, delta: String, deltaColor: Color) {
+private fun KpiTile(
+    label: String,
+    value: String,
+    trend: String?,
+    trendUp: Boolean,
+    modifier: Modifier = Modifier
+) {
     Column(
         modifier = modifier
-            .shadow(2.dp, RoundedCornerShape(14.dp), spotColor = Color.Black.copy(alpha = 0.05f))
-            .background(Surface, RoundedCornerShape(14.dp))
-            .border(0.5.dp, HairlineSoft, RoundedCornerShape(14.dp))
-            .padding(top = 11.dp, start = 8.dp, end = 8.dp, bottom = 10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .background(AppColors.White, RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .padding(14.dp)
     ) {
-        Text(num, color = Ink, fontSize = 21.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.6).sp, lineHeight = 21.sp)
-        Spacer(modifier = Modifier.height(5.dp))
-        Text(lbl, color = Muted, fontSize = 8.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp, fontFamily = FontFamily.Monospace)
-        Spacer(modifier = Modifier.height(3.dp))
-        Text(delta, color = deltaColor, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = AppColors.Gray500)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            value,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = AppColors.Gray900,
+            letterSpacing = (-0.7).sp,
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+            lineHeight = 30.sp
+        )
+        if (trend != null) {
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (trendUp) {
+                    Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppColors.Green)
+                }
+                Text(
+                    trend,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (trendUp) AppColors.Green else AppColors.Gray500,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                )
+            }
+        }
     }
 }
 
 @Composable
-fun EpgThisWeekCard(sparklineData: List<Float>) {
+private fun SparklineCard(
+    values: List<Float>,
+    delta: String,
+    modifier: Modifier = Modifier
+) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .padding(bottom = 12.dp)
-            .shadow(2.dp, RoundedCornerShape(18.dp), spotColor = Color.Black.copy(alpha = 0.05f))
-            .background(Surface, RoundedCornerShape(18.dp))
-            .border(0.5.dp, HairlineSoft, RoundedCornerShape(18.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp)
+            .background(AppColors.White, RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .padding(16.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+            verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text("EPG this week", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp)
-            Text("7-DAY · LIVE", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, fontFamily = FontFamily.Monospace)
-        }
-        
-        // Sparkline Canvas
-        Canvas(modifier = Modifier.fillMaxWidth().height(70.dp)) {
-            val width = size.width
-            val height = size.height
-            
-            // Grid lines
-            val lineColor = Color(0x123C3C43)
-            drawLine(lineColor, Offset(0f, height * 0.25f), Offset(width, height * 0.25f), 0.5.dp.toPx())
-            drawLine(lineColor, Offset(0f, height * 0.5f), Offset(width, height * 0.5f), 0.5.dp.toPx())
-            drawLine(lineColor, Offset(0f, height * 0.75f), Offset(width, height * 0.75f), 0.5.dp.toPx())
-            
-            val ptsX = listOf(23f, 69f, 114f, 160f, 206f, 251f, 297f).map { it / 320f * width }
-            
-            // Map the dynamic sparkline data (0.0 to 1.0) into Y coordinates (44f to 12f)
-            val minY = 12f / 70f * height
-            val maxY = 44f / 70f * height
-            val ptsY = if (sparklineData.size == 7) {
-                sparklineData.map { value ->
-                    // value is 0..1 (where 1 is highest point -> lower Y)
-                    maxY - (value * (maxY - minY))
-                }
-            } else {
-                listOf(44f, 32f, 40f, 24f, 30f, 20f, 12f).map { it / 70f * height }
-            }
-            
-            val path = Path().apply {
-                moveTo(ptsX[0], ptsY[0])
-                for (i in 1..6) {
-                    lineTo(ptsX[i], ptsY[i])
-                }
-            }
-            
-            val areaPath = Path().apply {
-                addPath(path)
-                lineTo(ptsX[6], height)
-                lineTo(ptsX[0], height)
-                close()
-            }
-            
-            // Fill
-            drawPath(
-                path = areaPath,
-                brush = Brush.verticalGradient(
-                    colors = listOf(Brand.copy(alpha = 0.28f), Brand.copy(alpha = 0f))
+            Column(Modifier.weight(1f)) {
+                Text("7-day activity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray900)
+                Text(
+                    "Eggs found per day",
+                    fontSize = 11.sp,
+                    color = AppColors.Gray500,
+                    modifier = Modifier.padding(top = 2.dp)
                 )
-            )
-            
-            // Line
-            drawPath(
-                path = path,
-                color = Brand,
-                style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-            )
-            
-            // Points
-            for (i in 0..5) {
-                drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = Offset(ptsX[i], ptsY[i]))
-                drawCircle(color = Brand, radius = 2.5.dp.toPx(), center = Offset(ptsX[i], ptsY[i]), style = Stroke(width = 1.6.dp.toPx()))
             }
-            // Today point
-            drawCircle(color = Brand, radius = 5.5.dp.toPx(), center = Offset(ptsX[6], ptsY[6]))
-            drawCircle(color = Color.White, radius = 2.5.dp.toPx(), center = Offset(ptsX[6], ptsY[6]))
+            Box(
+                modifier = Modifier
+                    .background(AppColors.GreenTint, RoundedCornerShape(999.dp))
+                    .padding(horizontal = 9.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    "↑ $delta",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AppColors.Green,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                )
+            }
         }
-        
-        Spacer(modifier = Modifier.height(6.dp))
-        
-        // Labels
+        Spacer(Modifier.height(14.dp))
+        Sparkline(values = values, modifier = Modifier.fillMaxWidth().height(56.dp))
+        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val days = listOf("Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Today")
-            days.forEachIndexed { i, day ->
-                val isToday = i == 6
+            listOf("Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Today").forEachIndexed { i, lbl ->
                 Text(
-                    text = day,
-                    color = if (isToday) Brand else Muted,
-                    fontSize = 9.sp,
-                    fontWeight = if (isToday) FontWeight.Bold else FontWeight.SemiBold,
-                    letterSpacing = 0.3.sp,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
+                    lbl.uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (i == 6) AppColors.Gray700 else AppColors.Gray400,
+                    letterSpacing = 0.6.sp
                 )
             }
         }
@@ -458,37 +389,125 @@ fun EpgThisWeekCard(sparklineData: List<Float>) {
 }
 
 @Composable
-fun TopSpeciesCard(topSpecies: List<SpeciesData>) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .padding(bottom = 12.dp)
-            .shadow(2.dp, RoundedCornerShape(18.dp), spotColor = Color.Black.copy(alpha = 0.05f))
-            .background(Surface, RoundedCornerShape(18.dp))
-            .border(0.5.dp, HairlineSoft, RoundedCornerShape(18.dp))
-            .padding(horizontal = 16.dp, vertical = 14.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Top species this week", color = Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp)
-            Text("478 DETECTIONS", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.4.sp, fontFamily = FontFamily.Monospace)
+private fun Sparkline(values: List<Float>, modifier: Modifier = Modifier) {
+    val lineColor = AppColors.Blue
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val maxV = values.maxOrNull() ?: 1f
+        val minV = values.minOrNull() ?: 0f
+        val range = (maxV - minV).coerceAtLeast(1f)
+        val pad = 6.dp.toPx()
+
+        fun xAt(i: Int) = i.toFloat() * w / (values.size - 1)
+        fun yAt(v: Float) = pad + (h - 2 * pad) * (1f - (v - minV) / range)
+
+        val linePath = Path().apply {
+            values.forEachIndexed { i, v ->
+                val x = xAt(i); val y = yAt(v)
+                if (i == 0) moveTo(x, y) else lineTo(x, y)
+            }
         }
-        
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (topSpecies.isEmpty()) {
-                Text("No data available", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
-            } else {
-                topSpecies.forEachIndexed { index, species ->
-                    val gradient = when (index) {
-                        0 -> listOf(Brand, BrandSecondary)
-                        1 -> listOf(Violet2, Color(0xFF7B79DE))
-                        else -> listOf(AiAccent, Color(0xFFC57BE6))
-                    }
-                    SpeciesBarRow(species.name, species.ratio, species.formattedPercentage, gradient, true)
+        val areaPath = Path().apply {
+            addPath(linePath)
+            lineTo(w, h); lineTo(0f, h); close()
+        }
+
+        drawPath(
+            path  = areaPath,
+            brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.18f), Color.Transparent))
+        )
+        drawPath(
+            path  = linePath,
+            color = lineColor,
+            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+        )
+
+        val sx = xAt(0); val sy = yAt(values.first())
+        drawCircle(Color.White, radius = 2.5.dp.toPx(), center = Offset(sx, sy))
+        drawCircle(lineColor,   radius = 2.5.dp.toPx(), center = Offset(sx, sy), style = Stroke(width = 1.5.dp.toPx()))
+
+        val ex = xAt(values.lastIndex); val ey = yAt(values.last())
+        drawCircle(lineColor,   radius = 4.dp.toPx(), center = Offset(ex, ey))
+        drawCircle(Color.White, radius = 4.dp.toPx(), center = Offset(ex, ey), style = Stroke(width = 2.dp.toPx()))
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SpeciesMixCard(
+    speciesData: List<SpeciesData>,
+    modifier: Modifier = Modifier
+) {
+    // Map SpeciesData to color-weighted segments
+    val colors = listOf(SpeciesBlue, SpeciesCyan, SpeciesAmber)
+    val total = speciesData.sumOf { it.ratio.toDouble() }.toFloat().coerceAtLeast(1f)
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AppColors.White, RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .padding(16.dp)
+    ) {
+        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray900)
+        Text(
+            "${speciesData.size} species detected",
+            fontSize = 11.sp,
+            color = AppColors.Gray500,
+            modifier = Modifier.padding(top = 2.dp)
+        )
+        Spacer(Modifier.height(14.dp))
+
+        // Segmented bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(AppColors.Gray100)
+        ) {
+            speciesData.forEachIndexed { i, seg ->
+                val color = colors.getOrElse(i) { AppColors.Gray400 }
+                Box(
+                    modifier = Modifier
+                        .weight(seg.ratio.coerceAtLeast(0.01f))
+                        .fillMaxHeight()
+                        .background(color)
+                )
+                if (i < speciesData.lastIndex) {
+                    Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(AppColors.White))
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement   = Arrangement.spacedBy(6.dp)
+        ) {
+            speciesData.forEachIndexed { i, seg ->
+                val color = colors.getOrElse(i) { AppColors.Gray400 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        seg.name,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        fontStyle = FontStyle.Italic,
+                        color = AppColors.Gray700
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        seg.formattedPercentage,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = AppColors.Gray900,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    )
                 }
             }
         }
@@ -496,102 +515,103 @@ fun TopSpeciesCard(topSpecies: List<SpeciesData>) {
 }
 
 @Composable
-fun SpeciesBarRow(name: String, ratio: Float, value: String, gradient: List<Color>, isItalic: Boolean) {
+private fun VerifyAlertRow(
+    pendingCount: Int,
+    oldestAgo: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Name
-        Text(
-            text = name,
-            color = Ink,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
-            modifier = Modifier.width(100.dp),
-            letterSpacing = (-0.1).sp
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        
-        // Track
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(8.dp)
-                .background(Color(0x1F787880), RoundedCornerShape(100.dp))
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth(ratio)
-                    .fillMaxHeight()
-                    .background(Brush.horizontalGradient(gradient), RoundedCornerShape(100.dp))
-            )
-        }
-        
-        Spacer(modifier = Modifier.width(10.dp))
-        
-        // Value
-        Text(
-            text = value,
-            color = Ink,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.width(32.dp),
-            textAlign = TextAlign.End,
-            fontFamily = FontFamily.Monospace
-        )
-    }
-}
-
-@Composable
-fun PendingReviewActionCard(pendingCount: Int) {
-    if (pendingCount <= 0) return
-    Row(
-        modifier = Modifier
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .shadow(4.dp, RoundedCornerShape(18.dp), spotColor = Warning.copy(alpha = 0.08f))
-            .background(Surface, RoundedCornerShape(18.dp))
-            .border(0.5.dp, Warning.copy(alpha = 0.22f), RoundedCornerShape(18.dp))
-            .padding(vertical = 12.dp, horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clip(RoundedCornerShape(12.dp))
+            .background(AppColors.White)
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
-        // Icon tile
         Box(
             modifier = Modifier
-                .size(42.dp)
-                .background(Warning.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                .size(36.dp)
+                .background(AppColors.AmberTint, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Outlined.Info, contentDescription = null, tint = Warning, modifier = Modifier.size(22.dp))
+            Icon(
+                painter = painterResource(R.drawable.ic_warning),
+                contentDescription = null,
+                tint = AppColors.Amber,
+                modifier = Modifier.size(18.dp)
+            )
         }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Body
-        Column(modifier = Modifier.weight(1f)) {
-            Text("$pendingCount frames awaiting review", color = Ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.2).sp)
-            Spacer(modifier = Modifier.height(2.dp))
-            Text("From recent active sessions", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "$pendingCount frames awaiting verification",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.Gray900
+            )
+            Text(
+                "Oldest pending · $oldestAgo",
+                fontSize = 11.sp,
+                color = AppColors.Gray500,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                modifier = Modifier.padding(top = 1.dp)
+            )
         }
-        
-        Spacer(modifier = Modifier.width(12.dp))
-        
-        // Button
-        Box(
-            modifier = Modifier
-                .background(Brand, RoundedCornerShape(100.dp))
-                .padding(horizontal = 14.dp, vertical = 7.dp)
-        ) {
-            Text("Review", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.1).sp)
-        }
+        Icon(
+            painter = painterResource(R.drawable.ic_chevron_right),
+            contentDescription = null,
+            tint = AppColors.Gray300,
+            modifier = Modifier.size(18.dp)
+        )
     }
 }
 
-@Preview(showBackground = true)
 @Composable
-private fun DashboardScreenPreview() {
-    AgarthaVisionTheme {
-        DashboardScreen()
+private fun SyncStatusRow(
+    allSynced: Boolean,
+    lastSyncLabel: String,
+    samplesSynced: Int,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AppColors.White, RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(AppColors.GreenTint, RoundedCornerShape(10.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_check_circle),
+                contentDescription = null,
+                tint = AppColors.Green,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(Modifier.width(Spacing.md))
+        Column(Modifier.weight(1f)) {
+            Text(
+                if (allSynced) "All samples synced" else "Sync pending",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.Gray900
+            )
+            Text(
+                "Last sync $lastSyncLabel · $samplesSynced samples",
+                fontSize = 11.sp,
+                color = AppColors.Gray500,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                modifier = Modifier.padding(top = 1.dp)
+            )
+        }
     }
 }

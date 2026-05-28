@@ -10,27 +10,27 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.outlined.Download
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,32 +38,38 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
-import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.usecase.records.SampleRecordItem
-import com.agarthavision.ui.components.glassChrome
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-// Design Tokens
-private val Brand = Color(0xFF1E40AF)
-private val BrandDeep = Color(0xFF1E3A8A)
-private val BrandSecondary = Color(0xFF3B82F6)
-private val Success = Color(0xFF34C759)
-private val SuccessDeep = Color(0xFF248A3D)
-private val Warning = Color(0xFFFF9F0A)
-private val Danger = Color(0xFFFF3B30)
-private val DangerDeep = Color(0xFFC9140B)
-private val DangerTint = Color(0xFFFFE5E5)
-private val Ink = Color(0xFF0F172A)
-private val Body = Color(0xFF3C3C43)
-private val Muted = Color(0xFF6E6E73)
-private val Bg = Color(0xFFF2F2F7)
-private val Surface = Color(0xFFFFFFFF)
-private val Hairline = Color(0x1E3C3C43)
-private val HairlineSoft = Color(0x143C3C43)
+// Data Model Mapping
+data class SessionDetail(
+    val id: String,                  
+    val label: String?,
+    val dateLabel: String,           
+    val timeLabel: String,           
+    val patientIdOrNote: String?,     
+    val epg: Int,                    
+    val confirmedEggs: Int,          
+    val speciesCount: Int,           
+    val samplesTotal: Int,           
+    val syncedSamples: Int?,         
+    val syncedAt: String?,           
+    val verifiedSamples: List<Sample>
+)
 
+data class Sample(
+    val id: String,
+    val source: Source,           
+    val species: String,          
+    val confidence: Int?,
+    val filePath: String?
+)
+
+enum class Source { AI, Manual }
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionDetailScreen(
     onBack: () -> Unit,
@@ -72,311 +78,504 @@ fun SessionDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val exportState by viewModel.currentExportState.collectAsStateWithLifecycle()
-    val session = state.session
+    
+    val sessionDetail = mapToUiModel(state)
 
-    Box(modifier = Modifier.fillMaxSize().background(Bg)) {
-        if (session == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Brand)
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(top = 103.dp, bottom = 40.dp)
-            ) {
-                item(span = { GridItemSpan(3) }) {
-                    SessionHeroCard(
-                        totalEpg = state.epg,
-                        sampleCount = session.samples.size,
-                        duration = "08:14", // Placeholder
-                        syncStatus = "Synced" // Placeholder
-                    )
-                }
-
-                item(span = { GridItemSpan(3) }) {
-                    SessionMetadataCard(sessionData = session)
-                }
-
-                item(span = { GridItemSpan(3) }) {
-                    Text(
-                        text = "SAMPLES (${session.samples.size})",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Muted,
-                        modifier = Modifier.padding(start = 18.dp, top = 24.dp, bottom = 12.dp)
-                    )
-                }
-
-                if (session.samples.isEmpty()) {
-                    item(span = { GridItemSpan(3) }) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(120.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No samples found", color = Muted)
-                        }
-                    }
-                } else {
-                    items(session.samples, key = { it.sample.id }) { item ->
-                        GalleryTile(item = item, onClick = { onSampleClick(item.sample.id) })
-                    }
-                }
-            }
+    if (sessionDetail == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AppColors.Blue)
         }
-
-        // Top Navigation Bar
-        SessionDetailNavBar(
-            title = session?.session?.label ?: "Unnamed Session",
-            onBack = onBack,
-            onExport = viewModel::exportCsv,
-            isExporting = exportState.isExporting
-        )
+        return
     }
-}
 
-@Composable
-fun SessionDetailNavBar(
-    title: String,
-    onBack: () -> Unit,
-    onExport: () -> Unit,
-    isExporting: Boolean
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(103.dp)
-            .glassChrome(
-                backgroundColor = Color(255, 255, 255, (0.72f * 255).toInt()),
-                shape = RoundedCornerShape(0.dp)
+    val isEmpty = sessionDetail.verifiedSamples.isEmpty()
+
+    Scaffold(
+        topBar = {
+            SessionDetailAppBar(
+                title = sessionDetail.label ?: "Session ${sessionDetail.id}",
+                subtitle = if (sessionDetail.patientIdOrNote.isNullOrBlank()) "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}" else "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}",
+                onBack = onBack,
+                onExport = viewModel::exportCsv
             )
-            .padding(top = 47.dp)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        // Back Button
-        Row(
-            modifier = Modifier.clickable { onBack() }.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "Back", tint = Brand, modifier = Modifier.size(28.dp))
-            Text("Back", color = Brand, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
-        }
-
-        Text(
-            text = title,
-            fontSize = 17.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Ink
-        )
-
-        Box(
-            modifier = Modifier.clickable(enabled = !isExporting) { onExport() }.padding(8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isExporting) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp, color = Brand)
-            } else {
-                Icon(
-                    Icons.Outlined.Download,
-                    contentDescription = "Export",
-                    tint = Brand,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
+        },
+        containerColor = AppColors.White
+    ) { inner ->
+        if (isEmpty) {
+            SessionDetailEmpty(
+                session = sessionDetail,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+            )
+        } else {
+            SessionDetailPopulated(
+                session = sessionDetail,
+                onSampleClick = { sample -> onSampleClick(sample.id) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner)
+            )
         }
     }
 }
 
-@Composable
-fun SessionHeroCard(totalEpg: Int, sampleCount: Int, duration: String, syncStatus: String) {
-    val epgColor = when {
-        totalEpg >= 250 -> DangerDeep
-        totalEpg in 100..249 -> Warning
-        totalEpg in 1..99 -> BrandDeep
-        else -> SuccessDeep
+private fun mapToUiModel(state: SessionDetailState): SessionDetail? {
+    val sessionData = state.session ?: return null
+    val sessionRecord = sessionData.session
+    val startedAt = Instant.ofEpochMilli(sessionRecord.startedAt)
+        .atZone(ZoneId.systemDefault())
+        
+    val dateLabel = startedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+    val timeLabel = startedAt.format(DateTimeFormatter.ofPattern("HH:mm"))
+    
+    val samples = sessionData.samples.map { item ->
+        val hasAi = item.detections.isNotEmpty()
+        val source = if (hasAi) Source.AI else Source.Manual
+        val species = if (hasAi) {
+            item.primaryDetection?.classLabel ?: "Unknown"
+        } else {
+            "Manual"
+        }
+        val confidence = if (hasAi) {
+            ((item.primaryDetection?.confidence ?: 0f) * 100).toInt()
+        } else {
+            null
+        }
+        
+        Sample(
+            id = item.sample.id,
+            source = source,
+            species = species,
+            confidence = confidence,
+            filePath = item.sample.storagePath
+        )
     }
     
-    val bgGradient = when {
-        totalEpg >= 250 -> listOf(Color(255, 240, 240), Color(255, 250, 250))
-        totalEpg in 100..249 -> listOf(Color(255, 248, 230), Color(255, 252, 240))
-        totalEpg in 1..99 -> listOf(Color(240, 248, 255), Color(250, 252, 255))
-        else -> listOf(Color(240, 255, 244), Color(250, 255, 252))
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp, vertical = 12.dp)
-            .shadow(elevation = 2.dp, shape = RoundedCornerShape(18.dp), spotColor = Ink.copy(alpha = 0.05f))
-            .background(brush = Brush.verticalGradient(bgGradient), shape = RoundedCornerShape(18.dp))
-            .border(1.dp, Color.White, RoundedCornerShape(18.dp))
-            .padding(20.dp)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column {
-                    Text(
-                        text = "TOTAL EPG",
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.8.sp,
-                        color = Muted
-                    )
-                    Text(
-                        text = totalEpg.toString(),
-                        fontSize = 44.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = (-1.5).sp,
-                        color = epgColor,
-                        modifier = Modifier.offset(y = (-4).dp)
-                    )
-                }
-
-                // Severity Pill
-                val (severityText, pillColor, textColor) = when {
-                    totalEpg >= 250 -> Triple("Heavy", Danger, Color.White)
-                    totalEpg in 100..249 -> Triple("Moderate", Warning, Color.White)
-                    totalEpg in 1..99 -> Triple("Light", BrandSecondary, Color.White)
-                    else -> Triple("Negative", Success, Color.White)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .background(pillColor, RoundedCornerShape(100.dp))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = severityText,
-                        color = textColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text("SAMPLES", fontSize = 10.sp, color = Muted, fontWeight = FontWeight.Medium)
-                    Text(sampleCount.toString(), fontSize = 15.sp, color = Ink, fontWeight = FontWeight.SemiBold)
-                }
-                Column {
-                    Text("DURATION", fontSize = 10.sp, color = Muted, fontWeight = FontWeight.Medium)
-                    Text(duration, fontSize = 15.sp, color = Ink, fontWeight = FontWeight.SemiBold)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("SYNC", fontSize = 10.sp, color = Muted, fontWeight = FontWeight.Medium)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Icon(androidx.compose.material.icons.Icons.Default.CheckCircle, contentDescription = null, tint = Success, modifier = Modifier.size(12.dp))
-                        Text(syncStatus, fontSize = 15.sp, color = SuccessDeep, fontWeight = FontWeight.SemiBold)
-                    }
-                }
-            }
-        }
-    }
+    // Calculate confirmed eggs. A simple proxy for now could be state.totalEggCount
+    val confirmedEggs = state.totalEggCount
+    val speciesCount = state.eggCounts.size
+    
+    return SessionDetail(
+        id = sessionRecord.id.takeLast(4),
+        label = sessionRecord.label,
+        dateLabel = dateLabel,
+        timeLabel = timeLabel,
+        patientIdOrNote = sessionRecord.notes,
+        epg = state.epg,
+        confirmedEggs = confirmedEggs,
+        speciesCount = speciesCount,
+        samplesTotal = sessionData.samples.size,
+        syncedSamples = null, // placeholder
+        syncedAt = null,      // placeholder
+        verifiedSamples = samples
+    )
 }
 
-@Composable
-fun SessionMetadataCard(sessionData: com.agarthavision.domain.usecase.records.SessionSamples) {
-    val session = sessionData.session
-    val startedAt = Instant.ofEpochMilli(session.startedAt)
-        .atZone(ZoneId.systemDefault())
-        .format(DateTimeFormatter.ofPattern("MMM dd, yyyy · HH:mm"))
+// Sub-composables
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 18.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(Surface)
-    ) {
-        MetadataRow(label = "Patient ID", value = "Anon-01") // Placeholder
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = HairlineSoft)
-        MetadataRow(label = "Started", value = startedAt)
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = HairlineSoft)
-        MetadataRow(label = "Operator", value = "Dr. Smith") // Placeholder
-        HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = HairlineSoft)
-        
-        val lat = sessionData.samples.firstNotNullOfOrNull { it.sample.latitude }
-        val lon = sessionData.samples.firstNotNullOfOrNull { it.sample.longitude }
-        val locString = if (lat != null && lon != null) {
-            String.format("%.4f, %.4f", lat, lon)
-        } else {
-            "Unknown"
-        }
-        MetadataRow(label = "Location", value = locString)
-    }
-}
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MetadataRow(label: String, value: String) {
+private fun SessionDetailAppBar(
+    title: String,
+    subtitle: String,
+    onBack: () -> Unit,
+    onExport: () -> Unit
+) {
     Row(
+        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .background(AppColors.White)
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp)
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(
+                painter = painterResource(R.drawable.ic_chevron_left),
+                contentDescription = "Back",
+                tint = AppColors.Gray700,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
+            Text(title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = AppColors.Gray900)
+            Text(subtitle,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = AppColors.Gray500,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                modifier = Modifier.padding(top = 2.dp))
+        }
+        IconButton(onClick = onExport) {
+            Icon(
+                painter = painterResource(R.drawable.ic_download),
+                contentDescription = "Export",
+                tint = AppColors.Gray700,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun EpgHeroCard(
+    epg: Int,
+    confirmedEggs: Int,
+    speciesCount: Int,
+    samplesTotal: Int,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AppColors.Gray50, RoundedCornerShape(12.dp))
+            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+    ) {
+        // Decorative blue radial accent (top-right)
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                AppColors.BlueTint.copy(alpha = 0.6f),
+                                Color.Transparent
+                            ),
+                            center = Offset(size.width, 0f),
+                            radius = 220.dp.toPx()
+                        )
+                    )
+                }
+        )
+
+        // Foreground content
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                "EGGS PER GRAM",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = AppColors.Gray500,
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                epg.toString(),
+                fontSize = 56.sp,
+                lineHeight = 56.sp,
+                fontWeight = FontWeight.Bold,
+                color = AppColors.Gray900,
+                letterSpacing = (-2.2).sp,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03")
+            )
+            Spacer(Modifier.height(12.dp))
+            EpgMeta(confirmedEggs, speciesCount, samplesTotal)
+        }
+    }
+}
+
+@Composable
+private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
+    if (confirmedEggs == 0) {
+        Text(
+            "No confirmed eggs yet",
+            fontSize = 13.sp,
+            color = AppColors.Gray500
+        )
+    } else {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            MetaItem(confirmedEggs.toString(), "confirmed")
+            DotSeparator()
+            MetaItem(speciesCount.toString(), "species")
+            DotSeparator()
+            MetaItem(samplesTotal.toString(), "samples")
+        }
+    }
+}
+
+@Composable
+private fun MetaItem(value: String, label: String) {
+    Row(verticalAlignment = Alignment.Bottom) {
+        Text(
+            value,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.Gray900,
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+        )
+        Spacer(Modifier.width(3.dp))
+        Text(
+            label,
+            fontSize = 13.sp,
+            color = AppColors.Gray500
+        )
+    }
+}
+
+@Composable
+private fun DotSeparator() {
+    Text(
+        "·",
+        fontSize = 13.sp,
+        color = AppColors.Gray300,
+        modifier = Modifier.padding(horizontal = 7.dp)
+    )
+}
+
+@Composable
+private fun SyncBanner(
+    syncedSamples: Int,
+    syncedAt: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AppColors.GreenTint, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_check_circle),
+            contentDescription = null,
+            tint = AppColors.Green,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                "Synced to cloud",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color(0xFF14532D)
+            )
+            Text(
+                "$syncedAt · $syncedSamples samples uploaded",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFF166534),
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                modifier = Modifier.padding(top = 1.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    count: String,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 15.sp, color = Ink)
-        Text(value, fontSize = 15.sp, color = Muted)
+        Text(title,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.Gray900)
+        Text(count,
+            fontSize = 12.sp,
+            color = AppColors.Gray500,
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
     }
 }
 
 @Composable
-fun GalleryTile(item: SampleRecordItem, onClick: () -> Unit) {
-    val hasAi = item.detections.isNotEmpty() // Simple logic: if detections exist, it's AI
-    val tagText = if (hasAi) "AI ${item.primaryDetection?.confidence ?: ""}" else "MAN"
+private fun SampleTile(
+    sample: Sample,
+    onClick: () -> Unit
+) {
+    val bboxColor = when (sample.source) {
+        Source.AI -> AppColors.Blue
+        Source.Manual -> AppColors.Amber
+    }
 
     Box(
         modifier = Modifier
             .aspectRatio(1f)
-            .border(0.5.dp, HairlineSoft) // Grid lines between tiles
-            .clickable { onClick() }
+            .clip(RoundedCornerShape(10.dp))
+            .background(AppColors.MicroscopeBrush)
+            .clickable(onClick = onClick)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "Sample ${sample.id}, ${sample.species}" +
+                    (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
+            }
     ) {
-        val storagePath = item.sample.storagePath
-        if (storagePath != null) {
+        // Render the actual image underneath if we have it
+        if (sample.filePath != null) {
             AsyncImage(
                 model = ImageRequest.Builder(LocalContext.current)
-                    .data(File(storagePath))
+                    .data(File(sample.filePath))
                     .build(),
                 contentDescription = null,
-                contentScale = ContentScale.Crop, // 220% background crop essentially
+                contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-        } else {
-            Box(modifier = Modifier.fillMaxSize().background(Color.LightGray))
         }
 
-        // Bbox hint overlay could go here if we do a small canvas pass
-        
-        // AI/MAN Badge
-        Box(
+
+
+        // Species badge bottom-left
+        SpeciesBadge(
+            text = sample.species,
+            isManual = sample.source == Source.Manual,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(6.dp)
-                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
-                .padding(horizontal = 4.dp, vertical = 2.dp)
+        )
+    }
+}
+
+@Composable
+private fun ConfidenceChip(text: String, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.White.copy(alpha = 0.9f),
+            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+        )
+    }
+}
+
+@Composable
+private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = Modifier) {
+    val bg = if (isManual) AppColors.Amber else AppColors.Blue
+    Box(
+        modifier = modifier
+            .background(bg, RoundedCornerShape(999.dp))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.White,
+            letterSpacing = 0.1.sp
+        )
+    }
+}
+
+@Composable
+private fun SessionDetailPopulated(
+    session: SessionDetail,
+    onSampleClick: (Sample) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = modifier,
+        contentPadding = PaddingValues(
+            start = Spacing.xl,
+            end = Spacing.xl,
+            top = Spacing.xs,
+            bottom = Spacing.xxl
+        ),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column {
+                EpgHeroCard(
+                    epg = session.epg,
+                    confirmedEggs = session.confirmedEggs,
+                    speciesCount = session.speciesCount,
+                    samplesTotal = session.samplesTotal,
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = "Eggs per gram: ${session.epg}, ${session.confirmedEggs} confirmed, ${session.speciesCount} species, ${session.samplesTotal} samples"
+                    }
+                )
+                Spacer(Modifier.height(Spacing.lg))
+                if (session.syncedSamples != null && session.syncedAt != null) {
+                    SyncBanner(
+                        syncedSamples = session.syncedSamples,
+                        syncedAt = session.syncedAt
+                    )
+                    Spacer(Modifier.height(Spacing.lg))
+                }
+                SectionHeader(
+                    title = "Verified samples",
+                    count = "${session.verifiedSamples.size} of ${session.samplesTotal}"
+                )
+                Spacer(Modifier.height(Spacing.sm))
+            }
+        }
+        items(session.verifiedSamples, key = { it.id }) { sample ->
+            SampleTile(sample = sample, onClick = { onSampleClick(sample) })
+        }
+    }
+}
+
+@Composable
+private fun SessionDetailEmpty(
+    session: SessionDetail,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .padding(horizontal = Spacing.xl)
+            .padding(top = Spacing.xs)
+            .verticalScroll(rememberScrollState())
+    ) {
+        EpgHeroCard(
+            epg = session.epg,
+            confirmedEggs = session.confirmedEggs,
+            speciesCount = session.speciesCount,
+            samplesTotal = session.samplesTotal,
+            modifier = Modifier.semantics(mergeDescendants = true) {
+                contentDescription = "Eggs per gram: ${session.epg}, ${session.confirmedEggs} confirmed, ${session.speciesCount} species, ${session.samplesTotal} samples"
+            }
+        )
+
+        Spacer(Modifier.height(60.dp))
+
+        EmptyStateGraphic()
+    }
+}
+
+@Composable
+private fun EmptyStateGraphic() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .background(AppColors.Gray50, CircleShape),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = tagText,
-                color = Color.White,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
+            Icon(
+                painter = painterResource(R.drawable.ic_minus_circle),
+                contentDescription = null,
+                tint = AppColors.Gray300,
+                modifier = Modifier.size(26.dp)
             )
         }
+        Spacer(Modifier.height(14.dp))
+        Text(
+            "No verified samples yet",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.Gray700
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Captured frames will appear here once verified.",
+            fontSize = 13.sp,
+            color = AppColors.Gray500,
+            textAlign = TextAlign.Center
+        )
     }
 }
