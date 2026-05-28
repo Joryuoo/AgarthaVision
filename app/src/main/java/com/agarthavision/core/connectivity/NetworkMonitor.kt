@@ -43,7 +43,7 @@ class NetworkMonitor @Inject constructor(
         scope.launch {
             sessionManager.state.collectLatest { state ->
                 when (state) {
-                    is SessionState.Recording -> runProbeLoop()
+                    is SessionState.Active -> runProbeLoop()
                     SessionState.Idle -> _status.value = Status.Connected
                 }
             }

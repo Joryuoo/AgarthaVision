@@ -39,17 +39,23 @@ data class DetectionEntity(
     @ColumnInfo(name = "confidence")
     val confidence: Float,
 
+    /**
+     * Bounding-box geometry in source-image pixels (top-left + size). Nullable
+     * to support manual captures (`samples.is_manual = true`) where the medtech
+     * tags the whole frame without drawing a box — all four columns are null for
+     * those rows. AI-confirmed detections always have non-null values. Per ADR-005.
+     */
     @ColumnInfo(name = "bbox_x")
-    val bboxX: Float,
+    val bboxX: Float?,
 
     @ColumnInfo(name = "bbox_y")
-    val bboxY: Float,
+    val bboxY: Float?,
 
     @ColumnInfo(name = "bbox_w")
-    val bboxW: Float,
+    val bboxW: Float?,
 
     @ColumnInfo(name = "bbox_h")
-    val bboxH: Float,
+    val bboxH: Float?,
 
     @ColumnInfo(name = "verdict", defaultValue = "'confirmed'")
     val verdict: String = DetectionVerdict.CONFIRMED.value,

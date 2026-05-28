@@ -1,5 +1,6 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -23,4 +24,37 @@ interface DetectionDao {
 
     @Query("SELECT * FROM detections WHERE sample_id = :sampleId")
     fun observeDetectionsForSample(sampleId: String): Flow<List<DetectionEntity>>
+
+    /**
+     * Aggregates confirmed detections per species for a session, excluding repeat
+     * samples (`samples.is_repeat = 0`). The `species` value resolves to
+     * `expert_class` when present, otherwise `class_label`.
+     */
+    @Query(
+        """
+         SELECT COALESCE(d.expert_class, d.class_label) AS species,
+             COUNT(*) AS eggCount
+        FROM detections d
+        JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.session_id = :sessionId
+          AND s.user_id = :userId
+          AND s.is_repeat = 0
+          AND d.verdict = 'confirmed'
+        GROUP BY species
+        ORDER BY species ASC
+        """,
+    )
+    suspend fun getConfirmedEggCountsForSession(
+        sessionId: String,
+        userId: String,
+    ): List<SessionEggCountRow>
 }
+
+/**
+ * Row result for per-session egg counts grouped by species.
+ */
+data class SessionEggCountRow(
+    val species: String,
+    @ColumnInfo(name = "eggCount")
+    val eggCount: Int,
+)

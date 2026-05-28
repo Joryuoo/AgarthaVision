@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.repository.AuthRepository
@@ -40,8 +41,8 @@ class ExportSessionUseCaseTest {
         assertEquals("/downloads/session-1.csv", result.getOrThrow())
         assertEquals(
             """
-            sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path
-            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris,0.91,10.0,20.0,5.0,user-1/sample-1.jpg
+            sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path,is_manual,is_repeat,user_note
+            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris,0.91,10.0,20.0,5.0,user-1/sample-1.jpg,false,false,
             
             """.trimIndent(),
             writer.lastCsv,
@@ -91,6 +92,8 @@ private class ExportDetectionRepository(
 
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(detectionsBySample[sampleId].orEmpty())
+
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) = emptyList<EggCount>()
 }
 
 private class FakeSessionReportRepository : SessionReportRepository {

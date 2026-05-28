@@ -212,10 +212,16 @@ private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Mo
     val destructive = MaterialTheme.styles.destructive
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
-            val left = detection.bboxX.coerceIn(0f, 1f) * size.width
-            val top = detection.bboxY.coerceIn(0f, 1f) * size.height
-            val width = detection.bboxW.coerceIn(0f, 1f) * size.width
-            val height = detection.bboxH.coerceIn(0f, 1f) * size.height
+            // Per ADR-005, manual-capture detections have null bbox columns —
+            // skip drawing for those.
+            val bx = detection.bboxX ?: return@forEach
+            val by = detection.bboxY ?: return@forEach
+            val bw = detection.bboxW ?: return@forEach
+            val bh = detection.bboxH ?: return@forEach
+            val left = bx.coerceIn(0f, 1f) * size.width
+            val top = by.coerceIn(0f, 1f) * size.height
+            val width = bw.coerceIn(0f, 1f) * size.width
+            val height = bh.coerceIn(0f, 1f) * size.height
             val color = if (detection.verifiedByUser) primary else destructive
             drawRect(
                 color = color,
@@ -274,14 +280,18 @@ private fun DetectionCard(index: Int, detection: Detection) {
                 text = stringResource(R.string.sample_detail_verdict, detection.verdict.value),
                 color = MaterialTheme.styles.mutedForeground,
             )
+            // Per ADR-005, manual captures have null bbox columns — show a
+            // "No bounding box" line instead of the formatted geometry.
+            val bx = detection.bboxX
+            val by = detection.bboxY
+            val bw = detection.bboxW
+            val bh = detection.bboxH
             Text(
-                text = stringResource(
-                    R.string.sample_detail_box,
-                    detection.bboxX,
-                    detection.bboxY,
-                    detection.bboxW,
-                    detection.bboxH,
-                ),
+                text = if (bx != null && by != null && bw != null && bh != null) {
+                    stringResource(R.string.sample_detail_box, bx, by, bw, bh)
+                } else {
+                    stringResource(R.string.sample_detail_box_none)
+                },
                 color = MaterialTheme.styles.mutedForeground,
             )
         }
@@ -299,6 +309,7 @@ private fun MetadataTab(sample: Sample) {
         item { MetadataRow(stringResource(R.string.sample_detail_session_id), sample.sessionId) }
         item { MetadataRow(stringResource(R.string.sample_detail_device_id), sample.deviceId) }
         item { MetadataRow(stringResource(R.string.sample_detail_status), sample.status.value) }
+        item { MetadataRow(stringResource(R.string.sample_detail_user_note), sample.userNote.orEmpty()) }
         item { MetadataRow(stringResource(R.string.sample_detail_captured_at), sample.timestamp.formatDateTime()) }
         item { MetadataRow(stringResource(R.string.sample_detail_verified_at), sample.verifiedAt.formatDateTime()) }
         item {

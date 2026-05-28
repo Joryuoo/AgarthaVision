@@ -30,4 +30,7 @@ data class SessionEntity(
 
     @ColumnInfo(name = "notes")
     val notes: String?,
+
+    @ColumnInfo(name = "label")
+    val label: String? = null,
 )

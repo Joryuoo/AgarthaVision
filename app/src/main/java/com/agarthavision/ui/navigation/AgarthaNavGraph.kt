@@ -12,10 +12,12 @@ import com.agarthavision.ui.login.LoginScreen
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
+import com.agarthavision.ui.sessions.SessionPickerScreen
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
 
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
+    data object SessionPicker : Screen("sessions")
     data object Capture : Screen("capture")
     data object Records : Screen("records")
     data object SessionDetail : Screen("records/session/{sessionId}") {
@@ -29,8 +31,9 @@ sealed class Screen(val route: String) {
 
 /**
  * Root nav graph. Starts on [Screen.Login]; LoginViewModel will redirect to
- * [Screen.Capture] on cold start when a persisted Supabase session exists.
- * See docs/03_MOBILE_APP_PLAN.md §1.0.
+ * [Screen.SessionPicker] on cold start when a persisted Supabase session exists.
+ * The picker is the only path into [Screen.Capture]. See ADR-005 and
+ * docs/03_MOBILE_APP_PLAN.md §1.0.
  */
 @Composable
 fun AgarthaNavGraph(
@@ -45,8 +48,18 @@ fun AgarthaNavGraph(
         composable(Screen.Login.route) {
             LoginScreen(
                 onLoggedIn = {
-                    navController.navigate(Screen.Capture.route) {
+                    navController.navigate(Screen.SessionPicker.route) {
                         popUpTo(Screen.Login.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+        composable(Screen.SessionPicker.route) {
+            SessionPickerScreen(
+                onSessionSelected = {
+                    navController.navigate(Screen.Capture.route) {
+                        popUpTo(Screen.SessionPicker.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 },
@@ -58,6 +71,17 @@ fun AgarthaNavGraph(
                 frameSampler = frameSampler,
                 onRecordsClick = {
                     navController.navigate(Screen.Records.route) {
+                        launchSingleTop = true
+                    }
+                },
+                onReportsClick = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId)) {
+                        launchSingleTop = true
+                    }
+                },
+                onSessionEnded = {
+                    navController.navigate(Screen.SessionPicker.route) {
+                        popUpTo(Screen.SessionPicker.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 },

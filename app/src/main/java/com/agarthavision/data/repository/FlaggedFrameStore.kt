@@ -44,4 +44,19 @@ class FlaggedFrameStore @Inject constructor() {
     fun clear() {
         _state.value = emptyList()
     }
+
+    /**
+     * Toggles [FlaggedFrame.markedAsRepeat] in place. Used by the queue-row kebab
+     * to mark a frame as a duplicate before opening the verification sheet
+     * (per ADR-005). Equality compares by capturedAt + jpeg payload, so this
+     * also re-inserts the updated copy.
+     */
+    fun toggleRepeat(frame: FlaggedFrame) {
+        _state.update { current ->
+            current.map { existing ->
+                if (existing == frame) existing.copy(markedAsRepeat = !existing.markedAsRepeat)
+                else existing
+            }
+        }
+    }
 }

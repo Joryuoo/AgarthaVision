@@ -7,13 +7,15 @@ import com.agarthavision.domain.usecase.records.ExportSessionUseCase
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
+import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
+import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -23,9 +25,20 @@ import kotlinx.coroutines.launch
  */
 data class SessionDetailState(
     val session: SessionSamples? = null,
+    val eggCounts: List<EggCountSummary> = emptyList(),
+    val totalEggCount: Int = 0,
+    val epg: Int = 0,
     val isExporting: Boolean = false,
     val exportPath: String? = null,
     val exportError: String? = null,
+)
+
+/**
+ * Display-ready egg count entry for the session detail screen.
+ */
+data class EggCountSummary(
+    val species: String,
+    val count: Int,
 )
 
 /**
@@ -35,16 +48,21 @@ data class SessionDetailState(
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     getSessionSamplesUseCase: GetSessionSamplesUseCase,
+    private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val exportSessionUseCase: ExportSessionUseCase,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
     private val exportState = MutableStateFlow(ExportState())
 
     val state: StateFlow<SessionDetailState> = getSessionSamplesUseCase(sessionId)
-        .map { session ->
+        .mapLatest { session ->
             val export = exportState.value
+            val eggCounts = sessionEggCountUseCase(sessionId)
             SessionDetailState(
                 session = session,
+                eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
+                totalEggCount = eggCounts.totalEggCount,
+                epg = eggCounts.epg,
                 isExporting = export.isExporting,
                 exportPath = export.exportPath,
                 exportError = export.exportError,

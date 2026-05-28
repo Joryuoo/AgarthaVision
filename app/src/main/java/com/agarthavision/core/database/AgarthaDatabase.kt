@@ -25,7 +25,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         SessionEntity::class,
         DetectionEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

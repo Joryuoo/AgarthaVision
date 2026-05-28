@@ -101,6 +101,14 @@ fun SessionDetailScreen(
                 .padding(horizontal = 20.dp),
         ) {
             ExportStatus(exportState = exportState)
+            if (session != null) {
+                EpgSummaryCard(
+                    totalEggCount = state.totalEggCount,
+                    epg = state.epg,
+                    counts = state.eggCounts,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
+                )
+            }
             if (session == null || session.samples.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
@@ -116,6 +124,67 @@ fun SessionDetailScreen(
                 ) {
                     items(session.samples, key = { it.sample.id }) { item ->
                         SampleRow(item = item, onClick = { onSampleClick(item.sample.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpgSummaryCard(
+    totalEggCount: Int,
+    epg: Int,
+    counts: List<EggCountSummary>,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.styles.card,
+            contentColor = MaterialTheme.styles.cardForeground,
+        ),
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(modifier = Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = stringResource(R.string.session_detail_epg_title),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.styles.mutedForeground,
+            )
+            Text(
+                text = epg.toString(),
+                style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.styles.foreground,
+            )
+            Text(
+                text = stringResource(R.string.session_detail_epg_total_label, totalEggCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.styles.mutedForeground,
+            )
+
+            if (counts.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.session_detail_epg_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.styles.mutedForeground,
+                )
+            } else {
+                counts.forEach { entry ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = entry.species,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.styles.foreground,
+                        )
+                        Text(
+                            text = entry.count.toString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.styles.mutedForeground,
+                        )
                     }
                 }
             }

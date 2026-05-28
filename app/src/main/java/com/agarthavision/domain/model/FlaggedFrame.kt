@@ -8,6 +8,8 @@ data class FlaggedFrame(
     val capturedAt: Instant,
     val jpegBytes: ByteArray,
     val predictions: List<PredictionDto>,
+    val source: FrameSource = FrameSource.MODEL,
+    val markedAsRepeat: Boolean = false,
     val inferenceModelVersion: String? = null,
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
@@ -20,6 +22,8 @@ data class FlaggedFrame(
         if (capturedAt != other.capturedAt) return false
         if (!jpegBytes.contentEquals(other.jpegBytes)) return false
         if (predictions != other.predictions) return false
+        if (source != other.source) return false
+        if (markedAsRepeat != other.markedAsRepeat) return false
         if (inferenceModelVersion != other.inferenceModelVersion) return false
         if (imageWidth != other.imageWidth) return false
         if (imageHeight != other.imageHeight) return false
@@ -31,6 +35,8 @@ data class FlaggedFrame(
         result = 31 * result + capturedAt.hashCode()
         result = 31 * result + jpegBytes.contentHashCode()
         result = 31 * result + predictions.hashCode()
+        result = 31 * result + source.hashCode()
+        result = 31 * result + markedAsRepeat.hashCode()
         result = 31 * result + (inferenceModelVersion?.hashCode() ?: 0)
         result = 31 * result + (imageWidth ?: 0)
         result = 31 * result + (imageHeight ?: 0)

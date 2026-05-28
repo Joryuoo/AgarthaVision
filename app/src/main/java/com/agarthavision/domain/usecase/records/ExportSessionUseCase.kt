@@ -53,6 +53,9 @@ class ExportSessionUseCase @Inject constructor(
             longitude?.toString().orEmpty(),
             accuracyMeters?.toString().orEmpty(),
             storagePath.orEmpty(),
+            isManual.toString(),
+            isRepeat.toString(),
+            userNote.orEmpty(),
         ).joinToString(",") { it.csvEscape() }
 
     private fun String.csvEscape(): String {
@@ -71,6 +74,6 @@ class ExportSessionUseCase @Inject constructor(
         private val CSV_QUOTED_CHARS = charArrayOf(',', '"', '\n', '\r')
 
         private const val CSV_HEADER =
-            "sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path"
+            "sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path,is_manual,is_repeat,user_note"
     }
 }

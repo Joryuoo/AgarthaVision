@@ -1,6 +1,7 @@
 package com.agarthavision.ui.capture
 
 import com.agarthavision.core.connectivity.NetworkMonitor
+import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.entity.SessionEntity
@@ -41,13 +42,17 @@ class CaptureViewModelTest {
     private val flaggedFrameStore: FlaggedFrameStore = mock<FlaggedFrameStore>().also {
         whenever(it.state).thenReturn(framesState)
     }
+    private val latestFrameBytes = MutableStateFlow<ByteArray?>(null)
+    private val frameSampler: FrameSampler = mock<FrameSampler>().also {
+        whenever(it.latestFrameBytes).thenReturn(latestFrameBytes)
+    }
     private val networkMonitor: NetworkMonitor = mock<NetworkMonitor>().also {
         whenever(it.status).thenReturn(networkStatus)
     }
 
-    private fun viewModel() = CaptureViewModel(sessionManager, flaggedFrameStore, networkMonitor)
+    private fun viewModel() = CaptureViewModel(sessionManager, flaggedFrameStore, frameSampler, networkMonitor)
 
-    private fun makeRecordingState(): SessionState.Recording {
+    private fun makeActiveState(): SessionState.Active {
         val entity = SessionEntity(
             sessionId = "session-1",
             userId = "user-1",
@@ -55,8 +60,13 @@ class CaptureViewModelTest {
             startedAt = Instant.EPOCH.toEpochMilli(),
             endedAt = null,
             notes = null,
+            label = "Smear 042",
         )
-        return SessionState.Recording(session = entity, startedAt = Instant.EPOCH)
+        return SessionState.Active(
+            session = entity,
+            startedAt = Instant.EPOCH,
+            isInferenceRunning = true,
+        )
     }
 
     private fun makeFrame(): FlaggedFrame = FlaggedFrame(
@@ -67,24 +77,25 @@ class CaptureViewModelTest {
     )
 
     @Test
-    fun `Disconnected status while recording stops session and latches connection-lost banner`() =
+    fun `Disconnected status pauses inference and latches connection-lost banner`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
 
             networkStatus.value = NetworkMonitor.Status.Disconnected
             advanceUntilIdle()
 
             assertTrue(vm.state.value.isConnectionLost)
-            verify(sessionManager).stopSession()
+            verify(sessionManager).pauseInference()
+            verify(sessionManager, never()).stopSession()
         }
 
     @Test
     fun `subsequent Connected status does not auto-clear banner`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
 
             networkStatus.value = NetworkMonitor.Status.Disconnected
@@ -97,10 +108,10 @@ class CaptureViewModelTest {
         }
 
     @Test
-    fun `onDetectionToastTap stops session and sets verificationTarget`() =
+    fun `onDetectionToastTap pauses inference and sets verificationTarget`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
 
             val frame = makeFrame()
@@ -108,27 +119,16 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertEquals(frame, vm.state.value.verificationTarget)
-            verify(sessionManager).stopSession()
-        }
-
-    @Test
-    fun `onDetectionToastTap while idle sets verificationTarget without stopping session`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            val frame = makeFrame()
-            vm.onDetectionToastTap(frame)
-            advanceUntilIdle()
-
-            assertEquals(frame, vm.state.value.verificationTarget)
+            verify(sessionManager).pauseInference()
             verify(sessionManager, never()).stopSession()
         }
 
     @Test
-    fun `resumeConnection on successful probe clears banner and restarts session`() =
+    fun `resumeConnection on successful probe clears banner and resumes inference`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(networkMonitor.probe()).thenReturn(true)
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
             networkStatus.value = NetworkMonitor.Status.Disconnected
             advanceUntilIdle()
@@ -139,7 +139,8 @@ class CaptureViewModelTest {
 
             assertFalse(vm.state.value.isConnectionLost)
             assertFalse(vm.state.value.isProbingConnection)
-            verify(sessionManager).startSession()
+            verify(sessionManager).resumeInference()
+            verify(sessionManager, never()).stopSession()
         }
 
     @Test
@@ -147,7 +148,7 @@ class CaptureViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(networkMonitor.probe()).thenReturn(false)
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
             networkStatus.value = NetworkMonitor.Status.Disconnected
             advanceUntilIdle()
@@ -157,11 +158,12 @@ class CaptureViewModelTest {
 
             assertTrue(vm.state.value.isConnectionLost)
             assertFalse(vm.state.value.isProbingConnection)
-            verify(sessionManager, never()).startSession()
+            // pauseInference was called on disconnect; resumeInference must NOT fire on failed probe.
+            verify(sessionManager, never()).resumeInference()
         }
 
     @Test
-    fun `onVerificationDismissed clears verificationTarget`() =
+    fun `onVerificationDismissed clears verificationTarget and resumes inference`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.onDetectionToastTap(makeFrame())
@@ -172,30 +174,21 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertNull(vm.state.value.verificationTarget)
+            verify(sessionManager).resumeInference()
         }
 
     @Test
-    fun `onQueueTap stops session and sets isQueueOpen`() =
+    fun `onQueueTap pauses inference and sets isQueueOpen`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            sessionState.value = makeRecordingState()
+            sessionState.value = makeActiveState()
             advanceUntilIdle()
 
             vm.onQueueTap()
             advanceUntilIdle()
 
             assertTrue(vm.state.value.isQueueOpen)
-            verify(sessionManager).stopSession()
-        }
-
-    @Test
-    fun `onQueueTap while idle does not stop session`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.onQueueTap()
-            advanceUntilIdle()
-
-            assertTrue(vm.state.value.isQueueOpen)
+            verify(sessionManager).pauseInference()
             verify(sessionManager, never()).stopSession()
         }
 
@@ -216,7 +209,7 @@ class CaptureViewModelTest {
         }
 
     @Test
-    fun `onQueueDismiss clears isQueueOpen`() =
+    fun `onQueueDismiss clears isQueueOpen and resumes inference`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.onQueueTap()
@@ -227,5 +220,6 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertFalse(vm.state.value.isQueueOpen)
+            verify(sessionManager).resumeInference()
         }
 }

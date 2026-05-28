@@ -107,7 +107,7 @@ class VerificationViewModelTest {
     @Test
     fun `successful submit removes frame and emits Dismiss`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
                 .thenReturn(Result.success("sample-1"))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -173,7 +173,7 @@ class VerificationViewModelTest {
     @Test
     fun `submit failure keeps isSubmitting false and emits ShowError`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
                 .thenReturn(Result.failure(RuntimeException("DB error")))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -188,6 +188,21 @@ class VerificationViewModelTest {
                 assertEquals("DB error", (event as VerificationEvent.ShowError).message)
             }
             assertFalse(vm.state.value.isSubmitting)
+        }
+
+    @Test
+    fun `onToggleRepeat updates state and store`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val frame = makeFrame(predictions = 1)
+            vm.setFrame(frame)
+            advanceUntilIdle()
+
+            vm.onToggleRepeat()
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.isRepeat)
+            verify(flaggedFrameStore).toggleRepeat(frame)
         }
 
     @Test

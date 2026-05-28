@@ -55,4 +55,31 @@ data class SampleEntity(
 
     @ColumnInfo(name = "status")
     val status: String,
+
+    /**
+     * Free-form medtech notes captured in the VerificationSheet / ManualSheet
+     * input row. The Supabase `samples.user_note` column has existed since
+     * `0001_init.sql` but was never wired client-side; per ADR-005 Sprint 2
+     * lights it up. No Supabase migration needed.
+     */
+    @ColumnInfo(name = "user_note")
+    val userNote: String? = null,
+
+    /**
+     * `true` when this sample was taken via the Capture button on
+     * `CaptureScreen` (no AI inference involved). Syncs to Supabase via
+     * migration `0006_sample_is_manual.sql`. Counted in EPG identically to
+     * AI-confirmed samples. Per ADR-005.
+     */
+    @ColumnInfo(name = "is_manual", defaultValue = "0")
+    val isManual: Boolean = false,
+
+    /**
+     * `true` when the medtech has flagged this sample as a duplicate of an
+     * egg already counted on the same smear. **Room-only** flag — never
+     * synced to Supabase. Excluded from EPG counts. Workflow aid for the
+     * medtech to sift through model outputs. Per ADR-005.
+     */
+    @ColumnInfo(name = "is_repeat", defaultValue = "0")
+    val isRepeat: Boolean = false,
 )

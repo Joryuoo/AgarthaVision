@@ -25,6 +25,20 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE user_id = :userId ORDER BY started_at DESC")
     fun observeAllSessions(userId: String): Flow<List<SessionEntity>>
 
+    /**
+     * Sessions the SessionPicker should show: active ([SessionEntity.endedAt] is `null`)
+     * OR started on/after [sinceMillis]. Newest first. Per ADR-005.
+     */
+    @Query(
+        """
+        SELECT * FROM sessions
+        WHERE user_id = :userId
+          AND (ended_at IS NULL OR started_at >= :sinceMillis)
+        ORDER BY started_at DESC
+        """
+    )
+    fun observeActiveAndRecent(userId: String, sinceMillis: Long): Flow<List<SessionEntity>>
+
     @Query("SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1")
     suspend fun getOpenSession(): SessionEntity?
 }

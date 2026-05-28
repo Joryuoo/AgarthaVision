@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
@@ -101,6 +102,8 @@ private class FakeDetectionRepository(
 
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(detectionsBySample[sampleId].orEmpty())
+
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) = emptyList<EggCount>()
 }
 
 private fun session(id: String, userId: String): Session =

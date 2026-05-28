@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.repository.AuthRepository
@@ -70,6 +71,8 @@ private class DetailDetectionRepository(
 
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(detections.filter { it.sampleId == sampleId })
+
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) = emptyList<EggCount>()
 }
 
 private fun detailSample(userId: String): Sample =

@@ -71,7 +71,8 @@ class SampleRemoteDataSource @Inject constructor(
             storagePath = storagePath,
             inferenceModelVersion = inferenceModelVersion.ifBlank { UNKNOWN_MODEL_VERSION },
             needsReannotation = needsReannotation,
-            userNote = null,
+            isManual = isManual,
+            userNote = userNote?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -119,6 +120,8 @@ class SampleRemoteDataSource @Inject constructor(
         val inferenceModelVersion: String,
         @SerialName("needs_reannotation")
         val needsReannotation: Boolean,
+        @SerialName("is_manual")
+        val isManual: Boolean,
         @SerialName("user_note")
         val userNote: String?,
     )
@@ -133,14 +136,15 @@ class SampleRemoteDataSource @Inject constructor(
         val classLabel: String,
         @SerialName("confidence")
         val confidence: Float,
+        // Nullable per ADR-005: manual captures (samples.is_manual = true) have no bbox.
         @SerialName("bbox_x")
-        val bboxX: Float,
+        val bboxX: Float?,
         @SerialName("bbox_y")
-        val bboxY: Float,
+        val bboxY: Float?,
         @SerialName("bbox_w")
-        val bboxW: Float,
+        val bboxW: Float?,
         @SerialName("bbox_h")
-        val bboxH: Float,
+        val bboxH: Float?,
         @SerialName("verdict")
         val verdict: String,
         @SerialName("expert_class")

@@ -16,4 +16,6 @@ data class VerificationSheetActions(
     val onToggleBoundingBoxes: () -> Unit,
     val onSubmit: () -> Unit,
     val onCancel: () -> Unit,
+    val onToggleRepeat: () -> Unit,
+    val onUserNoteChanged: (String) -> Unit,
 )

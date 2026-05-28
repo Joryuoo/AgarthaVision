@@ -43,17 +43,40 @@
     <string name="verify_delete_confirm_title">Delete this flagged frame?</string>
     <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
 
+    <string name="verify_sheet_kebab_desc">Sample actions</string>
+    <string name="verify_mark_repeat">Mark as repeat</string>
+    <string name="verify_unmark_repeat">Unmark as repeat</string>
+    <string name="verify_repeat_badge">Repeat</string>
+    <string name="verify_user_note_label">Notes (optional)</string>
+    <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
+
     <string name="queue_sheet_title">Flagged Frames · %1$d</string>
     <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
+    <string name="queue_filter_all">All</string>
+    <string name="queue_filter_flagged">Flagged</string>
+    <string name="queue_filter_manual">Manual</string>
+    <string name="queue_filter_repeat">Repeat</string>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$s%% · %2$d detection(s) · %3$s</string>
+    <string name="queue_row_manual_title">Manual capture</string>
+    <string name="queue_row_manual_subtitle">Manual capture · %1$s</string>
+    <string name="queue_row_source_ai">AI</string>
+    <string name="queue_row_source_manual">Manual</string>
 
     <string name="capture_title">Capture</string>
     <string name="capture_rec">REC</string>
     <string name="capture_start">Start Recording</string>
     <string name="capture_stop">Stop Recording</string>
+    <string name="capture_manual">Capture</string>
+    <string name="capture_end_session">End Session</string>
+    <string name="capture_end_session_title">End this session?</string>
+    <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <string name="capture_end_session_notes_label">Final notes (optional)</string>
+    <string name="capture_end_session_notes_placeholder">Anything to record about this smear</string>
+    <string name="capture_end_session_confirm">End session</string>
     <string name="capture_verify_action_desc">Verify flagged frames</string>
+    <string name="capture_reports_action_desc">View session EPG</string>
     <string name="capture_records_action_desc">View records</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
@@ -91,6 +114,9 @@
     <string name="session_detail_captured">Captured: %1$s</string>
     <string name="session_detail_back">Back to records</string>
     <string name="session_detail_open_sample">Open sample</string>
+    <string name="session_detail_epg_title">EPG</string>
+    <string name="session_detail_epg_total_label">Total eggs: %1$d</string>
+    <string name="session_detail_epg_empty">No confirmed eggs yet</string>
 
     <string name="sample_detail_title">Sample Detail</string>
     <string name="sample_detail_missing">Sample not found</string>
@@ -104,9 +130,11 @@
     <string name="sample_detail_detection_title">Detection %1$d</string>
     <string name="sample_detail_verdict">Verdict: %1$s</string>
     <string name="sample_detail_box">Box: x=%1$.2f y=%2$.2f w=%3$.2f h=%4$.2f</string>
+    <string name="sample_detail_box_none">Box: none (manual capture)</string>
     <string name="sample_detail_sample_id">Sample ID</string>
     <string name="sample_detail_session_id">Session ID</string>
     <string name="sample_detail_device_id">Device ID</string>
+    <string name="sample_detail_user_note">User note</string>
     <string name="sample_detail_status">Status</string>
     <string name="sample_detail_captured_at">Captured at</string>
     <string name="sample_detail_verified_at">Verified at</string>
@@ -117,4 +145,22 @@
     <string name="sample_detail_yes">Yes</string>
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
+
+    <string name="session_picker_title">Sessions</string>
+    <string name="session_picker_empty_title">No recent sessions</string>
+    <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
+    <string name="session_picker_create">New session</string>
+    <string name="session_picker_row_active">Active</string>
+    <string name="session_picker_row_untitled">Untitled smear</string>
+    <string name="session_picker_row_kebab_desc">Session actions</string>
+    <string name="session_picker_row_end_session">End session</string>
+    <string name="session_picker_dialog_title">New session</string>
+    <string name="session_picker_dialog_label">Smear label</string>
+    <string name="session_picker_dialog_label_placeholder">e.g. Brgy. San Roque · Patient 042</string>
+    <string name="session_picker_dialog_notes">Notes (optional)</string>
+    <string name="session_picker_dialog_notes_placeholder">Slide condition, prep quality, anything unusual</string>
+    <string name="session_picker_dialog_create">Create</string>
+
+    <string name="manual_sheet_title">Manual Capture · %1$s</string>
+    <string name="manual_sheet_close_desc">Close manual capture sheet</string>
 </resources>

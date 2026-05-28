@@ -7,14 +7,21 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.FactCheck
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -28,23 +35,31 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.theme.AgarthaSpacing
+import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationQueueSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import com.komoui.components.Badge as KomoBadge
@@ -52,6 +67,7 @@ import com.komoui.components.BadgeVariant
 import com.komoui.components.Button as KomoButton
 import com.komoui.components.ButtonSize
 import com.komoui.components.ButtonVariant
+import com.komoui.components.Input
 import com.komoui.components.sooner.SonnerAction
 import com.komoui.components.sooner.SonnerEvent
 import com.komoui.components.sooner.SonnerHost
@@ -68,6 +84,8 @@ fun CaptureScreen(
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
     onRecordsClick: () -> Unit,
+    onReportsClick: (String) -> Unit,
+    onSessionEnded: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
@@ -75,6 +93,7 @@ fun CaptureScreen(
     val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
     val detectionMessage = stringResource(R.string.capture_detection_message)
+    var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -93,6 +112,30 @@ fun CaptureScreen(
         }
     }
 
+    // Auto-pause inference whenever Capture leaves the foreground (back to picker,
+    // app backgrounded, etc.) and resume on return. Sheets/overlays handle their
+    // own pause/resume — see CaptureViewModel.resumeInferenceIfNoOverlay().
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> viewModel.resumeInferenceIfNoOverlay()
+                Lifecycle.Event.ON_PAUSE -> viewModel.pauseInference()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                CaptureEvent.SessionEnded -> onSessionEnded()
+            }
+        }
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.state
             .map { it.flaggedFrames.firstOrNull()?.capturedAt }
@@ -100,6 +143,7 @@ fun CaptureScreen(
             .collect { capturedAt ->
                 if (capturedAt != null) {
                     val latest = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
+                    if (latest.source != FrameSource.MODEL) return@collect
                     val eggType = latest.predictions.firstOrNull()?.classLabel ?: detectionFallback
                     val confidence = latest.predictions.firstOrNull()?.confidence ?: 0f
                     sonnerHostState.showSonner(
@@ -121,8 +165,30 @@ fun CaptureScreen(
         containerColor = MaterialTheme.styles.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(stringResource(R.string.capture_title)) },
+                title = {
+                    Text(
+                        state.activeSessionLabel?.takeIf { it.isNotBlank() }
+                            ?: stringResource(R.string.capture_title),
+                    )
+                },
                 actions = {
+                    IconButton(
+                        onClick = { state.activeSessionId?.let(onReportsClick) },
+                        enabled = state.activeSessionId != null,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Assessment,
+                            contentDescription = stringResource(R.string.capture_reports_action_desc),
+                            tint = MaterialTheme.styles.foreground,
+                        )
+                    }
+                    IconButton(onClick = onRecordsClick) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = stringResource(R.string.capture_records_action_desc),
+                            tint = MaterialTheme.styles.foreground,
+                        )
+                    }
                     IconButton(onClick = viewModel::onQueueTap) {
                         BadgedBox(
                             badge = {
@@ -176,7 +242,7 @@ fun CaptureScreen(
                         )
                     }
 
-                    if (state.isRecording) {
+                    if (state.isInferenceRunning) {
                         KomoBadge(
                             variant = BadgeVariant.Destructive,
                             modifier = Modifier
@@ -197,35 +263,35 @@ fun CaptureScreen(
                     if (state.isBusy) {
                         CircularProgressIndicator()
                     } else {
-                        KomoButton(
-                            onClick = {
-                                if (state.isRecording) viewModel.stopRecording()
-                                else viewModel.startRecording()
-                            },
-                            size = ButtonSize.Lg,
-                            variant = if (state.isRecording) ButtonVariant.Destructive else ButtonVariant.Default,
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = AgarthaSpacing.screenEdge),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(
-                                if (state.isRecording) {
-                                    stringResource(R.string.capture_stop)
-                                } else {
-                                    stringResource(R.string.capture_start)
-                                },
-                            )
+                            KomoButton(
+                                onClick = viewModel::onManualCapture,
+                                size = ButtonSize.Default,
+                                variant = ButtonVariant.Outline,
+                                enabled = state.activeSessionId != null,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PhotoCamera,
+                                    contentDescription = null,
+                                )
+                                Spacer(modifier = Modifier.width(AgarthaSpacing.xs))
+                                Text(stringResource(R.string.capture_manual))
+                            }
+                            KomoButton(
+                                onClick = { showEndConfirm = true },
+                                size = ButtonSize.Lg,
+                                variant = ButtonVariant.Destructive,
+                                enabled = state.activeSessionId != null,
+                            ) {
+                                Text(stringResource(R.string.capture_end_session))
+                            }
                         }
-                    }
-
-                    IconButton(
-                        onClick = onRecordsClick,
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 24.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = stringResource(R.string.capture_records_action_desc),
-                            tint = MaterialTheme.styles.foreground,
-                        )
                     }
 
                     state.errorMessage?.let { error ->
@@ -267,6 +333,8 @@ fun CaptureScreen(
     if (state.isQueueOpen) {
         VerificationQueueSheet(
             frames = state.flaggedFrames,
+            selectedFilter = state.queueFilter,
+            onFilterSelected = viewModel::onQueueFilterSelected,
             onRowClick = viewModel::onQueueItemSelected,
             onRowDelete = viewModel::onQueueItemDeleted,
             onDismiss = viewModel::onQueueDismiss,
@@ -275,11 +343,89 @@ fun CaptureScreen(
 
     val target = state.verificationTarget
     if (target != null) {
-        VerificationSheet(
-            frame = target,
-            onDismiss = viewModel::onVerificationDismissed,
+        if (target.source == FrameSource.MANUAL) {
+            ManualSheet(
+                frame = target,
+                onDismiss = viewModel::onVerificationDismissed,
+            )
+        } else {
+            VerificationSheet(
+                frame = target,
+                onDismiss = viewModel::onVerificationDismissed,
+            )
+        }
+    }
+
+    if (showEndConfirm) {
+        EndSessionConfirmDialog(
+            initialNotes = "",
+            isBusy = state.isBusy,
+            onConfirm = { notes ->
+                showEndConfirm = false
+                viewModel.endSession(notes)
+            },
+            onDismiss = { showEndConfirm = false },
         )
     }
+}
+
+@Composable
+private fun EndSessionConfirmDialog(
+    initialNotes: String,
+    isBusy: Boolean,
+    onConfirm: (notes: String?) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var notes by rememberSaveable { mutableStateOf(initialNotes) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            KomoButton(
+                onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
+                variant = ButtonVariant.Destructive,
+                size = ButtonSize.Default,
+                enabled = !isBusy,
+                loading = isBusy,
+            ) {
+                Text(stringResource(R.string.capture_end_session_confirm))
+            }
+        },
+        dismissButton = {
+            KomoButton(
+                onClick = onDismiss,
+                variant = ButtonVariant.Ghost,
+                size = ButtonSize.Default,
+                enabled = !isBusy,
+            ) {
+                Text(stringResource(R.string.verify_cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.capture_end_session_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.sm)) {
+                Text(
+                    text = stringResource(R.string.capture_end_session_body),
+                    color = MaterialTheme.styles.mutedForeground,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Text(
+                    text = stringResource(R.string.capture_end_session_notes_label),
+                    color = MaterialTheme.styles.foreground,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Input(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    placeholder = stringResource(R.string.capture_end_session_notes_placeholder),
+                    singleLine = false,
+                    enabled = !isBusy,
+                )
+            }
+        },
+        containerColor = MaterialTheme.styles.popover,
+        titleContentColor = MaterialTheme.styles.foreground,
+        textContentColor = MaterialTheme.styles.foreground,
+    )
 }
 
 @Composable

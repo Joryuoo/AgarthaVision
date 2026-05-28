@@ -49,6 +49,8 @@ data class VerificationUiState(
     val missedEgg: Boolean? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
+    val userNote: String = "",
+    val isRepeat: Boolean = false,
 ) {
     val canSubmit: Boolean
         get() = answers.isNotEmpty() && answers.all { it.isComplete } && !isSubmitting
@@ -122,8 +124,30 @@ class VerificationViewModel @Inject constructor(
                 missedEgg = null,
                 isSubmitting = false,
                 errorMessage = null,
+                userNote = "",
+                isRepeat = frame.markedAsRepeat,
             )
         }
+    }
+
+    /**
+     * Toggles the Room-only `samples.is_repeat` flag (per ADR-005). Marks the
+     * sample as a duplicate of a previously-verified one; excluded from EPG.
+     */
+    fun onToggleRepeat() {
+        val frame = currentFrame
+        _state.update { it.copy(isRepeat = !it.isRepeat) }
+        if (frame != null) {
+            flaggedFrameStore.toggleRepeat(frame)
+        }
+    }
+
+    /**
+     * Captures optional medtech free-form notes; persisted to `samples.user_note`
+     * on submit and surfaced in SampleDetail (Track 2.14). Per ADR-005.
+     */
+    fun onUserNoteChanged(text: String) {
+        _state.update { it.copy(userNote = text) }
     }
 
     fun onQ1Selected(isEgg: Boolean) {
@@ -205,6 +229,8 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 answers = snapshot.answers,
                 missedEgg = snapshot.missedEgg,
+                userNote = snapshot.userNote,
+                isRepeat = snapshot.isRepeat,
             ).fold(
                 onSuccess = {
                     currentFrame = null

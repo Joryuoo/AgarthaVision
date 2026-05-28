@@ -3,6 +3,7 @@
 package com.agarthavision.ui.verify
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,8 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -23,45 +23,46 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.komoui.components.Badge as KomoBadge
 import com.komoui.components.BadgeVariant
-import com.komoui.components.Button
+import com.komoui.components.Button as KomoButton
 import com.komoui.components.ButtonSize
 import com.komoui.components.ButtonVariant
 import com.komoui.components.Input
 import com.komoui.themes.styles
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VerificationSheet(
+fun ManualSheet(
     frame: FlaggedFrame,
     onDismiss: () -> Unit,
-    viewModel: VerificationViewModel = hiltViewModel(),
+    viewModel: ManualCaptureViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -72,8 +73,8 @@ fun VerificationSheet(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is VerificationEvent.Dismiss -> onDismiss()
-                is VerificationEvent.ShowError -> { /* error shown inline */ }
+                ManualCaptureEvent.Dismiss -> onDismiss()
+                is ManualCaptureEvent.ShowError -> { /* inline errors only */ }
             }
         }
     }
@@ -86,24 +87,16 @@ fun VerificationSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.styles.card,
     ) {
-        VerificationSheetContent(
+        ManualSheetContent(
             state = state,
-            actions = VerificationSheetActions(
-                onQ1Selected = viewModel::onQ1Selected,
-                onQ2Selected = viewModel::onQ2Selected,
+            actions = ManualSheetActions(
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
-                onQ4Selected = viewModel::onQ4Selected,
-                onDetectionPrev = viewModel::onDetectionPrev,
-                onDetectionNext = viewModel::onDetectionNext,
-                onFramePrev = viewModel::onFramePrev,
-                onFrameNext = viewModel::onFrameNext,
+                onUserNoteChanged = viewModel::onUserNoteChanged,
+                onToggleRepeat = viewModel::onToggleRepeat,
                 onDeleteFrame = viewModel::onDeleteFrame,
-                onToggleBoundingBoxes = viewModel::onToggleBoundingBoxes,
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
-                onToggleRepeat = viewModel::onToggleRepeat,
-                onUserNoteChanged = viewModel::onUserNoteChanged,
             ),
             modifier = Modifier
                 .heightIn(max = screenHeightDp * 0.95f)
@@ -112,13 +105,28 @@ fun VerificationSheet(
     }
 }
 
+private data class ManualSheetActions(
+    val onSpeciesSelected: (EggSpecies) -> Unit,
+    val onOtherSpeciesChanged: (String) -> Unit,
+    val onUserNoteChanged: (String) -> Unit,
+    val onToggleRepeat: () -> Unit,
+    val onDeleteFrame: () -> Unit,
+    val onSubmit: () -> Unit,
+    val onCancel: () -> Unit,
+)
+
 @Composable
-private fun VerificationSheetContent(
-    state: VerificationUiState,
-    actions: VerificationSheetActions,
+private fun ManualSheetContent(
+    state: ManualCaptureUiState,
+    actions: ManualSheetActions,
     modifier: Modifier = Modifier,
 ) {
     val frame = state.frame ?: return
+    val timeLabel = remember(frame.capturedAt) {
+        DateTimeFormatter.ofPattern("HH:mm:ss")
+            .withZone(ZoneId.systemDefault())
+            .format(frame.capturedAt)
+    }
 
     Column(
         modifier = modifier
@@ -127,40 +135,17 @@ private fun VerificationSheetContent(
             .padding(horizontal = AgarthaSpacing.screenEdge, vertical = AgarthaSpacing.md),
         verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.md),
     ) {
-        // Header — frame chevrons + title + boxes toggle
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = actions.onFramePrev,
-                    enabled = state.frameIndexInQueue > 1,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                        contentDescription = stringResource(R.string.verify_prev_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }
-                Text(
-                    text = stringResource(R.string.verify_title, state.frameIndexInQueue, state.queueSize),
-                    color = MaterialTheme.styles.foreground,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                IconButton(
-                    onClick = actions.onFrameNext,
-                    enabled = state.frameIndexInQueue < state.queueSize,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.verify_next_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }
-            }
-
+            Text(
+                text = stringResource(R.string.manual_sheet_title, timeLabel),
+                color = MaterialTheme.styles.foreground,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (state.isRepeat) {
                     KomoBadge(
@@ -170,35 +155,25 @@ private fun VerificationSheetContent(
                         Text(stringResource(R.string.verify_repeat_badge))
                     }
                 }
-                Text(
-                    text = stringResource(R.string.verify_show_boxes_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.styles.mutedForeground,
-                    modifier = Modifier.padding(end = AgarthaSpacing.xs),
-                )
-                Switch(
-                    checked = state.showBoundingBoxes,
-                    onCheckedChange = { actions.onToggleBoundingBoxes() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.styles.primary,
-                        checkedTrackColor = MaterialTheme.styles.primary.copy(alpha = 0.12f),
-                        uncheckedThumbColor = MaterialTheme.styles.mutedForeground,
-                        uncheckedTrackColor = MaterialTheme.styles.muted,
-                    ),
-                )
                 SheetKebab(
                     isRepeat = state.isRepeat,
                     onToggleRepeat = actions.onToggleRepeat,
                 )
+                IconButton(onClick = actions.onCancel) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.manual_sheet_close_desc),
+                        tint = MaterialTheme.styles.foreground,
+                    )
+                }
             }
         }
 
-        // Frame image with boxes
         FrameWithBoxes(
             jpegBytes = frame.jpegBytes,
-            predictions = frame.predictions,
-            highlightedIndex = state.currentDetectionIndex,
-            showBoxes = state.showBoundingBoxes,
+            predictions = emptyList(),
+            highlightedIndex = 0,
+            showBoxes = false,
             inferenceImageWidth = frame.imageWidth,
             inferenceImageHeight = frame.imageHeight,
             modifier = Modifier
@@ -206,99 +181,14 @@ private fun VerificationSheetContent(
                 .height(220.dp),
         )
 
-        // Detection navigation header
-        if (frame.predictions.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Button(
-                    onClick = actions.onDetectionPrev,
-                    size = ButtonSize.Sm,
-                    variant = ButtonVariant.Ghost,
-                    enabled = state.currentDetectionIndex > 0,
-                ) {
-                    Text(stringResource(R.string.verify_prev_detection))
-                }
-                Text(
-                    text = stringResource(
-                        R.string.verify_detection_header,
-                        state.currentDetectionIndex + 1,
-                        frame.predictions.size,
-                    ),
-                    color = MaterialTheme.styles.mutedForeground,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                Button(
-                    onClick = actions.onDetectionNext,
-                    size = ButtonSize.Sm,
-                    variant = ButtonVariant.Ghost,
-                    enabled = state.currentDetectionIndex < frame.predictions.size - 1,
-                ) {
-                    Text(stringResource(R.string.verify_next_detection))
-                }
-            }
-        }
-
-        // Confidence label
-        val prediction = frame.predictions.getOrNull(state.currentDetectionIndex)
-        if (prediction != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xxs)) {
-                Text(
-                    text = stringResource(
-                        R.string.verify_predicted,
-                        prediction.classLabel,
-                        "%.0f%%".format(prediction.confidence * 100),
-                    ),
-                    color = MaterialTheme.styles.mutedForeground,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                LinearProgressIndicator(
-                    progress = { prediction.confidence },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.styles.primary,
-                    trackColor = MaterialTheme.styles.secondary,
-                )
-            }
-        }
-
-        // Per-detection questions
-        val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
-        if (currentAnswers != null) {
-            YesNoQuestion(
-                label = stringResource(R.string.verify_q1),
-                selected = currentAnswers.isEgg,
-                onSelected = actions.onQ1Selected,
-            )
-
-            if (currentAnswers.isEgg == true) {
-                YesNoQuestion(
-                    label = stringResource(R.string.verify_q2),
-                    selected = currentAnswers.isBoxCorrect,
-                    onSelected = actions.onQ2Selected,
-                )
-            }
-
-            if (currentAnswers.isEgg == true && currentAnswers.isBoxCorrect == true) {
-                SpeciesDropdown(
-                    selected = currentAnswers.species,
-                    otherText = currentAnswers.otherSpeciesText,
-                    onSpeciesSelected = actions.onSpeciesSelected,
-                    onOtherTextChanged = actions.onOtherSpeciesChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // Q4 — frame-level
-        YesNoQuestion(
-            label = stringResource(R.string.verify_q4),
-            selected = state.missedEgg,
-            onSelected = actions.onQ4Selected,
+        SpeciesDropdown(
+            selected = state.selectedSpecies,
+            otherText = state.otherSpeciesText,
+            onSpeciesSelected = actions.onSpeciesSelected,
+            onOtherTextChanged = actions.onOtherSpeciesChanged,
+            modifier = Modifier.fillMaxWidth(),
         )
 
-        // Notes (optional) — persists to samples.user_note (per ADR-005)
         Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
             Text(
                 text = stringResource(R.string.verify_user_note_label),
@@ -325,14 +215,13 @@ private fun VerificationSheetContent(
 
         Spacer(modifier = Modifier.height(AgarthaSpacing.xs))
 
-        var showDeleteConfirm by remember { mutableStateOf(false) }
+        var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
 
-        // Delete + Cancel + Submit
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.clusterGap),
         ) {
-            Button(
+            KomoButton(
                 onClick = { showDeleteConfirm = true },
                 size = ButtonSize.Lg,
                 variant = ButtonVariant.Destructive,
@@ -341,7 +230,7 @@ private fun VerificationSheetContent(
             ) {
                 Text(stringResource(R.string.verify_delete_frame))
             }
-            Button(
+            KomoButton(
                 onClick = actions.onCancel,
                 size = ButtonSize.Lg,
                 variant = ButtonVariant.Ghost,
@@ -349,7 +238,7 @@ private fun VerificationSheetContent(
             ) {
                 Text(stringResource(R.string.verify_cancel))
             }
-            Button(
+            KomoButton(
                 onClick = actions.onSubmit,
                 size = ButtonSize.Lg,
                 enabled = state.canSubmit,
@@ -430,38 +319,6 @@ private fun SheetKebab(
                     onToggleRepeat()
                 },
             )
-        }
-    }
-}
-
-@Composable
-private fun YesNoQuestion(
-    label: String,
-    selected: Boolean?,
-    onSelected: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
-        Text(
-            text = label,
-            color = MaterialTheme.styles.foreground,
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.clusterGap)) {
-            Button(
-                onClick = { onSelected(true) },
-                size = ButtonSize.Sm,
-                variant = if (selected == true) ButtonVariant.Default else ButtonVariant.Ghost,
-            ) {
-                Text(stringResource(R.string.verify_yes))
-            }
-            Button(
-                onClick = { onSelected(false) },
-                size = ButtonSize.Sm,
-                variant = if (selected == false) ButtonVariant.Default else ButtonVariant.Ghost,
-            ) {
-                Text(stringResource(R.string.verify_no))
-            }
         }
     }
 }

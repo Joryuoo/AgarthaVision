@@ -31,15 +31,18 @@ class SessionRemoteDataSource @Inject constructor(
     }
 
     /**
-     * Marks the matching Supabase `sessions` row as ended.
+     * Marks the matching Supabase `sessions` row as ended. Persists [notes] when
+     * provided so the End-Session confirmation dialog's final observations sync.
      */
     suspend fun closeSession(
         sessionId: String,
         endedAt: Instant,
+        notes: String? = null,
     ) {
         supabase.postgrest[SESSIONS_TABLE].update(
             {
                 set("ended_at", endedAt.toString())
+                if (notes != null) set("notes", notes)
             },
         ) {
             filter {
@@ -56,6 +59,7 @@ class SessionRemoteDataSource @Inject constructor(
             startedAt = Instant.ofEpochMilli(startedAt).toString(),
             endedAt = endedAt?.let { Instant.ofEpochMilli(it).toString() },
             notes = notes,
+            label = label,
         )
 
     @Serializable
@@ -72,6 +76,8 @@ class SessionRemoteDataSource @Inject constructor(
         val endedAt: String?,
         @SerialName("notes")
         val notes: String?,
+        @SerialName("label")
+        val label: String?,
     )
 
     private companion object {
