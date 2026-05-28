@@ -1,0 +1,435 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "b8f55c48f03cc12e9a6b030a9a4fbcc6",
+    "entities": [
+      {
+        "tableName": "samples",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `gps_latitude` REAL, `gps_longitude` REAL, `gps_accuracy` REAL, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `is_repeat` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, PRIMARY KEY(`sample_id`))",
+        "fields": [
+          {
+            "fieldPath": "sampleId",
+            "columnName": "sample_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verifiedAt",
+            "columnName": "verified_at",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "imagePath",
+            "columnName": "image_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "storagePath",
+            "columnName": "storage_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "inferenceModelVersion",
+            "columnName": "inference_model_version",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'unknown'"
+          },
+          {
+            "fieldPath": "needsReannotation",
+            "columnName": "needs_reannotation",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "gpsLatitude",
+            "columnName": "gps_latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gpsLongitude",
+            "columnName": "gps_longitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gpsAccuracy",
+            "columnName": "gps_accuracy",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userNote",
+            "columnName": "user_note",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isManual",
+            "columnName": "is_manual",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "isRepeat",
+            "columnName": "is_repeat",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "predictionsJson",
+            "columnName": "predictions_json",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "imageWidth",
+            "columnName": "image_width",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "imageHeight",
+            "columnName": "image_height",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sample_id"
+          ]
+        }
+      },
+      {
+        "tableName": "sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `notes` TEXT, `label` TEXT, PRIMARY KEY(`session_id`))",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "ended_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "session_id"
+          ]
+        }
+      },
+      {
+        "tableName": "detections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `verified_by_user` INTEGER NOT NULL, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "detectionId",
+            "columnName": "detection_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleId",
+            "columnName": "sample_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "classLabel",
+            "columnName": "class_label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bboxX",
+            "columnName": "bbox_x",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bboxY",
+            "columnName": "bbox_y",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bboxW",
+            "columnName": "bbox_w",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "bboxH",
+            "columnName": "bbox_h",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "verdict",
+            "columnName": "verdict",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'confirmed'"
+          },
+          {
+            "fieldPath": "expertClass",
+            "columnName": "expert_class",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "verifiedByUser",
+            "columnName": "verified_by_user",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "detection_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_detections_sample_id",
+            "unique": false,
+            "columnNames": [
+              "sample_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_detections_sample_id` ON `${TABLE_NAME}` (`sample_id`)"
+          },
+          {
+            "name": "index_detections_class_label",
+            "unique": false,
+            "columnNames": [
+              "class_label"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_detections_class_label` ON `${TABLE_NAME}` (`class_label`)"
+          },
+          {
+            "name": "index_detections_verdict",
+            "unique": false,
+            "columnNames": [
+              "verdict"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_detections_verdict` ON `${TABLE_NAME}` (`verdict`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "samples",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sample_id"
+            ],
+            "referencedColumns": [
+              "sample_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reports",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`report_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `report_type` TEXT NOT NULL DEFAULT 'session', `generated_at` INTEGER NOT NULL, `total_samples` INTEGER NOT NULL, `total_eggs_confirmed` INTEGER NOT NULL, `positive_species_json` TEXT NOT NULL, `epg_per_species_json` TEXT NOT NULL, `csv_file_path` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'pending', `created_at` INTEGER NOT NULL, PRIMARY KEY(`report_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "reportId",
+            "columnName": "report_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "reportType",
+            "columnName": "report_type",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'session'"
+          },
+          {
+            "fieldPath": "generatedAt",
+            "columnName": "generated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalSamples",
+            "columnName": "total_samples",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalEggsConfirmed",
+            "columnName": "total_eggs_confirmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "positiveSpeciesJson",
+            "columnName": "positive_species_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "epgPerSpeciesJson",
+            "columnName": "epg_per_species_json",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "csvFilePath",
+            "columnName": "csv_file_path",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "supabaseStatus",
+            "columnName": "supabase_status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'pending'"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "report_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reports_session_id",
+            "unique": false,
+            "columnNames": [
+              "session_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reports_session_id` ON `${TABLE_NAME}` (`session_id`)"
+          },
+          {
+            "name": "index_reports_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reports_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          },
+          {
+            "name": "index_reports_generated_at",
+            "unique": false,
+            "columnNames": [
+              "generated_at"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reports_generated_at` ON `${TABLE_NAME}` (`generated_at`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "sessions",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "session_id"
+            ],
+            "referencedColumns": [
+              "session_id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b8f55c48f03cc12e9a6b030a9a4fbcc6')"
+    ]
+  }
+}

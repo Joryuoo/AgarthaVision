@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- For sharing CSV reports written to the public Downloads directory. -->
+    <external-path
+        name="downloads"
+        path="Download" />
+    <!-- Fallback when DIRECTORY_DOWNLOADS isn't available on this device. -->
+    <external-files-path
+        name="external_files"
+        path="." />
+    <files-path
+        name="files"
+        path="." />
+</paths>

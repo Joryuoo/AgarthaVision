@@ -106,10 +106,16 @@
 
     <string name="session_detail_title">Session Detail</string>
     <string name="session_detail_empty">No verified samples in this session</string>
-    <string name="session_detail_export_csv">Export CSV</string>
-    <string name="session_detail_exporting">Exporting…</string>
-    <string name="session_detail_export_saved">CSV saved: %1$s</string>
-    <string name="session_detail_export_failed">CSV export failed: %1$s</string>
+    <string name="report_section_title">Reports</string>
+    <string name="report_generate">Generate Report</string>
+    <string name="report_generating">Generating…</string>
+    <string name="report_empty">No reports yet. Tap Generate Report to create one.</string>
+    <string name="report_status_pending">Pending</string>
+    <string name="report_status_synced">Synced</string>
+    <string name="report_status_failed">Sync failed</string>
+    <string name="report_no_positive_species">No positive species</string>
+    <string name="report_generated_toast">Generated · shared to Downloads</string>
+    <string name="report_generation_failed">Report failed: %1$s</string>
     <string name="session_detail_unknown_detection">No detection</string>
     <string name="session_detail_confidence">Confidence: %1$.2f</string>
     <string name="session_detail_captured">Captured: %1$s</string>

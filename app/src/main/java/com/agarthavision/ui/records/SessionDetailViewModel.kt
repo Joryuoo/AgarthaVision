@@ -3,34 +3,37 @@ package com.agarthavision.ui.records
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.agarthavision.domain.usecase.records.ExportSessionUseCase
-import com.agarthavision.domain.usecase.records.SampleRecordItem
-import com.agarthavision.domain.usecase.records.SessionSamples
+import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase
 import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
+import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
+import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
-import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * UI state for one session's verified samples.
+ * UI state for one session's verified samples + persisted reports.
  */
 data class SessionDetailState(
     val session: SessionSamples? = null,
     val eggCounts: List<EggCountSummary> = emptyList(),
     val totalEggCount: Int = 0,
     val epg: Int = 0,
-    val isExporting: Boolean = false,
-    val exportPath: String? = null,
-    val exportError: String? = null,
+    val reports: List<Report> = emptyList(),
+    val isGenerating: Boolean = false,
+    val generationError: String? = null,
 )
 
 /**
@@ -42,32 +45,49 @@ data class EggCountSummary(
 )
 
 /**
- * Loads session samples and exports the raw session CSV.
+ * One-shot UI events emitted by the session detail screen.
+ */
+sealed interface SessionDetailEvent {
+    /**
+     * A report was successfully generated and saved at [csvPath].
+     */
+    data class ReportGenerated(val csvPath: String) : SessionDetailEvent
+}
+
+/**
+ * Loads session samples + reports and triggers report generation.
  */
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     getSessionSamplesUseCase: GetSessionSamplesUseCase,
+    observeSessionReportsUseCase: ObserveSessionReportsUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
-    private val exportSessionUseCase: ExportSessionUseCase,
+    private val generateSessionReportUseCase: GenerateSessionReportUseCase,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
-    private val exportState = MutableStateFlow(ExportState())
+    private val generationState = MutableStateFlow(GenerationState())
 
-    val state: StateFlow<SessionDetailState> = getSessionSamplesUseCase(sessionId)
-        .mapLatest { session ->
-            val export = exportState.value
-            val eggCounts = sessionEggCountUseCase(sessionId)
-            SessionDetailState(
-                session = session,
-                eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
-                totalEggCount = eggCounts.totalEggCount,
-                epg = eggCounts.epg,
-                isExporting = export.isExporting,
-                exportPath = export.exportPath,
-                exportError = export.exportError,
-            )
-        }
+    private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
+    val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
+
+    val state: StateFlow<SessionDetailState> = combine(
+        getSessionSamplesUseCase(sessionId),
+        observeSessionReportsUseCase(sessionId),
+        generationState,
+    ) { session, reports, generation ->
+        val eggCounts = sessionEggCountUseCase(sessionId)
+        SessionDetailState(
+            session = session,
+            eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
+            totalEggCount = eggCounts.totalEggCount,
+            epg = eggCounts.epg,
+            reports = reports,
+            isGenerating = generation.isGenerating,
+            generationError = generation.error,
+        )
+    }
+        .mapLatest { it }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5_000),
@@ -75,32 +95,28 @@ class SessionDetailViewModel @Inject constructor(
         )
 
     /**
-     * Observable export state for Compose to recompose while the report is writing.
+     * Generates a fresh report for this session. Emits [SessionDetailEvent.ReportGenerated]
+     * on success so the screen can offer the medtech a share action.
      */
-    val currentExportState: StateFlow<ExportState> = exportState.asStateFlow()
-
-    /**
-     * Generates and writes a CSV export for this session.
-     */
-    fun exportCsv() {
+    fun generateReport() {
         viewModelScope.launch {
-            exportState.update { it.copy(isExporting = true, exportPath = null, exportError = null) }
-            val result = exportSessionUseCase(sessionId)
-            exportState.update {
-                result.fold(
-                    onSuccess = { path -> ExportState(exportPath = path) },
-                    onFailure = { error -> ExportState(exportError = error.message ?: error::class.simpleName) },
-                )
-            }
+            generationState.update { it.copy(isGenerating = true, error = null) }
+            generateSessionReportUseCase(sessionId).fold(
+                onSuccess = { report ->
+                    generationState.update { GenerationState() }
+                    report.csvFilePath?.let { _events.emit(SessionDetailEvent.ReportGenerated(it)) }
+                },
+                onFailure = { error ->
+                    generationState.update {
+                        GenerationState(error = error.message ?: error::class.simpleName)
+                    }
+                },
+            )
         }
     }
 }
 
-/**
- * State for the asynchronous CSV export operation.
- */
-data class ExportState(
-    val isExporting: Boolean = false,
-    val exportPath: String? = null,
-    val exportError: String? = null,
+private data class GenerationState(
+    val isGenerating: Boolean = false,
+    val error: String? = null,
 )
