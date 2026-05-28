@@ -9,85 +9,95 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import androidx.compose.foundation.border
 import com.agarthavision.R
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.capture.QueueFilter
 import com.agarthavision.ui.theme.AgarthaSpacing
+import com.agarthavision.ui.theme.AgarthaRadius
 import com.komoui.themes.styles
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
+import com.komoui.components.Button as KomoButton
+import com.komoui.components.ButtonSize
+import com.komoui.components.ButtonVariant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VerificationQueueSheet(
-    frames: List<FlaggedFrame>,
-    selectedFilter: QueueFilter,
-    onFilterSelected: (QueueFilter) -> Unit,
-    onRowClick: (FlaggedFrame) -> Unit,
-    onRowDelete: (FlaggedFrame) -> Unit,
-    onDismiss: () -> Unit,
+fun VerificationQueueScreen(
+    onBackClick: () -> Unit,
+    viewModel: VerificationQueueViewModel = hiltViewModel(),
 ) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-    val filteredFrames = remember(frames, selectedFilter) {
-        filterQueueFrames(frames, selectedFilter)
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val filteredFrames = remember(state.flaggedFrames, state.queueFilter) {
+        filterQueueFrames(state.flaggedFrames, state.queueFilter)
     }
 
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.styles.card,
-    ) {
+    Scaffold(
+        containerColor = MaterialTheme.styles.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(stringResource(R.string.queue_sheet_title, filteredFrames.size))
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.records_back),
+                            tint = MaterialTheme.styles.foreground,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.styles.background,
+                    titleContentColor = MaterialTheme.styles.foreground,
+                ),
+            )
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(max = screenHeightDp * 0.95f)
-                .padding(horizontal = AgarthaSpacing.screenEdge)
-                .navigationBarsPadding(),
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = AgarthaSpacing.screenEdge),
         ) {
-            Text(
-                text = stringResource(R.string.queue_sheet_title, filteredFrames.size),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.styles.foreground,
-                modifier = Modifier.padding(vertical = AgarthaSpacing.md),
-            )
-
             QueueFilterChips(
-                selected = selectedFilter,
-                onSelected = onFilterSelected,
-                modifier = Modifier.padding(bottom = AgarthaSpacing.sm),
+                selected = state.queueFilter,
+                onSelected = viewModel::onQueueFilterSelected,
+                modifier = Modifier.padding(vertical = AgarthaSpacing.md),
             )
 
             if (filteredFrames.isEmpty()) {
@@ -95,7 +105,7 @@ fun VerificationQueueSheet(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-                    modifier = Modifier.padding(bottom = AgarthaSpacing.md),
+                    modifier = Modifier.fillMaxSize(),
                 ) {
                     items(
                         items = filteredFrames,
@@ -103,12 +113,27 @@ fun VerificationQueueSheet(
                     ) { frame ->
                         VerificationQueueRow(
                             frame = frame,
-                            onClick = { onRowClick(frame) },
-                            onDelete = { onRowDelete(frame) },
+                            onClick = { viewModel.onQueueItemSelected(frame) },
+                            onDelete = { viewModel.onQueueItemDeleted(frame) },
                         )
                     }
                 }
             }
+        }
+    }
+
+    val target = state.verificationTarget
+    if (target != null) {
+        if (target.source == FrameSource.MANUAL) {
+            ManualSheet(
+                frame = target,
+                onDismiss = viewModel::onVerificationDismissed,
+            )
+        } else {
+            VerificationSheet(
+                frame = target,
+                onDismiss = viewModel::onVerificationDismissed,
+            )
         }
     }
 }
@@ -129,30 +154,38 @@ private fun QueueFilterChips(
     onSelected: (QueueFilter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
+    androidx.compose.foundation.lazy.LazyRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
     ) {
-        QueueFilterChip(
-            label = stringResource(R.string.queue_filter_all),
-            selected = selected == QueueFilter.ALL,
-            onClick = { onSelected(QueueFilter.ALL) },
-        )
-        QueueFilterChip(
-            label = stringResource(R.string.queue_filter_flagged),
-            selected = selected == QueueFilter.FLAGGED,
-            onClick = { onSelected(QueueFilter.FLAGGED) },
-        )
-        QueueFilterChip(
-            label = stringResource(R.string.queue_filter_manual),
-            selected = selected == QueueFilter.MANUAL,
-            onClick = { onSelected(QueueFilter.MANUAL) },
-        )
-        QueueFilterChip(
-            label = stringResource(R.string.queue_filter_repeat),
-            selected = selected == QueueFilter.REPEAT,
-            onClick = { onSelected(QueueFilter.REPEAT) },
-        )
+        item {
+            QueueFilterChip(
+                label = stringResource(R.string.queue_filter_all),
+                selected = selected == QueueFilter.ALL,
+                onClick = { onSelected(QueueFilter.ALL) },
+            )
+        }
+        item {
+            QueueFilterChip(
+                label = stringResource(R.string.queue_filter_flagged),
+                selected = selected == QueueFilter.FLAGGED,
+                onClick = { onSelected(QueueFilter.FLAGGED) },
+            )
+        }
+        item {
+            QueueFilterChip(
+                label = stringResource(R.string.queue_filter_manual),
+                selected = selected == QueueFilter.MANUAL,
+                onClick = { onSelected(QueueFilter.MANUAL) },
+            )
+        }
+        item {
+            QueueFilterChip(
+                label = stringResource(R.string.queue_filter_repeat),
+                selected = selected == QueueFilter.REPEAT,
+                onClick = { onSelected(QueueFilter.REPEAT) },
+            )
+        }
     }
 }
 
@@ -162,9 +195,10 @@ private fun QueueFilterChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    KomoBadge(
-        variant = if (selected) BadgeVariant.Default else BadgeVariant.Outline,
-        modifier = Modifier.clickable(onClick = onClick),
+    KomoButton(
+        onClick = onClick,
+        variant = if (selected) ButtonVariant.Default else ButtonVariant.Secondary,
+        size = ButtonSize.Sm,
     ) {
         Text(text = label)
     }
@@ -188,6 +222,25 @@ private fun QueueEmptyState() {
         Text(
             text = stringResource(R.string.queue_sheet_empty_state),
             style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.styles.mutedForeground,
+        )
+    }
+}
+
+@Composable
+private fun RowBadge(text: String) {
+    Box(
+        modifier = Modifier
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.styles.border,
+                shape = RoundedCornerShape(AgarthaRadius.sm),
+            )
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.styles.mutedForeground,
         )
     }
@@ -258,23 +311,15 @@ private fun VerificationQueueRow(
                 horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
                 modifier = Modifier.padding(top = AgarthaSpacing.xxs),
             ) {
-                KomoBadge(variant = BadgeVariant.Outline) {
-                    Text(
-                        text = if (frame.source == FrameSource.MANUAL) {
-                            stringResource(R.string.queue_row_source_manual)
-                        } else {
-                            stringResource(R.string.queue_row_source_ai)
-                        },
-                        color = MaterialTheme.styles.mutedForeground,
-                    )
-                }
-                if (frame.markedAsRepeat) {
-                    KomoBadge(variant = BadgeVariant.Outline) {
-                        Text(
-                            text = stringResource(R.string.verify_repeat_badge),
-                            color = MaterialTheme.styles.mutedForeground,
-                        )
+                RowBadge(
+                    text = if (frame.source == FrameSource.MANUAL) {
+                        stringResource(R.string.queue_row_source_manual)
+                    } else {
+                        stringResource(R.string.queue_row_source_ai)
                     }
+                )
+                if (frame.markedAsRepeat) {
+                    RowBadge(text = stringResource(R.string.verify_repeat_badge))
                 }
             }
             Text(

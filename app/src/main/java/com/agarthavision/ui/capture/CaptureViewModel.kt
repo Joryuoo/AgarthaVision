@@ -121,24 +121,6 @@ class CaptureViewModel @Inject constructor(
         _state.update { it.copy(verificationTarget = null) }
     }
 
-    fun onQueueTap() {
-        sessionManager.pauseInference()
-        _state.update { it.copy(isQueueOpen = true) }
-    }
-
-    fun onQueueDismiss() {
-        sessionManager.resumeInference()
-        _state.update { it.copy(isQueueOpen = false) }
-    }
-
-    fun onQueueItemSelected(frame: FlaggedFrame) {
-        _state.update { it.copy(isQueueOpen = false, verificationTarget = frame) }
-    }
-
-    fun onQueueItemDeleted(frame: FlaggedFrame) {
-        flaggedFrameStore.remove(frame)
-    }
-
     /**
      * Captures a manual snapshot of the current camera feed and adds it to the queue.
      */
@@ -169,18 +151,6 @@ class CaptureViewModel @Inject constructor(
     }
 
     /**
-     * Toggles the queue-row Repeat marker on [frame] (per ADR-005). The marker
-     * pre-loads `VerificationViewModel.isRepeat` when the medtech opens the row.
-     */
-    fun onQueueItemToggleRepeat(frame: FlaggedFrame) {
-        flaggedFrameStore.toggleRepeat(frame)
-    }
-
-    fun onQueueFilterSelected(filter: QueueFilter) {
-        _state.update { it.copy(queueFilter = filter) }
-    }
-
-    /**
      * Pause/resume hooks exposed to the screen so a [LifecycleEventObserver]
      * can toggle inference when Capture goes to background/foreground.
      */
@@ -192,7 +162,7 @@ class CaptureViewModel @Inject constructor(
         // Only resume when nothing is on top — otherwise the user just closed the
         // app while a sheet was open, and the sheet's own dismiss handler should drive resume.
         val s = _state.value
-        if (s.verificationTarget == null && !s.isQueueOpen && !s.isConnectionLost) {
+        if (s.verificationTarget == null && !s.isConnectionLost) {
             sessionManager.resumeInference()
         }
     }
@@ -219,16 +189,6 @@ sealed interface CaptureEvent {
 }
 
 /**
- * Filter chip selection on the [VerificationQueueSheet]. Per ADR-005 / plan §6.7.
- */
-enum class QueueFilter {
-    ALL,
-    FLAGGED,
-    MANUAL,
-    REPEAT,
-}
-
-/**
  * Immutable UI state surface for the Capture screen.
  *
  * @property activeSessionId Room sessionId of the active smear (null when idle).
@@ -246,7 +206,6 @@ enum class QueueFilter {
  * @property isProbingConnection true while [resumeConnection] is awaiting a
  *   `/health` probe.
  * @property verificationTarget the frame currently being verified.
- * @property isQueueOpen true means the [VerificationQueueSheet] is mounted.
  */
 data class CaptureState(
     val activeSessionId: String? = null,
@@ -258,6 +217,4 @@ data class CaptureState(
     val isConnectionLost: Boolean = false,
     val isProbingConnection: Boolean = false,
     val verificationTarget: FlaggedFrame? = null,
-    val isQueueOpen: Boolean = false,
-    val queueFilter: QueueFilter = QueueFilter.ALL,
 )
