@@ -2,7 +2,6 @@ package com.agarthavision.ui.verify
 
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.capture.QueueFilter
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import java.time.Instant

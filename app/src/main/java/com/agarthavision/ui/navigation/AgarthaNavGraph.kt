@@ -14,6 +14,7 @@ import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.sessions.SessionPickerScreen
 import com.agarthavision.ui.settings.SettingsScreenPlaceholder
+import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
@@ -26,6 +27,7 @@ sealed class Screen(val route: String) {
     data object SampleDetail : Screen("records/sample/{sampleId}") {
         fun createRoute(sampleId: String) = "records/sample/$sampleId"
     }
+    data object VerificationQueue : Screen("verification_queue")
     data object Settings : Screen("settings")
 }
 
@@ -79,12 +81,22 @@ fun AgarthaNavGraph(
                         launchSingleTop = true
                     }
                 },
+                onVerifyQueueClick = {
+                    navController.navigate(Screen.VerificationQueue.route) {
+                        launchSingleTop = true
+                    }
+                },
                 onSessionEnded = {
                     navController.navigate(Screen.SessionPicker.route) {
                         popUpTo(Screen.SessionPicker.route) { inclusive = false }
                         launchSingleTop = true
                     }
                 },
+            )
+        }
+        composable(Screen.VerificationQueue.route) {
+            VerificationQueueScreen(
+                onBackClick = { navController.popBackStack() },
             )
         }
         composable(Screen.Records.route) {

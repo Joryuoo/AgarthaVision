@@ -177,49 +177,4 @@ class CaptureViewModelTest {
             verify(sessionManager).resumeInference()
         }
 
-    @Test
-    fun `onQueueTap pauses inference and sets isQueueOpen`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            sessionState.value = makeActiveState()
-            advanceUntilIdle()
-
-            vm.onQueueTap()
-            advanceUntilIdle()
-
-            assertTrue(vm.state.value.isQueueOpen)
-            verify(sessionManager).pauseInference()
-            verify(sessionManager, never()).stopSession()
-        }
-
-    @Test
-    fun `onQueueItemSelected sets verificationTarget and closes queue`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.onQueueTap()
-            advanceUntilIdle()
-            assertTrue(vm.state.value.isQueueOpen)
-
-            val frame = makeFrame()
-            vm.onQueueItemSelected(frame)
-            advanceUntilIdle()
-
-            assertEquals(frame, vm.state.value.verificationTarget)
-            assertFalse(vm.state.value.isQueueOpen)
-        }
-
-    @Test
-    fun `onQueueDismiss clears isQueueOpen and resumes inference`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.onQueueTap()
-            advanceUntilIdle()
-            assertTrue(vm.state.value.isQueueOpen)
-
-            vm.onQueueDismiss()
-            advanceUntilIdle()
-
-            assertFalse(vm.state.value.isQueueOpen)
-            verify(sessionManager).resumeInference()
-        }
 }

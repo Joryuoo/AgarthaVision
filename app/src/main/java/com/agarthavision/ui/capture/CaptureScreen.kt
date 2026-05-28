@@ -59,7 +59,6 @@ import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.ShutterButton
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.verify.ManualSheet
-import com.agarthavision.ui.verify.VerificationQueueSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import com.komoui.components.Badge as KomoBadge
 import com.komoui.components.BadgeVariant
@@ -84,6 +83,7 @@ fun CaptureScreen(
     frameSampler: FrameSampler,
     onRecordsClick: () -> Unit,
     onReportsClick: (String) -> Unit,
+    onVerifyQueueClick: () -> Unit,
     onSessionEnded: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -188,7 +188,7 @@ fun CaptureScreen(
                             tint = MaterialTheme.styles.foreground,
                         )
                     }
-                    IconButton(onClick = viewModel::onQueueTap) {
+                    IconButton(onClick = onVerifyQueueClick) {
                         BadgedBox(
                             badge = {
                                 if (state.flaggedFrames.isNotEmpty()) {
@@ -318,17 +318,6 @@ fun CaptureScreen(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
             )
         }
-    }
-
-    if (state.isQueueOpen) {
-        VerificationQueueSheet(
-            frames = state.flaggedFrames,
-            selectedFilter = state.queueFilter,
-            onFilterSelected = viewModel::onQueueFilterSelected,
-            onRowClick = viewModel::onQueueItemSelected,
-            onRowDelete = viewModel::onQueueItemDeleted,
-            onDismiss = viewModel::onQueueDismiss,
-        )
     }
 
     val target = state.verificationTarget

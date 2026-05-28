@@ -229,9 +229,10 @@ use a `Row` of `KomoBadge` instances with `BadgeVariant.Outline` (unselected) an
 `BadgeVariant.Default` (selected). Single-select. Default selection = first chip
 ("All"). Tap toggles selection. Chip text uses sentence case, no emoji.
 
-**Row-level visual flags** (e.g. "Repeat" pill or "AI"/"Manual" source pill on
-each queue row): also `KomoBadge` with `BadgeVariant.Outline`. Sized small,
-trailing on the row, with `mutedForeground` text colour.
+**Row-level visual flags** (e.g. "Repeat" flag or "AI"/"Manual" source flag on
+each queue row): use a custom `Box` with a 1dp border (`border` token), `sm` radius,
+and horizontal padding, rather than `KomoBadge` which forces a cramped pill shape.
+Text should use `mutedForeground`.
 
 ### Button
 **Use for** every CTA. Variants → moodboard mapping: `default` → Clinical Blue, pill (`full` radius) — "Validate sample". `secondary` → Paper fill, Ink text, pill. `outline` → Ink 1.5px border, transparent — "Re-scan". `destructive` → Coral fill — "Discard". `ghost` → text-only, used inside cards. `link` → reserved for cross-screen jumps.

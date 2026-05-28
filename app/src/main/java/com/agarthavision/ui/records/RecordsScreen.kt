@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -141,6 +143,9 @@ private fun FilterBar(
     onDateRangeSelected: (LocalDate?, LocalDate?) -> Unit,
 ) {
     var showDatePicker by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var showFiltersSheet by remember { mutableStateOf(false) }
+    val sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     Column(
         modifier = Modifier
@@ -148,63 +153,137 @@ private fun FilterBar(
             .padding(vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        androidx.compose.foundation.lazy.LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item {
-                KomoButton(
-                    onClick = { onSpeciesSelected(null) },
-                    variant = if (state.selectedSpecies == null) ButtonVariant.Default else ButtonVariant.Secondary,
-                    size = ButtonSize.Sm,
-                ) {
-                    Text(stringResource(R.string.records_species_all))
-                }
-            }
-            items(EggSpecies.entries.toTypedArray()) { species ->
-                val label = species.displayName
-                KomoButton(
-                    onClick = { onSpeciesSelected(species) },
-                    variant = if (state.selectedSpecies == species) ButtonVariant.Default else ButtonVariant.Secondary,
-                    size = ButtonSize.Sm,
-                ) {
-                    Text(label)
-                }
-            }
-        }
-
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            KomoButton(
-                onClick = { showDatePicker = true },
-                variant = ButtonVariant.Secondary,
-                size = ButtonSize.Sm,
-            ) {
-                Icon(
-                    imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
-                    contentDescription = null,
-                    modifier = Modifier.padding(end = 8.dp).size(16.dp)
+            Box(modifier = Modifier.weight(1f)) {
+                com.komoui.components.Input(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = "Search records...",
+                    singleLine = true,
+                    leadingIcon = {
+                        Icon(
+                            imageVector = androidx.compose.material.icons.Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = MaterialTheme.styles.mutedForeground
+                        )
+                    }
                 )
-                val dateText = if (state.startDate != null && state.endDate != null) {
-                    "${state.startDate} → ${state.endDate}"
-                } else if (state.startDate != null) {
-                    "${state.startDate} → Present"
-                } else if (state.endDate != null) {
-                    "Any → ${state.endDate}"
-                } else {
-                    "All time"
-                }
-                Text(dateText)
             }
             
-            if (state.startDate != null || state.endDate != null) {
-                KomoButton(
-                    onClick = { onDateRangeSelected(null, null) },
-                    variant = ButtonVariant.Ghost,
-                    size = ButtonSize.Sm,
-                ) {
-                    Text(stringResource(R.string.records_filter_clear))
+            androidx.compose.material3.IconButton(
+                onClick = { showFiltersSheet = true },
+            ) {
+                Icon(
+                    imageVector = androidx.compose.material.icons.Icons.Default.FilterList,
+                    contentDescription = "Filters",
+                    tint = MaterialTheme.styles.foreground
+                )
+            }
+        }
+    }
+
+    if (showFiltersSheet) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showFiltersSheet = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.styles.background,
+            contentColor = MaterialTheme.styles.foreground,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(24.dp)
+            ) {
+                Text(
+                    text = "Filters",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.styles.foreground
+                )
+
+                // Species Filter
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Species",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.styles.foreground
+                    )
+                    androidx.compose.foundation.lazy.LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        item {
+                            KomoButton(
+                                onClick = { onSpeciesSelected(null) },
+                                variant = if (state.selectedSpecies == null) ButtonVariant.Default else ButtonVariant.Secondary,
+                                size = ButtonSize.Sm,
+                            ) {
+                                Text(stringResource(R.string.records_species_all))
+                            }
+                        }
+                        items(EggSpecies.entries.toTypedArray()) { species ->
+                            val label = species.displayName
+                            KomoButton(
+                                onClick = { onSpeciesSelected(species) },
+                                variant = if (state.selectedSpecies == species) ButtonVariant.Default else ButtonVariant.Secondary,
+                                size = ButtonSize.Sm,
+                            ) {
+                                Text(label)
+                            }
+                        }
+                    }
+                }
+
+                // Date Range Filter
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Date Range",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.styles.foreground
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        KomoButton(
+                            onClick = { showDatePicker = true },
+                            variant = ButtonVariant.Secondary,
+                            size = ButtonSize.Sm,
+                        ) {
+                            Icon(
+                                imageVector = androidx.compose.material.icons.Icons.Default.DateRange,
+                                contentDescription = null,
+                                modifier = Modifier.padding(end = 8.dp).size(16.dp)
+                            )
+                            val dateText = if (state.startDate != null && state.endDate != null) {
+                                "${state.startDate} → ${state.endDate}"
+                            } else if (state.startDate != null) {
+                                "${state.startDate} → Present"
+                            } else if (state.endDate != null) {
+                                "Any → ${state.endDate}"
+                            } else {
+                                "All time"
+                            }
+                            Text(dateText)
+                        }
+                        
+                        if (state.startDate != null || state.endDate != null) {
+                            KomoButton(
+                                onClick = { onDateRangeSelected(null, null) },
+                                variant = ButtonVariant.Ghost,
+                                size = ButtonSize.Sm,
+                            ) {
+                                Text(stringResource(R.string.records_filter_clear))
+                            }
+                        }
+                    }
                 }
             }
         }
