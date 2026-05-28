@@ -131,3 +131,76 @@ the existing user-scoped `imagePath` rather than introducing a new global cache 
 - ✅ `./gradlew.bat :app:compileDebugKotlin`
 - ✅ `./gradlew.bat :app:testDebugUnitTest`
 - ✅ `./gradlew.bat :app:ktlintCheck :app:detekt`
+
+---
+
+## 2026-05-28 — Sprint 2 Addition: session-as-smear, EPG, Manual Capture, user_note
+
+Sprint 2 expanded with [ADR-005](../adr/005-session-as-smear-manual-capture-and-repeat-flag.md):
+a session now equals one fecal smear, EPG ships with a hardcoded Kato-Katz
+multiplier of 24, the medtech can capture frames manually without AI, and the
+existing-but-never-wired `samples.user_note` Supabase column finally flows
+end-to-end. Implemented in the documented order (source-of-truth + ADR + SQL
+first, progress doc last) over tracks 2.4–2.15.
+
+### Schema (Supabase + Room)
+
+| Migration | Purpose |
+|---|---|
+| `0005_session_label.sql` | Adds `sessions.label` (smear name) + `sessions_user_started_idx`. `sessions.notes` retained for in-session observations |
+| `0006_sample_is_manual.sql` | Adds `samples.is_manual boolean not null default false` + `samples_session_manual_idx` |
+| `0007_detection_bbox_nullable.sql` | Drops `NOT NULL` on `detections.bbox_x/y/w/h` to permit manual-capture rows with no drawn box |
+
+All three migrations were pushed to Supabase manually with the commented revert
+script ready for rollback. Room schema bumped 4 → 5 with destructive fallback;
+`SessionEntity.label`, `SampleEntity.userNote/isManual/isRepeat`, and nullable
+`DetectionEntity.bboxX/Y/W/H` cover the local mirror. `samples.is_repeat`
+is **Room-only** and never syncs (workflow flag for repeat-suspected smears).
+
+### Implementation tracks (DOCS-FIRST → PROGRESS-LAST)
+
+| Track | Deliverable | Key files |
+|---|---|---|
+| 2.4 | Session label + Room v5 | `0005_session_label.sql`, `SessionEntity`, `SessionRemoteDataSource`, `AgarthaDatabase` |
+| 2.5 | Sample flags catch-up | `0006_sample_is_manual.sql`, `SampleEntity.userNote/isManual/isRepeat` |
+| 2.6 | Nullable detection bbox | `0007_detection_bbox_nullable.sql`, `DetectionEntity`, `Detection`, null-safe `FrameWithBoxes`/`SampleDetailScreen`/`ExportSessionUseCase` |
+| 2.7 | SessionPicker UX | `ui/sessions/SessionPickerScreen.kt`, `SessionPickerViewModel.kt`, `SessionDao.observeActiveAndRecent`, nav refactor Login → Picker → Capture |
+| 2.8 | Session lifecycle flip | `SessionState.Active(session, startedAt, isInferenceRunning)`, `endSession(notes)` confirm dialog, no more Start/Stop Recording |
+| 2.9 | Auto-inference + manual snapshot | `DisposableEffect` + `LifecycleEventObserver` on Capture, `FrameSampler.latestFrameBytes: StateFlow<ByteArray?>` (`@Singleton`) |
+| 2.10 | Mark-as-Repeat + user-note | VerificationSheet kebab (`Mark/Unmark as repeat`), Repeat outline badge, Notes (optional) `Input` |
+| 2.11 | Queue filter chips + badges | `QueueFilter` enum (`ALL · FLAGGED · MANUAL · REPEAT`), `FrameSource` enum, `FlaggedFrame.source/markedAsRepeat`, AI/Manual + Repeat pills on rows |
+| 2.12 | EPG | `core/util/EpgCalculator.kt` (single-fn, multiplier=24), `domain/usecase/reports/SessionEggCountUseCase.kt`, EPG card on SessionDetail, Reports icon on Capture |
+| 2.13 | Manual Capture E2E | `ui/verify/ManualSheet.kt` + `ManualCaptureViewModel`, `domain/usecase/verify/SubmitManualCaptureUseCase`, sample row with `is_manual = true` + one CONFIRMED detection with null bbox |
+| 2.14 | user_note wired | `SampleRemoteDataSource` no longer hard-codes `null`; `SampleDetailScreen` Metadata tab + CSV export pick it up |
+| 2.15 | Unit tests | `EpgCalculatorTest`, `SessionEggCountUseCaseTest`, `SubmitManualCaptureUseCaseTest`, `SubmitVerificationUseCaseTest`, `SessionPickerViewModelTest`, `VerificationViewModelTest`, `VerificationQueueFilterTest`, `CaptureViewModelTest` — **72/72 passing** |
+
+### EPG semantics (Phase 1)
+
+`EpgCalculator.epg(count) = count * 24` where `count` is the number of
+`CONFIRMED` detections in the session, **excluding samples with `is_repeat = true`**.
+Manual-capture samples (`is_manual = true`) count toward EPG; repeat-marked
+samples never do. Phase 2 will swap the hardcoded multiplier for a
+`prep_methods` table (open in [00_PROJECT_OVERVIEW.md](../00_PROJECT_OVERVIEW.md)).
+
+### Verdict semantics (clarification)
+
+Manual-capture detections write `verdict = CONFIRMED` because the medtech
+explicitly picked the species — there is no model prediction to judge.
+`samples.needs_reannotation = true` carries the "boxes need to be drawn
+offline" semantics, **not** a verdict. Verified in
+[`DetectionVerdict`](../../app/src/main/java/com/agarthavision/domain/model/DetectionVerdict.kt):
+the enum still has exactly four values (`CONFIRMED`, `FALSE_POSITIVE`,
+`WRONG_CLASS`, `BOX_INCORRECT`). No new verdict was added.
+
+### Verification
+
+- ✅ `./gradlew :app:compileDebugKotlin`
+- ✅ `./gradlew :app:compileDebugUnitTestKotlin`
+- ✅ `./gradlew :app:testDebugUnitTest` — 72 passing, 0 failing
+- ✅ Supabase migrations 0005/0006/0007 applied manually by Joryuoo
+
+### Open / follow-up
+
+- Multiplier=24 citation needs the exact paper/DOH bulletin reference written into ADR-005's footnote.
+- Phase 2 manual-capture data source (OTG-attached inference hardware) is the snapshot source once the phone camera is removed; ADR-005 lists this as open.
+- Three top-bar icons on Capture (Reports + History + Queue) is at the comfort limit — Settings/Help will need an overflow menu in future work.

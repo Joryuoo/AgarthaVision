@@ -223,9 +223,25 @@ Variants → Clinical mapping: `default` → neutral info ("Synced 4 samples to 
 Variant mapping: `default` → Clinical Blue fill (active states). `secondary` → Paper fill, Ink text (resting tags). `outline` → Ink 1.5px border, transparent fill (taxonomy chips). `destructive` → Coral (threshold breach).
 Always use JetBrains Mono for badge text, 11 sp, uppercase, `+0.06 em`.
 
+### Badge — filter chip pattern
+**For sheet filter rows** (e.g. `VerificationQueueSheet` chips `All · Flagged · Manual · Repeat`):
+use a `Row` of `KomoBadge` instances with `BadgeVariant.Outline` (unselected) and
+`BadgeVariant.Default` (selected). Single-select. Default selection = first chip
+("All"). Tap toggles selection. Chip text uses sentence case, no emoji.
+
+**Row-level visual flags** (e.g. "Repeat" pill or "AI"/"Manual" source pill on
+each queue row): also `KomoBadge` with `BadgeVariant.Outline`. Sized small,
+trailing on the row, with `mutedForeground` text colour.
+
 ### Button
 **Use for** every CTA. Variants → moodboard mapping: `default` → Clinical Blue, pill (`full` radius) — "Validate sample". `secondary` → Paper fill, Ink text, pill. `outline` → Ink 1.5px border, transparent — "Re-scan". `destructive` → Coral fill — "Discard". `ghost` → text-only, used inside cards. `link` → reserved for cross-screen jumps.
 Default size is `default` (40.dp tall, 24.dp padding). Use `lg` (48.dp) for the primary capture button.
+
+**Two-button bottom row pattern** (e.g. `CaptureScreen` after [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md)): a secondary action on the left + a primary/destructive action on the right, via `Row(horizontalArrangement = Arrangement.SpaceBetween)`. Concrete example:
+- `📷 Capture` — `ButtonVariant.Outline`, `ButtonSize.Default`, icon + label.
+- `End Session` — `ButtonVariant.Destructive`, `ButtonSize.Lg`, label only.
+
+The destructive action stays the most visually prominent (Coral fill, larger size) so the medtech doesn't fat-finger Capture while reaching for End Session.
 
 ### Calendar
 **Use for** the date filter in the dashboard ("Validated between …"). Selected day uses `primary`; today's ring uses `ring`. Weekday header in JetBrains Mono 10 sp uppercase.
@@ -255,10 +271,14 @@ Internal padding `24.dp`, header gap `16.dp`.
 **Use for** sample-quick-look on dashboard map, Capture-options sheet (lighting / exposure), and the `VerificationQueueSheet` (badge → list of flagged frames → tap-row opens `VerificationSheet`). Drag handle visible (24.dp pill in `mutedForeground`). Snap points at 30% / 60% / 95%. Nested-sheet flow is permitted: queue sheet at 60% snap dismisses, then verification sheet opens at 95% snap.
 
 ### Dropdown Menu
-**Use for** kebab menu on each sample row (Re-scan · Export · Discard). Destructive items get Coral. Item height 36.dp, padding 12.dp.
+**Use for** kebab menu on each sample row (Re-scan · Export · Discard) and as the **secondary-action affordance on sheet headers** (e.g. `VerificationSheet` / `ManualSheet` kebab → "Mark as Repeat"). Destructive items get Coral. Item height 36.dp, padding 12.dp.
+
+**Kebab on sheets:** when a sheet has 3+ primary footer buttons (Cancel + Delete + Submit, etc.), put less-frequent destructive-adjacent actions (Mark as Repeat, Flag for re-annotation) in a kebab `IconButton` in the header row instead of a fourth button. Keeps the footer scannable.
 
 ### Input
 **Use for** Sample ID entry, EPG manual override, notes. Default: 1.5px Ink border (`input` token), `lg` radius, 14.dp vertical padding. Mono font for IDs/numbers, sans for free text.
+
+**Optional-input phrasing:** when an input is not required, append `" (optional)"` to the label (e.g. `Notes (optional)`) rather than relying on placeholder text. Placeholder is the example value; the label says whether the field is required. Used by `samples.user_note` input in `VerificationSheet`/`ManualSheet` and `sessions.notes` input in the create-session dialog + end-session confirmation.
 
 ### Popover
 **Use for** "what is EPG?" explainers, confidence breakdowns, GPS tooltip. Background `popover` white, `xl` radius.

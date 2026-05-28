@@ -8,7 +8,7 @@
     "build:release": "./gradlew assembleRelease",
     "install:device": "./gradlew :app:installDebug",
     "test": "./gradlew testDebugUnitTest",
-    "test:all": "./gradlew test",
+    "test:all": "./gradlew :app:test",
     "lint": "./gradlew ktlintCheck detekt",
     "lint:fix": "./gradlew ktlintFormat",
     "clean": "./gradlew clean",

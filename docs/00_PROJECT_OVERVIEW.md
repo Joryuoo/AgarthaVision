@@ -8,7 +8,7 @@
 A medtech opens the app, logs in, and sees a live camera viewport trained on a microscope slide. They tap **Start Session** — the app begins sampling one frame every two seconds and sending each to a cloud AI model. When the model detects a parasite egg, a banner appears: *"Egg detected — tap to review."* The session continues running while the medtech reviews flagged frames, accepting or rejecting each detection. When they finish, verified samples and their bounding-box metadata sync to the cloud database. No manual counting, no paper forms mid-session.
 
 **Phase 1 (current MVP):** Mobile capture + Supabase (Auth + Postgres + Storage) + a **self-hosted FastAPI inference container** running on a rented GPU droplet. Rebuildable on any GPU provider via a public image on GitHub Container Registry.
-**Phase 2:** Self-hosted inference on owned hardware (local GPU), self-hosted PostgreSQL in Philippine region, EPG calculations, DOH-formatted reports, offline-first sync queue.
+**Phase 2:** Self-hosted inference on owned hardware (local GPU), self-hosted PostgreSQL in Philippine region, EPG calculations backed by a DOH-validated `prep_methods` table (replacing the Phase-1 hardcoded `EpgCalculator.MULTIPLIER`), DOH-formatted reports, offline-first sync queue.
 
 ---
 
@@ -32,8 +32,10 @@ No dedicated backend to operate. The mobile app talks directly to Supabase and t
 ### Phase 2 (deferred — self-hosted stack)
 
 Triggered by funding/support commitment or first deployment with real patient PHI.
-Self-hosted FastAPI + PostgreSQL + MinIO + YOLO; EPG calculations; DOH-formatted PDF reports;
-offline-first `SyncQueue` + WorkManager; advanced HITL dashboard.
+Self-hosted FastAPI + PostgreSQL + MinIO + YOLO; EPG calculations backed by a
+DOH-validated `prep_methods` table (replacing the Phase-1 hardcoded
+`EpgCalculator.MULTIPLIER = 24` per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md));
+DOH-formatted PDF reports; offline-first `SyncQueue` + WorkManager; advanced HITL dashboard.
 See [ADR-002](adr/002-supabase-and-roboflow-for-mvp.md) for the migration path.
 
 **Mobile app role change in Phase 2.** The Android client's **on-device camera
@@ -89,7 +91,7 @@ Each General Objective from the Project Proposal maps to concrete MVP deliverabl
 
 | Specific Objective                           | Phase 1 Implementation | Phase 2 |
 |----------------------------------------------|------------------------|---------|
-| EPG within 10% of manual counts              | Deferred               | Automated EPG calc in backend; medtech override |
+| EPG within 10% of manual counts              | **Phase 1 Sprint 2** — hardcoded Kato-Katz volumetric multiplier `24` via [`core/util/EpgCalculator.kt`](../app/src/main/java/com/agarthavision/core/util/EpgCalculator.kt); per-session totals computed by `SessionEggCountUseCase` and surfaced on `SessionDetailScreen`. Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md). | Automated EPG calc in backend with DOH-validated formula table (replaces hardcoded multiplier); medtech override |
 | DOH reports within 5 min of validation       | Deferred               | Background PDF generation on validation |
 
 ---

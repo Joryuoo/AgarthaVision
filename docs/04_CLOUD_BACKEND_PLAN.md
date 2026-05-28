@@ -256,6 +256,66 @@ verdict. The migration:
 
 See [`supabase/migrations/0002_verification_fields.sql`](../supabase/migrations/0002_verification_fields.sql).
 
+### 4.1.3 Session Label — `0005_session_label.sql`
+
+Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md), one
+`sessions` row represents one fecal smear. The medtech enters a `label` at
+session creation (e.g. "Patient A · AM slide"). The existing `notes` column
+stays (now actually wired to a UI input for in-session free-form observations).
+
+- Adds `sessions.label text` (nullable; required at create time via UI).
+- Creates `sessions_user_started_idx on (user_id, started_at desc)` so the
+  SessionPicker list query is cheap.
+- Includes a **commented revert** at the bottom of the migration file.
+
+See [`supabase/migrations/0005_session_label.sql`](../supabase/migrations/0005_session_label.sql).
+
+### 4.1.4 Sample Manual Flag — `0006_sample_is_manual.sql`
+
+Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md), a
+medtech can take a manual snapshot of the current camera feed and tag it with
+a species **without AI inference**. Manual samples sync to Supabase identically
+to AI samples — they're real medtech attributions and count in EPG.
+
+- Adds `samples.is_manual boolean not null default false`.
+- Creates `samples_session_manual_idx on (session_id, is_manual)`.
+- Commented revert at file bottom.
+
+Note: `samples.is_repeat` is **not** added to Supabase — it's a Room-only
+workflow flag (the medtech's "I already counted this one" marker). Repeats
+never sync; they're a local sift-through aid. See ADR-005 for rationale.
+
+See [`supabase/migrations/0006_sample_is_manual.sql`](../supabase/migrations/0006_sample_is_manual.sql).
+
+### 4.1.5 Nullable Bbox for Manual Captures — `0007_detection_bbox_nullable.sql`
+
+Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md),
+manual captures persist a `detections` row with the medtech's species pick but
+**no bounding box** (the medtech tags the whole frame; offline annotation can
+fill the box in later if needed).
+
+- Drops `NOT NULL` from `detections.bbox_x`, `.bbox_y`, `.bbox_w`, `.bbox_h`.
+- Existing AI-confirmed rows (with non-null bbox values) are unaffected.
+- Manual-capture rows write all four as `NULL`.
+- Commented revert at file bottom (with a safety note that revert only works
+  if no rows currently hold null bbox values).
+
+Consumer impact (mobile): `FrameWithBoxes`, `SampleDetailScreen`, and
+`ExportSessionUseCase` CSV gain ~3 null-guards. The rationale for nullable
+columns over a sentinel `(0,0,0,0)` value is in ADR-005.
+
+See [`supabase/migrations/0007_detection_bbox_nullable.sql`](../supabase/migrations/0007_detection_bbox_nullable.sql).
+
+### 4.1.6 `samples.user_note` finally wired (no migration)
+
+The `user_note` column has existed in `public.samples` since the original
+`0001_init.sql`. Until Sprint 2 the mobile client always sent `null` for it
+([`SampleRemoteDataSource.toRow()`](../app/src/main/java/com/agarthavision/data/supabase/SampleRemoteDataSource.kt)).
+Sprint 2 closes this gap: Room `SampleEntity` gains a `user_note: String?`
+column, both `VerificationSheet` and `ManualSheet` add an optional `Input`
+above the footer, and the value flows through `toRow()`, `SampleDetailScreen`
+Metadata tab, and the CSV export. **No Supabase migration needed.**
+
 ### 4.2 Storage Bucket
 
 Create a single private bucket `samples` via the Supabase dashboard or CLI:

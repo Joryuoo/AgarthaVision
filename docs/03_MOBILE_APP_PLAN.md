@@ -148,7 +148,9 @@ There is no sign-up flow in MVP. Accounts are provisioned manually in the Supaba
 
 ### 1.1 Session Lifecycle
 
-A `SessionManager` (`@Singleton`, app-scoped) tracks the active recording session:
+**Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md), one session = one fecal smear.** Sessions are explicitly started and ended by the medtech; inference auto-pauses whenever the Capture screen is not in the foreground.
+
+A `SessionManager` (`@Singleton`, app-scoped) tracks the active session:
 
 ```kotlin
 @Singleton
@@ -160,23 +162,34 @@ class SessionManager @Inject constructor(
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    suspend fun startSession(): SessionEntity { /* ... */ }
-    suspend fun stopSession()                  { /* ... */ }
+    suspend fun startSession(label: String, notes: String? = null): SessionEntity { /* ... */ }
+    suspend fun endSession(sessionId: String)                                      { /* ... */ }
+    fun pauseInference()                                                            { /* ... */ }
+    fun resumeInference()                                                           { /* ... */ }
 }
 
 sealed interface SessionState {
     data object Idle : SessionState
-    data class Recording(val session: SessionEntity, val startedAt: Instant) : SessionState
+    data class Active(
+        val session: SessionEntity,
+        val startedAt: Instant,
+        val isInferenceRunning: Boolean,
+    ) : SessionState
 }
 ```
 
-`startSession()`:
-1. Generate UUID for `session_id`.
-2. Insert `SessionEntity` locally with `started_at = Instant.now()`.
-3. Insert the same row into Supabase `sessions` table via `supabase-kt`.
-4. Transition state to `Recording`.
+`startSession(label, notes?)`:
+1. Only called from the SessionPickerScreen "Create new session" path.
+2. Generate UUID for `session_id`.
+3. Insert `SessionEntity` locally with `started_at = Instant.now()`, `label`, optional `notes`.
+4. Insert the same row into Supabase `sessions` table via `supabase-kt`.
+5. Transition state to `Active(isInferenceRunning = false)`. Inference will auto-start when CaptureScreen comes to foreground.
 
-`stopSession()`: set `ended_at`, update locally + remotely.
+`endSession(id)`: the ONLY path that writes `ended_at`. Triggered by the `End Session` button on CaptureScreen (with AlertDialog confirmation + optional `notes` editor) or by row-kebab "End session" on SessionPickerScreen.
+
+`pauseInference()` / `resumeInference()`: pure local state on the current `Active` row. `CaptureScreen` calls these via `DisposableEffect` keyed on screen lifecycle + open sheets. Stopping inference is **not** session-ending — the session row stays open until `endSession()` is called.
+
+**State machine:** `Idle → SessionPicker → Active(isInferenceRunning=true) ↔ Active(isInferenceRunning=false) → Ended` (Ended = `ended_at` set, transitions back to `Idle` after Picker re-mounts).
 
 ### 1.2 CameraX Integration
 
@@ -416,6 +429,8 @@ before retraining.
 | Next / Prev (frame) | Chevrons next to the "Flagged Frame · N of M" header. Navigate between flagged frames in the queue. Per-detection answers stay scoped to the frame they were entered against. Clamps at queue edges. |
 | Next / Prev (detection) | Buttons under the frame image. Navigate between detections **within** the current frame. Independent from frame-level navigation. |
 | Delete frame | Destructive button next to Cancel/Submit (Coral). Removes the current frame from `FlaggedFrameStore` after an `AlertDialog` confirmation. If the queue is non-empty afterwards, the sheet auto-advances to the next frame; otherwise the sheet dismisses. Use case: the expert recognises a duplicate of a previously-verified sample and wants to discard without persisting. |
+| Mark as Repeat | **Kebab menu** in the sheet header (cleaner than a fourth footer button). Persists the sample with all detection rows, sets `samples.is_repeat = true`, and dismisses the sheet. Repeats stay in the queue under the "Repeat" filter chip so the medtech can manually delete later. **Repeats are excluded from EPG counts.** `is_repeat` is a Room-only flag — see [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md). |
+| Notes (optional) | Free-form `Input` row above the footer (or in a `Collapsible`), persisted to `samples.user_note`. Visible later in `SampleDetailScreen` Metadata tab and in the CSV export. |
 
 Submitting a frame where **every** detection is `FALSE_POSITIVE` still results in a
 persisted sample — that's the labeled-false-positive case, not a deletion. Reports
@@ -444,6 +459,60 @@ The following are not in Sprint 1 scope and live here so Sprint 2+ can pick them
   prev/next chevrons cover the explicit case today; a horizontal pager would
   feel smoother but is out of scope until the queue sheet pattern has been
   observed in real medtech use.
+
+### 1.6b Manual Capture (Sprint 2)
+
+Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md), the
+medtech can manually capture a snapshot of the current camera feed and tag it
+with a species, **without AI inference**. This is the "what's left if you take
+away the AI?" path — same tables, same EPG arithmetic, no model.
+
+**Trigger:** a `[📷 Capture]` button on the bottom-left of `CaptureScreen`
+(KomoUI `ButtonVariant.Outline`, paired with the `End Session` Destructive
+button on the right). The button reads the latest preview frame from
+`FrameSampler.latestFrameBytes: StateFlow<ByteArray?>`, builds a
+`FlaggedFrame(source = FrameSource.MANUAL, predictions = emptyList())`,
+adds it to `FlaggedFrameStore`. It surfaces in the queue sheet under the
+"Manual" filter chip.
+
+**ManualSheet** opens instead of `VerificationSheet` when the medtech taps a
+queue row whose `source == MANUAL`:
+
+```
+┌────────────────────────────────────────┐
+│  Manual Capture · {time}        [⋮]    │  ← kebab: Mark as Repeat
+├────────────────────────────────────────┤
+│   [Frame preview — no boxes]           │
+├────────────────────────────────────────┤
+│  Species: [▼ Ascaris / Trichuris /     │
+│            Hookworm / Other (free)]    │  ← SpeciesDropdown (same as Q3)
+│                                        │
+│  Notes (optional): [_____________]     │  ← samples.user_note
+├────────────────────────────────────────┤
+│  [Cancel]  [Delete]      [Submit]      │
+└────────────────────────────────────────┘
+```
+
+**`SubmitManualCaptureUseCase`** on Submit:
+
+1. Persist `SampleEntity(status = VERIFIED, is_manual = true, needs_reannotation = true, user_note = ..., ...)`.
+2. Persist one `DetectionEntity` with `class_label = expert_class = picked species`,
+   `verdict = CONFIRMED`, `confidence = 1.0f`, `bbox_x/y/w/h = null` (the bbox
+   columns become nullable in migration `0007` — see §2.6 of
+   [sprint2_addition_plan.md](sprint2_addition_plan.md)).
+3. Persist the JPEG to `filesDir/users/{userId}/samples/{sampleId}.jpg`.
+4. `flaggedFrameStore.remove(frame)` and trigger `SyncSampleUseCase`.
+
+**EPG inclusion:** manual captures contribute to per-session egg counts
+exactly like AI-confirmed detections — the query is
+`WHERE verdict = 'confirmed' AND is_repeat = false`, which both match.
+
+**SampleDetailScreen** detects `bbox_x == null` and skips the detection
+overlay (showing "Manual capture · no box drawn" instead).
+
+**Phase 2:** the phone camera is removed; the snapshot source flips to the
+OTG-attached on-prem inference hardware. UI and data flow are unchanged.
+See [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md) §Open.
 
 ### 1.7 Sample Lifecycle
 
@@ -644,17 +713,35 @@ The **Audit** tab from the old plan is deferred — verification in the MVP is o
 `ExportSessionUseCase` queries all verified samples in a session and emits a CSV:
 
 ```csv
-sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path
+sample_id,captured_at,verified_at,class_label,confidence,gps_lat,gps_lng,gps_accuracy,storage_path,is_manual,is_repeat,user_note
 ```
 
-EPG calculations are deferred to Phase 2 — they require:
-- A trusted volumetric multiplier (Kato-Katz prep-method dependent)
-- Per-species egg counts at session level
-- DOH validation of the formula
+The medtech can aggregate externally; in-app aggregates are surfaced on
+`SessionDetailScreen` (see §2.12 below).
 
-For Phase 1 MVP, the CSV is a raw export. The medtech aggregates externally.
+### 2.4 → 2.15 — Addition plan (DMKuZu)
 
-### 2.4 Acceptance Criteria — Sprint 2
+Per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md)
+and [sprint2_addition_plan.md](sprint2_addition_plan.md), the following
+tracks extend Sprint 2 with session-as-smear semantics, EPG, Manual
+Capture, repeat-flag, and `user_note` wiring:
+
+| § | Track |
+|---|---|
+| 2.4 | `0005_session_label.sql` (add `sessions.label`) + Room `SessionEntity.label` + schema v5 export |
+| 2.5 | `0006_sample_is_manual.sql` + Room `SampleEntity` adds `is_manual`, `is_repeat` (Room-only), `user_note` (catch-up to existing Supabase column) |
+| 2.6 | `0007_detection_bbox_nullable.sql` + Room `DetectionEntity.bbox*: Float?` + null-safe consumers |
+| 2.7 | `SessionPickerScreen` (landing after Login) + nav refactor |
+| 2.8 | `Start/Stop Recording` → `End Session` rename + confirmation dialog + `SessionState.Recording → Active(_, _)` |
+| 2.9 | Auto-inference lifecycle (pause on sheet/picker/reports/history) + `FrameSampler.latestFrameBytes` |
+| 2.10 | VerificationSheet kebab (Mark-as-Repeat) + user-note `Input` row |
+| 2.11 | QueueSheet filter chips (`All / Flagged / Manual / Repeat`) + visual badges |
+| 2.12 | `core/util/EpgCalculator.kt` (multiplier 24) + `SessionEggCountUseCase` + EPG card on `SessionDetailScreen` + Reports icon on `CaptureScreen` |
+| 2.13 | Manual Capture E2E (Capture button, `ManualSheet`, `SubmitManualCaptureUseCase`) — see §1.6b |
+| 2.14 | Wire `user_note` through `SampleRemoteDataSource.toRow()` (stop forcing null), Metadata tab, CSV |
+| 2.15 | Unit tests |
+
+### 2.16 Acceptance Criteria — Sprint 2
 
 - Records screen lists past sessions, most recent first.
 - Tapping a session shows the list of verified samples in it.
@@ -714,6 +801,8 @@ Phase 2 will reintroduce the rest as needed.
 | `SessionEntity`     | One row per recording session. Mirrors the Supabase `sessions` row.      |
 | `SampleEntity`      | One row per verified flagged frame. Mirrors Supabase `samples`.          |
 | `DetectionEntity`   | One row per detection within a sample. Mirrors Supabase `detections`.    |
+
+Phase 1 Sprint 2 ships **EPG arithmetic** as a pure `core/util/EpgCalculator.kt` + `SessionEggCountUseCase` (no durable entity row); per [ADR-005](adr/005-session-as-smear-manual-capture-and-repeat-flag.md). A durable `EPGCalculationEntity` (cached EPG-per-session row) remains Phase 2 — for Phase 1 the calc is cheap and on-demand from Room.
 
 Deferred to Phase 2: `UserEntity`, `DeviceEntity`, `InferenceRequestEntity`, `EPGCalculationEntity`, `ValidationRecordEntity`, `ReportEntity`, `ReportSampleEntity`, `SyncQueueEntity`. Several of these are obviated by Phase 1's simpler model (e.g. inference is synchronous so there's no `InferenceRequest`; verification has no edit history so there's no `ValidationRecord`).
 
