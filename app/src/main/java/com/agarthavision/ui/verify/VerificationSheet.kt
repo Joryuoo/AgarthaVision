@@ -9,40 +9,46 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Flag
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.records.AppColors
 import java.time.ZoneId
@@ -100,13 +106,13 @@ fun VerificationSheet(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
 ) {
     val frame = state.frame ?: return
+    val showDiscardConfirm = remember { mutableStateOf(false) }
     val timeLabel = remember(frame.capturedAt) {
         DateTimeFormatter.ofPattern("HH:mm:ss")
             .withZone(ZoneId.systemDefault())
@@ -127,6 +133,28 @@ private fun VerificationSheetContent(
             title = "Verify detection",
             metaText = "Frame ${state.frameIndexInQueue}/${state.queueSize} · $timeLabel",
             onBack = actions.onCancel,
+            actions = {
+                // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(if (state.isRepeat) AppColors.BlueTint else Color.Transparent)
+                        .border(
+                            width = 0.5.dp,
+                            color = if (state.isRepeat) AppColors.Blue.copy(alpha = 0.35f) else AppColors.Gray300,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .clickable { actions.onToggleRepeat() },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = if (state.isRepeat) Icons.Filled.Flag else Icons.Outlined.Flag,
+                        contentDescription = if (state.isRepeat) "Repeat sample (enabled)" else "Mark as repeat sample",
+                        tint = if (state.isRepeat) AppColors.Blue else AppColors.Gray700,
+                    )
+                }
+            },
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
@@ -138,33 +166,20 @@ private fun VerificationSheetContent(
                 SmallToggle("Next frame", false, actions.onFrameNext, Modifier.weight(1f))
             }
 
-            Box(
+            FrameWithBoxes(
+                jpegBytes = frame.jpegBytes,
+                predictions = frame.predictions,
+                highlightedIndex = state.currentDetectionIndex,
+                showBoxes = state.showBoundingBoxes,
+                inferenceImageWidth = frame.imageWidth,
+                inferenceImageHeight = frame.imageHeight,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(170.dp)
+                    .height(220.dp)
                     .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
-            ) {
-                AsyncImage(
-                    model = frame.jpegBytes,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                if (currentPrediction != null && state.showBoundingBoxes) {
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .fillMaxWidth(0.3f)
-                                .fillMaxHeight(0.35f)
-                                .border(1.dp, AppColors.Blue, RoundedCornerShape(4.dp)),
-                        )
-                    }
-                }
-            }
+            )
 
             Row(
                 modifier = Modifier
@@ -202,7 +217,7 @@ private fun VerificationSheetContent(
             }
 
             QuestionSection(
-                title = "1. PARASITE PRESENT?",
+                title = stringResource(R.string.verify_q1),
                 options = listOf(true to "Yes", false to "No"),
                 selected = currentAnswers?.isEgg,
                 onSelect = actions.onQ1Selected,
@@ -210,68 +225,65 @@ private fun VerificationSheetContent(
 
             if (currentAnswers?.isEgg == true) {
                 QuestionSection(
-                    title = "2. IS IT $speciesName?",
+                    title = stringResource(R.string.verify_q2),
                     options = listOf(true to "Yes", false to "No"),
                     selected = currentAnswers.isBoxCorrect,
                     onSelect = actions.onQ2Selected,
                 )
 
-                if (currentAnswers.isBoxCorrect == false) {
-                    Text(
-                        text = "3. SELECT CORRECT SPECIES",
-                        fontFamily = FontFamily.Monospace,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = AppColors.Gray500,
-                        letterSpacing = 0.8.sp,
-                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp, top = 8.dp),
-                    )
-                    FlowRow(
+                if (currentAnswers.isBoxCorrect == true) {
+                    SpeciesDropdown(
+                        selected = currentAnswers.species,
+                        otherText = currentAnswers.otherSpeciesText,
+                        onSpeciesSelected = actions.onSpeciesSelected,
+                        onOtherTextChanged = actions.onOtherSpeciesChanged,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(bottom = 14.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        val quickSpecies = listOf(
-                            EggSpecies.ASCARIS to "Ascaris",
-                            EggSpecies.TRICHURIS to "Trichuris",
-                            EggSpecies.HOOKWORM to "Hookworm",
-                            EggSpecies.OTHER to "Other...",
-                        )
-                        quickSpecies.forEach { (species, label) ->
-                            SpeciesChoice(
-                                label = label,
-                                selected = currentAnswers.species == species,
-                                onClick = { actions.onSpeciesSelected(species) },
-                            )
-                        }
-                    }
-
-                    if (currentAnswers.species == EggSpecies.OTHER) {
-                        NoteField(
-                            value = currentAnswers.otherSpeciesText,
-                            onValueChange = actions.onOtherSpeciesChanged,
-                            placeholder = "Species name",
-                            modifier = Modifier.padding(bottom = 14.dp),
-                        )
-                    }
+                    )
                 }
             }
 
             QuestionSection(
-                title = "4. DID THE MODEL MISS OTHER EGGS?",
+                title = stringResource(R.string.verify_q4),
                 options = listOf(true to "Yes", false to "No"),
                 selected = state.missedEgg,
                 onSelect = actions.onQ4Selected,
             )
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                SmallToggle("Repeat sample", state.isRepeat, actions.onToggleRepeat, Modifier.weight(1f))
-                SmallToggle("Boxes", state.showBoundingBoxes, actions.onToggleBoundingBoxes, Modifier.weight(1f))
+                Text(
+                    text = "Boxes",
+                    color = AppColors.Gray700,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = state.showBoundingBoxes,
+                    onCheckedChange = { actions.onToggleBoundingBoxes() },
+                    thumbContent = if (state.showBoundingBoxes) {
+                        {
+                            Icon(
+                                imageVector = Icons.Outlined.CropSquare,
+                                contentDescription = null,
+                                modifier = Modifier.size(SwitchDefaults.IconSize),
+                            )
+                        }
+                    } else null,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = AppColors.White,
+                        checkedTrackColor = AppColors.Blue,
+                        checkedIconColor = AppColors.Blue,
+                        uncheckedThumbColor = AppColors.Gray500,
+                        uncheckedTrackColor = AppColors.Gray200,
+                    ),
+                )
             }
 
             NoteField(
@@ -294,11 +306,35 @@ private fun VerificationSheetContent(
                 primaryLabel = "Submit",
                 secondaryLabel = "Discard",
                 onPrimaryClick = actions.onSubmit,
-                onSecondaryClick = actions.onCancel,
+                onSecondaryClick = { showDiscardConfirm.value = true },
                 primaryLoading = state.isSubmitting,
                 primaryEnabled = state.canSubmit,
             )
         }
+    }
+
+    if (showDiscardConfirm.value) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm.value = false },
+            title = { Text("Discard this frame?") },
+            text = { Text("This will remove the current frame from the verification queue.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm.value = false
+                        actions.onDeleteFrame()
+                    },
+                    enabled = !state.isSubmitting,
+                ) {
+                    Text("Discard", color = AppColors.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm.value = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
@@ -342,29 +378,6 @@ private fun <T> QuestionSection(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SpeciesChoice(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
-            .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    ) {
-        Text(
-            text = label,
-            color = AppColors.Gray900,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            fontStyle = if (label == "Other...") FontStyle.Normal else FontStyle.Italic,
-        )
     }
 }
 

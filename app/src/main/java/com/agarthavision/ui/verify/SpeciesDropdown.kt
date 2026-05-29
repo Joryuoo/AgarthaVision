@@ -9,7 +9,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -23,8 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
-
-import com.komoui.themes.styles
+import com.agarthavision.ui.records.AppColors
 
 @Composable
 fun SpeciesDropdown(
@@ -36,10 +34,14 @@ fun SpeciesDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = MaterialTheme.styles.ring,
-        unfocusedBorderColor = MaterialTheme.styles.border,
-        focusedLabelColor = MaterialTheme.styles.foreground,
-        unfocusedLabelColor = MaterialTheme.styles.mutedForeground,
+        focusedBorderColor = AppColors.Blue,
+        unfocusedBorderColor = AppColors.Gray300,
+        focusedContainerColor = AppColors.White,
+        unfocusedContainerColor = AppColors.White,
+        focusedTextColor = AppColors.Gray900,
+        unfocusedTextColor = AppColors.Gray900,
+        focusedLabelColor = AppColors.Gray700,
+        unfocusedLabelColor = AppColors.Gray500,
     )
 
     Column(modifier = modifier) {

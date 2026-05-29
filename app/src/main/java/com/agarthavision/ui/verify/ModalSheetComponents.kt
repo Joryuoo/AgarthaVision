@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -30,7 +31,8 @@ import com.agarthavision.ui.records.AppTypography
 fun ScreenTopBar(
     title: String,
     metaText: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -63,6 +65,8 @@ fun ScreenTopBar(
                 style = TextStyle(fontFeatureSettings = "tnum")
             )
         }
+        Spacer(modifier = Modifier.weight(1f))
+        actions()
     }
 }
 
