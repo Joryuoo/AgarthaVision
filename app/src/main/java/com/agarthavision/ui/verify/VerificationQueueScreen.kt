@@ -234,7 +234,7 @@ private fun FrameRow(
         else -> "Unknown class"
     }
 
-    val confidence = if (isAI) "${(top?.confidence ?: 0f * 100).toInt()}%" else ""
+    val confidence = if (isAI) "${((top?.confidence ?: 0f) * 100).toInt()}%" else ""
     val isItalic = isAI && title != "Unknown class"
 
     val duration = Duration.between(frame.capturedAt, Instant.now())
@@ -325,6 +325,19 @@ private fun FrameRow(
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text("Pending", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AmberText, letterSpacing = 0.1.sp, style = InterBaseStyle)
+                }
+
+                if (frame.markedAsRepeat) {
+                    Row(
+                        modifier = Modifier.background(Color(0xFFEDE9FE), CircleShape).padding(horizontal = 6.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Canvas(modifier = Modifier.size(7.dp)) {
+                            drawCircle(Color(0xFF7C3AED))
+                        }
+                        Text("Repeat", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF5B21B6), letterSpacing = 0.1.sp, style = InterBaseStyle)
+                    }
                 }
             }
         }

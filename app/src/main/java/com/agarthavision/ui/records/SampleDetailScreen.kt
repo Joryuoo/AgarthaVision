@@ -227,7 +227,8 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
             .atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("MMM dd, yyyy · HH:mm:ss"))
 
-        val provenanceText = if (item.detections.isNotEmpty()) "AI-Captured" else "Manually Captured"
+        val provenanceText = if (item.sample.isManual) "Manually Captured" else "AI-Captured"
+
 
         Column(
             modifier = Modifier

@@ -89,6 +89,7 @@ private data class SampleUi(
     val species: String,
     val confidence: Int?,
     val filePath: String?,
+    val isRepeat: Boolean = false,
 )
 
 private enum class SampleSource { Ai, Manual }
@@ -188,6 +189,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
             confidence = primary?.confidence?.let { (it * 100).toInt() },
             filePath = item.sample.filePath,
+            isRepeat = item.sample.isRepeat,
         )
     }
 
@@ -514,6 +516,17 @@ private fun SampleTile(
                     .align(Alignment.TopEnd)
                     .padding(6.dp),
             )
+        }
+        if (sample.isRepeat) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(Color(0xFF7C3AED), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
+            ) {
+                Text("R", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            }
         }
         SpeciesBadge(
             text = sample.species,

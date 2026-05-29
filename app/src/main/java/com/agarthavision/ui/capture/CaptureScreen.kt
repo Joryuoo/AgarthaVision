@@ -95,6 +95,7 @@ import com.komoui.components.sooner.showSonner
 import com.komoui.themes.styles
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @Composable
 private fun SvgIcon(
@@ -263,21 +264,34 @@ fun CaptureScreen(
             .distinctUntilChanged()
             .collect { capturedAt ->
                 if (capturedAt != null) {
-                    val latest = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-                    if (latest.source != FrameSource.MODEL) return@collect
-                    val eggType = latest.predictions.firstOrNull()?.classLabel ?: detectionFallback
-                    val confidence = latest.predictions.firstOrNull()?.confidence ?: 0f
-                    sonnerHostState.showSonner(
-                        SonnerEvent(
-                            message = detectionMessage.format(eggType, "%.0f".format(confidence * 100)),
-                            action = SonnerAction(
-                                actionText = detectionView,
-                                execute = { viewModel.onDetectionToastTap(latest) },
+                    // Capture the frame NOW — before the coroutine suspends on showSonner
+                    val frameAtToastTime =
+                        viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
+                    if (frameAtToastTime.source != FrameSource.MODEL) return@collect
+                    val eggType =
+                        frameAtToastTime.predictions.firstOrNull()?.classLabel ?: detectionFallback
+                    val confidence = frameAtToastTime.predictions.firstOrNull()?.confidence ?: 0f
+                    launch {
+                        // SonnerAction.execute is NOT called by the library — only performAction()
+                        // is invoked, which surfaces as SnackbarResult.ActionPerformed below.
+                        val result = sonnerHostState.showSonner(
+                            SonnerEvent(
+                                message = detectionMessage.format(
+                                    eggType,
+                                    "%.0f".format(confidence * 100),
+                                ),
+                                action = SonnerAction(
+                                    actionText = detectionView,
+                                    execute = {},
+                                ),
+                                withDismissAction = true,
+                                variant = SonnerVariant.Default,
                             ),
-                            withDismissAction = true,
-                            variant = SonnerVariant.Default,
-                        ),
-                    )
+                        )
+                        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
+                            viewModel.onDetectionToastTap(frameAtToastTime)
+                        }
+                    }
                 }
             }
     }
@@ -481,13 +495,29 @@ fun CaptureScreen(
         }
 
         // Sonner toast (top-center so it never blocks the bottom chrome)
-        SonnerHost(
-            hostState = sonnerHostState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
-        )
+        val toastStyles = remember {
+            object : com.komoui.themes.KomoStyles by com.agarthavision.ui.theme.AgarthaLightStyles {
+                override val foreground = Color.White
+                override val mutedForeground = Color.White.copy(alpha = 0.7f)
+            }
+        }
+        com.komoui.themes.KomoTheme(
+            isDarkTheme = false,
+            komoLightColors = toastStyles,
+            komoDarkColors = toastStyles,
+            materialLightColors = MaterialTheme.colorScheme,
+            materialDarkColors = MaterialTheme.colorScheme,
+            komoRadius = com.agarthavision.ui.theme.AgarthaRadius,
+            typography = com.agarthavision.ui.theme.AgarthaTypography,
+        ) {
+            SonnerHost(
+                hostState = sonnerHostState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+            )
+        }
     }
 
     val target = state.verificationTarget
