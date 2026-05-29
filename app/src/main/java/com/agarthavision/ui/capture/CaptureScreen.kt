@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.FactCheck
@@ -85,6 +86,7 @@ fun CaptureScreen(
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
     onSessionEnded: () -> Unit,
+    onNavigateBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sonnerHostState = remember { SnackbarHostState() }
@@ -164,6 +166,15 @@ fun CaptureScreen(
         containerColor = MaterialTheme.styles.background,
         topBar = {
             CenterAlignedTopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = onNavigateBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.session_detail_back),
+                            tint = MaterialTheme.styles.foreground,
+                        )
+                    }
+                },
                 title = {
                     Text(
                         state.activeSessionLabel?.takeIf { it.isNotBlank() }

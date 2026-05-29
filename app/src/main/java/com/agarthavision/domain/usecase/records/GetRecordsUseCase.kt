@@ -23,6 +23,7 @@ data class SessionRecordItem(
     val speciesLabels: List<String>,
     val latitude: Double?,
     val longitude: Double?,
+    val totalEpg: Int = 0,
 )
 
 /**
@@ -62,6 +63,14 @@ class GetRecordsUseCase @Inject constructor(
                     val detections = samples.flatMap { sample ->
                         detectionRepository.getDetectionsForSample(sample.id)
                     }
+                    val countedSampleIds = samples
+                        .filterNot { it.isRepeat }
+                        .map { it.id }
+                        .toSet()
+                    val totalEpg = detections.count { detection ->
+                        detection.sampleId in countedSampleIds &&
+                            detection.verdict != DetectionVerdict.FALSE_POSITIVE
+                    }
                     val speciesLabels = detections
                         .mapNotNull { detection -> detection.expertClass ?: detection.classLabel }
                         .distinct()
@@ -72,6 +81,7 @@ class GetRecordsUseCase @Inject constructor(
                         speciesLabels = speciesLabels,
                         latitude = samples.firstNotNullOfOrNull { it.latitude },
                         longitude = samples.firstNotNullOfOrNull { it.longitude },
+                        totalEpg = totalEpg,
                     )
                 }
             },

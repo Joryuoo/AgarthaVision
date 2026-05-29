@@ -9,7 +9,9 @@ import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.ReportFileStore
 import com.agarthavision.domain.repository.ReportRepository
@@ -101,6 +103,10 @@ private class ReportAuthRepository(private val userId: String?) : AuthRepository
 private class ReportSessionRepository(private val session: Session?) : SessionRepository {
     override fun observeAllSessions(userId: String): Flow<List<Session>> = flowOf(session?.let(::listOf).orEmpty())
     override suspend fun getSessionById(sessionId: String): Session? = session?.takeIf { it.id == sessionId }
+    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+        flowOf(emptyList())
+
+    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
 }
 
 private class ReportSampleRepository(
@@ -131,6 +137,12 @@ private class ReportDetectionRepository(
 
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount> =
         eggCounts
+
+    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
+        flowOf(emptyList())
+
+    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
+        flowOf(emptyList())
 }
 
 private class FakeReportRepository : ReportRepository {

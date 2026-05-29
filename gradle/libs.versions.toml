@@ -37,6 +37,7 @@ compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+compose-ui-text-google-fonts = { group = "androidx.compose.ui", name = "ui-text-google-fonts" }
 
 # Core
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }

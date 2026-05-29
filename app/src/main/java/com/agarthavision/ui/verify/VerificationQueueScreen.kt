@@ -2,121 +2,202 @@
 
 package com.agarthavision.ui.verify
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.outlined.DeleteOutline
-import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material3.Icon
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
-import androidx.compose.foundation.border
-import com.agarthavision.R
-import com.agarthavision.domain.model.FrameSource
+import androidx.compose.ui.layout.ContentScale
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.theme.AgarthaSpacing
-import com.agarthavision.ui.theme.AgarthaRadius
-import com.komoui.themes.styles
-import com.komoui.components.Button as KomoButton
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.ui.components.SvgIcon
+import java.time.Duration
+import java.time.Instant
 
-@OptIn(ExperimentalMaterial3Api::class)
+// Design Tokens
+private val White = Color(0xFFFFFFFF)
+private val Gray50 = Color(0xFFF7F8FA)
+private val Gray100 = Color(0xFFEEF0F4)
+private val Gray200 = Color(0xFFE2E5EB)
+private val Gray300 = Color(0xFFCBD0DA)
+private val Gray400 = Color(0xFF9CA3AF)
+private val Gray500 = Color(0xFF6B7280)
+private val Gray700 = Color(0xFF374151)
+private val Gray900 = Color(0xFF0F172A)
+private val Blue = Color(0xFF1E3FD9)
+private val Amber = Color(0xFFD97706)
+private val AmberTint = Color(0xFFFEF3C7)
+private val AmberText = Color(0xFF92400E)
+private val Green = Color(0xFF16A34A)
+private val GreenTint = Color(0xFFDCFCE7)
+private val GreenText = Color(0xFF166534)
+private val Red = Color(0xFFDC2626)
+private val RedTint = Color(0xFFFEE2E2)
+private val RedText = Color(0xFFDC2626)
+
+private val InterBaseStyle = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontFeatureSettings = "\"cv11\", \"ss01\", \"ss03\""
+)
+private val InterTabularStyle = TextStyle(
+    fontFamily = FontFamily.Default,
+    fontFeatureSettings = "\"cv11\", \"ss01\", \"ss03\", \"tnum\""
+)
+
 @Composable
 fun VerificationQueueScreen(
     onBackClick: () -> Unit,
+    onSampleDetailClick: (String) -> Unit,
     viewModel: VerificationQueueViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
     val filteredFrames = remember(state.flaggedFrames, state.queueFilter) {
         filterQueueFrames(state.flaggedFrames, state.queueFilter)
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.styles.background,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.queue_sheet_title, filteredFrames.size))
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.records_back),
-                            tint = MaterialTheme.styles.foreground,
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.styles.background,
-                    titleContentColor = MaterialTheme.styles.foreground,
-                ),
-            )
-        }
-    ) { padding ->
+    val counts = remember(state.flaggedFrames) {
+        mapOf(
+            QueueFilter.ALL to state.flaggedFrames.size,
+            QueueFilter.FLAGGED to state.flaggedFrames.count { it.source == FrameSource.MODEL },
+            QueueFilter.MANUAL to state.flaggedFrames.count { it.source == FrameSource.MANUAL },
+            QueueFilter.REPEAT to state.flaggedFrames.count { it.markedAsRepeat },
+        )
+    }
+
+    val pendingCount = state.flaggedFrames.size
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black), // Background outside the 480dp container
+        contentAlignment = Alignment.TopCenter
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = AgarthaSpacing.screenEdge),
+                .widthIn(max = 480.dp)
+                .background(White)
+                .systemBarsPadding()
         ) {
-            QueueFilterChips(
-                selected = state.queueFilter,
-                onSelected = viewModel::onQueueFilterSelected,
-                modifier = Modifier.padding(vertical = AgarthaSpacing.md),
-            )
-
-            if (filteredFrames.isEmpty()) {
-                QueueEmptyState()
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-                    modifier = Modifier.fillMaxSize(),
+            // App Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 14.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onBackClick() },
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(
-                        items = filteredFrames,
-                        key = { frame -> frame.capturedAt.toEpochMilli() },
-                    ) { frame ->
-                        VerificationQueueRow(
-                            frame = frame,
-                            onClick = { viewModel.onQueueItemSelected(frame) },
-                            onDelete = { viewModel.onQueueItemDeleted(frame) },
-                        )
+                    SvgIcon("M 15 18 L 9 12 L 15 6", color = Gray900, strokeWidth = 1.8f, modifier = Modifier.size(24.dp))
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Verify Queue", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Gray900, letterSpacing = (-0.44).sp, style = InterBaseStyle)
+                    Text("${state.flaggedFrames.size} items · $pendingCount pending", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Gray500, style = InterTabularStyle)
+                }
+            }
+
+            // Filter Chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 4.dp)
+                    .padding(bottom = 8.dp), // extra for shadow/scroll spacing
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    QueueFilter.ALL to "All",
+                    QueueFilter.FLAGGED to "AI",
+                    QueueFilter.MANUAL to "Manual",
+                    QueueFilter.REPEAT to "Repeat"
+                ).forEach { (filter, label) ->
+                    val isSelected = state.queueFilter == filter
+                    val count = counts[filter] ?: 0
+
+                    Row(
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(if (isSelected) Gray900 else White)
+                            .border(1.dp, if (isSelected) Gray900 else Gray200, CircleShape)
+                            .clickable { viewModel.onQueueFilterSelected(filter) }
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) White else Gray700, style = InterBaseStyle)
+                        Text("$count", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) White.copy(alpha = 0.5f) else Gray400, style = InterTabularStyle)
                     }
+                }
+            }
+
+            // Frame List
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp), // 24px bottom for home indicator
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(
+                    items = filteredFrames,
+                    key = { frame -> frame.capturedAt.toEpochMilli() }
+                ) { frame ->
+                    FrameRow(
+                        frame = frame,
+                        onClick = { viewModel.onQueueItemSelected(frame) }
+                    )
                 }
             }
         }
@@ -138,206 +219,118 @@ fun VerificationQueueScreen(
     }
 }
 
-internal fun filterQueueFrames(
-    frames: List<FlaggedFrame>,
-    filter: QueueFilter,
-): List<FlaggedFrame> = when (filter) {
-    QueueFilter.ALL -> frames
-    QueueFilter.FLAGGED -> frames.filter { it.source == FrameSource.MODEL }
-    QueueFilter.MANUAL -> frames.filter { it.source == FrameSource.MANUAL }
-    QueueFilter.REPEAT -> frames.filter { it.markedAsRepeat }
-}
-
 @Composable
-private fun QueueFilterChips(
-    selected: QueueFilter,
-    onSelected: (QueueFilter) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    androidx.compose.foundation.lazy.LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-    ) {
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_all),
-                selected = selected == QueueFilter.ALL,
-                onClick = { onSelected(QueueFilter.ALL) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_flagged),
-                selected = selected == QueueFilter.FLAGGED,
-                onClick = { onSelected(QueueFilter.FLAGGED) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_manual),
-                selected = selected == QueueFilter.MANUAL,
-                onClick = { onSelected(QueueFilter.MANUAL) },
-            )
-        }
-        item {
-            QueueFilterChip(
-                label = stringResource(R.string.queue_filter_repeat),
-                selected = selected == QueueFilter.REPEAT,
-                onClick = { onSelected(QueueFilter.REPEAT) },
-            )
-        }
-    }
-}
-
-@Composable
-private fun QueueFilterChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    KomoButton(
-        onClick = onClick,
-        variant = if (selected) ButtonVariant.Default else ButtonVariant.Secondary,
-        size = ButtonSize.Sm,
-    ) {
-        Text(text = label)
-    }
-}
-
-@Composable
-private fun QueueEmptyState() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = AgarthaSpacing.xxl),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Inbox,
-            contentDescription = null,
-            tint = MaterialTheme.styles.mutedForeground,
-            modifier = Modifier.size(40.dp),
-        )
-        Spacer(modifier = Modifier.padding(AgarthaSpacing.xxs))
-        Text(
-            text = stringResource(R.string.queue_sheet_empty_state),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.styles.mutedForeground,
-        )
-    }
-}
-
-@Composable
-private fun RowBadge(text: String) {
-    Box(
-        modifier = Modifier
-            .border(
-                width = 1.dp,
-                color = MaterialTheme.styles.border,
-                shape = RoundedCornerShape(AgarthaRadius.sm),
-            )
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.styles.mutedForeground,
-        )
-    }
-}
-
-@Composable
-private fun VerificationQueueRow(
+private fun FrameRow(
     frame: FlaggedFrame,
-    onClick: () -> Unit,
-    onDelete: () -> Unit,
+    onClick: () -> Unit
 ) {
+    val isManual = frame.source == FrameSource.MANUAL
     val top = frame.predictions.firstOrNull()
-    val timeText = remember(frame.capturedAt) {
-        DateTimeFormatter.ofPattern("HH:mm:ss")
-            .withZone(ZoneId.systemDefault())
-            .format(frame.capturedAt)
-    }
+    val isAI = !isManual
+
     val title = when {
-        frame.source == FrameSource.MANUAL -> stringResource(R.string.queue_row_manual_title)
+        isManual -> "Manual capture"
         top != null -> top.classLabel
-        else -> stringResource(R.string.queue_row_unknown_class)
+        else -> "Unknown class"
     }
-    val subtitle = if (frame.source == FrameSource.MANUAL) {
-        stringResource(R.string.queue_row_manual_subtitle, timeText)
-    } else {
-        stringResource(
-            R.string.queue_row_subtitle,
-            "%.0f".format((top?.confidence ?: 0f) * 100f),
-            frame.predictions.size,
-            timeText,
-        )
+
+    val confidence = if (isAI) "${(top?.confidence ?: 0f * 100).toInt()}%" else ""
+    val isItalic = isAI && title != "Unknown class"
+
+    val duration = Duration.between(frame.capturedAt, Instant.now())
+    val timeStr = when {
+        duration.toMinutes() > 0 -> "${duration.toMinutes()}m ago"
+        else -> "${duration.seconds}s ago"
     }
+
+    val metaSource = if (isAI) "AI" else "Manual"
 
     Row(
-        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(MaterialTheme.styles.muted.copy(alpha = 0.4f))
-            .clickable(onClick = onClick)
-            .padding(AgarthaSpacing.sm),
+            .background(White)
+            .border(1.dp, Gray100, RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        // Thumbnail
         Box(
             modifier = Modifier
-                .size(64.dp)
+                .size(52.dp)
                 .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.styles.background),
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color(0xFF0e1424), Color(0xFF060912)),
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, size.height)
+                        )
+                    )
+                    drawCircle(
+                        color = Color(80, 60, 40, (0.6f * 255).toInt()),
+                        radius = size.width * 0.5f,
+                        center = Offset(size.width * 0.35f, size.height * 0.40f)
+                    )
+                    drawCircle(
+                        color = Color(90, 70, 50, (0.4f * 255).toInt()),
+                        radius = size.width * 0.5f,
+                        center = Offset(size.width * 0.70f, size.height * 0.65f)
+                    )
+                }
         ) {
             AsyncImage(
                 model = frame.jpegBytes,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.fillMaxSize(),
             )
         }
-        Spacer(modifier = Modifier.padding(AgarthaSpacing.xxs))
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        // Info
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = AgarthaSpacing.sm),
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = MaterialTheme.styles.foreground,
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
-                modifier = Modifier.padding(top = AgarthaSpacing.xxs),
-            ) {
-                RowBadge(
-                    text = if (frame.source == FrameSource.MANUAL) {
-                        stringResource(R.string.queue_row_source_manual)
-                    } else {
-                        stringResource(R.string.queue_row_source_ai)
-                    }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = title,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
+                    color = Gray900,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    style = InterBaseStyle
                 )
-                if (frame.markedAsRepeat) {
-                    RowBadge(text = stringResource(R.string.verify_repeat_badge))
+                if (isAI) {
+                    Box(modifier = Modifier.background(Gray100, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        Text(confidence, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Gray700, style = InterTabularStyle)
+                    }
                 }
             }
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.styles.mutedForeground,
-            )
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(metaSource, fontSize = 12.sp, color = Gray500, style = InterBaseStyle)
+                Text("·", fontSize = 12.sp, color = Gray300, style = InterBaseStyle)
+                Text(timeStr, fontSize = 12.sp, color = Gray500, style = InterTabularStyle)
+                Text("·", fontSize = 12.sp, color = Gray300, style = InterBaseStyle)
+
+                Row(
+                    modifier = Modifier.background(AmberTint, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text("Pending", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AmberText, letterSpacing = 0.1.sp, style = InterBaseStyle)
+                }
+            }
         }
-        IconButton(
-            onClick = onDelete,
-            modifier = Modifier.size(48.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.DeleteOutline,
-                contentDescription = stringResource(R.string.queue_row_delete),
-                tint = MaterialTheme.styles.mutedForeground,
-            )
-        }
+
+        Spacer(modifier = Modifier.width(6.dp))
+
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Gray300, modifier = Modifier.size(24.dp))
     }
 }
-

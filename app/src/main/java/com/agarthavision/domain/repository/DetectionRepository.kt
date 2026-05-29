@@ -13,4 +13,19 @@ interface DetectionRepository {
      * samples.
      */
     suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount>
+
+    /**
+     * Observes confirmed egg counts aggregated by species over a specific time window.
+     */
+    fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>>
+
+    /**
+     * Observes daily egg counts (grouped by sample locally) over a specific time window.
+     */
+    fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>>
 }
+
+data class DailyEggCount(
+    val timestamp: Long,
+    val count: Int,
+)

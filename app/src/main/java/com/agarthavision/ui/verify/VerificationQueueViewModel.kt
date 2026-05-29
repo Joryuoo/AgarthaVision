@@ -3,6 +3,7 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.FlaggedFrame
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +17,21 @@ enum class QueueFilter {
     ALL,
     FLAGGED,
     MANUAL,
-    REPEAT,
+    REPEAT
 }
+
+internal fun filterQueueFrames(
+    frames: List<FlaggedFrame>,
+    filter: QueueFilter,
+): List<FlaggedFrame> =
+    frames.filter { frame ->
+        when (filter) {
+            QueueFilter.ALL -> true
+            QueueFilter.FLAGGED -> frame.source == FrameSource.MODEL
+            QueueFilter.MANUAL -> frame.source == FrameSource.MANUAL
+            QueueFilter.REPEAT -> frame.markedAsRepeat
+        }
+    }
 
 data class VerificationQueueState(
     val flaggedFrames: List<FlaggedFrame> = emptyList(),

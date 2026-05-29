@@ -1,53 +1,63 @@
-@file:Suppress("FunctionNaming", "LongMethod", "LongParameterList", "UnusedPrivateMember")
-
 package com.agarthavision.ui.login
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
+
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
-import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaVisionTheme
-import com.komoui.components.Button
-import com.komoui.components.ButtonSize
-import com.komoui.components.Input
 import com.komoui.components.sooner.SonnerEvent
 import com.komoui.components.sooner.SonnerHost
 import com.komoui.components.sooner.SonnerVariant
 import com.komoui.components.sooner.showSonner
-import com.komoui.themes.styles
 
 /**
  * Login route for dashboard-provisioned Supabase accounts.
@@ -106,40 +116,101 @@ private fun LoginScreenContent(
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.styles.background,
+        containerColor = Color.White,
         snackbarHost = {
             SonnerHost(
                 hostState = snackbarHostState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(AgarthaSpacing.screenEdge),
+                    .padding(16.dp),
             )
         },
     ) { padding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .background(Color.White)
                 .padding(padding)
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(AgarthaSpacing.screenEdge),
-            contentAlignment = Alignment.Center,
+                .imePadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
             if (state.isCheckingSession) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(32.dp),
-                    color = MaterialTheme.styles.primary,
-                    trackColor = MaterialTheme.styles.muted,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .align(Alignment.Center),
+                    color = Color(0xFF1E3FD9),
+                    trackColor = Color(0xFFE2E5EB),
                 )
             } else {
-                LoginForm(
-                    state = state,
-                    actions = actions,
-                    modifier = Modifier.widthIn(max = 420.dp),
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .widthIn(max = 480.dp)
+                        .padding(top = 32.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        AppMark()
+                        Spacer(modifier = Modifier.height(28.dp))
+                        Text(
+                            text = "AgarthaVision",
+                            color = Color(0xFF0F172A),
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.75).sp, // -0.025em * 30px
+                            lineHeight = 33.sp, // 1.1
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Sign in to continue your clinical work.",
+                            color = Color(0xFF6B7280),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Normal,
+                            lineHeight = 21.75.sp, // 1.45
+                        )
+                        Spacer(modifier = Modifier.height(32.dp))
+
+                        LoginForm(state = state, actions = actions)
+                    }
+
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Forgot password?",
+                            color = Color(0xFF1E3FD9),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier
+                                .clickable { /* Handle forgot password */ }
+                                .padding(vertical = 8.dp)
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun AppMark() {
+    Box(
+        modifier = Modifier
+            .size(64.dp)
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(16.dp),
+                spotColor = Color(0x380F172A),
+                ambientColor = Color(0x0F0F172A)
+            )
+            .background(Color.Transparent, RoundedCornerShape(16.dp))
+            .border(1.dp, Color(0x0F0F172A), RoundedCornerShape(16.dp))
+    ) {
+        // Logo SVG will be inserted here. Leave empty for now.
     }
 }
 
@@ -149,113 +220,73 @@ private fun LoginForm(
     actions: LoginActions,
     modifier: Modifier = Modifier,
 ) {
-    val title = stringResource(R.string.login_title)
-    val subtitle = stringResource(R.string.login_subtitle)
-    val emailLabel = stringResource(R.string.login_email_label)
-    val emailPlaceholder = stringResource(R.string.login_email_placeholder)
-    val emailError = stringResource(R.string.login_email_error)
-    val passwordLabel = stringResource(R.string.login_password_label)
-    val passwordPlaceholder = stringResource(R.string.login_password_placeholder)
-    val passwordError = stringResource(R.string.login_password_error)
-    val submitLabel = stringResource(R.string.login_submit)
+    val emailErrorText = stringResource(R.string.login_email_error)
+    val passwordErrorText = stringResource(R.string.login_password_error)
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.md),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
-            Text(
-                text = title,
-                color = MaterialTheme.styles.foreground,
-                style = MaterialTheme.typography.headlineLarge,
-            )
-            Text(
-                text = subtitle,
-                color = MaterialTheme.styles.mutedForeground,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(AgarthaSpacing.xs))
-
-        EmailInput(
-            label = emailLabel,
+        LoginInputGroup(
+            label = "Email",
             value = state.email,
             onValueChange = actions.onEmailChanged,
-            placeholder = emailPlaceholder,
-            inputOptions = LoginInputOptions(
-                enabled = state.canSubmit,
-                isError = state.emailError,
-                errorText = emailError,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next,
-                ),
-            ),
+            placeholder = "you@hospital.org",
+            isError = state.emailError,
+            errorText = emailErrorText,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Email,
+                imeAction = ImeAction.Next,
+            )
         )
 
-        PasswordInput(
-            label = passwordLabel,
+        Spacer(modifier = Modifier.height(14.dp))
+
+        LoginInputGroup(
+            label = "Password",
             value = state.password,
             onValueChange = actions.onPasswordChanged,
-            placeholder = passwordPlaceholder,
-            inputOptions = LoginInputOptions(
-                enabled = state.canSubmit,
-                isError = state.passwordError,
-                errorText = passwordError,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                ),
-                keyboardActions = KeyboardActions(onDone = { actions.onSubmit() }),
+            placeholder = "••••••••••",
+            isError = state.passwordError,
+            errorText = passwordErrorText,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = ImeAction.Done,
             ),
+            keyboardActions = KeyboardActions(onDone = { actions.onSubmit() })
         )
+
+        Spacer(modifier = Modifier.height(22.dp))
 
         Button(
             onClick = actions.onSubmit,
-            size = ButtonSize.Lg,
             enabled = state.canSubmit,
-            loading = state.isSubmitting,
-            fullWidth = true,
+            shape = CircleShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF1E3FD9),
+                contentColor = Color.White,
+                disabledContainerColor = Color(0xFF1E3FD9).copy(alpha = 0.5f),
+                disabledContentColor = Color.White.copy(alpha = 0.5f)
+            ),
+            contentPadding = PaddingValues(vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Text(text = submitLabel)
+            if (state.isSubmitting) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+            } else {
+                Text(
+                    text = "Sign in",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 15.sp
+                )
+            }
         }
     }
-}
-
-@Composable
-private fun EmailInput(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    inputOptions: LoginInputOptions,
-) {
-    LoginInputGroup(
-        label = label,
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = placeholder,
-        inputOptions = inputOptions,
-    )
-}
-
-@Composable
-private fun PasswordInput(
-    label: String,
-    value: String,
-    onValueChange: (String) -> Unit,
-    placeholder: String,
-    inputOptions: LoginInputOptions,
-) {
-    LoginInputGroup(
-        label = label,
-        value = value,
-        onValueChange = onValueChange,
-        placeholder = placeholder,
-        inputOptions = inputOptions,
-    )
 }
 
 @Composable
@@ -264,45 +295,77 @@ private fun LoginInputGroup(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    inputOptions: LoginInputOptions,
-    modifier: Modifier = Modifier,
+    isError: Boolean = false,
+    errorText: String? = null,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
     Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = label,
-            color = MaterialTheme.styles.foreground,
-            style = MaterialTheme.typography.labelLarge,
+            color = Color(0xFF374151),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
         )
-        Input(
+
+        var isFocused by remember { mutableStateOf(false) }
+        val borderColor = if (isError) Color(0xFFDC2626) else if (isFocused) Color(0xFF1E3FD9) else Color(0xFFE2E5EB)
+
+        BasicTextField(
             value = value,
             onValueChange = onValueChange,
-            placeholder = placeholder,
-            enabled = inputOptions.enabled,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isFocused = it.isFocused },
+            textStyle = TextStyle(
+                color = Color(0xFF0F172A),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Normal
+            ),
             singleLine = true,
-            isError = inputOptions.isError,
-            visualTransformation = inputOptions.visualTransformation,
-            keyboardOptions = inputOptions.keyboardOptions,
-            keyboardActions = inputOptions.keyboardActions,
-            supportingText = {
-                if (inputOptions.isError) {
-                    Text(text = inputOptions.errorText)
+            visualTransformation = visualTransformation,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            cursorBrush = SolidColor(Color(0xFF1E3FD9)),
+            decorationBox = { innerTextField ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(if (isError) Color(0xFFFEE2E2) else Color.White, RoundedCornerShape(12.dp))
+                        .border(
+                            width = 1.dp,
+                            color = borderColor,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 13.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            color = Color(0xFF9CA3AF),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Normal
+                        )
+                    }
+                    innerTextField()
                 }
-            },
+            }
         )
+        if (isError && errorText != null) {
+            Text(
+                text = errorText,
+                color = Color(0xFFDC2626),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
     }
 }
-
-private data class LoginInputOptions(
-    val enabled: Boolean,
-    val isError: Boolean,
-    val errorText: String,
-    val keyboardOptions: KeyboardOptions,
-    val visualTransformation: VisualTransformation = VisualTransformation.None,
-    val keyboardActions: KeyboardActions = KeyboardActions.Default,
-)
 
 @Preview(showBackground = true)
 @Composable

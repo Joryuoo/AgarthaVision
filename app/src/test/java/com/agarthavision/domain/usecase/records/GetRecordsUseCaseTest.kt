@@ -6,7 +6,9 @@ import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -43,6 +45,7 @@ class GetRecordsUseCaseTest {
         assertEquals(listOf("Ascaris"), records.single().speciesLabels)
         assertEquals(10.0, records.single().latitude)
         assertEquals(20.0, records.single().longitude)
+        assertEquals(1, records.single().totalEpg)
     }
 
     @Test
@@ -73,6 +76,11 @@ private class FakeSessionRepository(
 
     override suspend fun getSessionById(sessionId: String): Session? =
         sessions.firstOrNull { it.id == sessionId }
+
+    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+        flowOf(emptyList())
+
+    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
 }
 
 private class FakeSampleRepository(
@@ -105,6 +113,12 @@ private class FakeDetectionRepository(
         flowOf(detectionsBySample[sampleId].orEmpty())
 
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) = emptyList<EggCount>()
+
+    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
+        flowOf(emptyList())
+
+    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
+        flowOf(emptyList())
 }
 
 private fun session(id: String, userId: String): Session =

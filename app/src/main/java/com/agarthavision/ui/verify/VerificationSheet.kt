@@ -2,62 +2,52 @@
 
 package com.agarthavision.ui.verify
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.agarthavision.R
+import coil.compose.AsyncImage
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.theme.AgarthaSpacing
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
-import com.komoui.components.Button
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
-import com.komoui.components.Input
-import com.komoui.themes.styles
+import com.agarthavision.ui.records.AppColors
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VerificationSheet(
     frame: FlaggedFrame,
@@ -74,18 +64,18 @@ fun VerificationSheet(
         viewModel.events.collect { event ->
             when (event) {
                 is VerificationEvent.Dismiss -> onDismiss()
-                is VerificationEvent.ShowError -> { /* error shown inline */ }
+                is VerificationEvent.ShowError -> Unit
             }
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    BackHandler(onBack = viewModel::onCancel)
 
-    ModalBottomSheet(
-        onDismissRequest = viewModel::onCancel,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.styles.card,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Gray200)
+            .systemBarsPadding(),
     ) {
         VerificationSheetContent(
             state = state,
@@ -106,383 +96,324 @@ fun VerificationSheet(
                 onToggleRepeat = viewModel::onToggleRepeat,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
             ),
-            modifier = Modifier
-                .heightIn(max = screenHeightDp * 0.95f)
-                .navigationBarsPadding(),
         )
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
-    modifier: Modifier = Modifier,
 ) {
     val frame = state.frame ?: return
+    val timeLabel = remember(frame.capturedAt) {
+        DateTimeFormatter.ofPattern("HH:mm:ss")
+            .withZone(ZoneId.systemDefault())
+            .format(frame.capturedAt)
+    }
+    val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
+    val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
+    val speciesName = currentPrediction?.classLabel ?: "Unknown"
+    val confidence = currentPrediction?.confidence ?: 0f
 
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AgarthaSpacing.screenEdge, vertical = AgarthaSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.md),
+            .padding(bottom = 32.dp)
+            .verticalScroll(rememberScrollState()),
     ) {
-        // Header — frame chevrons + title + boxes toggle
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                /*IconButton(
-                    onClick = actions.onFramePrev,
-                    enabled = state.frameIndexInQueue > 1,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                        contentDescription = stringResource(R.string.verify_prev_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }*/
-                Text(
-                    text = stringResource(R.string.verify_title, state.frameIndexInQueue, state.queueSize),
-                    color = MaterialTheme.styles.foreground,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                /*IconButton(
-                    onClick = actions.onFrameNext,
-                    enabled = state.frameIndexInQueue < state.queueSize,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.verify_next_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }*/
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (state.isRepeat) {
-                    KomoBadge(
-                        variant = BadgeVariant.Outline,
-                        modifier = Modifier.padding(end = AgarthaSpacing.xs),
-                    ) {
-                        Text(stringResource(R.string.verify_repeat_badge))
-                    }
-                }
-                /*Text(
-                    text = stringResource(R.string.verify_show_boxes_label),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.styles.mutedForeground,
-                    modifier = Modifier.padding(end = AgarthaSpacing.xs),
-                )*/
-                Switch(
-                    checked = state.showBoundingBoxes,
-                    onCheckedChange = { actions.onToggleBoundingBoxes() },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.styles.primary,
-                        checkedTrackColor = MaterialTheme.styles.primary.copy(alpha = 0.12f),
-                        uncheckedThumbColor = MaterialTheme.styles.mutedForeground,
-                        uncheckedTrackColor = MaterialTheme.styles.muted,
-                    ),
-                )
-                SheetKebab(
-                    isRepeat = state.isRepeat,
-                    onToggleRepeat = actions.onToggleRepeat,
-                )
-            }
-        }
-
-        // Frame image with boxes
-        FrameWithBoxes(
-            jpegBytes = frame.jpegBytes,
-            predictions = frame.predictions,
-            highlightedIndex = state.currentDetectionIndex,
-            showBoxes = state.showBoundingBoxes,
-            inferenceImageWidth = frame.imageWidth,
-            inferenceImageHeight = frame.imageHeight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp),
+        ScreenTopBar(
+            title = "Verify detection",
+            metaText = "Frame ${state.frameIndexInQueue}/${state.queueSize} · $timeLabel",
+            onBack = actions.onCancel,
         )
 
-        // Detection navigation header
-        if (frame.predictions.size > 1) {
+        Column(modifier = Modifier.padding(horizontal = 22.dp)) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                /*Button(
-                    onClick = actions.onDetectionPrev,
-                    size = ButtonSize.Sm,
-                    variant = ButtonVariant.Ghost,
-                    enabled = state.currentDetectionIndex > 0,
-                ) {
-                    Text(stringResource(R.string.verify_prev_detection))
-                }*/
-                IconButton(
-                    onClick = actions.onDetectionPrev,
-                    enabled = state.currentDetectionIndex > 0,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-                        contentDescription = stringResource(R.string.verify_prev_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }
-                Text(
-                    text = stringResource(
-                        R.string.verify_detection_header,
-                        state.currentDetectionIndex + 1,
-                        frame.predictions.size,
-                    ),
-                    color = MaterialTheme.styles.mutedForeground,
-                    style = MaterialTheme.typography.labelMedium,
-                )
-                /*Button(
-                    onClick = actions.onDetectionNext,
-                    size = ButtonSize.Sm,
-                    variant = ButtonVariant.Ghost,
-                    enabled = state.currentDetectionIndex < frame.predictions.size - 1,
-                ) {
-                    Text(stringResource(R.string.verify_next_detection))
-                }*/
-                IconButton(
-                    onClick = actions.onDetectionNext,
-                    enabled = state.currentDetectionIndex < frame.predictions.size - 1,
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                        contentDescription = stringResource(R.string.verify_next_frame),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }
-            }
-        }
-
-        // Confidence label
-        val prediction = frame.predictions.getOrNull(state.currentDetectionIndex)
-        if (prediction != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xxs)) {
-                Text(
-                    text = stringResource(
-                        R.string.verify_predicted,
-                        prediction.classLabel,
-                        "%.0f%%".format(prediction.confidence * 100),
-                    ),
-                    color = MaterialTheme.styles.mutedForeground,
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                LinearProgressIndicator(
-                    progress = { prediction.confidence },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = MaterialTheme.styles.primary,
-                    trackColor = MaterialTheme.styles.secondary,
-                )
-            }
-        }
-
-        // Per-detection questions
-        val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
-        if (currentAnswers != null) {
-            YesNoQuestion(
-                label = stringResource(R.string.verify_q1),
-                selected = currentAnswers.isEgg,
-                onSelected = actions.onQ1Selected,
-            )
-
-            if (currentAnswers.isEgg == true) {
-                YesNoQuestion(
-                    label = stringResource(R.string.verify_q2),
-                    selected = currentAnswers.isBoxCorrect,
-                    onSelected = actions.onQ2Selected,
-                )
+                SmallToggle("Previous frame", false, actions.onFramePrev, Modifier.weight(1f))
+                SmallToggle("Next frame", false, actions.onFrameNext, Modifier.weight(1f))
             }
 
-            if (currentAnswers.isEgg == true && currentAnswers.isBoxCorrect == true) {
-                SpeciesDropdown(
-                    selected = currentAnswers.species,
-                    otherText = currentAnswers.otherSpeciesText,
-                    onSpeciesSelected = actions.onSpeciesSelected,
-                    onOtherTextChanged = actions.onOtherSpeciesChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-
-        // Q4 — frame-level
-        YesNoQuestion(
-            label = stringResource(R.string.verify_q4),
-            selected = state.missedEgg,
-            onSelected = actions.onQ4Selected,
-        )
-
-        // Notes (optional) — persists to samples.user_note (per ADR-005)
-        Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
-            Text(
-                text = stringResource(R.string.verify_user_note_label),
-                color = MaterialTheme.styles.foreground,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Input(
-                value = state.userNote,
-                onValueChange = actions.onUserNoteChanged,
-                placeholder = stringResource(R.string.verify_user_note_placeholder),
-                singleLine = false,
-                enabled = !state.isSubmitting,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        state.errorMessage?.let { msg ->
-            Text(
-                text = msg,
-                color = MaterialTheme.styles.destructive,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(AgarthaSpacing.xs))
-
-        var showDeleteConfirm by remember { mutableStateOf(false) }
-
-        // Delete + Cancel + Submit
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.clusterGap),
-        ) {
-            Button(
-                onClick = { showDeleteConfirm = true },
-                size = ButtonSize.Lg,
-                variant = ButtonVariant.Destructive,
-                enabled = !state.isSubmitting,
-                modifier = Modifier.weight(1f),
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(170.dp)
+                    .padding(bottom = 18.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(0.5.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
             ) {
-                Text(stringResource(R.string.verify_delete_frame))
-            }
-            /*Button(
-                onClick = actions.onCancel,
-                size = ButtonSize.Lg,
-                variant = ButtonVariant.Ghost,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.verify_cancel))
-            }*/
-            Button(
-                onClick = actions.onSubmit,
-                size = ButtonSize.Lg,
-                enabled = state.canSubmit,
-                loading = state.isSubmitting,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = if (state.isSubmitting) {
-                        stringResource(R.string.verify_submitting)
-                    } else {
-                        stringResource(R.string.verify_submit)
-                    },
+                AsyncImage(
+                    model = frame.jpegBytes,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
                 )
-            }
-        }
 
-        if (showDeleteConfirm) {
-            AlertDialog(
-                onDismissRequest = { showDeleteConfirm = false },
-                title = { Text(stringResource(R.string.verify_delete_confirm_title)) },
-                text = { Text(stringResource(R.string.verify_delete_confirm_body)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDeleteConfirm = false
-                            actions.onDeleteFrame()
-                        },
-                    ) {
-                        Text(
-                            stringResource(R.string.verify_delete_frame),
-                            color = MaterialTheme.styles.destructive,
+                if (currentPrediction != null && state.showBoundingBoxes) {
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .fillMaxWidth(0.3f)
+                                .fillMaxHeight(0.35f)
+                                .border(1.dp, AppColors.Blue, RoundedCornerShape(4.dp)),
                         )
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteConfirm = false }) {
-                        Text(stringResource(R.string.verify_cancel))
-                    }
-                },
-                containerColor = MaterialTheme.styles.card,
-                titleContentColor = MaterialTheme.styles.foreground,
-                textContentColor = MaterialTheme.styles.mutedForeground,
-            )
-        }
-    }
-}
+                }
+            }
 
-@Composable
-private fun SheetKebab(
-    isRepeat: Boolean,
-    onToggleRepeat: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.verify_sheet_kebab_desc),
-                tint = MaterialTheme.styles.foreground,
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            DropdownMenuItem(
-                text = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 10.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column {
                     Text(
-                        text = if (isRepeat) {
-                            stringResource(R.string.verify_unmark_repeat)
-                        } else {
-                            stringResource(R.string.verify_mark_repeat)
-                        },
+                        text = speciesName,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 18.sp,
+                        color = AppColors.Gray900,
                     )
-                },
-                onClick = {
-                    expanded = false
-                    onToggleRepeat()
-                },
+                    Text(
+                        text = "Detection ${state.currentDetectionIndex + 1} of ${state.answers.size.coerceAtLeast(1)}",
+                        color = AppColors.Gray500,
+                        fontSize = 12.sp,
+                    )
+                }
+                Text(
+                    text = "${(confidence * 100).toInt()}% Conf",
+                    color = AppColors.Blue,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                SmallToggle("Prev detection", false, actions.onDetectionPrev, Modifier.weight(1f))
+                SmallToggle("Next detection", false, actions.onDetectionNext, Modifier.weight(1f))
+            }
+
+            QuestionSection(
+                title = "1. PARASITE PRESENT?",
+                options = listOf(true to "Yes", false to "No"),
+                selected = currentAnswers?.isEgg,
+                onSelect = actions.onQ1Selected,
+            )
+
+            if (currentAnswers?.isEgg == true) {
+                QuestionSection(
+                    title = "2. IS IT $speciesName?",
+                    options = listOf(true to "Yes", false to "No"),
+                    selected = currentAnswers.isBoxCorrect,
+                    onSelect = actions.onQ2Selected,
+                )
+
+                if (currentAnswers.isBoxCorrect == false) {
+                    Text(
+                        text = "3. SELECT CORRECT SPECIES",
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppColors.Gray500,
+                        letterSpacing = 0.8.sp,
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp, top = 8.dp),
+                    )
+                    FlowRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        val quickSpecies = listOf(
+                            EggSpecies.ASCARIS to "Ascaris",
+                            EggSpecies.TRICHURIS to "Trichuris",
+                            EggSpecies.HOOKWORM to "Hookworm",
+                            EggSpecies.OTHER to "Other...",
+                        )
+                        quickSpecies.forEach { (species, label) ->
+                            SpeciesChoice(
+                                label = label,
+                                selected = currentAnswers.species == species,
+                                onClick = { actions.onSpeciesSelected(species) },
+                            )
+                        }
+                    }
+
+                    if (currentAnswers.species == EggSpecies.OTHER) {
+                        NoteField(
+                            value = currentAnswers.otherSpeciesText,
+                            onValueChange = actions.onOtherSpeciesChanged,
+                            placeholder = "Species name",
+                            modifier = Modifier.padding(bottom = 14.dp),
+                        )
+                    }
+                }
+            }
+
+            QuestionSection(
+                title = "4. DID THE MODEL MISS OTHER EGGS?",
+                options = listOf(true to "Yes", false to "No"),
+                selected = state.missedEgg,
+                onSelect = actions.onQ4Selected,
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                SmallToggle("Repeat sample", state.isRepeat, actions.onToggleRepeat, Modifier.weight(1f))
+                SmallToggle("Boxes", state.showBoundingBoxes, actions.onToggleBoundingBoxes, Modifier.weight(1f))
+            }
+
+            NoteField(
+                value = state.userNote,
+                onValueChange = actions.onUserNoteChanged,
+                placeholder = "Notes for this sample",
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+
+            state.errorMessage?.let {
+                Text(
+                    text = it,
+                    color = AppColors.Red,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+
+            SheetActionRow(
+                primaryLabel = "Submit",
+                secondaryLabel = "Discard",
+                onPrimaryClick = actions.onSubmit,
+                onSecondaryClick = actions.onCancel,
+                primaryLoading = state.isSubmitting,
+                primaryEnabled = state.canSubmit,
             )
         }
     }
 }
 
 @Composable
-private fun YesNoQuestion(
-    label: String,
-    selected: Boolean?,
-    onSelected: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
+private fun <T> QuestionSection(
+    title: String,
+    options: List<Pair<T, String>>,
+    selected: T?,
+    onSelect: (T) -> Unit,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
+    Text(
+        text = title,
+        fontFamily = FontFamily.Monospace,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AppColors.Gray500,
+        letterSpacing = 0.8.sp,
+        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        options.forEach { (value, label) ->
+            val isSelected = selected == value
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .background(if (isSelected) AppColors.Blue else AppColors.White, RoundedCornerShape(8.dp))
+                    .border(1.dp, if (isSelected) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(8.dp))
+                    .clickable { onSelect(value) }
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    color = if (isSelected) AppColors.White else AppColors.Gray900,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeciesChoice(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+            .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+    ) {
         Text(
             text = label,
-            color = MaterialTheme.styles.foreground,
-            style = MaterialTheme.typography.bodyMedium,
+            color = AppColors.Gray900,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontStyle = if (label == "Other...") FontStyle.Normal else FontStyle.Italic,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.clusterGap)) {
-            Button(
-                onClick = { onSelected(true) },
-                size = ButtonSize.Sm,
-                variant = if (selected == true) ButtonVariant.Default else ButtonVariant.Ghost,
-            ) {
-                Text(stringResource(R.string.verify_yes))
-            }
-            Button(
-                onClick = { onSelected(false) },
-                size = ButtonSize.Sm,
-                variant = if (selected == false) ButtonVariant.Default else ButtonVariant.Ghost,
-            ) {
-                Text(stringResource(R.string.verify_no))
-            }
-        }
     }
+}
+
+@Composable
+private fun SmallToggle(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .background(if (selected) AppColors.BlueTint else AppColors.White, RoundedCornerShape(10.dp))
+            .border(1.dp, if (selected) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = if (selected) AppColors.Blue else AppColors.Gray700,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
+private fun NoteField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
+        placeholder = { Text(placeholder, color = AppColors.Gray400, fontSize = 13.sp) },
+        minLines = 1,
+        maxLines = 3,
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = AppColors.Blue,
+            unfocusedBorderColor = AppColors.Gray300,
+            focusedContainerColor = AppColors.White,
+            unfocusedContainerColor = AppColors.White,
+            focusedTextColor = AppColors.Gray900,
+            unfocusedTextColor = AppColors.Gray900,
+        ),
+    )
 }

@@ -13,3 +13,13 @@ data class Session(
     val notes: String?,
     val label: String?,
 )
+
+/**
+ * Domain model wrapping a session with its aggregated metrics.
+ */
+data class SessionWithStats(
+    val session: Session,
+    val totalSamples: Int,
+    val verifiedSamples: Int,
+    val totalEpg: Int
+)

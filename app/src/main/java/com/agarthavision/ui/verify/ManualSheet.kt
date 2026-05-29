@@ -2,62 +2,50 @@
 
 package com.agarthavision.ui.verify
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.theme.AgarthaSpacing
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
-import com.komoui.components.Button as KomoButton
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
+import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.components.glassChrome
 import com.komoui.components.Input
-import com.komoui.themes.styles
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ManualSheet(
     frame: FlaggedFrame,
@@ -79,13 +67,13 @@ fun ManualSheet(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+    BackHandler(onBack = viewModel::onCancel)
 
-    ModalBottomSheet(
-        onDismissRequest = viewModel::onCancel,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.styles.card,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AppColors.Gray200)
+            .systemBarsPadding()
     ) {
         ManualSheetContent(
             state = state,
@@ -98,9 +86,6 @@ fun ManualSheet(
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
             ),
-            modifier = Modifier
-                .heightIn(max = screenHeightDp * 0.95f)
-                .navigationBarsPadding(),
         )
     }
 }
@@ -119,7 +104,6 @@ private data class ManualSheetActions(
 private fun ManualSheetContent(
     state: ManualCaptureUiState,
     actions: ManualSheetActions,
-    modifier: Modifier = Modifier,
 ) {
     val frame = state.frame ?: return
     val timeLabel = remember(frame.capturedAt) {
@@ -128,197 +112,175 @@ private fun ManualSheetContent(
             .format(frame.capturedAt)
     }
 
+    var showCustomSpeciesDialog by remember { mutableStateOf(false) }
+    var customSpeciesText by remember { mutableStateOf("") }
+
     Column(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = AgarthaSpacing.screenEdge, vertical = AgarthaSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.md),
+            .padding(bottom = 32.dp)
+            .verticalScroll(rememberScrollState()),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        ScreenTopBar(
+            title = "Label sample",
+            metaText = "MANUAL · ${frame.capturedAt.toEpochMilli().toString().takeLast(3)}",
+            onBack = actions.onCancel
+        )
+
+        Column(modifier = Modifier.padding(horizontal = 22.dp)) {
+
+            // Image preview
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .padding(bottom = 14.dp)
+                    .clip(RoundedCornerShape(18.dp))
+                    .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
+            ) {
+                AsyncImage(
+                    model = frame.jpegBytes,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Species Section
             Text(
-                text = stringResource(R.string.manual_sheet_title, timeLabel),
-                color = MaterialTheme.styles.foreground,
-                style = MaterialTheme.typography.titleMedium,
+                text = "SPECIES",
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
+                color = AppColors.Gray500,
+                letterSpacing = 0.8.sp,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (state.isRepeat) {
-                    KomoBadge(
-                        variant = BadgeVariant.Outline,
-                        modifier = Modifier.padding(end = AgarthaSpacing.xs),
-                    ) {
-                        Text(stringResource(R.string.verify_repeat_badge))
-                    }
-                }
-                SheetKebab(
-                    isRepeat = state.isRepeat,
-                    onToggleRepeat = actions.onToggleRepeat,
+
+            // Quick Chips
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val quickSpecies = listOf(
+                    EggSpecies.ASCARIS to "Ascaris",
+                    EggSpecies.TRICHURIS to "Trichuris",
+                    EggSpecies.HOOKWORM to "Hookworm"
                 )
-                /*IconButton(onClick = actions.onCancel) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.manual_sheet_close_desc),
-                        tint = MaterialTheme.styles.foreground,
-                    )
-                }*/
-            }
-        }
 
-        FrameWithBoxes(
-            jpegBytes = frame.jpegBytes,
-            predictions = emptyList(),
-            highlightedIndex = 0,
-            showBoxes = false,
-            inferenceImageWidth = frame.imageWidth,
-            inferenceImageHeight = frame.imageHeight,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(220.dp),
-        )
-
-        SpeciesDropdown(
-            selected = state.selectedSpecies,
-            otherText = state.otherSpeciesText,
-            onSpeciesSelected = actions.onSpeciesSelected,
-            onOtherTextChanged = actions.onOtherSpeciesChanged,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.xs)) {
-            Text(
-                text = stringResource(R.string.verify_user_note_label),
-                color = MaterialTheme.styles.foreground,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Input(
-                value = state.userNote,
-                onValueChange = actions.onUserNoteChanged,
-                placeholder = stringResource(R.string.verify_user_note_placeholder),
-                singleLine = false,
-                enabled = !state.isSubmitting,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-
-        state.errorMessage?.let { msg ->
-            Text(
-                text = msg,
-                color = MaterialTheme.styles.destructive,
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
-
-        Spacer(modifier = Modifier.height(AgarthaSpacing.xs))
-
-        var showDeleteConfirm by rememberSaveable { mutableStateOf(false) }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(AgarthaSpacing.clusterGap),
-        ) {
-            KomoButton(
-                onClick = { showDeleteConfirm = true },
-                size = ButtonSize.Lg,
-                variant = ButtonVariant.Destructive,
-                enabled = !state.isSubmitting,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.verify_delete_frame))
-            }
-            /*KomoButton(
-                onClick = actions.onCancel,
-                size = ButtonSize.Lg,
-                variant = ButtonVariant.Ghost,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.verify_cancel))
-            }*/
-            KomoButton(
-                onClick = actions.onSubmit,
-                size = ButtonSize.Lg,
-                enabled = state.canSubmit,
-                loading = state.isSubmitting,
-                modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    text = if (state.isSubmitting) {
-                        stringResource(R.string.verify_submitting)
-                    } else {
-                        stringResource(R.string.verify_submit)
-                    },
-                )
-            }
-        }
-
-        if (showDeleteConfirm) {
-            AlertDialog(
-                onDismissRequest = { showDeleteConfirm = false },
-                title = { Text(stringResource(R.string.verify_delete_confirm_title)) },
-                text = { Text(stringResource(R.string.verify_delete_confirm_body)) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDeleteConfirm = false
-                            actions.onDeleteFrame()
-                        },
+                quickSpecies.forEach { (species, label) ->
+                    val selected = state.selectedSpecies == species
+                    Box(
+                        modifier = Modifier
+                            .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+                            .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                            .clickable { actions.onSpeciesSelected(species) }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            stringResource(R.string.verify_delete_frame),
-                            color = MaterialTheme.styles.destructive,
+                            text = label,
+                            color = AppColors.Gray900,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = FontStyle.Italic,
+                            letterSpacing = (-0.1).sp
                         )
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { showDeleteConfirm = false }) {
-                        Text(stringResource(R.string.verify_cancel))
-                    }
-                },
-                containerColor = MaterialTheme.styles.card,
-                titleContentColor = MaterialTheme.styles.foreground,
-                textContentColor = MaterialTheme.styles.mutedForeground,
+                }
+
+                // Other... chip
+                val isOtherSelected = state.selectedSpecies != null && quickSpecies.none { it.first == state.selectedSpecies }
+                Box(
+                    modifier = Modifier
+                        .background(if (isOtherSelected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
+                        .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                        .clickable {
+                            showCustomSpeciesDialog = true
+                        }
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = if (isOtherSelected) state.selectedSpecies?.name ?: "Other..." else "Other...",
+                        color = AppColors.Gray900,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Normal, // Not italic
+                        letterSpacing = (-0.1).sp
+                    )
+                }
+            }
+
+            // Note section
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 14.dp)
+                    .background(Color.Transparent, RoundedCornerShape(14.dp))
+                    .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+            ) {
+                Text(
+                    text = "NOTE",
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AppColors.Gray500,
+                    letterSpacing = 0.8.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+                Input(
+                    value = state.userNote,
+                    onValueChange = actions.onUserNoteChanged,
+                    placeholder = "Add an observation about morphology, color, or staining.",
+                    singleLine = false,
+                    enabled = !state.isSubmitting,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+
+            SheetActionRow(
+                primaryLabel = "Submit",
+                secondaryLabel = "Discard",
+                onPrimaryClick = actions.onSubmit,
+                onSecondaryClick = actions.onCancel,
+                primaryLoading = state.isSubmitting,
+                primaryEnabled = state.canSubmit
             )
         }
     }
-}
 
-@Composable
-private fun SheetKebab(
-    isRepeat: Boolean,
-    onToggleRepeat: () -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { expanded = true }) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = stringResource(R.string.verify_sheet_kebab_desc),
-                tint = MaterialTheme.styles.foreground,
-            )
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = if (isRepeat) {
-                            stringResource(R.string.verify_unmark_repeat)
-                        } else {
-                            stringResource(R.string.verify_mark_repeat)
-                        },
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onToggleRepeat()
-                },
-            )
-        }
+    if (showCustomSpeciesDialog) {
+        AlertDialog(
+            onDismissRequest = { showCustomSpeciesDialog = false },
+            title = { Text("Custom Species") },
+            text = {
+                OutlinedTextField(
+                    value = customSpeciesText,
+                    onValueChange = { customSpeciesText = it },
+                    label = { Text("Species name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        actions.onSpeciesSelected(EggSpecies.OTHER)
+                        actions.onOtherSpeciesChanged(customSpeciesText)
+                        showCustomSpeciesDialog = false
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCustomSpeciesDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
