@@ -1,8 +1,7 @@
 # AgarthaVision
 
 <p align="center">
-  <!-- Replace this placeholder with the final logo asset when it is ready. -->
-  <img src="docs/assets/agartha-logo.svg" alt="AgarthaVision logo" width="112" />
+  <img src="docs/assets/agarthavision-logo-mark-transparent.svg" alt="AgarthaVision logo" width="112" />
 </p>
 
 <p align="center">

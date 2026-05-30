@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+pillow
+numpy
+timm
+git+https://github.com/DMKuZu/ultralytics@c2b156345e2e1468f6113b60813ddb7eeab969d1

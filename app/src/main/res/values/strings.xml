@@ -1,3 +1,175 @@
 <resources>
     <string name="app_name">AgarthaVision</string>
+    <string name="login_title">Welcome back.</string>
+    <string name="login_subtitle">Sign in with your provisioned medtech account to begin a session.</string>
+    <string name="login_email_label">Email</string>
+    <string name="login_email_placeholder">m.santos@laguna-rhu.ph</string>
+    <string name="login_email_error">Enter a valid email address.</string>
+    <string name="login_password_label">Password</string>
+    <string name="login_password_placeholder">..........</string>
+    <string name="login_password_error">Password is required.</string>
+    <string name="login_forgot_password">Forgot?</string>
+    <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
+    <string name="login_submit">Log in</string>
+    <string name="login_failed_title">Login failed</string>
+    <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
+
+    <string name="verify_title">Flagged Frame · %1$s</string>
+    <string name="verify_detection_header">Detection %1$d of %2$d</string>
+    <string name="verify_predicted">Model predicted: %1$s · %2$s confidence</string>
+    <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
+    <string name="verify_q2">Is the bounding box correctly placed?</string>
+    <string name="verify_q3">What species?</string>
+    <string name="verify_q4">Did the model miss any eggs in this frame?</string>
+    <string name="verify_yes">Yes</string>
+    <string name="verify_no">No</string>
+    <string name="verify_other_label">Other species</string>
+    <string name="verify_other_hint">Type the observed species</string>
+    <string name="verify_prev_detection">Previous detection</string>
+    <string name="verify_next_detection">Next detection</string>
+    <string name="verify_show_boxes_label">Show bounding boxes</string>
+    <string name="verify_submit">Submit</string>
+    <string name="verify_cancel">Cancel</string>
+    <string name="verify_submitting">Submitting…</string>
+
+    <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
+    <string name="connection_lost_resume">Resume Recording</string>
+    <string name="connection_lost_probing">Checking connection…</string>
+
+    <string name="verify_prev_frame">Previous frame</string>
+    <string name="verify_next_frame">Next frame</string>
+    <string name="verify_delete_frame">Delete</string>
+    <string name="verify_delete_confirm_title">Delete this flagged frame?</string>
+    <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
+
+    <string name="verify_sheet_kebab_desc">Sample actions</string>
+    <string name="verify_mark_repeat">Mark as repeat</string>
+    <string name="verify_unmark_repeat">Unmark as repeat</string>
+    <string name="verify_repeat_badge">Repeat</string>
+    <string name="verify_user_note_label">Notes (optional)</string>
+    <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
+
+    <string name="queue_sheet_title">Flagged Frames · %1$d</string>
+    <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
+    <string name="queue_filter_all">All</string>
+    <string name="queue_filter_flagged">Flagged</string>
+    <string name="queue_filter_manual">Manual</string>
+    <string name="queue_filter_repeat">Repeat</string>
+    <string name="queue_row_delete">Remove from queue</string>
+    <string name="queue_row_unknown_class">Unknown detection</string>
+    <string name="queue_row_subtitle">%1$s%% · %2$d detection(s) · %3$s</string>
+    <string name="queue_row_manual_title">Manual capture</string>
+    <string name="queue_row_manual_subtitle">Manual capture · %1$s</string>
+    <string name="queue_row_source_ai">AI</string>
+    <string name="queue_row_source_manual">Manual</string>
+
+    <string name="capture_title">Capture</string>
+    <string name="capture_rec">REC</string>
+    <string name="capture_start">Start Recording</string>
+    <string name="capture_stop">Stop Recording</string>
+    <string name="capture_manual">Capture</string>
+    <string name="capture_end_session">End Session</string>
+    <string name="capture_end_session_title">End this session?</string>
+    <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <plurals name="capture_end_blocked_body">
+        <item quantity="one">You have %1$d unverified frame. Verify or delete it before ending the session.</item>
+        <item quantity="other">You have %1$d unverified frames. Verify or delete them before ending the session.</item>
+    </plurals>
+    <string name="capture_end_session_notes_label">Final notes (optional)</string>
+    <string name="capture_end_session_notes_placeholder">Anything to record about this smear</string>
+    <string name="capture_end_session_confirm">End session</string>
+    <string name="capture_verify_action_desc">Verify flagged frames</string>
+    <string name="capture_reports_action_desc">View session EPG</string>
+    <string name="capture_records_action_desc">View records</string>
+    <string name="capture_permission_required">Camera permission is required for recording.</string>
+    <string name="capture_allow_camera">Allow Camera</string>
+    <string name="capture_detection_fallback">egg</string>
+    <string name="capture_detection_message">%1$s detected · %2$s%% confidence</string>
+    <string name="capture_detection_view">View</string>
+
+    <string name="records_title">Records</string>
+    <string name="records_back">Back to capture</string>
+    <string name="records_empty">No sessions found</string>
+    <string name="records_filter_start">Start date</string>
+    <string name="records_filter_end">End date</string>
+    <string name="records_filter_hint">YYYY-MM-DD</string>
+    <string name="records_filter_apply">Apply</string>
+    <string name="records_filter_clear">Clear</string>
+    <string name="records_species_all">All species</string>
+
+    <string name="records_session_title">Session %1$s</string>
+    <string name="records_session_summary">%1$d verified samples · %2$s</string>
+    <string name="records_session_no_species">No species labels</string>
+    <string name="records_session_time">%1$s → %2$s</string>
+    <string name="records_session_active">active</string>
+    <string name="records_session_open">Open</string>
+    <string name="records_no_gps">No GPS</string>
+    <string name="records_gps">%1$.5f, %2$.5f</string>
+
+    <string name="session_detail_title">Session Detail</string>
+    <string name="session_detail_empty">No verified samples in this session</string>
+    <string name="report_section_title">Reports</string>
+    <string name="report_generate">Generate Report</string>
+    <string name="report_generating">Generating…</string>
+    <string name="report_empty">No reports yet. Tap Generate Report to create one.</string>
+    <string name="report_status_pending">Pending</string>
+    <string name="report_status_synced">Synced</string>
+    <string name="report_status_failed">Sync failed</string>
+    <string name="report_no_positive_species">No positive species</string>
+    <string name="report_generated_toast">Generated · shared to Downloads</string>
+    <string name="report_generation_failed">Report failed: %1$s</string>
+    <string name="session_detail_unknown_detection">No detection</string>
+    <string name="session_detail_confidence">Confidence: %1$.2f</string>
+    <string name="session_detail_captured">Captured: %1$s</string>
+    <string name="session_detail_back">Back to records</string>
+    <string name="session_detail_open_sample">Open sample</string>
+    <string name="session_detail_epg_title">EPG</string>
+    <string name="session_detail_epg_total_label">Total eggs: %1$d</string>
+    <string name="session_detail_epg_empty">No confirmed eggs yet</string>
+
+    <string name="sample_detail_title">Sample Detail</string>
+    <string name="sample_detail_missing">Sample not found</string>
+    <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
+    <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
+    <string name="sample_detail_tab_image">Image</string>
+    <string name="sample_detail_tab_detections">Detections</string>
+    <string name="sample_detail_tab_metadata">Metadata</string>
+    <string name="sample_detail_image_desc">Verified microscopy sample image</string>
+    <string name="sample_detail_no_detections">No detections recorded</string>
+    <string name="sample_detail_detection_title">Detection %1$d</string>
+    <string name="sample_detail_verdict">Verdict: %1$s</string>
+    <string name="sample_detail_box">Box: x=%1$.2f y=%2$.2f w=%3$.2f h=%4$.2f</string>
+    <string name="sample_detail_box_none">Box: none (manual capture)</string>
+    <string name="sample_detail_sample_id">Sample ID</string>
+    <string name="sample_detail_session_id">Session ID</string>
+    <string name="sample_detail_device_id">Device ID</string>
+    <string name="sample_detail_user_note">User note</string>
+    <string name="sample_detail_status">Status</string>
+    <string name="sample_detail_captured_at">Captured at</string>
+    <string name="sample_detail_verified_at">Verified at</string>
+    <string name="sample_detail_gps">GPS</string>
+    <string name="sample_detail_storage_path">Storage path</string>
+    <string name="sample_detail_model_version">Model version</string>
+    <string name="sample_detail_needs_reannotation">Needs reannotation</string>
+    <string name="sample_detail_yes">Yes</string>
+    <string name="sample_detail_no">No</string>
+    <string name="sample_detail_back">Back to session</string>
+
+    <string name="session_picker_title">Sessions</string>
+    <string name="session_picker_empty_title">No recent sessions</string>
+    <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
+    <string name="session_picker_create">New session</string>
+    <string name="session_picker_row_active">Active</string>
+    <string name="session_picker_row_untitled">Untitled smear</string>
+    <string name="session_picker_row_kebab_desc">Session actions</string>
+    <string name="session_picker_row_end_session">End session</string>
+    <string name="session_picker_dialog_title">New session</string>
+    <string name="session_picker_dialog_label">Smear label</string>
+    <string name="session_picker_dialog_label_placeholder">e.g. Brgy. San Roque · Patient 042</string>
+    <string name="session_picker_dialog_notes">Notes (optional)</string>
+    <string name="session_picker_dialog_notes_placeholder">Slide condition, prep quality, anything unusual</string>
+    <string name="session_picker_dialog_create">Create</string>
+
+    <string name="manual_sheet_title">Manual Capture · %1$s</string>
+    <string name="manual_sheet_close_desc">Close manual capture sheet</string>
 </resources>

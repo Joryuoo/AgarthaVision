@@ -1,0 +1,20 @@
+{
+  "name": "agarthavision",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "stop" : "./gradlew --stop",
+    "build": "./gradlew assembleDebug",
+    "build:release": "./gradlew assembleRelease",
+    "install:device": "./gradlew :app:installDebug",
+    "test": "./gradlew testDebugUnitTest",
+    "test:all": "./gradlew :app:test",
+    "lint": "./gradlew ktlintCheck detekt",
+    "lint:fix": "./gradlew ktlintFormat",
+    "clean": "./gradlew clean",
+    "sync": "./gradlew --refresh-dependencies",
+    "emulator": "emulator -avd AgarthaVision_Test",
+    "prepare": "husky",
+    "compile": "./gradlew :app:compileDebugKotlin"
+  }
+}

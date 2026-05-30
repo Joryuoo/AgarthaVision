@@ -1,0 +1,943 @@
+# AgarthaVision · Environment & Project Setup
+
+> From a fresh machine to a working project on GitHub, ready for the team to clone.
+>
+> **Phase A** (done once by one person): Create the project, configure it, push to remote.
+> **Phase B** (done by every team member): Clone, set up IDE, verify build.
+
+---
+
+## Phase A — Project Creation (One Person)
+
+This phase is done once. The person who does it will have the project running
+locally and pushed to GitHub. Everyone else follows Phase B.
+
+---
+
+### A.1 Prerequisites
+
+Install these before creating the project.
+
+#### JDK 21
+
+KomoUI 0.3.0 requires Kotlin 2.2.x which targets JDK 21.
+
+```bash
+# macOS (Homebrew)
+brew install openjdk@21
+
+# Linux (SDKMAN — recommended for team consistency)
+curl -s "https://get.sdkman.io" | bash
+sdk install java 21.0.3-tem
+
+# Windows (winget)
+winget install EclipseAdoptium.Temurin.21.JDK
+```
+
+Verify: `java -version` should print 21.x.
+
+#### Android SDK
+
+Since you already have **Android Studio with SDK 36** installed, your SDK is
+ready. Confirm your `ANDROID_HOME` path:
+
+```bash
+# Typical locations:
+# macOS/Linux: ~/Android/Sdk
+# Windows:     %LOCALAPPDATA%\Android\Sdk
+
+# Add to your shell profile (~/.bashrc or ~/.zshrc):
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+```
+
+If team members **don't** have Android Studio, they can install the SDK
+standalone (see Phase B, §B.2).
+
+#### Bun
+
+Used as the project's task runner for scripts, git hooks, and linting orchestration.
+
+```bash
+# macOS / Linux
+curl -fsSL https://bun.sh/install | bash
+
+# Windows
+powershell -c "irm bun.sh/install.ps1 | iex"
+```
+
+Verify: `bun --version` should print 1.x.
+
+#### Git
+
+Confirm git is installed and your GitHub credentials are configured:
+
+```bash
+git --version
+git config user.name   # Should show your name
+git config user.email  # Should show your email
+```
+
+#### Docker + GHCR (DMKuZu only)
+
+The inference container (FastAPI + custom Ultralytics fork + model weights) is built
+and pushed by **DMKuZu** to GitHub Container Registry. The rest of the team does NOT
+need Docker — they just consume the deployed endpoint via `INFERENCE_URL` in
+`local.properties`. Per [ADR-003](adr/003-self-hosted-inference-container.md).
+
+DMKuZu only:
+
+```bash
+# macOS
+brew install --cask docker
+
+# Linux
+# follow https://docs.docker.com/engine/install/
+
+# Windows
+winget install Docker.DockerDesktop
+```
+
+Then log into GHCR with a Personal Access Token (classic, scope: `write:packages`):
+
+```bash
+echo "$GHCR_TOKEN" | docker login ghcr.io -u <your-github-username> --password-stdin
+```
+
+See [inference/README.md](../inference/README.md) for the build/push/deploy runbook
+(Phase 1 §1 of the inference work).
+
+---
+
+### A.2 Create the Android Project
+
+Open **Android Studio** and create a new project:
+
+1. `File` → `New` → `New Project`
+2. Select **Empty Activity** (Compose)
+3. Configure:
+
+| Field            | Value                  |
+|------------------|------------------------|
+| Name             | `AgarthaVision`        |
+| Package name     | `com.agarthavision`    |
+| Save location    | Wherever you keep projects (e.g. `~/Projects/AgarthaVision`) |
+| Minimum SDK      | **API 26** (Android 8.0) — required by KomoUI's Calendar (uses `java.time`) |
+| Build config language | **Kotlin DSL (build.gradle.kts)** |
+
+4. Click **Finish**. Wait for the initial Gradle sync to complete.
+
+At this point you have a working "Hello World" Compose project. Verify by
+clicking ▶ and confirming it runs on an emulator or device.
+
+---
+
+### A.3 Set Up the Version Catalog
+
+Android Studio generates a `gradle/libs.versions.toml` by default. Replace
+its contents entirely with the project's version catalog.
+
+The authoritative version catalog lives in [02_PROJECT_ARCHITECTURE.md §4](02_PROJECT_ARCHITECTURE.md).
+The block below is a snapshot at MVP time — keep them in sync; if they drift, the
+architecture doc wins.
+
+Open `gradle/libs.versions.toml` and replace with:
+
+```toml
+[versions]
+kotlin = "2.2.10"
+agp = "9.2.1"
+compose-bom = "2025.05.00"
+komoui = "0.3.0"
+hilt = "2.51.1"
+room = "2.7.0"
+retrofit = "2.11.0"
+okhttp = "4.12.0"
+camerax = "1.4.1"
+workmanager = "2.10.0"
+datastore = "1.1.2"
+coroutines = "1.9.0"
+navigation = "2.8.5"
+lifecycle = "2.8.7"
+coil = "2.7.0"
+ktlint-plugin = "12.1.2"
+detekt = "1.23.7"
+
+[libraries]
+# Compose
+compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+compose-ui = { group = "androidx.compose.ui", name = "ui" }
+compose-material3 = { group = "androidx.compose.material3", name = "material3" }
+compose-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+compose-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+
+# KomoUI
+komoui = { group = "io.github.derangga", name = "komoui", version.ref = "komoui" }
+
+# Hilt
+hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
+hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
+
+# Room
+room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
+room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
+
+# Network
+retrofit = { group = "com.squareup.retrofit2", name = "retrofit", version.ref = "retrofit" }
+retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", version.ref = "retrofit" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+okhttp-logging = { group = "com.squareup.okhttp3", name = "logging-interceptor", version.ref = "okhttp" }
+
+# CameraX
+camerax-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+camerax-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+camerax-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+camerax-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+
+# Background + Async
+workmanager = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workmanager" }
+coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+
+# Navigation
+navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
+
+# Lifecycle
+lifecycle-viewmodel = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-compose", version.ref = "lifecycle" }
+lifecycle-runtime = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle" }
+
+# DataStore
+datastore = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+
+# Image loading
+coil = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# Testing
+junit = { group = "junit", name = "junit", version = "4.13.2" }
+coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+compose-test = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+ksp = { id = "com.google.devtools.ksp", version = "2.2.10-RC-2.0.2" }
+ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-plugin" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+```
+
+> **Note on SDK version:** The project targets `compileSdk = 36` (your installed
+> SDK) with `minSdk = 26` (for KomoUI compatibility). Android Studio may have
+> generated different values — we fix them in A.5.
+
+---
+
+### A.4 Configure Root `build.gradle.kts`
+
+Open the **root** `build.gradle.kts` (the one in the project root, not inside `app/`)
+and replace its contents:
+
+```kotlin
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android)      apply false
+    alias(libs.plugins.kotlin.compose)      apply false
+    alias(libs.plugins.hilt)                apply false
+    alias(libs.plugins.ksp)                 apply false
+    alias(libs.plugins.ktlint)
+    alias(libs.plugins.detekt)
+}
+```
+
+---
+
+### A.5 Configure App `build.gradle.kts`
+
+Open `app/build.gradle.kts` and replace its contents:
+
+```kotlin
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.ktlint)
+}
+
+android {
+    namespace = "com.agarthavision"
+    compileSdk = 36
+
+    defaultConfig {
+        applicationId = "com.agarthavision"
+        minSdk = 26
+        targetSdk = 36
+        versionCode = 1
+        versionName = "0.1.0-mvp"
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField("String", "SUPABASE_URL",       "\"${project.findProperty("SUPABASE_URL_DEV") ?: ""}\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"${project.findProperty("SUPABASE_ANON_KEY_DEV") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"${project.findProperty("ROBOFLOW_API_KEY") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"${project.findProperty("ROBOFLOW_PROJECT") ?: ""}\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "${project.findProperty("ROBOFLOW_VERSION") ?: 1}")
+        }
+        release {
+            isMinifyEnabled = false
+            buildConfigField("String", "SUPABASE_URL",       "\"${project.findProperty("SUPABASE_URL_PROD") ?: ""}\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY",  "\"${project.findProperty("SUPABASE_ANON_KEY_PROD") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_API_KEY",   "\"${project.findProperty("ROBOFLOW_API_KEY") ?: ""}\"")
+            buildConfigField("String", "ROBOFLOW_PROJECT",   "\"${project.findProperty("ROBOFLOW_PROJECT") ?: ""}\"")
+            buildConfigField("Integer","ROBOFLOW_VERSION",   "${project.findProperty("ROBOFLOW_VERSION") ?: 1}")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+    }
+
+    kotlinOptions {
+        jvmTarget = "21"
+    }
+
+    ksp {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
+dependencies {
+    // Compose BOM
+    val composeBom = platform(libs.compose.bom)
+    implementation(composeBom)
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.tooling.preview)
+    debugImplementation(libs.compose.tooling)
+
+    // KomoUI
+    implementation(libs.komoui)
+
+    // Hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
+
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    // Network
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
+
+    // CameraX
+    implementation(libs.camerax.core)
+    implementation(libs.camerax.camera2)
+    implementation(libs.camerax.lifecycle)
+    implementation(libs.camerax.view)
+
+    // Background + Async
+    implementation(libs.workmanager)
+    implementation(libs.coroutines.core)
+    implementation(libs.coroutines.android)
+
+    // Navigation + Lifecycle
+    implementation(libs.navigation.compose)
+    implementation(libs.lifecycle.viewmodel)
+    implementation(libs.lifecycle.runtime)
+
+    // DataStore
+    implementation(libs.datastore)
+
+    // Image loading
+    implementation(libs.coil)
+
+    // Testing
+    testImplementation(libs.junit)
+    testImplementation(libs.coroutines.test)
+    androidTestImplementation(composeBom)
+    androidTestImplementation(libs.compose.test)
+}
+```
+
+---
+
+### A.6 Configure `gradle.properties`
+
+Open `gradle.properties` in the project root and ensure these lines are present:
+
+```properties
+org.gradle.jvmargs=-Xmx3072M -Dfile.encoding=UTF-8
+org.gradle.configuration-cache=true
+org.gradle.caching=true
+android.useAndroidX=true
+kotlin.code.style=official
+```
+
+---
+
+### A.7 Sync and Verify Build
+
+1. In Android Studio, click **Sync Now** (banner at the top after editing Gradle files).
+2. Wait for sync to complete. Fix any version conflicts that appear.
+3. Click ▶ to build and run. You should see the default Compose screen.
+
+If sync fails, the most common issues are:
+- **AGP version mismatch** — check that `agp` in the version catalog matches what
+  Android Studio supports. You may need to update it to the version AS bundled.
+- **KSP version must match Kotlin** — `ksp = "2.2.10-RC-2.0.2"` pairs with
+  `kotlin = "2.2.10-RC"`. If your Kotlin differs, update KSP accordingly.
+- **JDK mismatch** — `Settings` → `Build` → `Gradle` → Gradle JDK must be 21.
+
+> **Important:** Don't spend time debugging version conflicts alone. If sync
+> fails after 15 minutes, post the error in the team chat.
+
+---
+
+### A.8 Create the Package Structure
+
+Android Studio generated a flat `com.agarthavision` package with `MainActivity.kt`
+and a default theme. Now create the full package structure.
+
+In the Project view, right-click `com.agarthavision` under `app/src/main/java/`
+and create these packages:
+
+```
+com.agarthavision/
+├── core/
+│   ├── di/
+│   ├── network/
+│   ├── database/
+│   ├── sync/
+│   ├── location/
+│   ├── connectivity/
+│   ├── datastore/
+│   └── util/
+├── domain/
+│   ├── model/
+│   ├── repository/
+│   └── usecase/
+│       ├── capture/
+│       ├── inference/
+│       ├── validation/
+│       └── reports/
+├── data/
+│   ├── local/
+│   │   ├── entity/
+│   │   ├── dao/
+│   │   └── mapper/
+│   ├── remote/
+│   │   ├── api/
+│   │   ├── dto/
+│   │   └── mapper/
+│   └── repository/
+├── ui/
+│   ├── theme/
+│   ├── navigation/
+│   ├── components/
+│   ├── capture/
+│   ├── queue/
+│   ├── validate/
+│   ├── reports/
+│   └── settings/
+└── worker/
+```
+
+> **Tip:** Empty packages disappear in Android Studio's "Android" view. Switch to
+> **Project** view to see them. Or add a placeholder file in each — these can be
+> deleted once real files exist.
+
+---
+
+### A.9 Create the Application Class
+
+Create `com/agarthavision/AgarthaVisionApp.kt`:
+
+```kotlin
+package com.agarthavision
+
+import android.app.Application
+import dagger.hilt.android.HiltAndroidApp
+
+@HiltAndroidApp
+class AgarthaVisionApp : Application()
+```
+
+Register it in `AndroidManifest.xml` — add the `android:name` attribute:
+
+```xml
+<application
+    android:name=".AgarthaVisionApp"
+    ...>
+```
+
+---
+
+### A.10 Update MainActivity for Hilt
+
+Open `MainActivity.kt` and add `@AndroidEntryPoint`:
+
+```kotlin
+package com.agarthavision
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.material3.Text
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            // KomoUI theme goes here once the design system is set up.
+            // For now the default Material theme is fine.
+            Text("AgarthaVision")
+        }
+    }
+}
+```
+
+---
+
+### A.11 Verify the Scaffold
+
+Build and run again. The app should launch showing "AgarthaVision". This confirms:
+- Hilt is wired correctly (`@HiltAndroidApp` + `@AndroidEntryPoint`)
+- The version catalog resolves all dependencies
+- KomoUI is on the classpath (imported but not yet used)
+- Room, Retrofit, CameraX, WorkManager are all available
+
+---
+
+### A.12 Initialize Git and Push to GitHub
+
+Your project directory already has a `.git` folder from Android Studio. Now
+connect it to the remote repository.
+
+#### Create `.gitignore`
+
+Android Studio generates one, but verify it includes at least:
+
+```gitignore
+# Gradle
+.gradle/
+build/
+local.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/settings.json
+
+# Android
+app/release/
+*.apk
+*.aab
+
+# Bun / Node
+node_modules/
+bun.lockb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+*.keystore
+
+# Local TDD tests (from the TDD skill)
+.local-tests/
+```
+
+#### Push
+
+```bash
+cd /path/to/AgarthaVision
+
+git add .
+git commit -m "chore(core): initial project scaffold with KomoUI 0.3.0, Hilt, Room, CameraX"
+
+git remote add origin https://github.com/Joryuoo/AgarthaVision.git
+git branch -M main
+git push -u origin main
+```
+
+> **If the GitHub repo already has a README or LICENSE**, use:
+> `git pull origin main --rebase` before pushing.
+
+---
+
+### A.13 Set Up Bun (Task Runner + Git Hooks)
+
+Still in the project root:
+
+```bash
+bun init -y
+
+bun add -d husky @commitlint/cli @commitlint/config-conventional lint-staged
+```
+
+Create `package.json` (replace what `bun init` generated):
+
+```json
+{
+  "name": "agarthavision",
+  "private": true,
+  "scripts": {
+    "build": "./gradlew assembleDebug",
+    "build:release": "./gradlew assembleRelease",
+    "install:device": "./gradlew installDebug",
+    "test": "./gradlew testDebugUnitTest",
+    "test:all": "./gradlew test",
+    "lint": "./gradlew ktlintCheck detekt",
+    "lint:fix": "./gradlew ktlintFormat",
+    "clean": "./gradlew clean",
+    "sync": "./gradlew --refresh-dependencies",
+    "emulator": "emulator -avd AgarthaVision_Test",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "**/*.kt": [
+      "./gradlew ktlintFormat",
+      "git add"
+    ]
+  }
+}
+```
+
+Set up git hooks:
+
+```bash
+bunx husky init
+```
+
+Create `.husky/pre-commit`:
+
+```bash
+#!/usr/bin/env sh
+bunx lint-staged
+```
+
+Create `.husky/commit-msg`:
+
+```bash
+#!/usr/bin/env sh
+bunx --no-install commitlint --edit "$1"
+```
+
+Create `commitlint.config.js`:
+
+```js
+export default {
+  extends: ["@commitlint/config-conventional"],
+  rules: {
+    "scope-enum": [2, "always", [
+      "capture",
+      "inference",
+      "dashboard",
+      "reports",
+      "theme",
+      "core",
+      "data",
+      "ci",
+      "docs",
+    ]],
+  },
+};
+```
+
+Commit and push:
+
+```bash
+git add .
+git commit -m "ci(core): add Bun task runner, Husky hooks, commitlint"
+git push
+```
+
+---
+
+### A.14 Set Up GitHub Branch Protection
+
+Go to https://github.com/Joryuoo/AgarthaVision/settings/branches and create rules:
+
+**`main` branch:**
+- Require pull request before merging
+- Require 2 approvals
+- Require status checks to pass (add CI later)
+- No force push
+
+**`develop` branch** (create it first):
+
+```bash
+git checkout -b develop
+git push -u origin develop
+```
+
+Then in GitHub settings:
+- Require pull request before merging
+- Require 1 approval
+- Require status checks to pass
+- No force push
+
+---
+
+### A.15 Initialize the Supabase Project
+
+No CLI or Docker needed. Everything is done through the Supabase web dashboard.
+
+#### 1. Create projects
+
+Go to [supabase.com](https://supabase.com) and create two projects:
+
+| Project | Purpose | Region |
+|---------|---------|--------|
+| `agarthavision-dev` | Development / testing | ap-southeast-1 (Singapore) if available |
+| `agarthavision-prod` | Demo / production | Same |
+
+Free tier covers both. **DMKuZu** owns these projects.
+
+#### 2. Run the Phase 1 schema
+
+In each project: **SQL Editor** → paste the full schema from
+[04_CLOUD_BACKEND_PLAN.md §4](04_CLOUD_BACKEND_PLAN.md) → **Run**.
+
+Also commit the same SQL to the repo so schema changes are tracked in git:
+
+```
+supabase/migrations/0001_init.sql   ← paste the schema here
+```
+
+Future schema changes: write a new `0002_*.sql` file, commit it, and run it
+manually in the dashboard SQL editor. This keeps the schema change in git
+without requiring the CLI.
+
+#### 3. Copy credentials into `local.properties`
+
+In each Supabase project: **Settings → API** → copy **Project URL** and **anon key**.
+
+
+Add to `local.properties` (see §B.6 below for the full format):
+
+```properties
+SUPABASE_URL_DEV=https://<dev-ref>.supabase.co
+SUPABASE_ANON_KEY_DEV=<dev anon key>
+SUPABASE_URL_PROD=https://<prod-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=<prod anon key>
+```
+
+#### 4. Provision test accounts
+
+No sign-up flow exists in the MVP. Go to **Authentication → Users → Invite user** in the
+dashboard and create one account per team member. Share credentials over the team chat.
+
+---
+
+### A.16 Create an Emulator (optional)
+
+Through the terminal:
+
+```bash
+avdmanager create avd \
+  --name "AgarthaVision_Test" \
+  --package "system-images;android-36;google_apis;x86_64" \
+  --device "pixel_6"
+
+emulator -avd AgarthaVision_Test
+```
+
+Or through Android Studio: `Tools` → `Device Manager` → `Create Virtual Device`.
+
+---
+
+## Phase B — Team Onboarding (Every Team Member)
+
+Once the project is on GitHub, every other team member follows these steps.
+
+---
+
+### B.1 Prerequisites
+
+Install the same prerequisites as Phase A:
+- **JDK 21** (see A.1)
+- **Bun** (see A.1)
+- **Android SDK** (see B.2 below)
+
+### B.2 Android SDK
+
+**If you have Android Studio:** Open it → `Settings` → `Languages & Frameworks`
+→ `Android SDK` → install **Android 36 (API 36)** and **Build-Tools 36.0.0**.
+Confirm `ANDROID_HOME` points to the SDK location.
+
+**If you don't have Android Studio:** Install the command-line tools standalone:
+
+```bash
+# macOS
+brew install --cask android-commandlinetools
+
+# Linux / Windows — download from:
+# https://developer.android.com/studio#command-line-tools-only
+```
+
+Then:
+
+```bash
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH
+
+sdkmanager --licenses
+sdkmanager "platforms;android-36" \
+           "build-tools;36.0.0" \
+           "platform-tools" \
+           "system-images;android-36;google_apis;x86_64" \
+           "emulator"
+```
+
+Add `ANDROID_HOME` to your shell profile permanently.
+
+---
+
+### B.3 Clone and Build
+
+```bash
+git clone https://github.com/Joryuoo/AgarthaVision.git
+cd AgarthaVision
+bun install
+bun run build
+```
+
+If `bun run build` produces `app/build/outputs/apk/debug/app-debug.apk`, you're set.
+
+---
+
+### B.4 Choose Your IDE
+
+#### Option A — IntelliJ IDEA (Recommended)
+
+1. Download from https://www.jetbrains.com/idea/download/ (Community is free).
+2. Install the **Android** plugin: `Settings` → `Plugins` → search "Android".
+3. Configure SDK: `Settings` → `Languages & Frameworks` → `Android SDK` → set to `ANDROID_HOME`.
+4. Set Gradle JDK: `Settings` → `Build` → `Gradle` → Gradle JDK → **21**.
+5. Open: `File` → `Open` → select the `AgarthaVision` folder.
+6. Run config: `Run` → `Edit Configurations` → `+` → `Android App` → Module: `app`.
+
+#### Option B — VSCode (Lightweight)
+
+Install extensions:
+
+| Extension                | Publisher       | Purpose                       |
+|--------------------------|-----------------|-------------------------------|
+| Kotlin                   | fwcd            | Syntax, completion, debugging |
+| Android iOS Emulator     | nickmitchell    | Launch emulators              |
+| Gradle for Java          | Microsoft       | Gradle task runner            |
+
+Create `.vscode/settings.json`:
+
+```json
+{
+  "java.jdt.ls.java.home": "/path/to/jdk-21",
+  "android.sdk.path": "/path/to/Android/Sdk",
+  "kotlin.languageServer.enabled": true
+}
+```
+
+Build from terminal: `bun run build` and `bun run install:device`.
+
+#### Option C — Android Studio
+
+Full Compose Preview, Layout Inspector, device profiler. For constrained
+machines, reduce IDE heap to 2048 MB and use offline Gradle mode when
+not adding new dependencies.
+
+---
+
+### B.5 First Build Verification
+
+Every team member should pass all three:
+
+```bash
+bun run build    # Should produce the debug APK
+bun run test     # Should pass (even with 0 tests)
+bun run lint     # Should pass
+```
+
+If any fail:
+
+1. `java -version` → must be 21
+2. `echo $ANDROID_HOME` → must point to SDK with API 36
+3. `bun --version` → must be installed
+4. Gradle sync in IDE → must complete without errors
+
+---
+
+### B.6 Secrets and Environment Variables
+
+The app reads Supabase + Inference credentials from `BuildConfig` fields populated
+at build time. Secrets must never be committed — they live in `local.properties`
+(gitignored). A template `local.properties.example` lives in the repo root.
+
+Go to our SoftEng Files google drive and copy paste the contents in env_variables.txt and paste it to `local.properties` in the project root:
+
+```properties
+# Development Supabase project (Dashboard → Settings → API)
+SUPABASE_URL_DEV=https://<dev-project-ref>.supabase.co
+SUPABASE_ANON_KEY_DEV=sb_publishable_<dev-anon-key>
+
+# Production Supabase project (Dashboard → Settings → API)
+SUPABASE_URL_PROD=https://<prod-project-ref>.supabase.co
+SUPABASE_ANON_KEY_PROD=sb_publishable_<prod-anon-key>
+
+# Inference container (self-hosted FastAPI on a rented GPU droplet)
+# DMKuZu provisions the droplet and shares the IP + Bearer key over team chat.
+INFERENCE_URL_DEV=http://<droplet-ip>:8000
+INFERENCE_URL_PROD=http://<droplet-ip>:8000
+INFERENCE_API_KEY=<shared-secret>
+```
+
+Gradle's `project.findProperty(...)` reads these and feeds them into `BuildConfig`.
+If a property is missing, the field defaults to an empty string and the app's
+network calls will fail with a clear "Missing API key" error at runtime — fail
+loudly, not silently.
+
+`local.properties` is already in `.gitignore`. Confirm with:
+
+```bash
+grep "local.properties" .gitignore
+```
+
+For CI builds, pass the same properties via `-PSUPABASE_ANON_KEY_PROD=...` on the
+Gradle command line. Do **not** commit a `local.properties.example` with real keys.
+
+---
+
+### B.7 Recommended IDE Plugins (Optional)
+
+| Plugin / Extension        | Available In       | Why                                         |
+|---------------------------|--------------------|---------------------------------------------|
+| Rainbow Brackets          | IntelliJ / VSCode  | Easier nesting readability in Compose       |
+| GitLens                   | VSCode             | Inline git blame, PR context                |
+| TODO Highlight            | Both               | Track TODO, FIXME, HACK consistently        |
+| Markdown Preview Enhanced | VSCode             | Preview plan docs                           |
+| Database Navigator        | IntelliJ           | Inspect Room SQLite during debugging        |
+| HTTP Client               | IntelliJ Ultimate  | Test backend API endpoints inline           |

@@ -1,0 +1,220 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 2,
+    "identityHash": "f2ff32bca3377b12e18a25757b2497ec",
+    "entities": [
+      {
+        "tableName": "samples",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `image_path` TEXT NOT NULL, `gps_latitude` REAL, `gps_longitude` REAL, `gps_accuracy` REAL, `status` TEXT NOT NULL, PRIMARY KEY(`sample_id`))",
+        "fields": [
+          {
+            "fieldPath": "sampleId",
+            "columnName": "sample_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imagePath",
+            "columnName": "image_path",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gpsLatitude",
+            "columnName": "gps_latitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gpsLongitude",
+            "columnName": "gps_longitude",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "gpsAccuracy",
+            "columnName": "gps_accuracy",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "sample_id"
+          ]
+        }
+      },
+      {
+        "tableName": "sessions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `notes` TEXT, PRIMARY KEY(`session_id`))",
+        "fields": [
+          {
+            "fieldPath": "sessionId",
+            "columnName": "session_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startedAt",
+            "columnName": "started_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endedAt",
+            "columnName": "ended_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "session_id"
+          ]
+        }
+      },
+      {
+        "tableName": "detections",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL NOT NULL, `bbox_y` REAL NOT NULL, `bbox_w` REAL NOT NULL, `bbox_h` REAL NOT NULL, `verified_by_user` INTEGER NOT NULL, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "detectionId",
+            "columnName": "detection_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sampleId",
+            "columnName": "sample_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "classLabel",
+            "columnName": "class_label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "confidence",
+            "columnName": "confidence",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bboxX",
+            "columnName": "bbox_x",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bboxY",
+            "columnName": "bbox_y",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bboxW",
+            "columnName": "bbox_w",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bboxH",
+            "columnName": "bbox_h",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verifiedByUser",
+            "columnName": "verified_by_user",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "detection_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_detections_sample_id",
+            "unique": false,
+            "columnNames": [
+              "sample_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_detections_sample_id` ON `${TABLE_NAME}` (`sample_id`)"
+          },
+          {
+            "name": "index_detections_class_label",
+            "unique": false,
+            "columnNames": [
+              "class_label"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_detections_class_label` ON `${TABLE_NAME}` (`class_label`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "samples",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "sample_id"
+            ],
+            "referencedColumns": [
+              "sample_id"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f2ff32bca3377b12e18a25757b2497ec')"
+    ]
+  }
+}
