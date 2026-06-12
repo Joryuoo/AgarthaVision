@@ -6,14 +6,13 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.animation.core.EaseInOut
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
+import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +33,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -60,12 +60,8 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.vector.PathParser
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -77,55 +73,20 @@ import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonSize
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
+import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaSpacing
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
-import com.komoui.components.Badge as KomoBadge
-import com.komoui.components.BadgeVariant
-import com.komoui.components.Button as KomoButton
-import com.komoui.components.ButtonSize
-import com.komoui.components.ButtonVariant
-import com.komoui.components.Input
-import com.komoui.components.sooner.SonnerAction
-import com.komoui.components.sooner.SonnerEvent
-import com.komoui.components.sooner.SonnerHost
-import com.komoui.components.sooner.SonnerVariant
-import com.komoui.components.sooner.showSonner
-import com.komoui.themes.styles
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-
-@Composable
-private fun SvgIcon(
-    pathData: String,
-    modifier: Modifier = Modifier,
-    color: Color = Color.White,
-    strokeWidth: Float = 1.6f,
-    drawExtras: (DrawScope.(Color) -> Unit)? = null,
-) {
-    val path = remember(pathData) {
-        PathParser().parsePathString(pathData).toPath()
-    }
-    Canvas(modifier = modifier) {
-        val scale = size.width / 24f // assumes 24x24 viewBox
-        scale(scale, scale, pivot = Offset.Zero) {
-            if (pathData.isNotEmpty()) {
-                drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round,
-                    ),
-                )
-            }
-            drawExtras?.invoke(this, color)
-        }
-    }
-}
 
 @Composable
 private fun PulsingDot() {
@@ -163,7 +124,7 @@ private fun IconButtonGlass(
     pathData: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
-    drawExtras: (DrawScope.(Color) -> Unit)? = null,
+    drawExtras: (DrawScope.() -> Unit)? = null,
 ) {
     Box(
         modifier = Modifier
@@ -196,7 +157,7 @@ fun CaptureScreen(
     onNavigateBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val sonnerHostState = remember { SnackbarHostState() }
+    val toastState = rememberAgarthaToastState()
     val context = LocalContext.current
     val view = LocalView.current
     val detectionFallback = stringResource(R.string.capture_detection_fallback)
@@ -264,7 +225,7 @@ fun CaptureScreen(
             .distinctUntilChanged()
             .collect { capturedAt ->
                 if (capturedAt != null) {
-                    // Capture the frame NOW — before the coroutine suspends on showSonner
+                    // Capture the frame NOW — before the coroutine suspends on the toast
                     val frameAtToastTime =
                         viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
                     if (frameAtToastTime.source != FrameSource.MODEL) return@collect
@@ -272,25 +233,15 @@ fun CaptureScreen(
                         frameAtToastTime.predictions.firstOrNull()?.classLabel ?: detectionFallback
                     val confidence = frameAtToastTime.predictions.firstOrNull()?.confidence ?: 0f
                     launch {
-                        // SonnerAction.execute is NOT called by the library — only performAction()
-                        // is invoked, which surfaces as SnackbarResult.ActionPerformed below.
-                        val result = sonnerHostState.showSonner(
-                            SonnerEvent(
-                                message = detectionMessage.format(
-                                    eggType,
-                                    "%.0f".format(confidence * 100),
-                                ),
-                                action = SonnerAction(
-                                    actionText = detectionView,
-                                    execute = {},
-                                ),
-                                withDismissAction = true,
-                                variant = SonnerVariant.Default,
+                        toastState.show(
+                            message = detectionMessage.format(
+                                eggType,
+                                "%.0f".format(confidence * 100),
                             ),
+                            variant = AgarthaToastVariant.Default,
+                            actionLabel = detectionView,
+                            onAction = { viewModel.onDetectionToastTap(frameAtToastTime) },
                         )
-                        if (result == androidx.compose.material3.SnackbarResult.ActionPerformed) {
-                            viewModel.onDetectionToastTap(frameAtToastTime)
-                        }
                     }
                 }
             }
@@ -299,7 +250,7 @@ fun CaptureScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.styles.background),
+            .background(AppColors.White),
     ) {
         // Base: camera view / permission gate
         if (hasCameraPermission) {
@@ -373,9 +324,9 @@ fun CaptureScreen(
                 Box {
                     IconButtonGlass(
                         "M9 12l2 2 4-4",
-                        drawExtras = { c ->
+                        drawExtras = {
                             drawRoundRect(
-                                c,
+                                Color.White,
                                 Offset(3f, 3f),
                                 Size(18f, 18f),
                                 CornerRadius(2f, 2f),
@@ -494,30 +445,14 @@ fun CaptureScreen(
             }
         }
 
-        // Sonner toast (top-center so it never blocks the bottom chrome)
-        val toastStyles = remember {
-            object : com.komoui.themes.KomoStyles by com.agarthavision.ui.theme.AgarthaLightStyles {
-                override val foreground = Color.White
-                override val mutedForeground = Color.White.copy(alpha = 0.7f)
-            }
-        }
-        com.komoui.themes.KomoTheme(
-            isDarkTheme = false,
-            komoLightColors = toastStyles,
-            komoDarkColors = toastStyles,
-            materialLightColors = MaterialTheme.colorScheme,
-            materialDarkColors = MaterialTheme.colorScheme,
-            komoRadius = com.agarthavision.ui.theme.AgarthaRadius,
-            typography = com.agarthavision.ui.theme.AgarthaTypography,
-        ) {
-            SonnerHost(
-                hostState = sonnerHostState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-            )
-        }
+        // Detection toast (top-center so it never blocks the bottom chrome)
+        AgarthaToastHost(
+            state = toastState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .align(Alignment.TopCenter)
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+        )
     }
 
     val target = state.verificationTarget
@@ -562,21 +497,28 @@ private fun EndSessionConfirmDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            KomoButton(
+            AgarthaButton(
                 onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
-                variant = ButtonVariant.Destructive,
-                size = ButtonSize.Default,
+                variant = AgarthaButtonVariant.Destructive,
+                size = AgarthaButtonSize.Default,
                 enabled = !isBusy && !isBlocked,
-                loading = isBusy,
             ) {
-                Text(stringResource(R.string.capture_end_session_confirm))
+                if (isBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = AppColors.White,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(stringResource(R.string.capture_end_session_confirm))
+                }
             }
         },
         dismissButton = {
-            KomoButton(
+            AgarthaButton(
                 onClick = onDismiss,
-                variant = ButtonVariant.Ghost,
-                size = ButtonSize.Default,
+                variant = AgarthaButtonVariant.Ghost,
+                size = AgarthaButtonSize.Default,
                 enabled = !isBusy,
             ) {
                 Text(stringResource(R.string.verify_cancel))
@@ -592,33 +534,41 @@ private fun EndSessionConfirmDialog(
                             blockedCount,
                             blockedCount,
                         ),
-                        color = MaterialTheme.styles.mutedForeground,
+                        color = AppColors.Gray500,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 } else {
                     Text(
                         text = stringResource(R.string.capture_end_session_body),
-                        color = MaterialTheme.styles.mutedForeground,
+                        color = AppColors.Gray500,
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
                         text = stringResource(R.string.capture_end_session_notes_label),
-                        color = MaterialTheme.styles.foreground,
+                        color = AppColors.Gray900,
                         style = MaterialTheme.typography.labelLarge,
                     )
-                    Input(
+                    OutlinedTextField(
                         value = notes,
                         onValueChange = { notes = it },
-                        placeholder = stringResource(R.string.capture_end_session_notes_placeholder),
+                        placeholder = {
+                            Text(stringResource(R.string.capture_end_session_notes_placeholder))
+                        },
                         singleLine = false,
                         enabled = !isBusy,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = AppColors.Blue,
+                            unfocusedBorderColor = AppColors.Gray200,
+                        ),
+                        shape = RoundedCornerShape(12.dp),
                     )
                 }
             }
         },
-        containerColor = MaterialTheme.styles.popover,
-        titleContentColor = MaterialTheme.styles.foreground,
-        textContentColor = MaterialTheme.styles.foreground,
+        containerColor = AppColors.White,
+        titleContentColor = AppColors.Gray900,
+        textContentColor = AppColors.Gray900,
     )
 }
 
@@ -627,19 +577,19 @@ private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.styles.background)
+            .background(AppColors.White)
             .padding(24.dp),
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = stringResource(R.string.capture_permission_required),
-                color = MaterialTheme.styles.foreground,
+                color = AppColors.Gray900,
                 style = MaterialTheme.typography.bodyMedium,
             )
-            KomoButton(
+            AgarthaButton(
                 onClick = onRequestPermission,
-                size = ButtonSize.Default,
+                size = AgarthaButtonSize.Default,
                 modifier = Modifier.padding(top = 12.dp),
             ) {
                 Text(stringResource(R.string.capture_allow_camera))

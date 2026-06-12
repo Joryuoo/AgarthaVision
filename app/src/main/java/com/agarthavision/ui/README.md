@@ -1,7 +1,3 @@
-
-## `ui/README.md`
-
-```markdown
 # UI Package
 
 ## Purpose
@@ -12,7 +8,7 @@ This includes Jetpack Compose screens, ViewModels, navigation, theme setup, and 
 
 ## Responsibilities
 
-The `ui` package may contain:
+The `ui` package contains:
 
 - Compose screens
 - ViewModels
@@ -23,15 +19,18 @@ The `ui` package may contain:
 - Reusable custom composables
 - Feature-specific UI folders
 
-## Planned Subpackages
+## Current Subpackages
 
 ```text
 ui/
-├── theme/           # AgarthaLightColors, AgarthaRadius, AgarthaTypography, AgarthaVisionTheme
-├── navigation/      # AppNavHost, route definitions, navigation graph
-├── components/      # Shared custom composables
-├── capture/         # CaptureScreen, CaptureViewModel
-├── queue/           # QueueScreen, QueueViewModel
-├── validate/        # ValidateScreen, ValidateViewModel
-├── reports/         # ReportsScreen, ReportsViewModel, AdminDashboard
-└── settings/        # SettingsScreen, SettingsViewModel
+├── capture/         # Capture screen, ViewModel, and connection-loss banner
+├── components/      # Shared Agartha components and microscopy primitives
+├── dashboard/       # Dashboard screen and ViewModel
+├── login/           # Login screen and ViewModel
+├── navigation/      # Navigation graph and routes
+├── records/         # Records, session detail, sample detail, and reports UI
+├── sessions/        # Session picker/list screen and ViewModel
+├── settings/        # Settings placeholder
+├── theme/           # AppColors, typography, spacing, and MaterialTheme setup
+└── verify/          # Verification queue, verification sheet, and manual sheet
+```

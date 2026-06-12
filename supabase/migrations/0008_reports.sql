@@ -3,13 +3,12 @@
 -- Each row records one report generation event for a session. Multiple reports
 -- per session are allowed (ordered by generated_at descending). The CSV file
 -- itself stays local on the device; only this metadata + aggregate stats are
--- mirrored here ("row-only sync" per the Phase 1 REPORTS rollout in
--- mutable-growing-graham.md).
+-- mirrored here ("row-only sync" per the Phase 1 REPORTS rollout).
 --
 -- The `session` report_type is the only value supported in Phase 1.
 -- `administrative` is reserved for the Phase 2 cross-session report variant.
 --
--- See docs/ERD.md (Module 3.1) and docs/03_MOBILE_APP_PLAN.md.
+-- See schema.ts, CONTEXT.md, and TODO.md.
 
 create table public.reports (
     id                   uuid primary key default uuid_generate_v4(),

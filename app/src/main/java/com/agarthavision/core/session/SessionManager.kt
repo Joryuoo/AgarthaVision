@@ -21,7 +21,7 @@ import javax.inject.Singleton
  * an existing active session from the picker. [stopSession] sets `ended_at`
  * locally and remotely.
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.1.
+ * See CONTEXT.md and TODO.md
  */
 @Singleton
 class SessionManager @Inject constructor(

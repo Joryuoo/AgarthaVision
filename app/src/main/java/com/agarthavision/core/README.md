@@ -8,27 +8,25 @@ This package should not contain feature-specific UI or business logic. It should
 
 ## Responsibilities
 
-The `core` package may contain:
+The `core` package contains:
 
-- Dependency injection modules
-- Database setup
-- Network setup
-- Camera service wrappers
-- Sync queue utilities
-- Location provider wrappers
+- CameraX wrappers and frame sampling
 - Connectivity monitoring
-- DataStore preference setup
-- General utility functions
+- Room database setup
+- Hilt dependency injection modules
+- Location provider wrappers
+- Session state management
+- Shared utility functions
 
-## Planned Subpackages
+## Current Subpackages
 
 ```text
 core/
-├── di/              # Hilt modules
-├── network/         # Retrofit, OkHttp, API base configuration
-├── database/        # Room database class and migrations
-├── sync/            # SyncQueueManager and sync helpers
-├── location/        # GPS/location provider wrappers
+├── camera/          # CameraManager and FrameSampler
 ├── connectivity/    # NetworkMonitor
-├── datastore/       # DataStore preference wrapper
-└── util/            # Formatters, UUID generator, extensions
+├── database/        # AgarthaDatabase
+├── di/              # Hilt modules
+├── location/        # FusedLocationProvider
+├── session/         # SessionManager and SessionState
+└── util/            # DeviceIdProvider, EpgCalculator, image helpers
+```

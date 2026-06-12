@@ -2,7 +2,7 @@ package com.agarthavision.ui.sessions
 
 import android.content.Intent
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
+import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,12 +24,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.scale
-import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -66,36 +62,6 @@ private val Red = Color(0xFFDC2626)
 private val RedTint = Color(0xFFFEE2E2)
 private val Green = Color(0xFF16A34A)
 private val GreenTint = Color(0xFFDCFCE7)
-
-@Composable
-fun SvgIcon(
-    pathData: String,
-    modifier: Modifier = Modifier,
-    color: Color = LocalContentColor.current,
-    strokeWidth: Float = 1.6f,
-    drawExtras: (DrawScope.() -> Unit)? = null
-) {
-    val path = remember(pathData) {
-        PathParser().parsePathString(pathData).toPath()
-    }
-    Canvas(modifier = modifier) {
-        val scale = size.width / 24f // assuming 24x24 viewBox
-        scale(scale, scale, pivot = Offset.Zero) {
-            if (pathData.isNotEmpty()) {
-                drawPath(
-                    path = path,
-                    color = color,
-                    style = Stroke(
-                        width = strokeWidth,
-                        cap = StrokeCap.Round,
-                        join = StrokeJoin.Round
-                    )
-                )
-            }
-            drawExtras?.invoke(this)
-        }
-    }
-}
 
 @Composable
 fun SessionsScreen(

@@ -23,7 +23,7 @@ import javax.inject.Inject
  *
  * Tracks both the current frame under review and per-detection answers within
  * that frame. The verdict model (Q1→Q2→Q3 branching + frame-level Q4) is
- * documented in [ADR-004](../../../../../../../../docs/adr/004-verification-as-hitl-correction.md).
+ * documented in the ADR-004 summary in CONTEXT.md.
  *
  * @property isVisible whether the sheet is currently mounted.
  * @property frameIndexInQueue 1-based position of [frame] in `FlaggedFrameStore`.
@@ -79,7 +79,7 @@ sealed interface VerificationEvent {
  * The store collector (`init`) keeps `queueSize` + `frameIndexInQueue` in sync
  * as frames are added/removed by other surfaces (Capture toast/queue, delete).
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.6 + ADR-004.
+ * See CONTEXT.md and TODO.md
  */
 @Suppress("TooManyFunctions")
 @HiltViewModel

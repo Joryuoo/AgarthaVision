@@ -5,7 +5,6 @@ package com.agarthavision.ui.verify
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -14,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.agarthavision.data.remote.dto.PredictionDto
-import com.komoui.themes.styles
+import com.agarthavision.ui.theme.AppColors
 
 @Composable
 fun FrameWithBoxes(
@@ -29,8 +28,8 @@ fun FrameWithBoxes(
     val sourceW = inferenceImageWidth?.toFloat()?.takeIf { it > 0f }
     val sourceH = inferenceImageHeight?.toFloat()?.takeIf { it > 0f }
     // Capture tokens at composition time — DrawScope inside Canvas is not @Composable.
-    val activeBoxColor = MaterialTheme.styles.destructive   // AlertCoral
-    val otherBoxColor = MaterialTheme.styles.primary        // ClinicalBlue
+    val activeBoxColor = AppColors.Red    // highlighted detection
+    val otherBoxColor = AppColors.Blue    // other detections
     Box(modifier = modifier) {
         AsyncImage(
             model = jpegBytes,

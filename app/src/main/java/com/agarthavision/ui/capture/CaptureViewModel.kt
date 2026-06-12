@@ -33,7 +33,7 @@ import javax.inject.Inject
  * - [flaggedFrameStore].state → mirrors the queue into `flaggedFrames`.
  * - [networkMonitor].status → on `Disconnected`, pauses inference and latches
  *   `isConnectionLost = true`. The latch is cleared **only** by a successful
- *   [resumeConnection] probe (per docs/03_MOBILE_APP_PLAN.md §1.9).
+ *   [resumeConnection] probe (per CONTEXT.md and TODO.md).
  *
  * **Verification entry points:** [onDetectionToastTap] (single-frame, from
  * Sonner) opens the verification sheet directly. The queue lives on its own
@@ -41,7 +41,7 @@ import javax.inject.Inject
  * navigates there via a callback. Inference is paused while the sheet is
  * mounted — sheets no longer end the session.
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.1, §1.5, §1.6, §1.9.
+ * See CONTEXT.md and TODO.md.
  */
 @HiltViewModel
 class CaptureViewModel @Inject constructor(

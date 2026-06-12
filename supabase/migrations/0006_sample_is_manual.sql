@@ -4,8 +4,7 @@
 -- button on CaptureScreen, without AI inference. Counted in EPG; the detection
 -- row uses null bbox columns (see 0007). Per ADR-005.
 --
--- See docs/adr/005-session-as-smear-manual-capture-and-repeat-flag.md and
--- docs/04_CLOUD_BACKEND_PLAN.md §4.1.4.
+-- See CONTEXT.md and schema.ts.
 --
 -- NOTE: samples.is_repeat is intentionally NOT added to Supabase — it's a
 -- Room-only workflow flag (the medtech's "I already counted this one" marker

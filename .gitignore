@@ -32,7 +32,8 @@ Thumbs.db
 *.iml
 .vscode/settings.json
 
-.venv
-roboflow.py
-
 temp-backup/
+
+.kotlin
+
+.idea

@@ -15,7 +15,7 @@ import javax.inject.Singleton
 /**
  * Provides the app-wide [SupabaseClient] with Auth, Postgrest, and Storage plugins
  * installed. URL + anon key are baked into [BuildConfig] at build time from
- * `local.properties`. See docs/04_CLOUD_BACKEND_PLAN.md §6 and ADR-002.
+ * `local.properties`. See CONTEXT.md and schema.ts
  */
 @Module
 @InstallIn(SingletonComponent::class)

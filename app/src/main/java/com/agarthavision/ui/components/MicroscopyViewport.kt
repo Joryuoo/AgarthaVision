@@ -10,20 +10,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import com.agarthavision.core.camera.CameraManager
-import com.komoui.themes.styles
+import com.agarthavision.ui.theme.AppColors
 
 /**
  * Camera preview surface for the capture flow.
  *
  * Binds [CameraManager.bindAnalysis] to the lifecycle and routes frames into the
  * supplied [analyzer] (typically the `FrameSampler` injected into the
- * `CaptureViewModel`). See docs/03_MOBILE_APP_PLAN.md §1.2 and §1.3.
+ * `CaptureViewModel`). See CONTEXT.md and TODO.md
  */
 @Composable
 fun MicroscopyViewport(
@@ -57,7 +56,7 @@ fun MicroscopyViewport(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.styles.background),
+            .background(AppColors.White),
     ) {
         AndroidView(
             factory = { previewView },

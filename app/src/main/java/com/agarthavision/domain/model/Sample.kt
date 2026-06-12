@@ -10,7 +10,7 @@ import java.util.UUID
  *
  * Additional fields (`userId`, `verifiedAt`, `storagePath`, `inferenceModelVersion`)
  * may be added in Sprint 1 implementation tracks as the sync flow is built out.
- * See docs/03_MOBILE_APP_PLAN.md §1.10.
+ * See CONTEXT.md and TODO.md
  */
 data class Sample(
     val id: String = UUID.randomUUID().toString(),

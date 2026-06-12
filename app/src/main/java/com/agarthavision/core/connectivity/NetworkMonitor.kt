@@ -23,7 +23,7 @@ import javax.inject.Singleton
  * automatically when the session goes [SessionState.Idle], and [status] resets to
  * [Status.Connected] so the next session starts clean.
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.9.
+ * See CONTEXT.md and TODO.md
  */
 @Singleton
 class NetworkMonitor @Inject constructor(

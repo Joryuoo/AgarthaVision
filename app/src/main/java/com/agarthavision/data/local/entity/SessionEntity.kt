@@ -8,7 +8,7 @@ import androidx.room.PrimaryKey
  * Room entity for a capture session.
  *
  * Mirrors the Supabase `sessions` table. One row per `startSession()` call;
- * `endedAt` is set on `stopSession()`. See docs/03_MOBILE_APP_PLAN.md §1.1.
+ * `endedAt` is set on `stopSession()`. See CONTEXT.md and TODO.md
  */
 @Entity(tableName = "sessions")
 data class SessionEntity(

@@ -14,7 +14,7 @@ import retrofit2.http.POST
  * detections in [InferenceResponseDto] shape. Bearer-token auth is injected
  * by the OkHttp interceptor wired in [com.agarthavision.core.di.InferenceModule].
  *
- * See docs/04_CLOUD_BACKEND_PLAN.md §5 and ADR-003.
+ * See CONTEXT.md and schema.ts
  */
 interface InferenceApi {
     @GET("health")

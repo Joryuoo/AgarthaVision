@@ -1,38 +1,34 @@
-
-```markdown
 # Data Package
 
 ## Purpose
 
-The `data` package contains the implementation details for local storage, remote API communication, data transfer objects, Room entities, DAOs, and repository implementations.
+The `data` package contains implementation details for local storage, remote inference calls, Supabase sync, file storage, and repository implementations.
 
-This layer connects the app to actual data sources such as Room, Retrofit, local files, and the backend API.
+This layer connects the app to actual data sources such as Room, Retrofit, local files, and Supabase.
 
 ## Responsibilities
 
-The `data` package may contain:
+The `data` package contains:
 
 - Room entities
 - Room DAOs
-- Retrofit API interfaces
-- Request and response DTOs
-- Repository implementations
 - Local-to-domain mappers
-- Remote-to-domain mappers
-- File storage handlers
+- Inference API and DTOs
+- Supabase remote data sources
+- Repository implementations
+- Local image/report file storage handlers
 
-## Planned Subpackages
+## Current Subpackages
 
 ```text
 data/
 ├── local/
-│   ├── entity/      # Room entities
 │   ├── dao/         # Room DAO interfaces
-│   └── mapper/      # Entity ↔ Domain mappers
-│
+│   ├── entity/      # Room entities
+│   └── mapper/      # Entity-to-domain mappers
 ├── remote/
-│   ├── api/         # Retrofit APIs: InferenceApi, ReportApi, SyncApi
-│   ├── dto/         # Request/response DTOs
-│   └── mapper/      # DTO ↔ Domain mappers
-│
-└── repository/      # Repository implementations
+│   ├── dto/         # Inference request/response DTOs
+│   └── InferenceApi.kt
+├── repository/      # Repository implementations and local stores
+└── supabase/        # Supabase remote data sources and sync use cases
+```

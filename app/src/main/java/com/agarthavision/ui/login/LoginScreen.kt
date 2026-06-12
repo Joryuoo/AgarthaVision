@@ -26,7 +26,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,11 +52,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.AgarthaToastState
+import com.agarthavision.ui.components.AgarthaToastVariant
+import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaVisionTheme
-import com.komoui.components.sooner.SonnerEvent
-import com.komoui.components.sooner.SonnerHost
-import com.komoui.components.sooner.SonnerVariant
-import com.komoui.components.sooner.showSonner
 
 /**
  * Login route for dashboard-provisioned Supabase accounts.
@@ -68,22 +67,18 @@ fun LoginScreen(
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberAgarthaToastState()
     val loginFailedTitle = stringResource(R.string.login_failed_title)
     val loginFailedGeneric = stringResource(R.string.login_failed_generic)
 
-    LaunchedEffect(viewModel, snackbarHostState) {
+    LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
             when (event) {
                 LoginEvent.NavigateToCapture -> onLoggedIn()
                 is LoginEvent.ShowLoginError -> {
-                    snackbarHostState.showSonner(
-                        SonnerEvent(
-                            message = loginFailedTitle,
-                            subMessage = event.message ?: loginFailedGeneric,
-                            withDismissAction = true,
-                            variant = SonnerVariant.Destructive,
-                        ),
+                    toastState.show(
+                        message = "$loginFailedTitle\n${event.message ?: loginFailedGeneric}",
+                        variant = AgarthaToastVariant.Destructive,
                     )
                 }
             }
@@ -97,7 +92,7 @@ fun LoginScreen(
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
         ),
-        snackbarHostState = snackbarHostState,
+        toastState = toastState,
     )
 }
 
@@ -111,15 +106,15 @@ private data class LoginActions(
 private fun LoginScreenContent(
     state: LoginUiState,
     actions: LoginActions,
-    snackbarHostState: SnackbarHostState,
+    toastState: AgarthaToastState,
     modifier: Modifier = Modifier,
 ) {
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = Color.White,
         snackbarHost = {
-            SonnerHost(
-                hostState = snackbarHostState,
+            AgarthaToastHost(
+                state = toastState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
@@ -378,7 +373,7 @@ private fun LoginScreenContentPreview() {
                 onPasswordChanged = {},
                 onSubmit = {},
             ),
-            snackbarHostState = remember { SnackbarHostState() },
+            toastState = rememberAgarthaToastState(),
         )
     }
 }

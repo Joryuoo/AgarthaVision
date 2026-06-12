@@ -14,6 +14,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,7 +43,6 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.records.AppColors
 import com.agarthavision.ui.components.glassChrome
-import com.komoui.components.Input
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -232,13 +232,20 @@ private fun ManualSheetContent(
                     letterSpacing = 0.8.sp,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                Input(
+                OutlinedTextField(
                     value = state.userNote,
                     onValueChange = actions.onUserNoteChanged,
-                    placeholder = "Add an observation about morphology, color, or staining.",
+                    placeholder = {
+                        Text("Add an observation about morphology, color, or staining.")
+                    },
                     singleLine = false,
                     enabled = !state.isSubmitting,
                     modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = AppColors.Blue,
+                        unfocusedBorderColor = AppColors.Gray200,
+                    ),
+                    shape = RoundedCornerShape(12.dp),
                 )
             }
 

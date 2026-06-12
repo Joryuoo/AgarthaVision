@@ -5,8 +5,7 @@
 -- frame as a species without drawing a box. Offline annotation can fill these in
 -- later if needed (samples.needs_reannotation = true). Per ADR-005.
 --
--- See docs/adr/005-session-as-smear-manual-capture-and-repeat-flag.md and
--- docs/04_CLOUD_BACKEND_PLAN.md §4.1.5.
+-- See CONTEXT.md and schema.ts.
 
 alter table public.detections
     alter column bbox_x drop not null,

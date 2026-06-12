@@ -7,7 +7,7 @@ import java.time.Instant
  * The app-level capture session state. Per ADR-005, an active session = one
  * fecal smear. [isInferenceRunning] toggles when Capture foregrounds/backgrounds
  * or when a sheet/picker/reports overlay opens — paused state keeps the smear
- * alive without burning the inference server. See docs/03_MOBILE_APP_PLAN.md §1.1.
+ * alive without burning the inference server. See CONTEXT.md and TODO.md
  */
 sealed interface SessionState {
     data object Idle : SessionState

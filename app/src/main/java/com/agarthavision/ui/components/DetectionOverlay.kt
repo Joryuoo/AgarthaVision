@@ -9,7 +9,7 @@ import com.agarthavision.ui.theme.AgarthaVisionTheme
 
 // Canvas drawn on top of MicroscopyViewport.
 // Renders bounding circles and species label chips for each detection.
-// See docs/components.md §6.
+// See CONTEXT.md.
 @Composable
 fun DetectionOverlay(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxSize()) {

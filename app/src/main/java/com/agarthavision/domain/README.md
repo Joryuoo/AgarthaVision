@@ -1,5 +1,3 @@
-
-```markdown
 # Domain Package
 
 ## Purpose
@@ -10,23 +8,25 @@ This layer should be pure Kotlin as much as possible. It should not depend direc
 
 ## Responsibilities
 
-The `domain` package may contain:
+The `domain` package contains:
 
-- Domain models
+- Domain models and enums
 - Repository interfaces
 - Use cases
 - Business rules
-- Validation rules
 - App-level workflow logic
 
-## Planned Subpackages
+## Current Subpackages
 
 ```text
 domain/
-├── model/           # Domain models: Sample, Detection, EPGResult, Report, etc.
-├── repository/      # Repository interfaces / contracts
+├── model/           # Domain models and enums
+├── repository/      # Repository interfaces and contracts
 └── usecase/
-    ├── capture/     # CaptureSampleUseCase, TransmitPayloadUseCase
-    ├── inference/   # FetchInferenceResultUseCase
-    ├── validation/  # ApproveSampleUseCase, EditDetectionUseCase, RejectFindingsUseCase
-    └── reports/     # GenerateSessionReportUseCase, FetchDetailedRecordsUseCase
+    ├── auth/        # Session restore and sign-in use cases
+    ├── capture/     # Inference and flagged-frame capture use cases
+    ├── inference/   # Inference error modeling
+    ├── records/     # Records, sample detail, and CSV report use cases
+    ├── reports/     # Session egg-count use cases
+    └── verify/      # Verification and manual-capture submission use cases
+```

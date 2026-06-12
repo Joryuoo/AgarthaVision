@@ -4,8 +4,7 @@
 -- sessions.notes (free-form observations during/after the session). One session
 -- represents one fecal smear per ADR-005.
 --
--- See docs/adr/005-session-as-smear-manual-capture-and-repeat-flag.md and
--- docs/04_CLOUD_BACKEND_PLAN.md §4.1.3.
+-- See CONTEXT.md and schema.ts.
 
 alter table public.sessions
     add column label text;

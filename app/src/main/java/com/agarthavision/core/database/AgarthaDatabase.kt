@@ -14,12 +14,11 @@ import com.agarthavision.data.local.entity.SessionEntity
 /**
  * AgarthaVision Room database.
  *
- * Phase 1 schema covers three entities — mirrors of the Supabase `sessions`,
- * `samples`, and `detections` tables. See docs/03_MOBILE_APP_PLAN.md §1.7 +
- * docs/04_CLOUD_BACKEND_PLAN.md §4.
+ * Phase 1 schema covers Room mirrors of the Supabase `sessions`, `samples`,
+ * `detections`, and `reports` tables. See schema.ts.
  *
- * Version 3 adds ADR-004 verification/sync metadata. There is no production data
- * yet, so a destructive migration is acceptable.
+ * Version 7 adds persisted reports. Local schema history is exported under
+ * `app/schemas/`.
  */
 @Database(
     entities = [

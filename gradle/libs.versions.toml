@@ -2,7 +2,6 @@
 kotlin = "2.2.10"
 agp = "9.2.1"
 compose-bom = "2026.02.01"
-komoui = "0.3.0"
 hilt = "2.59.2"
 room = "2.7.0"
 retrofit = "2.11.0"
@@ -45,9 +44,6 @@ exifinterface = { group = "androidx.exifinterface", name = "exifinterface", vers
 
 # Activity
 activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity" }
-
-# KomoUI
-komoui = { group = "io.github.derangga", name = "komoui", version.ref = "komoui" }
 
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

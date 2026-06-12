@@ -1,176 +1,109 @@
 package com.agarthavision.ui.theme
 
 import androidx.compose.material3.Typography
-import com.agarthavision.R
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.em
+import androidx.compose.ui.text.googlefonts.Font
+import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
+import com.agarthavision.R
 
-// ── Font families ─────────────────────────────────────────────────────────────
-//   geist_regular.ttf        — Geist weight 400 (fonts.google.com)
-//   geist_medium.ttf         — Geist weight 500
-//   jetbrains_mono_regular.ttf — JetBrains Mono weight 400
+// ── Inter font family (Google Fonts) ──────────────────────────────────────────
+// Replaces the retired Geist + JetBrains Mono families. Inter ships tabular
+// figures via `fontFeatureSettings = "tnum"`, so the EPG / mono readouts below
+// no longer need a separate monospaced family.
 
-  val GeistFamily = FontFamily(
-      Font(resId = R.font.geist_regular,  weight = FontWeight.Normal),
-      Font(resId = R.font.geist_medium,   weight = FontWeight.Medium),
-  )
-  val JetBrainsMonoFamily = FontFamily(
-      Font(resId = R.font.jetbrains_mono_regular, weight = FontWeight.Normal),
-  )
+val GoogleFontProvider = GoogleFont.Provider(
+    providerAuthority = "com.google.android.gms.fonts",
+    providerPackage = "com.google.android.gms",
+    certificates = R.array.com_google_android_gms_fonts_certs,
+)
 
-// ── Material3 Typography (8 clinical roles → Material slots) ─────────────────
-// See docs/components.md §3 for the full role ↔ slot mapping and usage rules.
-val AgarthaTypography = Typography(
-    // Hero numerals — EPG "1,284", large stats
-    displayLarge = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 96.sp,
-        lineHeight    = 104.sp,
-        letterSpacing = (-0.04).em,
-    ),
-    displayMedium = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 72.sp,
-        lineHeight    = 80.sp,
-        letterSpacing = (-0.04).em,
-    ),
-    displaySmall = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 56.sp,
-        lineHeight    = 64.sp,
-        letterSpacing = (-0.04).em,
-    ),
+val Inter = GoogleFont("Inter")
 
-    // Screen / section titles
-    headlineLarge = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 32.sp,
-        lineHeight    = 40.sp,
-        letterSpacing = (-0.02).em,
-    ),
-    headlineMedium = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 28.sp,
-        lineHeight    = 36.sp,
-        letterSpacing = (-0.02).em,
-    ),
+val InterFamily = FontFamily(
+    Font(googleFont = Inter, fontProvider = GoogleFontProvider, weight = FontWeight.Normal),    // 400
+    Font(googleFont = Inter, fontProvider = GoogleFontProvider, weight = FontWeight.Medium),    // 500
+    Font(googleFont = Inter, fontProvider = GoogleFontProvider, weight = FontWeight.SemiBold),  // 600
+    Font(googleFont = Inter, fontProvider = GoogleFontProvider, weight = FontWeight.Bold),      // 700
+)
+
+private const val BASE_FEATURES = "tnum, cv11, ss01, ss03"
+
+val AppTypography = Typography(
+    // Headlines (app bar title)
     headlineSmall = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 24.sp,
-        lineHeight    = 32.sp,
-        letterSpacing = (-0.01).em,
+        fontFamily = InterFamily,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.4).sp,
+        fontFeatureSettings = "cv11, ss01, ss03",
     ),
-
-    // Card titles, dialog titles
+    // Titles (record ID, section labels)
     titleLarge = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 22.sp,
-        lineHeight    = 28.sp,
-        letterSpacing = (-0.01).em,
+        fontFamily = InterFamily,
+        fontSize = 17.sp,
+        lineHeight = 22.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.2).sp,
+        fontFeatureSettings = BASE_FEATURES,
     ),
-    titleMedium = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 20.sp,
-        lineHeight    = 28.sp,
-        letterSpacing = (-0.01).em,
-    ),
-    titleSmall = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 16.sp,
-        lineHeight    = 24.sp,
-        letterSpacing = 0.em,
-    ),
-
-    // Body copy
-    bodyLarge = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Normal,
-        fontSize      = 16.sp,
-        lineHeight    = 24.sp,
-        letterSpacing = 0.em,
-    ),
+    // Body
     bodyMedium = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Normal,
-        fontSize      = 14.sp,
-        lineHeight    = 20.sp,
-        letterSpacing = 0.em,
+        fontFamily = InterFamily,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.Normal,
+        fontFeatureSettings = BASE_FEATURES,
     ),
-    bodySmall = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Normal,
-        fontSize      = 12.sp,
-        lineHeight    = 16.sp,
-        letterSpacing = 0.em,
-    ),
-
-    // Buttons, tabs, list rows
-    labelLarge = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 14.sp,
-        lineHeight    = 20.sp,
-        letterSpacing = 0.em,
-    ),
+    // Labels (input labels, chip text)
     labelMedium = TextStyle(
-        fontFamily    = GeistFamily,
-        fontWeight    = FontWeight.Medium,
-        fontSize      = 12.sp,
-        lineHeight    = 16.sp,
-        letterSpacing = 0.em,
+        fontFamily = InterFamily,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        fontWeight = FontWeight.Medium,
+        fontFeatureSettings = BASE_FEATURES,
     ),
-    // Mono eyebrow — "DETECTION", "EDGE INFERENCE" section labels
+    // Captions (timestamps, meta)
     labelSmall = TextStyle(
-        fontFamily    = JetBrainsMonoFamily,
-        fontWeight    = FontWeight.Normal,
-        fontSize      = 10.sp,
-        lineHeight    = 14.sp,
-        letterSpacing = 0.12.em,
+        fontFamily = InterFamily,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.Medium,
+        fontFeatureSettings = BASE_FEATURES,
     ),
 )
 
 // ── Extra non-Material styles for clinical data display ───────────────────────
+// Now Inter-based with tabular figures (tnum) instead of JetBrains Mono / Geist.
 // Use these directly (not via MaterialTheme.typography) for the listed surfaces.
 
 // IDs, timestamps, GPS coords, EPG readouts — tabular figures required
 val MonoDataStyle = TextStyle(
-    fontFamily         = JetBrainsMonoFamily,
-    fontWeight         = FontWeight.Normal,
-    fontSize           = 13.sp,
-    lineHeight         = 18.sp,
-    letterSpacing      = 0.em,
-    fontFeatureSettings = "\"tnum\"",
+    fontFamily = InterFamily,
+    fontWeight = FontWeight.Medium,
+    fontSize = 13.sp,
+    lineHeight = 18.sp,
+    fontFeatureSettings = "tnum",
 )
 
 // Same as MonoData but at 11 sp for compact rows
 val MonoSmallStyle = TextStyle(
-    fontFamily         = JetBrainsMonoFamily,
-    fontWeight         = FontWeight.Normal,
-    fontSize           = 11.sp,
-    lineHeight         = 16.sp,
-    letterSpacing      = 0.em,
-    fontFeatureSettings = "\"tnum\"",
+    fontFamily = InterFamily,
+    fontWeight = FontWeight.Medium,
+    fontSize = 11.sp,
+    lineHeight = 16.sp,
+    fontFeatureSettings = "tnum",
 )
 
-// Hero EPG number — Geist, large, tabular figures (tnum)
+// Hero EPG number — Inter, large, tabular figures (tnum)
 val EpgDisplayStyle = TextStyle(
-    fontFamily         = GeistFamily,
-    fontWeight         = FontWeight.Medium,
-    fontSize           = 56.sp,
-    lineHeight         = 64.sp,
-    letterSpacing      = (-0.04).em,
-    fontFeatureSettings = "\"tnum\"",
+    fontFamily = InterFamily,
+    fontWeight = FontWeight.Bold,
+    fontSize = 56.sp,
+    lineHeight = 64.sp,
+    letterSpacing = (-0.4).sp,
+    fontFeatureSettings = "tnum",
 )

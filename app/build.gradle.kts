@@ -130,9 +130,6 @@ dependencies {
     debugImplementation(libs.compose.tooling)
     debugImplementation(libs.compose.test.manifest)
 
-    // KomoUI
-    implementation(libs.komoui)
-
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

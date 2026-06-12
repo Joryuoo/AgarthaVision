@@ -1,7 +1,7 @@
 # AgarthaVision
 
 <p align="center">
-  <img src="docs/assets/agarthavision-logo-mark-transparent.svg" alt="AgarthaVision logo" width="112" />
+  <img src="agarthavision-logo-mark-transparent.svg" alt="AgarthaVision logo" width="112" />
 </p>
 
 <p align="center">
@@ -12,11 +12,11 @@
   <img alt="Android" src="https://img.shields.io/badge/ANDROID-0B1118?style=for-the-badge&logo=android&logoColor=white&labelColor=0B1118" />
   <img alt="Kotlin" src="https://img.shields.io/badge/KOTLIN-2457D6?style=for-the-badge&logo=kotlin&logoColor=white&labelColor=2457D6" />
   <img alt="Jetpack Compose" src="https://img.shields.io/badge/JETPACK_COMPOSE-1697A6?style=for-the-badge&logo=jetpackcompose&logoColor=white&labelColor=1697A6" />
-  <img alt="KomoUI" src="https://img.shields.io/badge/KOMOUI-1E3FD9?style=for-the-badge&logoColor=white&labelColor=1E3FD9" />
+  <img alt="Material 3" src="https://img.shields.io/badge/MATERIAL_3-1E3FD9?style=for-the-badge&logoColor=white&labelColor=1E3FD9" />
   <img alt="Supabase Postgres" src="https://img.shields.io/badge/SUPABASE_POSTGRES-16A34A?style=for-the-badge&logo=supabase&logoColor=white&labelColor=16A34A" />
   <img alt="FastAPI Inference" src="https://img.shields.io/badge/FASTAPI_INFERENCE-0F766E?style=for-the-badge&logo=fastapi&logoColor=white&labelColor=0F766E" />
   <img alt="CameraX" src="https://img.shields.io/badge/CAMERAX-C2410C?style=for-the-badge&logo=android&logoColor=white&labelColor=C2410C" />
-  <img alt="MVP Sprint 2" src="https://img.shields.io/badge/MVP_SPRINT_2-374151?style=for-the-badge&logoColor=white&labelColor=374151" />
+  <img alt="MVP Sprint 3" src="https://img.shields.io/badge/MVP_SPRINT_3-374151?style=for-the-badge&logoColor=white&labelColor=374151" />
 </p>
 
 ## Overview
@@ -50,7 +50,6 @@ app/
     domain/     Pure Kotlin models, repositories, and use cases
     data/       Room, Supabase, Retrofit, mappers, and repository implementations
     ui/         Jetpack Compose screens, ViewModels, navigation, and theme
-    worker/     Background work hooks reserved for sync-related workflows
 
 supabase/
   migrations/  Phase 1 Postgres schema and RLS migrations
@@ -75,9 +74,9 @@ Key rules:
 | --- | --- |
 | Language | Kotlin 2.2.10 |
 | Platform | Android, min SDK 26, target SDK 36 |
-| UI | Jetpack Compose, Material 3, KomoUI |
+| UI | Jetpack Compose, Material 3, Agartha components |
 | Architecture | MVVM, Clean Architecture, Hilt |
-| Local data | Room, DataStore |
+| Local data | Room |
 | Camera | CameraX |
 | Networking | Retrofit, OkHttp, Ktor client |
 | Cloud data | Supabase Auth, PostgREST, Storage |
@@ -150,26 +149,19 @@ The mobile app persists verified samples locally with Room, uploads images to Su
 
 ## Project Status
 
-The latest progress report records Sprint 2 as the active implementation phase. Core records browsing, sample detail, CSV export, session-as-smear semantics, manual capture, EPG calculation, user notes, and persisted session reports are implemented. Open follow-ups include Supabase image rehydration after local cache loss, clearer report-sync retry behavior, and remaining Phase 2 planning items.
+The current root audit records Sprint 3 hardening as the active implementation phase. Core records browsing, sample detail with Supabase image fallback, CSV export, session-as-smear semantics, manual capture, EPG calculation, user notes, and persisted session reports are implemented. Open follow-ups include theme cleanup, report-sync retry behavior, CI setup, Settings completion, and remaining Phase 2 planning items.
 
-See `docs/progress/sprint2_progress_report.md` for the current code-vs-spec audit.
+See `TODO.md` for the current code-vs-spec audit and backlog.
 
 ## Documentation
 
-The project source of truth lives in `docs/`:
+The project source of truth now lives in three root files:
 
-- `docs/00_PROJECT_OVERVIEW.md` - scope, objectives, stack, and ownership.
-- `docs/01_ENVIRONMENT_SETUP.md` - local setup, secrets, tooling, and onboarding.
-- `docs/02_PROJECT_ARCHITECTURE.md` - architecture, package boundaries, and dependency rules.
-- `docs/03_MOBILE_APP_PLAN.md` - sprint-by-sprint Android MVP plan.
-- `docs/04_CLOUD_BACKEND_PLAN.md` - Supabase and inference-container plan.
-- `docs/agartha-design-system.md` - definitive UI tokens and interaction rules.
-- `docs/06_GIT_WORKFLOW_AND_CI.md` - branch, commit, PR, and CI expectations.
-- `docs/07_TEAM_CONVENTIONS.md` - Kotlin style, naming, KDoc, and tests.
-- `docs/adr/` - architecture decision records.
-- `docs/progress/` - implementation audits and sprint status.
+- `CONTEXT.md` - project overview, tech stack, architecture rules, design system, Supabase/inference contracts, git workflow, coding conventions, and ADR summaries.
+- `schema.ts` - ground-truth data model for Supabase, Room, domain enums, Storage, and relationships.
+- `TODO.md` - implemented state, known issues, Sprint 3 backlog, Phase 2 roadmap, and deferred documentation notes.
 
-When a rule is unclear or missing, update the relevant source-of-truth document before changing the implementation.
+When a rule is unclear or missing, update the relevant root source-of-truth file before changing the implementation.
 
 ## Git Workflow
 
