@@ -50,6 +50,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.theme.AppColors
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -121,7 +122,6 @@ private fun VerificationSheetContent(
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
     val speciesName = currentPrediction?.classLabel ?: "Unknown"
-    val confidence = currentPrediction?.confidence ?: 0f
 
     Column(
         modifier = Modifier
@@ -200,12 +200,7 @@ private fun VerificationSheetContent(
                         fontSize = 12.sp,
                     )
                 }
-                Text(
-                    text = "${(confidence * 100).toInt()}% Conf",
-                    color = AppColors.Blue,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                SourceBadge(source = frame.source)
             }
 
             Row(
@@ -334,6 +329,27 @@ private fun VerificationSheetContent(
                     Text("Cancel")
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun SourceBadge(source: FrameSource) {
+    val isModelSource = source == FrameSource.MODEL
+
+    Box(
+        modifier = Modifier
+            .background(
+                color = if (isModelSource) AppColors.BlueTint else AppColors.AmberTint,
+                shape = RoundedCornerShape(999.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = if (isModelSource) "AI-suggested" else "Manual",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isModelSource) AppColors.Blue else AppColors.Amber,
         )
     }
 }

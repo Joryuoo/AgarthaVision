@@ -47,6 +47,7 @@ import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun SampleDetailScreen(
@@ -365,12 +366,24 @@ private fun DetectionCard(index: Int, detection: Detection) {
 
         // Fields
         Column(modifier = Modifier.padding(start = 16.dp)) {
-            val confidenceStr = if (aiGenerated) "${(detection.confidence * 100).toInt()}%" else "—"
-            DetailRow(label = "Confidence", value = confidenceStr, isLast = false, valueFontFamily = FontFamily.Monospace)
-            DetailRow(label = "Verdict", value = if (isVerified) "Verified" else "Rejected", valueColor = if (isVerified) AppColors.Green else AppColors.Red, isLast = false)
+            val sourceStr = if (aiGenerated) "AI-suggested" else "Manual"
+            DetailRow(label = "Source", value = sourceStr, isLast = false)
+            DetailRow(
+                label = "Verdict",
+                value = if (isVerified) "Verified" else "Rejected",
+                valueColor = if (isVerified) AppColors.Green else AppColors.Red,
+                isLast = false,
+            )
 
             val bboxStr = if (detection.bboxX != null) {
-                String.format("[%.3f, %.3f, %.3f, %.3f]", detection.bboxX, detection.bboxY, detection.bboxW, detection.bboxH)
+                String.format(
+                    Locale.US,
+                    "[%.3f, %.3f, %.3f, %.3f]",
+                    detection.bboxX,
+                    detection.bboxY,
+                    detection.bboxW,
+                    detection.bboxH,
+                )
             } else {
                 "None"
             }
@@ -415,7 +428,7 @@ private fun MetadataTab(sample: Sample) {
         item {
             GroupedList(title = "CAPTURE DATA") {
                 val locString = if (sample.latitude != null && sample.longitude != null) {
-                    String.format("%.4f, %.4f", sample.latitude, sample.longitude)
+                    String.format(Locale.US, "%.4f, %.4f", sample.latitude, sample.longitude)
                 } else {
                     "None"
                 }

@@ -55,12 +55,12 @@ import androidx.compose.ui.layout.ContentScale
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.SvgIcon
+import com.agarthavision.ui.theme.AppColors
 import java.time.Duration
 import java.time.Instant
 
 // Design Tokens
 private val White = Color(0xFFFFFFFF)
-private val Gray50 = Color(0xFFF7F8FA)
 private val Gray100 = Color(0xFFEEF0F4)
 private val Gray200 = Color(0xFFE2E5EB)
 private val Gray300 = Color(0xFFCBD0DA)
@@ -68,16 +68,8 @@ private val Gray400 = Color(0xFF9CA3AF)
 private val Gray500 = Color(0xFF6B7280)
 private val Gray700 = Color(0xFF374151)
 private val Gray900 = Color(0xFF0F172A)
-private val Blue = Color(0xFF1E3FD9)
-private val Amber = Color(0xFFD97706)
 private val AmberTint = Color(0xFFFEF3C7)
 private val AmberText = Color(0xFF92400E)
-private val Green = Color(0xFF16A34A)
-private val GreenTint = Color(0xFFDCFCE7)
-private val GreenText = Color(0xFF166534)
-private val Red = Color(0xFFDC2626)
-private val RedTint = Color(0xFFFEE2E2)
-private val RedText = Color(0xFFDC2626)
 
 private val InterBaseStyle = TextStyle(
     fontFamily = FontFamily.Default,
@@ -234,7 +226,6 @@ private fun FrameRow(
         else -> "Unknown class"
     }
 
-    val confidence = if (isAI) "${((top?.confidence ?: 0f) * 100).toInt()}%" else ""
     val isItalic = isAI && title != "Unknown class"
 
     val duration = Duration.between(frame.capturedAt, Instant.now())
@@ -307,8 +298,18 @@ private fun FrameRow(
                     style = InterBaseStyle
                 )
                 if (isAI) {
-                    Box(modifier = Modifier.background(Gray100, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp)) {
-                        Text(confidence, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Gray700, style = InterTabularStyle)
+                    Box(
+                        modifier = Modifier
+                            .background(AppColors.BlueTint, CircleShape)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            "AI",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppColors.Blue,
+                            style = InterTabularStyle,
+                        )
                     }
                 }
             }

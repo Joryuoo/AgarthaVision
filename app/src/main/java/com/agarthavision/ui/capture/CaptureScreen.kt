@@ -231,13 +231,9 @@ fun CaptureScreen(
                     if (frameAtToastTime.source != FrameSource.MODEL) return@collect
                     val eggType =
                         frameAtToastTime.predictions.firstOrNull()?.classLabel ?: detectionFallback
-                    val confidence = frameAtToastTime.predictions.firstOrNull()?.confidence ?: 0f
                     launch {
                         toastState.show(
-                            message = detectionMessage.format(
-                                eggType,
-                                "%.0f".format(confidence * 100),
-                            ),
+                            message = detectionMessage.format(eggType),
                             variant = AgarthaToastVariant.Default,
                             actionLabel = detectionView,
                             onAction = { viewModel.onDetectionToastTap(frameAtToastTime) },

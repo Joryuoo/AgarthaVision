@@ -16,7 +16,7 @@
 
     <string name="verify_title">Flagged Frame · %1$s</string>
     <string name="verify_detection_header">Detection %1$d of %2$d</string>
-    <string name="verify_predicted">Model predicted: %1$s · %2$s confidence</string>
+    <string name="verify_predicted">Model predicted: %1$s</string>
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
     <string name="verify_q2">Is the bounding box correctly placed?</string>
     <string name="verify_q3">What species?</string>
@@ -48,6 +48,8 @@
     <string name="verify_repeat_badge">Repeat</string>
     <string name="verify_user_note_label">Notes (optional)</string>
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
+    <string name="badge_ai_suggested">AI-suggested</string>
+    <string name="badge_manual">Manual</string>
 
     <string name="queue_sheet_title">Flagged Frames · %1$d</string>
     <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
@@ -57,7 +59,7 @@
     <string name="queue_filter_repeat">Repeat</string>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
-    <string name="queue_row_subtitle">%1$s%% · %2$d detection(s) · %3$s</string>
+    <string name="queue_row_subtitle">%1$d detection(s) · %2$s</string>
     <string name="queue_row_manual_title">Manual capture</string>
     <string name="queue_row_manual_subtitle">Manual capture · %1$s</string>
     <string name="queue_row_source_ai">AI</string>
@@ -84,7 +86,7 @@
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_detection_fallback">egg</string>
-    <string name="capture_detection_message">%1$s detected · %2$s%% confidence</string>
+    <string name="capture_detection_message">%1$s detected — tap to review</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
@@ -119,7 +121,7 @@
     <string name="report_generated_toast">Generated · shared to Downloads</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
     <string name="session_detail_unknown_detection">No detection</string>
-    <string name="session_detail_confidence">Confidence: %1$.2f</string>
+    <string name="session_detail_confidence">Source: %1$s</string>
     <string name="session_detail_captured">Captured: %1$s</string>
     <string name="session_detail_back">Back to records</string>
     <string name="session_detail_open_sample">Open sample</string>
