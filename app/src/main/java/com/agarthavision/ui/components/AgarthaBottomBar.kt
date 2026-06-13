@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AppColors
 
 sealed class Tab(
     val route: String,

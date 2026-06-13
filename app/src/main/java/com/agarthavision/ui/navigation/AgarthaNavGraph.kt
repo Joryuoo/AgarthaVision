@@ -30,7 +30,7 @@ import com.agarthavision.ui.components.AgarthaBottomBar
 import com.agarthavision.ui.components.bottomBarRoutes
 import com.agarthavision.ui.dashboard.DashboardScreen
 import com.agarthavision.ui.login.LoginScreen
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen

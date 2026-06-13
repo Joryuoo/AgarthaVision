@@ -24,8 +24,8 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.text.TextStyle
 import coil.compose.AsyncImage
-import com.agarthavision.ui.records.AppColors
-import com.agarthavision.ui.records.AppTypography
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AppTypography
 
 @Composable
 fun ScreenTopBar(

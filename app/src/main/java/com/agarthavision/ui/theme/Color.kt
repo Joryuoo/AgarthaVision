@@ -5,8 +5,7 @@ import androidx.compose.ui.graphics.Color
 
 /**
  * Canonical AgarthaVision color palette (Inter / #1E3FD9 design system, per
- * agartha-design-system.md). Single source of truth — formerly duplicated in
- * `ui/records/RecordsTheme.kt`, which now re-exports this object.
+ * agartha-design-system.md). Single source of truth for app color tokens.
  *
  * The legacy "Clinical Pulse" KomoUI palette (Bone/Paper/Ink/ClinicalBlue/…)
  * and its legacy theme implementation were removed when the old theme system

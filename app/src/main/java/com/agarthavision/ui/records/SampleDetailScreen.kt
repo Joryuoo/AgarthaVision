@@ -41,6 +41,8 @@ import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleRecordItem
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AppTypography
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId

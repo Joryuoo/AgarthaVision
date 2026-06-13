@@ -22,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AppColors
 
 @Composable
 fun SpeciesDropdown(

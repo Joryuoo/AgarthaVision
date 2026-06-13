@@ -8,8 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.unit.dp
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
-// Radius scale consolidated from the former library radius object and RecordsTheme
-// `AppShapes`). Pills use `extraLarge`.
+// Radius scale for MaterialTheme shapes. Pills use `extraLarge`.
 val AppShapes = Shapes(
     small      = RoundedCornerShape(8.dp),     // tiles, mini tags
     medium     = RoundedCornerShape(12.dp),    // cards, inputs, popovers

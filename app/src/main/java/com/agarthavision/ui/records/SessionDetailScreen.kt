@@ -65,6 +65,9 @@ import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.Spacing
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -100,7 +103,7 @@ fun SessionDetailScreen(
     onSampleClick: (String) -> Unit,
     viewModel: SessionDetailViewModel = hiltViewModel(),
 ) {
-    AgarthaTheme {
+    AgarthaVisionTheme {
         val state by viewModel.state.collectAsStateWithLifecycle()
         val context = LocalContext.current
         val snackbarHostState = remember { SnackbarHostState() }
@@ -126,7 +129,7 @@ fun SessionDetailScreen(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.Blue)
             }
-            return@AgarthaTheme
+            return@AgarthaVisionTheme
         }
 
         Scaffold(

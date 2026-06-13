@@ -41,7 +41,7 @@ import coil.compose.AsyncImage
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.components.glassChrome
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter

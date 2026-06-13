@@ -55,9 +55,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.ui.navigation.Screen
-import com.agarthavision.ui.records.AppColors
-import com.agarthavision.ui.records.AgarthaTheme
-import com.agarthavision.ui.records.Spacing
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.Spacing
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -74,7 +74,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    AgarthaTheme {
+    AgarthaVisionTheme {
         Box(
             modifier = Modifier
                 .fillMaxSize()

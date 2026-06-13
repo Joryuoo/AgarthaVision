@@ -48,6 +48,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
+import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -63,7 +66,7 @@ fun RecordsScreen(
     onBackClick: () -> Unit = {},
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
-    AgarthaTheme {
+    AgarthaVisionTheme {
         val state by viewModel.state.collectAsStateWithLifecycle()
         var searchText by remember { mutableStateOf("") }
 

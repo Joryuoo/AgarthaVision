@@ -69,7 +69,7 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 
 | Track | Status | Codebase check |
 |---|---:|---|
-| Clinical microscopy color, typography, spacing, component tokens | ⏳ | `AppColors`, MaterialTheme, and Agartha components exist; `RecordsTheme` compatibility aliases still need cleanup |
+| Clinical microscopy color, typography, spacing, component tokens | ✅ | `AppColors`, MaterialTheme, spacing, typography, and Agartha components are the canonical token surface |
 | Capture dark immersive mode | ✅ | capture UI components |
 | Login, Dashboard, Session Picker, Capture, Verify Queue, Records, Session Detail, Sample Detail | ✅ | screen packages exist |
 | Settings screen | ⏳ | placeholder exists, full settings experience not implemented |
@@ -86,7 +86,6 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 
 ## Known Issues / Technical Debt
 
-- RecordsTheme compatibility aliases need consolidation into the single MaterialTheme-backed token surface.
 - Settings screen is still a placeholder and needs real options, session/account affordances, and QA copy.
 - Capture top bar is near its icon-density limit; Settings/Help should move behind an overflow menu.
 - Report sync retry behavior is not robust yet; `sync_failed` report rows need background retry/backoff or an explicit manual retry affordance.
@@ -102,13 +101,12 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 1. Run a full physical-device E2E pass: login, start session, inference health, flag frame, verify, manual capture, end session, records, report generation, share.
 2. Confirm `0008_reports.sql` is applied in the active Supabase project and that report rows sync with RLS enabled.
 3. Harden report/sample retry behavior for connectivity resume, or clearly defer it behind a manual retry state.
-4. Finish theme cleanup by folding RecordsTheme aliases into the MaterialTheme-backed token system.
-5. Replace remaining placeholder Settings UI with production actions and account/session information.
-6. Add Capture overflow menu for secondary actions so top-bar density stays readable on narrow devices.
-7. Add `.github` workflows for build/test/lint/commitlint plus a PR template.
-8. Add the Kato-Katz multiplier citation near `EpgCalculator.MULTIPLIER`.
-9. Normalize report/admin RLS style by replacing the `0008` inline admin check with `public.is_admin(uuid)` in a follow-up migration.
-10. Re-run lint/tests/build after documentation cleanup and record the result in the PR.
+4. Replace remaining placeholder Settings UI with production actions and account/session information.
+5. Add Capture overflow menu for secondary actions so top-bar density stays readable on narrow devices.
+6. Add `.github` workflows for build/test/lint/commitlint plus a PR template.
+7. Add the Kato-Katz multiplier citation near `EpgCalculator.MULTIPLIER`.
+8. Normalize report/admin RLS style by replacing the `0008` inline admin check with `public.is_admin(uuid)` in a follow-up migration.
+9. Re-run lint/tests/build after documentation cleanup and record the result in the PR.
 
 ## Phase 2 Roadmap
 

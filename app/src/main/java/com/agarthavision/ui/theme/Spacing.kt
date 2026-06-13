@@ -21,9 +21,8 @@ object AgarthaSpacing {
     val clusterGap  = 12.dp  // Buttons in a row
 }
 
-// Compact spacing scale formerly defined in `ui/records/RecordsTheme.kt`
-// (consumed by the records screens + dashboard). Merged here so all spacing
-// tokens live in one place; `RecordsTheme.kt` re-exports this object.
+// Compact spacing scale consumed by the records screens and dashboard.
+// Kept here so all spacing tokens live in one place.
 object Spacing {
     val xs   =  4.dp
     val sm   =  8.dp

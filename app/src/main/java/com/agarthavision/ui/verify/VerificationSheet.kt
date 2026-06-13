@@ -50,7 +50,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AppColors
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
