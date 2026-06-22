@@ -311,6 +311,7 @@ private fun VerificationSheetContent(
     if (showDiscardConfirm.value) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirm.value = false },
+            shape = RoundedCornerShape(8.dp),
             title = { Text("Discard this frame?") },
             text = { Text("This will remove the current frame from the verification queue.") },
             confirmButton = {

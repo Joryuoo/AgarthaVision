@@ -112,6 +112,7 @@ private fun ManualSheetContent(
             .format(frame.capturedAt)
     }
 
+    var showDiscardConfirm by remember { mutableStateOf(false) }
     var showCustomSpeciesDialog by remember { mutableStateOf(false) }
     var customSpeciesText by remember { mutableStateOf("") }
 
@@ -253,11 +254,36 @@ private fun ManualSheetContent(
                 primaryLabel = "Submit",
                 secondaryLabel = "Discard",
                 onPrimaryClick = actions.onSubmit,
-                onSecondaryClick = actions.onCancel,
+                onSecondaryClick = { showDiscardConfirm = true },
                 primaryLoading = state.isSubmitting,
                 primaryEnabled = state.canSubmit
             )
         }
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            shape = RoundedCornerShape(8.dp),
+            title = { Text("Discard this frame?") },
+            text = { Text("This will remove the current frame from the verification queue.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm = false
+                        actions.onDeleteFrame()
+                    },
+                    enabled = !state.isSubmitting,
+                ) {
+                    Text("Discard", color = AppColors.Red)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 
     if (showCustomSpeciesDialog) {

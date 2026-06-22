@@ -1,6 +1,43 @@
 # AGENTS
 
-This file is the entry point for contributors and automated agents.
+This file is the entry point for contributors and automated agents. It also serves as the
+ICM workspace map (Layer 0) — read this before starting any task.
+
+---
+
+## Development Workspace
+
+AgarthaVision uses a three-stage ICM pipeline for sprint work: **scope → implement → QA**.
+Every stage produces a markdown artifact a human can inspect and edit before the next stage runs.
+
+### Stages (in order)
+
+1. `stages/01_scope/` — Analyse a backlog item; write a scoped implementation plan
+2. `stages/02_implement/` — Execute the plan; write code; record implementation notes
+3. `stages/03_qa/` — Run lint + tests; verify architecture + design compliance; draft the PR
+
+Read the target stage's `CONTEXT.md` to load exactly the right inputs for that step.
+A human reviews each stage's `output/` before the next stage runs — that is the gate.
+
+### How to run the pipeline
+
+1. When a task arrives, go to `stages/01_scope/` and read its `CONTEXT.md`.
+2. Complete stages in order: 01 → 02 → 03.
+3. Load only the files named in the current stage's Inputs table — nothing else.
+4. Write output to that stage's `output/` folder.
+5. Do not load files from another stage unless the current contract explicitly says to.
+
+### Shared resources
+
+| Path | What it is |
+|---|---|
+| `_config/voice.md` | Clinical voice and tone — load when writing user-facing text or docs |
+| `_config/conventions.md` | Kotlin style, naming, KDoc, commit, branch rules — load for all coding stages |
+| `CONTEXT.md` | Full project reference: tech stack, architecture rules, design system, ADRs |
+| `schema.ts` | Ground-truth data model for Supabase, Room, and domain enums |
+| `TODO.md` | Implementation state, Sprint 3 backlog, Phase 2 roadmap |
+
+---
 
 ## Source of Truth
 
