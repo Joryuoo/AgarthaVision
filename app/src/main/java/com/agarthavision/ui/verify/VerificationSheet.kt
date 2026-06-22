@@ -52,6 +52,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.DialogShape
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -311,7 +312,7 @@ private fun VerificationSheetContent(
     if (showDiscardConfirm.value) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirm.value = false },
-            shape = RoundedCornerShape(8.dp),
+            shape = DialogShape,
             title = { Text("Discard this frame?") },
             text = { Text("This will remove the current frame from the verification queue.") },
             confirmButton = {

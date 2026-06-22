@@ -282,6 +282,9 @@ New Session · Verify (AI) · Manual. Slide up over screen + tab bar; drag handl
   destructive = `--red` / white. Icon buttons 40×40, `lg` radius (utility chrome).
 - **Inputs** — white, `--gray-200` border, `sm` radius; focus = `--blue` border + 3px glow;
   error = red border + light-red tint.
+- **Dialogs** — `AlertDialog` uses an 8dp radius via the shared `DialogShape` token
+  (`ui/theme/Theme.kt`); always pass `shape = DialogShape`. Material 3 defaults dialogs to
+  `shapes.extraLarge`, which here is the 999dp pill token — do not rely on it.
 - **Badges** — pill, 11px / 600. Status colors map to the semantic palette.
 - **Toggle / Switch** — 44×26 pill; off `--gray-200`, on `--blue`; white thumb. (The Boxes
   toggle on `VerificationSheet` uses a Material 3 `Switch` with a box icon in the thumb when on.)

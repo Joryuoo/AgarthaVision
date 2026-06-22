@@ -42,6 +42,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.components.glassChrome
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -264,7 +265,7 @@ private fun ManualSheetContent(
     if (showDiscardConfirm) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirm = false },
-            shape = RoundedCornerShape(8.dp),
+            shape = DialogShape,
             title = { Text("Discard this frame?") },
             text = { Text("This will remove the current frame from the verification queue.") },
             confirmButton = {
@@ -289,6 +290,7 @@ private fun ManualSheetContent(
     if (showCustomSpeciesDialog) {
         AlertDialog(
             onDismissRequest = { showCustomSpeciesDialog = false },
+            shape = DialogShape,
             title = { Text("Custom Species") },
             text = {
                 OutlinedTextField(

@@ -82,6 +82,7 @@ import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -492,6 +493,7 @@ private fun EndSessionConfirmDialog(
     val isBlocked = blockedCount > 0
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = DialogShape,
         confirmButton = {
             AgarthaButton(
                 onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },

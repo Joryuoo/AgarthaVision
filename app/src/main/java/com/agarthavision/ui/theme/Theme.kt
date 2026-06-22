@@ -16,6 +16,13 @@ val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(999.dp),   // pills
 )
 
+// Explicit shape for AlertDialogs. Material3 defaults dialogs to
+// `shapes.extraLarge`, which in this app is the 999.dp pill token — far too
+// round for a dialog. Pass this on every `AlertDialog(shape = DialogShape)`
+// rather than overloading the shared `extraLarge` slot (mirrors AgarthaButton's
+// local `PillShape`).
+val DialogShape = RoundedCornerShape(8.dp)
+
 // ── Material3 color scheme derived from AppColors ────────────────────────────
 private val AgarthaColorScheme = lightColorScheme(
     primary          = AppColors.Blue,
