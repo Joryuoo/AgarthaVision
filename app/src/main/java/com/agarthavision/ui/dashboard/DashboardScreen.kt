@@ -82,11 +82,11 @@ fun DashboardScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = Spacing.xxl)
+                contentPadding = PaddingValues(bottom = Spacing.md)
             ) {
-                // 1. Status Bar Padding
+                // 1. App Header
                 item {
-                    Spacer(Modifier.statusBarsPadding().height(Spacing.md))
+                    com.agarthavision.ui.components.AppHeader()
                 }
 
                 // 2. Active Session Hero (only when active)
@@ -274,12 +274,20 @@ private fun PulsingDot(color: Color, size: Dp) {
 private fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Sessions",    kpis.sessionsCount, null, true,  Modifier.weight(1f))
-            KpiTile("Samples",     kpis.samplesCount,  null, true,  Modifier.weight(1f))
+            KpiTile("Sessions", kpis.sessionsCount, null, true,
+                bgColor = AppColors.Blue, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f))
+            KpiTile("Samples", kpis.samplesCount, null, true,
+                bgColor = AppColors.Gray700, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Verified",    kpis.verifiedRatio, null, true,  Modifier.weight(1f))
-            KpiTile("EPG avg",     kpis.epgAvgStatus,  null, false, Modifier.weight(1f))
+            KpiTile("Verified", kpis.verifiedRatio, null, true,
+                bgColor = AppColors.Gray900, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f))
+            KpiTile("EPG avg", kpis.epgAvgStatus, null, false,
+                bgColor = AppColors.Blue.copy(alpha = 0.7f), contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                modifier = Modifier.weight(1f))
         }
     }
 }
@@ -290,21 +298,24 @@ private fun KpiTile(
     value: String,
     trend: String?,
     trendUp: Boolean,
+    bgColor: Color = AppColors.White,
+    contentColor: Color = AppColors.Gray900,
+    labelColor: Color = AppColors.Gray500,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
-            .background(AppColors.White, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(bgColor, RoundedCornerShape(12.dp))
+            .border(1.dp, if (bgColor == AppColors.White) AppColors.Gray100 else Color.Transparent, RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = AppColors.Gray500)
+        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = labelColor)
         Spacer(Modifier.height(6.dp))
         Text(
             value,
             fontSize = 28.sp,
             fontWeight = FontWeight.Bold,
-            color = AppColors.Gray900,
+            color = contentColor,
             letterSpacing = (-0.7).sp,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
             lineHeight = 30.sp
@@ -319,7 +330,7 @@ private fun KpiTile(
                     trend,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (trendUp) AppColors.Green else AppColors.Gray500,
+                    color = if (trendUp) AppColors.Green else labelColor,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                 )
             }

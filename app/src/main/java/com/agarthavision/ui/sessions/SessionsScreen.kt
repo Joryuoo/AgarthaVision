@@ -189,6 +189,7 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .statusBarsPadding()
             .padding(top = 14.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -249,7 +250,7 @@ private fun SessionCard(
                 text = session.label ?: "Session ${session.id.take(8)}",
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
-                color = Gray900,
+                color = Blue,
                 letterSpacing = (-0.015).em
             )
             Spacer(modifier = Modifier.height(3.dp))
@@ -257,7 +258,7 @@ private fun SessionCard(
                 text = meta,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Gray500
+                color = Blue.copy(alpha = 0.7f)
             )
         }
 
@@ -552,10 +553,10 @@ private fun SheetInput(
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Gray700)
             if (isRequired) {
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("REQUIRED", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Gray500, modifier = Modifier.background(Gray100, RoundedCornerShape(4.dp)).padding(horizontal = 7.dp, vertical = 2.dp))
+                Text("REQUIRED", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Red, modifier = Modifier.background(RedTint, RoundedCornerShape(4.dp)).padding(horizontal = 7.dp, vertical = 2.dp))
             } else {
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("OPTIONAL", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Gray400, modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp))
+                Text("OPTIONAL", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Gray500, modifier = Modifier.background(Gray100, RoundedCornerShape(4.dp)).padding(horizontal = 7.dp, vertical = 2.dp))
             }
         }
 

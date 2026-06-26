@@ -121,7 +121,7 @@ fun VerificationQueueScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp)
-                    .padding(top = 14.dp, bottom = 12.dp),
+                    .padding(top = 2.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(

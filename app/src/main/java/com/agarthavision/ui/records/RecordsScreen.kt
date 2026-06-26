@@ -100,7 +100,7 @@ fun RecordsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner),
-                contentPadding = PaddingValues(bottom = Spacing.xxl),
+                contentPadding = PaddingValues(bottom = Spacing.md),
             ) {
                 item {
                     Spacer(Modifier.height(Spacing.xs))
@@ -244,9 +244,18 @@ private fun StatsRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        StatTile("Sessions", sessionsCount, Modifier.weight(1f))
-        StatTile("Eggs found", eggsCount, Modifier.weight(1f))
-        StatTile("Samples", samplesCount, Modifier.weight(1f))
+        StatTile(
+            "Sessions", sessionsCount, Modifier.weight(1f),
+            bgColor = AppColors.Blue, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+        )
+        StatTile(
+            "Eggs found", eggsCount, Modifier.weight(1f),
+            bgColor = AppColors.Blue.copy(alpha = 0.7f), contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+        )
+        StatTile(
+            "Samples", samplesCount, Modifier.weight(1f),
+            bgColor = AppColors.Gray700, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+        )
     }
 }
 
@@ -255,18 +264,21 @@ private fun StatTile(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
+    bgColor: androidx.compose.ui.graphics.Color = AppColors.Gray50,
+    contentColor: androidx.compose.ui.graphics.Color = AppColors.Gray900,
+    labelColor: androidx.compose.ui.graphics.Color = AppColors.Gray500,
 ) {
     Column(
         modifier = modifier
-            .background(AppColors.Gray50, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(bgColor, RoundedCornerShape(12.dp))
+            .border(1.dp, if (bgColor == AppColors.Gray50 || bgColor == AppColors.White) AppColors.Gray100 else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(12.dp))
             .padding(12.dp),
     ) {
         Text(
             label.uppercase(),
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = AppColors.Gray500,
+            color = labelColor,
             letterSpacing = 0.6.sp,
         )
         Spacer(Modifier.height(4.dp))
@@ -274,7 +286,7 @@ private fun StatTile(
             value,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = AppColors.Gray900,
+            color = contentColor,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             lineHeight = 22.sp,
         )

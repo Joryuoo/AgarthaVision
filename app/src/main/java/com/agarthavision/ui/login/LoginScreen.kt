@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -141,31 +143,38 @@ private fun LoginScreenContent(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
                         .widthIn(max = 480.dp)
-                        .padding(top = 32.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
+                        .padding(top = 72.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        AppMark()
-                        Spacer(modifier = Modifier.height(28.dp))
-                        Text(
-                            text = "AgarthaVision",
-                            color = Color(0xFF0F172A),
-                            fontSize = 30.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = (-0.75).sp, // -0.025em * 30px
-                            lineHeight = 33.sp, // 1.1
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Sign in to continue your clinical work.",
-                            color = Color(0xFF6B7280),
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Normal,
-                            lineHeight = 21.75.sp, // 1.45
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            AppMark()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "AgarthaVision",
+                                color = Color(0xFF1E3FD9),
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = (-0.75).sp, // -0.025em * 30px
+                                lineHeight = 33.sp, // 1.1
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Sign in to continue your clinical work.",
+                                color = Color(0xFF6B7280),
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Normal,
+                                lineHeight = 21.75.sp, // 1.45
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
                         Spacer(modifier = Modifier.height(32.dp))
 
                         LoginForm(state = state, actions = actions)
@@ -195,17 +204,22 @@ private fun LoginScreenContent(
 private fun AppMark() {
     Box(
         modifier = Modifier
-            .size(64.dp)
+            .size(80.dp)
             .shadow(
                 elevation = 8.dp,
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 spotColor = Color(0x380F172A),
                 ambientColor = Color(0x0F0F172A)
             )
-            .background(Color.Transparent, RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0x0F0F172A), RoundedCornerShape(16.dp))
+            .background(Color.White, RoundedCornerShape(20.dp))
+            .border(1.dp, Color(0x0F0F172A), RoundedCornerShape(20.dp)),
+        contentAlignment = Alignment.Center
     ) {
-        // Logo SVG will be inserted here. Leave empty for now.
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_logo),
+            contentDescription = "AgarthaVision Logo",
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 

@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -94,7 +95,8 @@ fun AgarthaNavGraph(
                 )
             }
         },
-        containerColor = AppColors.White
+        containerColor = AppColors.White,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { inner ->
         AgarthaNavHost(
             navController = navController,
