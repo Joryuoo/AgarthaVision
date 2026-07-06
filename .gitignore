@@ -35,3 +35,7 @@ Thumbs.db
 temp-backup/
 
 .kotlin
+
+screenshots/
+
+.claude/

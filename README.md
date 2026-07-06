@@ -1,7 +1,7 @@
 # AgarthaVision
 
 <p align="center">
-  <img src="agarthavision-logo-mark-transparent.svg" alt="AgarthaVision logo" width="112" />
+  <img src="branding/agarthavision-logo-mark-transparent.svg" alt="AgarthaVision logo" width="112" />
 </p>
 
 <p align="center">

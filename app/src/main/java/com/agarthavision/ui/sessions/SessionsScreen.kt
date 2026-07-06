@@ -66,6 +66,7 @@ private val GreenTint = Color(0xFFDCFCE7)
 @Composable
 fun SessionsScreen(
     onNavigate: (String) -> Unit = {},
+    onNavigateToCapture: (String) -> Unit,
     onSessionSelected: (String) -> Unit,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
@@ -75,7 +76,7 @@ fun SessionsScreen(
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionsEvent.NavigateToCapture -> onSessionSelected(event.sessionId)
+                is SessionsEvent.NavigateToCapture -> onNavigateToCapture(event.sessionId)
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND

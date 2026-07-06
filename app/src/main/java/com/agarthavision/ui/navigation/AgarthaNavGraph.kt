@@ -146,8 +146,11 @@ fun AgarthaNavHost(
         composable(Screen.Sessions.route) {
             SessionsScreen(
                 onNavigate = { route -> navController.navigate(route) },
-                onSessionSelected = {
+                onNavigateToCapture = {
                     navController.navigate(Screen.Capture.route)
+                },
+                onSessionSelected = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId))
                 }
             )
         }
