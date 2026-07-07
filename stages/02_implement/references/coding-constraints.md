@@ -15,14 +15,19 @@ Quick-reference enforcement list. Violations are PR blockers.
 
 ## Design system hard rules (from CONTEXT.md §4)
 
-- Colors: `AppColors.*` only. Never raw hex in app code. Raw hex lives only in the palette definition.
+- Colors: `AgarthaTheme.colors.*` (mode-aware) in screens; `AppColors.*` only inside the
+  palette definition files (`Color.kt`, `Palette.kt`) and for mode-independent on-image
+  badges. Never raw hex elsewhere.
 - Typography: MaterialTheme typography tokens only. Never raw `fontSize` / `fontWeight`.
 - Spacing: 8-px grid — `4, 8, 12, 16, 20, 24, 32, 48` dp. No other values.
 - Radius: `sm=8`, `md=12`, `lg=16`, `pill=999` dp.
-- Capture screen: dark/immersive. All other screens: light.
+- Capture screen: always dark/immersive, independent of the light/dark toggle. All other
+  screens follow the user's theme preference (`ThemeMode`, persisted via DataStore).
 - Species names: always italic (`FontStyle.Italic`): *Ascaris lumbricoides*, *Trichuris trichiura*, *Hookworm*.
 - No charting library. No external icon library. Hand-crafted inline SVG / Compose drawing only.
-- Buttons: pill shape. Primary = cobalt fill / white text. Secondary = gray-100 / gray-900. Destructive = red / white.
+- Buttons: pill shape. Primary = maroon accent fill / on-accent text. Secondary = gray-100 /
+  gray-900. Destructive = red / white. Gold is a brand highlight fill only — always paired
+  with dark text, never the primary-button color and never adjacent to amber.
 - No shadows on plain cards — flat with 1px gray-100 hairline. Shadows only on modal sheets and Active Session hero.
 
 ## Kotlin style

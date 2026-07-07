@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">AgarthaVision</string>
+    <string name="theme_toggle_to_dark">Switch to dark mode</string>
+    <string name="theme_toggle_to_light">Switch to light mode</string>
     <string name="login_title">Welcome back.</string>
     <string name="login_subtitle">Sign in with your provisioned medtech account to begin a session.</string>
     <string name="login_email_label">Email</string>

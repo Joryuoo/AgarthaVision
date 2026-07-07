@@ -3,8 +3,16 @@ package com.agarthavision.ui.verify
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -24,7 +32,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.text.TextStyle
 import coil.compose.AsyncImage
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
 
 @Composable
@@ -34,6 +42,7 @@ fun ScreenTopBar(
     onBack: () -> Unit,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -47,19 +56,19 @@ fun ScreenTopBar(
                 .clickable { onBack() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = AppColors.Gray900)
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
         }
         Spacer(modifier = Modifier.width(8.dp))
         Column {
             Text(
                 title,
                 style = AppTypography.headlineSmall,
-                color = AppColors.Gray900,
+                color = colors.textPrimary,
             )
             Text(
                 metaText.uppercase(),
                 fontSize = 11.sp,
-                color = AppColors.Gray500,
+                color = colors.textSecondary,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Medium,
                 style = TextStyle(fontFeatureSettings = "tnum")
@@ -79,6 +88,7 @@ fun SheetActionRow(
     primaryLoading: Boolean = false,
     primaryEnabled: Boolean = true
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -89,34 +99,33 @@ fun SheetActionRow(
         Box(
             modifier = Modifier
                 .weight(1f)
-                .background(AppColors.RedTint, RoundedCornerShape(14.dp))
-                .border(0.5.dp, AppColors.Red.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .background(colors.dangerTint, RoundedCornerShape(14.dp))
+                .border(0.5.dp, colors.danger.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .clickable { onSecondaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = secondaryLabel,
-                color = AppColors.Red,
+                color = colors.dangerText,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp
             )
         }
 
-        // Primary Button (Brand Filled or Gray700 based on screenshot)
-        // I'll use Gray700 since the screenshot shows a dark gray button instead of bright blue
+        // Primary Button — inverse surface (dark chip in light mode, light chip in dark)
         Box(
             modifier = Modifier
                 .weight(2f)
-                .background(if (primaryEnabled) AppColors.Gray700 else AppColors.Gray400, RoundedCornerShape(14.dp))
+                .background(if (primaryEnabled) colors.textPrimary else colors.textTertiary, RoundedCornerShape(14.dp))
                 .clickable(enabled = primaryEnabled && !primaryLoading) { onPrimaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (primaryLoading) "Loading..." else primaryLabel,
-                color = AppColors.White,
+                color = colors.background,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp

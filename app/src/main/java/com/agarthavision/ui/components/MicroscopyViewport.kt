@@ -56,7 +56,8 @@ fun MicroscopyViewport(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(AppColors.White),
+            // Capture is dark tool mode — dark backdrop while the camera warms up.
+            .background(AppColors.Gray900),
     ) {
         AndroidView(
             factory = { previewView },

@@ -48,7 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
-import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -66,101 +66,99 @@ fun RecordsScreen(
     onBackClick: () -> Unit = {},
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
-    AgarthaVisionTheme {
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        var searchText by remember { mutableStateOf("") }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    var searchText by remember { mutableStateOf("") }
 
-        val filteredRecords = remember(state.sessions, searchText) {
-            state.sessions.filter { item ->
-                searchText.isBlank() ||
-                    item.session.id.contains(searchText, ignoreCase = true) ||
-                    item.session.label?.contains(searchText, ignoreCase = true) == true ||
-                    item.session.notes?.contains(searchText, ignoreCase = true) == true ||
-                    item.speciesLabels.any { it.contains(searchText, ignoreCase = true) }
-            }
+    val filteredRecords = remember(state.sessions, searchText) {
+        state.sessions.filter { item ->
+            searchText.isBlank() ||
+                item.session.id.contains(searchText, ignoreCase = true) ||
+                item.session.label?.contains(searchText, ignoreCase = true) == true ||
+                item.session.notes?.contains(searchText, ignoreCase = true) == true ||
+                item.speciesLabels.any { it.contains(searchText, ignoreCase = true) }
         }
+    }
 
-        val totalEggs = state.sessions.sumOf { it.totalEpg }
-        val totalSamples = state.sessions.sumOf { it.sampleCount }
+    val totalEggs = state.sessions.sumOf { it.totalEpg }
+    val totalSamples = state.sessions.sumOf { it.sampleCount }
 
-        Scaffold(
-            topBar = {
-                RecordsAppBar(
-                    subtitle = if (state.startDate == null && state.endDate == null) {
-                        "All sessions"
-                    } else {
-                        "Filtered date range"
-                    },
+    Scaffold(
+        topBar = {
+            RecordsAppBar(
+                subtitle = if (state.startDate == null && state.endDate == null) {
+                    "All sessions"
+                } else {
+                    "Filtered date range"
+                },
+            )
+        },
+        containerColor = AgarthaTheme.colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { inner ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner),
+            contentPadding = PaddingValues(bottom = Spacing.md),
+        ) {
+            item {
+                Spacer(Modifier.height(Spacing.xs))
+                SearchInput(
+                    value = searchText,
+                    onValueChange = { searchText = it },
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
-            },
-            containerColor = AppColors.White,
-            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        ) { inner ->
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner),
-                contentPadding = PaddingValues(bottom = Spacing.md),
-            ) {
-                item {
-                    Spacer(Modifier.height(Spacing.xs))
-                    SearchInput(
-                        value = searchText,
-                        onValueChange = { searchText = it },
-                        modifier = Modifier.padding(horizontal = Spacing.xl),
-                    )
-                }
-                item {
-                    Spacer(Modifier.height(Spacing.md))
-                    StatsRow(
-                        sessionsCount = state.sessions.size.toString(),
-                        eggsCount = totalEggs.toString(),
-                        samplesCount = totalSamples.toString(),
-                        modifier = Modifier.padding(horizontal = Spacing.xl),
-                    )
-                }
-                item {
-                    Spacer(Modifier.height(Spacing.md))
-                    SpeciesFilterChips(
-                        selected = state.selectedSpecies,
-                        onSelect = viewModel::onSpeciesSelected,
-                    )
-                }
-                item { Spacer(Modifier.height(Spacing.xs)) }
+            }
+            item {
+                Spacer(Modifier.height(Spacing.md))
+                StatsRow(
+                    sessionsCount = state.sessions.size.toString(),
+                    eggsCount = totalEggs.toString(),
+                    samplesCount = totalSamples.toString(),
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
+                )
+            }
+            item {
+                Spacer(Modifier.height(Spacing.md))
+                SpeciesFilterChips(
+                    selected = state.selectedSpecies,
+                    onSelect = viewModel::onSpeciesSelected,
+                )
+            }
+            item { Spacer(Modifier.height(Spacing.xs)) }
 
-                when {
-                    state.isLoading -> item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            CircularProgressIndicator(color = AppColors.Blue)
-                        }
+            when {
+                state.isLoading -> item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(color = AgarthaTheme.colors.accent)
                     }
-                    filteredRecords.isEmpty() -> item {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(240.dp)
-                                .padding(horizontal = Spacing.xl),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = stringResource(R.string.records_empty),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = AppColors.Gray500,
-                            )
-                        }
-                    }
-                    else -> items(filteredRecords, key = { it.session.id }) { record ->
-                        RecordCard(
-                            record = record,
-                            onClick = { onSessionClick(record.session.id) },
-                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                }
+                filteredRecords.isEmpty() -> item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(240.dp)
+                            .padding(horizontal = Spacing.xl),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.records_empty),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = AgarthaTheme.colors.textSecondary,
                         )
                     }
+                }
+                else -> items(filteredRecords, key = { it.session.id }) { record ->
+                    RecordCard(
+                        record = record,
+                        onClick = { onSessionClick(record.session.id) },
+                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                    )
                 }
             }
         }
@@ -173,7 +171,7 @@ private fun RecordsAppBar(subtitle: String) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppColors.White)
+            .background(AgarthaTheme.colors.background)
             .statusBarsPadding()
             .padding(horizontal = Spacing.xl, vertical = 12.dp),
     ) {
@@ -181,12 +179,12 @@ private fun RecordsAppBar(subtitle: String) {
             Text(
                 "Records",
                 style = MaterialTheme.typography.headlineSmall,
-                color = AppColors.Gray900,
+                color = AgarthaTheme.colors.textPrimary,
             )
             Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,
-                color = AppColors.Gray500,
+                color = AgarthaTheme.colors.textSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
@@ -207,27 +205,27 @@ private fun SearchInput(
             Text(
                 "Search sessions, notes, species...",
                 style = MaterialTheme.typography.bodyMedium,
-                color = AppColors.Gray400,
+                color = AgarthaTheme.colors.textTertiary,
             )
         },
         leadingIcon = {
             Icon(
                 painter = painterResource(R.drawable.ic_search),
                 contentDescription = null,
-                tint = AppColors.Gray400,
+                tint = AgarthaTheme.colors.textTertiary,
                 modifier = Modifier.size(18.dp),
             )
         },
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = AppColors.Gray50,
-            focusedContainerColor = AppColors.White,
-            unfocusedBorderColor = AppColors.Gray200,
-            focusedBorderColor = AppColors.Blue,
-            cursorColor = AppColors.Blue,
-            unfocusedTextColor = AppColors.Gray900,
-            focusedTextColor = AppColors.Gray900,
+            unfocusedContainerColor = AgarthaTheme.colors.surfaceVariant,
+            focusedContainerColor = AgarthaTheme.colors.surface,
+            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
+            focusedBorderColor = AgarthaTheme.colors.accent,
+            cursorColor = AgarthaTheme.colors.accent,
+            unfocusedTextColor = AgarthaTheme.colors.textPrimary,
+            focusedTextColor = AgarthaTheme.colors.textPrimary,
         ),
         textStyle = MaterialTheme.typography.bodyMedium,
     )
@@ -244,13 +242,14 @@ private fun StatsRow(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
+        val colors = AgarthaTheme.colors
         StatTile(
             "Sessions", sessionsCount, Modifier.weight(1f),
-            bgColor = AppColors.Blue, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+            bgColor = colors.accent, contentColor = colors.onAccent, labelColor = colors.onAccent.copy(alpha = 0.8f)
         )
         StatTile(
             "Eggs found", eggsCount, Modifier.weight(1f),
-            bgColor = AppColors.Blue.copy(alpha = 0.7f), contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+            bgColor = colors.gold, contentColor = colors.onGold, labelColor = colors.onGold.copy(alpha = 0.75f)
         )
         StatTile(
             "Samples", samplesCount, Modifier.weight(1f),
@@ -264,14 +263,19 @@ private fun StatTile(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    bgColor: androidx.compose.ui.graphics.Color = AppColors.Gray50,
-    contentColor: androidx.compose.ui.graphics.Color = AppColors.Gray900,
-    labelColor: androidx.compose.ui.graphics.Color = AppColors.Gray500,
+    bgColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.surfaceVariant,
+    contentColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.textPrimary,
+    labelColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.textSecondary,
 ) {
+    val neutralBg = bgColor == AgarthaTheme.colors.surfaceVariant || bgColor == AgarthaTheme.colors.surface
     Column(
         modifier = modifier
             .background(bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, if (bgColor == AppColors.Gray50 || bgColor == AppColors.White) AppColors.Gray100 else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(12.dp))
+            .border(
+                1.dp,
+                if (neutralBg) AgarthaTheme.colors.border else androidx.compose.ui.graphics.Color.Transparent,
+                RoundedCornerShape(12.dp)
+            )
             .padding(12.dp),
     ) {
         Text(
@@ -315,9 +319,10 @@ private fun SpeciesChip(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val bg = if (selected) AppColors.Gray900 else AppColors.White
-    val border = if (selected) AppColors.Gray900 else AppColors.Gray200
-    val text = if (selected) AppColors.White else AppColors.Gray700
+    val colors = AgarthaTheme.colors
+    val bg = if (selected) colors.textPrimary else colors.surface
+    val border = if (selected) colors.textPrimary else colors.borderStrong
+    val text = if (selected) colors.background else colors.textSecondary
 
     Box(
         modifier = Modifier
@@ -358,8 +363,8 @@ private fun RecordCard(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.White, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(AgarthaTheme.colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -369,13 +374,13 @@ private fun RecordCard(
                 Text(
                     record.session.label ?: "Session ${record.session.id.take(4)}",
                     style = MaterialTheme.typography.titleLarge,
-                    color = AppColors.Gray900,
+                    color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
                     metaText,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = AppColors.Gray500,
+                    color = AgarthaTheme.colors.textSecondary,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                     modifier = Modifier.padding(top = 2.dp),
                 )
@@ -384,7 +389,7 @@ private fun RecordCard(
         }
 
         Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = AppColors.Gray100, thickness = 1.dp)
+        HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 1.dp)
         Spacer(Modifier.height(10.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -402,23 +407,24 @@ private fun RecordStat(value: String, label: String) {
             value,
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
-            color = AppColors.Gray900,
+            color = AgarthaTheme.colors.textPrimary,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
         )
         Spacer(Modifier.width(4.dp))
         Text(
             label,
             fontSize = 12.sp,
-            color = AppColors.Gray500,
+            color = AgarthaTheme.colors.textSecondary,
         )
     }
 }
 
 @Composable
 private fun StatusPill(status: SyncStatus) {
+    val colors = AgarthaTheme.colors
     val (bg, fg, text) = when (status) {
-        SyncStatus.Synced -> Triple(AppColors.GreenTint, AppColors.GreenText, "Synced")
-        SyncStatus.PendingSync -> Triple(AppColors.AmberTint, AppColors.AmberText, "Pending sync")
+        SyncStatus.Synced -> Triple(colors.successTint, colors.successText, "Synced")
+        SyncStatus.PendingSync -> Triple(colors.warningTint, colors.warningText, "Pending sync")
     }
     Box(
         modifier = Modifier

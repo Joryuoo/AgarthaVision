@@ -55,21 +55,10 @@ import androidx.compose.ui.layout.ContentScale
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.SvgIcon
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.time.Duration
 import java.time.Instant
-
-// Design Tokens
-private val White = Color(0xFFFFFFFF)
-private val Gray100 = Color(0xFFEEF0F4)
-private val Gray200 = Color(0xFFE2E5EB)
-private val Gray300 = Color(0xFFCBD0DA)
-private val Gray400 = Color(0xFF9CA3AF)
-private val Gray500 = Color(0xFF6B7280)
-private val Gray700 = Color(0xFF374151)
-private val Gray900 = Color(0xFF0F172A)
-private val AmberTint = Color(0xFFFEF3C7)
-private val AmberText = Color(0xFF92400E)
 
 private val InterBaseStyle = TextStyle(
     fontFamily = FontFamily.Default,
@@ -102,18 +91,19 @@ fun VerificationQueueScreen(
     }
 
     val pendingCount = state.flaggedFrames.size
+    val colors = AgarthaTheme.colors
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black), // Background outside the 480dp container
+            .background(colors.background), // Background outside the 480dp container
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 480.dp)
-                .background(White)
+                .background(colors.background)
                 .systemBarsPadding()
         ) {
             // App Bar
@@ -131,14 +121,32 @@ fun VerificationQueueScreen(
                         .clickable { onBackClick() },
                     contentAlignment = Alignment.Center
                 ) {
-                    SvgIcon("M 15 18 L 9 12 L 15 6", color = Gray900, strokeWidth = 1.8f, modifier = Modifier.size(24.dp))
+                    SvgIcon(
+                        "M 15 18 L 9 12 L 15 6",
+                        color = colors.textPrimary,
+                        strokeWidth = 1.8f,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Verify Queue", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Gray900, letterSpacing = (-0.44).sp, style = InterBaseStyle)
-                    Text("${state.flaggedFrames.size} items · $pendingCount pending", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Gray500, style = InterTabularStyle)
+                    Text(
+                        "Verify Queue",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.44).sp,
+                        style = InterBaseStyle
+                    )
+                    Text(
+                        "${state.flaggedFrames.size} items · $pendingCount pending",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.textSecondary,
+                        style = InterTabularStyle
+                    )
                 }
             }
 
@@ -163,15 +171,31 @@ fun VerificationQueueScreen(
                     Row(
                         modifier = Modifier
                             .clip(CircleShape)
-                            .background(if (isSelected) Gray900 else White)
-                            .border(1.dp, if (isSelected) Gray900 else Gray200, CircleShape)
+                            .background(if (isSelected) colors.textPrimary else colors.surface)
+                            .border(1.dp, if (isSelected) colors.textPrimary else colors.borderStrong, CircleShape)
                             .clickable { viewModel.onQueueFilterSelected(filter) }
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) White else Gray700, style = InterBaseStyle)
-                        Text("$count", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = if (isSelected) White.copy(alpha = 0.5f) else Gray400, style = InterTabularStyle)
+                        Text(
+                            label,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isSelected) colors.background else colors.textSecondary,
+                            style = InterBaseStyle
+                        )
+                        Text(
+                            "$count",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isSelected) {
+                                colors.background.copy(alpha = 0.6f)
+                            } else {
+                                colors.textTertiary
+                            },
+                            style = InterTabularStyle
+                        )
                     }
                 }
             }
@@ -179,7 +203,8 @@ fun VerificationQueueScreen(
             // Frame List
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp), // 24px bottom for home indicator
+                // 24px bottom for home indicator
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(
@@ -216,6 +241,7 @@ private fun FrameRow(
     frame: FlaggedFrame,
     onClick: () -> Unit
 ) {
+    val colors = AgarthaTheme.colors
     val isManual = frame.source == FrameSource.MANUAL
     val top = frame.predictions.firstOrNull()
     val isAI = !isManual
@@ -240,8 +266,8 @@ private fun FrameRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(White)
-            .border(1.dp, Gray100, RoundedCornerShape(12.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .clickable { onClick() }
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -252,23 +278,7 @@ private fun FrameRow(
                 .size(52.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .drawBehind {
-                    drawRect(
-                        brush = Brush.linearGradient(
-                            colors = listOf(Color(0xFF0e1424), Color(0xFF060912)),
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, size.height)
-                        )
-                    )
-                    drawCircle(
-                        color = Color(80, 60, 40, (0.6f * 255).toInt()),
-                        radius = size.width * 0.5f,
-                        center = Offset(size.width * 0.35f, size.height * 0.40f)
-                    )
-                    drawCircle(
-                        color = Color(90, 70, 50, (0.4f * 255).toInt()),
-                        radius = size.width * 0.5f,
-                        center = Offset(size.width * 0.70f, size.height * 0.65f)
-                    )
+                    drawRect(brush = AppColors.MicroscopeBrush)
                 }
         ) {
             AsyncImage(
@@ -292,7 +302,7 @@ private fun FrameRow(
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
-                    color = Gray900,
+                    color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     style = InterBaseStyle
@@ -300,14 +310,14 @@ private fun FrameRow(
                 if (isAI) {
                     Box(
                         modifier = Modifier
-                            .background(AppColors.BlueTint, CircleShape)
+                            .background(colors.accentTint, CircleShape)
                             .padding(horizontal = 6.dp, vertical = 2.dp),
                     ) {
                         Text(
                             "AI",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = AppColors.Blue,
+                            color = colors.accent,
                             style = InterTabularStyle,
                         )
                     }
@@ -315,29 +325,48 @@ private fun FrameRow(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(metaSource, fontSize = 12.sp, color = Gray500, style = InterBaseStyle)
-                Text("·", fontSize = 12.sp, color = Gray300, style = InterBaseStyle)
-                Text(timeStr, fontSize = 12.sp, color = Gray500, style = InterTabularStyle)
-                Text("·", fontSize = 12.sp, color = Gray300, style = InterBaseStyle)
+                Text(metaSource, fontSize = 12.sp, color = colors.textSecondary, style = InterBaseStyle)
+                Text("·", fontSize = 12.sp, color = colors.textTertiary, style = InterBaseStyle)
+                Text(timeStr, fontSize = 12.sp, color = colors.textSecondary, style = InterTabularStyle)
+                Text("·", fontSize = 12.sp, color = colors.textTertiary, style = InterBaseStyle)
 
                 Row(
-                    modifier = Modifier.background(AmberTint, CircleShape).padding(horizontal = 6.dp, vertical = 2.dp),
+                    modifier = Modifier
+                        .background(colors.warningTint, CircleShape)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text("Pending", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AmberText, letterSpacing = 0.1.sp, style = InterBaseStyle)
+                    Text(
+                        "Pending",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.warningText,
+                        letterSpacing = 0.1.sp,
+                        style = InterBaseStyle
+                    )
                 }
 
                 if (frame.markedAsRepeat) {
+                    val repeatAccent = colors.accent
                     Row(
-                        modifier = Modifier.background(Color(0xFFEDE9FE), CircleShape).padding(horizontal = 6.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .background(colors.accentTint, CircleShape)
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Canvas(modifier = Modifier.size(7.dp)) {
-                            drawCircle(Color(0xFF7C3AED))
+                            drawCircle(repeatAccent)
                         }
-                        Text("Repeat", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF5B21B6), letterSpacing = 0.1.sp, style = InterBaseStyle)
+                        Text(
+                            "Repeat",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.accent,
+                            letterSpacing = 0.1.sp,
+                            style = InterBaseStyle
+                        )
                     }
                 }
             }
@@ -345,6 +374,11 @@ private fun FrameRow(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = Gray300, modifier = Modifier.size(24.dp))
+        Icon(
+            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colors.textTertiary,
+            modifier = Modifier.size(24.dp)
+        )
     }
 }

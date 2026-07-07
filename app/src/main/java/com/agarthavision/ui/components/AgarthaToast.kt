@@ -16,7 +16,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
  * Toast severity. Replaces KomoUI's `SonnerVariant`.
@@ -78,13 +78,24 @@ fun AgarthaToastHost(
     state: AgarthaToastState,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     val containerColor: Color
-    val contentColor: Color = AppColors.White
+    // Inverse-surface text for the neutral toast; on-accent for bright fills.
+    val contentColor: Color
 
     when (state.currentVariant) {
-        AgarthaToastVariant.Default -> containerColor = AppColors.Gray900
-        AgarthaToastVariant.Destructive -> containerColor = AppColors.Red
-        AgarthaToastVariant.Success -> containerColor = AppColors.Green
+        AgarthaToastVariant.Default -> {
+            containerColor = colors.textPrimary
+            contentColor = colors.background
+        }
+        AgarthaToastVariant.Destructive -> {
+            containerColor = colors.danger
+            contentColor = colors.onAccent
+        }
+        AgarthaToastVariant.Success -> {
+            containerColor = colors.success
+            contentColor = colors.onAccent
+        }
     }
 
     SnackbarHost(

@@ -65,7 +65,7 @@ import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
-import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.io.File
@@ -103,76 +103,74 @@ fun SessionDetailScreen(
     onSampleClick: (String) -> Unit,
     viewModel: SessionDetailViewModel = hiltViewModel(),
 ) {
-    AgarthaVisionTheme {
-        val state by viewModel.state.collectAsStateWithLifecycle()
-        val context = LocalContext.current
-        val snackbarHostState = remember { SnackbarHostState() }
-        val generatedMessage = stringResource(R.string.report_generated_toast)
-        val generationFailedTemplate = stringResource(R.string.report_generation_failed)
-        val sessionDetail = mapToUiModel(state)
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    val generatedMessage = stringResource(R.string.report_generated_toast)
+    val generationFailedTemplate = stringResource(R.string.report_generation_failed)
+    val sessionDetail = mapToUiModel(state)
 
-        LaunchedEffect(viewModel) {
-            viewModel.events.collect { event ->
-                when (event) {
-                    is SessionDetailEvent.ReportGenerated -> snackbarHostState.showSnackbar(generatedMessage)
-                }
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is SessionDetailEvent.ReportGenerated -> snackbarHostState.showSnackbar(generatedMessage)
             }
         }
+    }
 
-        LaunchedEffect(state.generationError) {
-            state.generationError?.let { error ->
-                snackbarHostState.showSnackbar(generationFailedTemplate.format(error))
-            }
+    LaunchedEffect(state.generationError) {
+        state.generationError?.let { error ->
+            snackbarHostState.showSnackbar(generationFailedTemplate.format(error))
         }
+    }
 
-        if (sessionDetail == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppColors.Blue)
-            }
-            return@AgarthaVisionTheme
+    if (sessionDetail == null) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(color = AgarthaTheme.colors.accent)
         }
+        return
+    }
 
-        Scaffold(
-            topBar = {
-                SessionDetailAppBar(
-                    title = sessionDetail.label ?: "Session ${sessionDetail.id}",
-                    subtitle = if (sessionDetail.patientIdOrNote.isNullOrBlank()) {
-                        "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}"
-                    } else {
-                        "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
-                    },
-                    isGenerating = state.isGenerating,
-                    onBack = onBack,
-                    onGenerateReport = viewModel::generateReport,
-                )
-            },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            containerColor = AppColors.White,
-        ) { inner ->
-            if (sessionDetail.verifiedSamples.isEmpty()) {
-                SessionDetailEmpty(
-                    session = sessionDetail,
-                    reports = state.reports,
-                    isGenerating = state.isGenerating,
-                    onGenerate = viewModel::generateReport,
-                    onShare = { report -> shareReportCsv(context, report) },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner),
-                )
-            } else {
-                SessionDetailPopulated(
-                    session = sessionDetail,
-                    reports = state.reports,
-                    isGenerating = state.isGenerating,
-                    onGenerate = viewModel::generateReport,
-                    onShare = { report -> shareReportCsv(context, report) },
-                    onSampleClick = { sample -> onSampleClick(sample.id) },
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(inner),
-                )
-            }
+    Scaffold(
+        topBar = {
+            SessionDetailAppBar(
+                title = sessionDetail.label ?: "Session ${sessionDetail.id}",
+                subtitle = if (sessionDetail.patientIdOrNote.isNullOrBlank()) {
+                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}"
+                } else {
+                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
+                },
+                isGenerating = state.isGenerating,
+                onBack = onBack,
+                onGenerateReport = viewModel::generateReport,
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = AgarthaTheme.colors.background,
+    ) { inner ->
+        if (sessionDetail.verifiedSamples.isEmpty()) {
+            SessionDetailEmpty(
+                session = sessionDetail,
+                reports = state.reports,
+                isGenerating = state.isGenerating,
+                onGenerate = viewModel::generateReport,
+                onShare = { report -> shareReportCsv(context, report) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner),
+            )
+        } else {
+            SessionDetailPopulated(
+                session = sessionDetail,
+                reports = state.reports,
+                isGenerating = state.isGenerating,
+                onGenerate = viewModel::generateReport,
+                onShare = { report -> shareReportCsv(context, report) },
+                onSampleClick = { sample -> onSampleClick(sample.id) },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(inner),
+            )
         }
     }
 }
@@ -218,28 +216,29 @@ private fun SessionDetailAppBar(
     onBack: () -> Unit,
     onGenerateReport: () -> Unit,
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .background(AppColors.White)
+            .background(colors.background)
             .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
     ) {
         IconButton(onClick = onBack) {
             Icon(
                 painter = painterResource(R.drawable.ic_chevron_left),
                 contentDescription = stringResource(R.string.session_detail_back),
-                tint = AppColors.Gray700,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(22.dp),
             )
         }
         Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
-            Text(title, style = MaterialTheme.typography.headlineSmall, color = AppColors.Gray900)
+            Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary)
             Text(
                 subtitle,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = AppColors.Gray500,
+                color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 2.dp),
             )
@@ -248,7 +247,7 @@ private fun SessionDetailAppBar(
             Icon(
                 painter = painterResource(R.drawable.ic_download),
                 contentDescription = stringResource(R.string.report_generate),
-                tint = if (isGenerating) AppColors.Gray300 else AppColors.Gray700,
+                tint = if (isGenerating) colors.textTertiary else colors.textSecondary,
                 modifier = Modifier.size(22.dp),
             )
         }
@@ -263,11 +262,13 @@ private fun EpgHeroCard(
     samplesTotal: Int,
     modifier: Modifier = Modifier,
 ) {
+    val themeColors = AgarthaTheme.colors
+    val heroGlow = themeColors.accentTint
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.Gray50, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(themeColors.surfaceVariant, RoundedCornerShape(12.dp))
+            .border(1.dp, themeColors.border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(
@@ -276,7 +277,7 @@ private fun EpgHeroCard(
                 .drawBehind {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(AppColors.BlueTint.copy(alpha = 0.6f), Color.Transparent),
+                            colors = listOf(heroGlow.copy(alpha = 0.6f), Color.Transparent),
                             center = Offset(size.width, 0f),
                             radius = 220.dp.toPx(),
                         ),
@@ -288,7 +289,7 @@ private fun EpgHeroCard(
                 "EGGS PER GRAM",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = AppColors.Gray500,
+                color = AgarthaTheme.colors.textSecondary,
                 letterSpacing = 1.sp,
             )
             Spacer(Modifier.height(8.dp))
@@ -297,7 +298,7 @@ private fun EpgHeroCard(
                 fontSize = 56.sp,
                 lineHeight = 56.sp,
                 fontWeight = FontWeight.Bold,
-                color = AppColors.Gray900,
+                color = AgarthaTheme.colors.textPrimary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             )
             Spacer(Modifier.height(12.dp))
@@ -309,7 +310,7 @@ private fun EpgHeroCard(
 @Composable
 private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
     if (confirmedEggs == 0) {
-        Text("No confirmed eggs yet", fontSize = 13.sp, color = AppColors.Gray500)
+        Text("No confirmed eggs yet", fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     } else {
         Row(verticalAlignment = Alignment.CenterVertically) {
             MetaItem(confirmedEggs.toString(), "confirmed")
@@ -328,11 +329,11 @@ private fun MetaItem(value: String, label: String) {
             value,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
-            color = AppColors.Gray900,
+            color = AgarthaTheme.colors.textPrimary,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
         )
         Spacer(Modifier.width(3.dp))
-        Text(label, fontSize = 13.sp, color = AppColors.Gray500)
+        Text(label, fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     }
 }
 
@@ -341,7 +342,7 @@ private fun DotSeparator() {
     Text(
         "·",
         fontSize = 13.sp,
-        color = AppColors.Gray300,
+        color = AgarthaTheme.colors.textTertiary,
         modifier = Modifier.padding(horizontal = 7.dp),
     )
 }
@@ -357,8 +358,8 @@ private fun ReportsSection(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.Gray50, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(12.dp))
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -372,7 +373,7 @@ private fun ReportsSection(
                     text = stringResource(R.string.report_section_title),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = AppColors.Gray900,
+                    color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
                     text = if (reports.isEmpty()) {
@@ -381,7 +382,7 @@ private fun ReportsSection(
                         "${reports.size} generated"
                     },
                     fontSize = 12.sp,
-                    color = AppColors.Gray500,
+                    color = AgarthaTheme.colors.textSecondary,
                 )
             }
             SmallActionPill(
@@ -413,14 +414,14 @@ private fun ReportRow(report: Report, onShare: () -> Unit) {
                 text = report.generatedAt.formatReportDateTime(),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = AppColors.Gray900,
+                color = AgarthaTheme.colors.textPrimary,
             )
             Text(
                 text = report.positiveSpecies.joinToString(", ").ifBlank {
                     stringResource(R.string.report_no_positive_species)
                 },
                 fontSize = 12.sp,
-                color = AppColors.Gray500,
+                color = AgarthaTheme.colors.textSecondary,
             )
         }
         ReportStatusPill(status = report.supabaseStatus)
@@ -429,10 +430,11 @@ private fun ReportRow(report: Report, onShare: () -> Unit) {
 
 @Composable
 private fun ReportStatusPill(status: ReportSyncStatus) {
+    val colors = AgarthaTheme.colors
     val (bg, fg, label) = when (status) {
-        ReportSyncStatus.SYNCED -> Triple(AppColors.GreenTint, AppColors.GreenText, R.string.report_status_synced)
-        ReportSyncStatus.SYNC_FAILED -> Triple(AppColors.RedTint, AppColors.Red, R.string.report_status_failed)
-        ReportSyncStatus.PENDING -> Triple(AppColors.AmberTint, AppColors.AmberText, R.string.report_status_pending)
+        ReportSyncStatus.SYNCED -> Triple(colors.successTint, colors.successText, R.string.report_status_synced)
+        ReportSyncStatus.SYNC_FAILED -> Triple(colors.dangerTint, colors.dangerText, R.string.report_status_failed)
+        ReportSyncStatus.PENDING -> Triple(colors.warningTint, colors.warningText, R.string.report_status_pending)
     }
     Box(
         modifier = Modifier
@@ -454,13 +456,14 @@ private fun SmallActionPill(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
-            .background(if (enabled) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(999.dp))
+            .background(if (enabled) colors.accent else colors.borderStrong, RoundedCornerShape(999.dp))
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
     ) {
-        Text(label, color = AppColors.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(label, color = colors.onAccent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -475,11 +478,11 @@ private fun SectionHeader(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray900)
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AgarthaTheme.colors.textPrimary)
         Text(
             count,
             fontSize = 12.sp,
-            color = AppColors.Gray500,
+            color = AgarthaTheme.colors.textSecondary,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
         )
     }
@@ -525,10 +528,10 @@ private fun SampleTile(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(6.dp)
-                    .background(Color(0xFF7C3AED), RoundedCornerShape(999.dp))
+                    .background(AgarthaTheme.colors.gold, RoundedCornerShape(999.dp))
                     .padding(horizontal = 5.dp, vertical = 2.dp),
             ) {
-                Text("R", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("R", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.onGold)
             }
         }
         SpeciesBadge(
@@ -554,7 +557,8 @@ private fun ConfidenceChip(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = Modifier) {
-    val bg = if (isManual) AppColors.Amber else AppColors.Blue
+    // On-image badges: fixed maroon/amber fills with white text (mode-independent).
+    val bg = if (isManual) AppColors.Amber else AppColors.Maroon
     Box(
         modifier = modifier
             .background(bg, RoundedCornerShape(999.dp))
@@ -594,7 +598,10 @@ private fun SessionDetailPopulated(
                     speciesCount = session.speciesCount,
                     samplesTotal = session.samplesTotal,
                     modifier = Modifier.semantics(mergeDescendants = true) {
-                        contentDescription = "Eggs per gram: ${session.epg}, ${session.confirmedEggs} confirmed, ${session.speciesCount} species, ${session.samplesTotal} samples"
+                        contentDescription = "Eggs per gram: ${session.epg}, " +
+                            "${session.confirmedEggs} confirmed, " +
+                            "${session.speciesCount} species, " +
+                            "${session.samplesTotal} samples"
                     },
                 )
                 Spacer(Modifier.height(Spacing.md))
@@ -660,23 +667,28 @@ private fun EmptyStateGraphic() {
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(AppColors.Gray50, CircleShape),
+                .background(AgarthaTheme.colors.surfaceVariant, CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_minus_circle),
                 contentDescription = null,
-                tint = AppColors.Gray300,
+                tint = AgarthaTheme.colors.textTertiary,
                 modifier = Modifier.size(26.dp),
             )
         }
         Spacer(Modifier.height(14.dp))
-        Text("No verified samples yet", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray700)
+        Text(
+            "No verified samples yet",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AgarthaTheme.colors.textSecondary
+        )
         Spacer(Modifier.height(4.dp))
         Text(
             "Captured frames will appear here once verified.",
             fontSize = 13.sp,
-            color = AppColors.Gray500,
+            color = AgarthaTheme.colors.textSecondary,
             textAlign = TextAlign.Center,
         )
     }
@@ -686,19 +698,21 @@ private fun shareReportCsv(context: Context, report: Report) {
     val path = report.csvFilePath ?: return
     val file = File(path)
     if (!file.exists()) return
-    val uri = runCatching {
+
+    runCatching {
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }.getOrElse { return }
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/csv"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        putExtra(Intent.EXTRA_SUBJECT, file.name)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }.onSuccess { uri ->
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, file.name)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(intent, file.name).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chooser) }
     }
-    val chooser = Intent.createChooser(intent, file.name).apply {
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    }
-    runCatching { context.startActivity(chooser) }
 }
 
 private fun Instant.formatReportDateTime(): String =

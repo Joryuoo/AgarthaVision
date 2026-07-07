@@ -1,14 +1,18 @@
 package com.agarthavision.ui.dashboard
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.Sample
+import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
+import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,6 +25,7 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
@@ -40,6 +45,7 @@ data class DashboardUiState(
     val allSynced: Boolean = true,
     val lastSyncLabel: String = "—",
     val syncedSamplesCount: Int = 0,
+    val isDarkMode: Boolean = false,
 )
 
 data class ActiveSessionState(
@@ -73,6 +79,7 @@ data class PendingAndSync(
     val syncedSamplesCount: Int
 )
 
+@Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
@@ -81,7 +88,11 @@ class DashboardViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
     private val detectionRepository: DetectionRepository,
+    observeThemeModeUseCase: ObserveThemeModeUseCase,
+    private val setThemeModeUseCase: SetThemeModeUseCase,
 ) : ViewModel() {
+
+    private val themeModeFlow = observeThemeModeUseCase()
 
     private val userIdFlow = flow {
         val uid = authRepository.getCurrentUserId()
@@ -122,10 +133,10 @@ class DashboardViewModel @Inject constructor(
             val oldestPendingAgo = if (oldestPendingMs != null) {
                 val diffMs = System.currentTimeMillis() - oldestPendingMs
                 when {
-                    diffMs < 60_000L             -> "${diffMs / 1_000}s ago"
-                    diffMs < 3_600_000L          -> "${diffMs / 60_000}m ago"
-                    diffMs < 86_400_000L         -> "${diffMs / 3_600_000}h ago"
-                    else                         -> "${diffMs / 86_400_000}d ago"
+                    diffMs < MILLIS_PER_MINUTE -> "${diffMs / MILLIS_PER_SECOND}s ago"
+                    diffMs < MILLIS_PER_HOUR -> "${diffMs / MILLIS_PER_MINUTE}m ago"
+                    diffMs < MILLIS_PER_DAY -> "${diffMs / MILLIS_PER_HOUR}h ago"
+                    else -> "${diffMs / MILLIS_PER_DAY}d ago"
                 }
             } else ""
 
@@ -145,10 +156,10 @@ class DashboardViewModel @Inject constructor(
             val lastSyncLabel = if (lastSyncedMs != null) {
                 val diffMs = System.currentTimeMillis() - lastSyncedMs
                 when {
-                    diffMs < 60_000L    -> "just now"
-                    diffMs < 3_600_000L -> "${diffMs / 60_000}m ago"
-                    diffMs < 86_400_000L -> "${diffMs / 3_600_000}h ago"
-                    else                -> "${diffMs / 86_400_000}d ago"
+                    diffMs < MILLIS_PER_MINUTE -> "just now"
+                    diffMs < MILLIS_PER_HOUR -> "${diffMs / MILLIS_PER_MINUTE}m ago"
+                    diffMs < MILLIS_PER_DAY -> "${diffMs / MILLIS_PER_HOUR}h ago"
+                    else -> "${diffMs / MILLIS_PER_DAY}d ago"
                 }
             } else "never"
 
@@ -196,14 +207,14 @@ class DashboardViewModel @Inject constructor(
 
     // Historical charts
     private val historicalDataFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
-        val sevenDaysAgo = Instant.now().minus(Duration.ofDays(7)).toEpochMilli()
+        val sevenDaysAgo = Instant.now().minus(Duration.ofDays(HISTORICAL_DAYS.toLong())).toEpochMilli()
         combine(
             detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo),
             detectionRepository.observeDailyEggCountsSince(userId, sevenDaysAgo)
         ) { eggCounts, dailyCounts ->
             // Process Species
             val totalEggs = eggCounts.sumOf { it.count }.coerceAtLeast(1)
-            val topSpecies = eggCounts.take(3).map {
+            val topSpecies = eggCounts.take(TOP_SPECIES_COUNT).map {
                 val ratio = it.count.toFloat() / totalEggs
                 SpeciesData(
                     name = it.species,
@@ -213,16 +224,21 @@ class DashboardViewModel @Inject constructor(
             }
 
             // Process Sparkline (7 days)
-            val sparkline = MutableList(7) { 0f }
-            val startOfDay = Instant.now().atZone(ZoneId.systemDefault()).toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val dayMs = 24 * 60 * 60 * 1000L
+            val sparkline = MutableList(HISTORICAL_DAYS) { 0f }
+            val startOfDay = Instant.now()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+            val dayMs = MILLIS_PER_DAY
 
             for (daily in dailyCounts) {
                 // Determine which of the last 7 days this timestamp belongs to (0 = oldest, 6 = today)
                 val diffMs = startOfDay - daily.timestamp
                 val daysAgo = if (diffMs < 0) 0 else (diffMs / dayMs).toInt()
-                val index = 6 - daysAgo
-                if (index in 0..6) {
+                val index = SPARKLINE_LAST_INDEX - daysAgo
+                if (index in 0..SPARKLINE_LAST_INDEX) {
                     sparkline[index] += daily.count.toFloat()
                 }
             }
@@ -239,8 +255,9 @@ class DashboardViewModel @Inject constructor(
         kpiStateFlow,
         pendingAndSyncFlow,
         activeSessionStateFlow,
-        historicalDataFlow
-    ) { kpis, pendingSync, activeSession, (topSpecies, sparkline) ->
+        historicalDataFlow,
+        themeModeFlow
+    ) { kpis, pendingSync, activeSession, (topSpecies, sparkline), themeMode ->
         DashboardUiState(
             isLoading           = false,
             kpis                = kpis,
@@ -251,11 +268,33 @@ class DashboardViewModel @Inject constructor(
             syncedSamplesCount  = pendingSync.syncedSamplesCount,
             activeSession       = activeSession,
             topSpecies          = topSpecies,
-            epgSparklineData    = sparkline
+            epgSparklineData    = sparkline,
+            isDarkMode          = themeMode == ThemeMode.DARK
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = DashboardUiState()
     )
+
+    /** Flips the persisted theme between light and dark. */
+    fun onToggleTheme() {
+        val target = if (uiState.value.isDarkMode) ThemeMode.LIGHT else ThemeMode.DARK
+        viewModelScope.launch {
+            setThemeModeUseCase(target).onFailure { error ->
+                Log.e(TAG, "Failed to persist theme mode $target", error)
+            }
+        }
+    }
+
+    private companion object {
+        const val TAG = "DashboardViewModel"
+        const val MILLIS_PER_SECOND = 1_000L
+        const val MILLIS_PER_MINUTE = 60_000L
+        const val MILLIS_PER_HOUR = 3_600_000L
+        const val MILLIS_PER_DAY = 86_400_000L
+        const val HISTORICAL_DAYS = 7
+        const val TOP_SPECIES_COUNT = 3
+        const val SPARKLINE_LAST_INDEX = HISTORICAL_DAYS - 1
+    }
 }

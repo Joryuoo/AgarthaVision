@@ -6,7 +6,18 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -41,11 +52,9 @@ import coil.compose.AsyncImage
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.components.glassChrome
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun ManualSheet(
@@ -73,7 +82,7 @@ fun ManualSheet(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppColors.Gray200)
+            .background(AgarthaTheme.colors.background)
             .systemBarsPadding()
     ) {
         ManualSheetContent(
@@ -107,15 +116,11 @@ private fun ManualSheetContent(
     actions: ManualSheetActions,
 ) {
     val frame = state.frame ?: return
-    val timeLabel = remember(frame.capturedAt) {
-        DateTimeFormatter.ofPattern("HH:mm:ss")
-            .withZone(ZoneId.systemDefault())
-            .format(frame.capturedAt)
-    }
 
     var showDiscardConfirm by remember { mutableStateOf(false) }
     var showCustomSpeciesDialog by remember { mutableStateOf(false) }
     var customSpeciesText by remember { mutableStateOf("") }
+    val colors = AgarthaTheme.colors
 
     Column(
         modifier = Modifier
@@ -138,7 +143,7 @@ private fun ManualSheetContent(
                     .height(200.dp)
                     .padding(bottom = 14.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .border(0.5.dp, Color(0, 0, 0, (0.08f * 255).toInt()), RoundedCornerShape(18.dp))
+                    .border(0.5.dp, colors.border, RoundedCornerShape(18.dp))
             ) {
                 AsyncImage(
                     model = frame.jpegBytes,
@@ -154,7 +159,7 @@ private fun ManualSheetContent(
                 fontFamily = FontFamily.Monospace,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = AppColors.Gray500,
+                color = colors.textSecondary,
                 letterSpacing = 0.8.sp,
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
             )
@@ -178,14 +183,21 @@ private fun ManualSheetContent(
                     val selected = state.selectedSpecies == species
                     Box(
                         modifier = Modifier
-                            .background(if (selected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
-                            .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                            .background(
+                                if (selected) colors.accentTint else Color.Transparent,
+                                RoundedCornerShape(100.dp)
+                            )
+                            .border(
+                                0.5.dp,
+                                if (selected) colors.accent else colors.borderStrong,
+                                RoundedCornerShape(100.dp)
+                            )
                             .clickable { actions.onSpeciesSelected(species) }
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
                             text = label,
-                            color = AppColors.Gray900,
+                            color = if (selected) colors.accent else colors.textPrimary,
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontStyle = FontStyle.Italic,
@@ -195,11 +207,19 @@ private fun ManualSheetContent(
                 }
 
                 // Other... chip
-                val isOtherSelected = state.selectedSpecies != null && quickSpecies.none { it.first == state.selectedSpecies }
+                val isOtherSelected = state.selectedSpecies != null &&
+                    quickSpecies.none { it.first == state.selectedSpecies }
                 Box(
                     modifier = Modifier
-                        .background(if (isOtherSelected) AppColors.Gray300 else Color.Transparent, RoundedCornerShape(100.dp))
-                        .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(100.dp))
+                        .background(
+                            if (isOtherSelected) colors.accentTint else Color.Transparent,
+                            RoundedCornerShape(100.dp)
+                        )
+                        .border(
+                            0.5.dp,
+                            if (isOtherSelected) colors.accent else colors.borderStrong,
+                            RoundedCornerShape(100.dp)
+                        )
                         .clickable {
                             showCustomSpeciesDialog = true
                         }
@@ -207,7 +227,7 @@ private fun ManualSheetContent(
                 ) {
                     Text(
                         text = if (isOtherSelected) state.selectedSpecies?.name ?: "Other..." else "Other...",
-                        color = AppColors.Gray900,
+                        color = if (isOtherSelected) colors.accent else colors.textPrimary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         fontStyle = FontStyle.Normal, // Not italic
@@ -222,7 +242,7 @@ private fun ManualSheetContent(
                     .fillMaxWidth()
                     .padding(bottom = 14.dp)
                     .background(Color.Transparent, RoundedCornerShape(14.dp))
-                    .border(0.5.dp, AppColors.Gray300, RoundedCornerShape(14.dp))
+                    .border(0.5.dp, colors.borderStrong, RoundedCornerShape(14.dp))
                     .padding(horizontal = 16.dp, vertical = 14.dp),
             ) {
                 Text(
@@ -230,7 +250,7 @@ private fun ManualSheetContent(
                     fontFamily = FontFamily.Monospace,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = AppColors.Gray500,
+                    color = colors.textSecondary,
                     letterSpacing = 0.8.sp,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
@@ -244,8 +264,8 @@ private fun ManualSheetContent(
                     enabled = !state.isSubmitting,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AppColors.Blue,
-                        unfocusedBorderColor = AppColors.Gray200,
+                        focusedBorderColor = colors.accent,
+                        unfocusedBorderColor = colors.borderStrong,
                     ),
                     shape = RoundedCornerShape(12.dp),
                 )
@@ -276,7 +296,7 @@ private fun ManualSheetContent(
                     },
                     enabled = !state.isSubmitting,
                 ) {
-                    Text("Discard", color = AppColors.Red)
+                    Text("Discard", color = AgarthaTheme.colors.danger)
                 }
             },
             dismissButton = {

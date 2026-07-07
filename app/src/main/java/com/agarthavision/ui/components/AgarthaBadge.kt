@@ -12,12 +12,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
  * Visual variant for [AgarthaBadge]. Replaces KomoUI's `BadgeVariant`.
  *
- * - [Default]     filled brand blue, white text
+ * - [Default]     filled brand maroon, on-accent text
  * - [Secondary]   filled neutral gray, muted text
  * - [Outline]     hairline border, transparent fill
  * - [Destructive] soft red tint, red text
@@ -27,7 +27,8 @@ enum class AgarthaBadgeVariant { Default, Secondary, Outline, Destructive }
 private val BadgeShape = RoundedCornerShape(999.dp)
 
 /**
- * Variant-aware pill badge built on Material3 [Surface], styled from [AppColors].
+ * Variant-aware pill badge built on Material3 [Surface], styled from
+ * [AgarthaTheme] tokens so it adapts to light and dark mode.
  * [Surface] propagates `contentColor` down to text/icons in [content].
  * Drop-in replacement for the legacy badge component.
  */
@@ -37,27 +38,28 @@ fun AgarthaBadge(
     variant: AgarthaBadgeVariant = AgarthaBadgeVariant.Default,
     content: @Composable () -> Unit,
 ) {
+    val colors = AgarthaTheme.colors
     val containerColor: Color
     val contentColor: Color
     var border: BorderStroke? = null
 
     when (variant) {
         AgarthaBadgeVariant.Default -> {
-            containerColor = AppColors.Blue
-            contentColor = AppColors.White
+            containerColor = colors.accent
+            contentColor = colors.onAccent
         }
         AgarthaBadgeVariant.Secondary -> {
-            containerColor = AppColors.Gray100
-            contentColor = AppColors.Gray700
+            containerColor = colors.surfaceMuted
+            contentColor = colors.textSecondary
         }
         AgarthaBadgeVariant.Outline -> {
             containerColor = Color.Transparent
-            contentColor = AppColors.Gray700
-            border = BorderStroke(1.dp, AppColors.Gray200)
+            contentColor = colors.textSecondary
+            border = BorderStroke(1.dp, colors.borderStrong)
         }
         AgarthaBadgeVariant.Destructive -> {
-            containerColor = AppColors.RedTint
-            contentColor = AppColors.Red
+            containerColor = colors.dangerTint
+            contentColor = colors.dangerText
         }
     }
 

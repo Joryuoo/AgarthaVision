@@ -13,8 +13,8 @@ import com.agarthavision.ui.theme.AgarthaVisionTheme
 @Composable
 fun DetectionOverlay(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxSize()) {
-        // TODO: for each Detection: drawCircle(color = ClinicalBlue, ...) + drawText(species label)
-        // TODO: highlight color switches to AlertCoral when confidence < threshold
+        // TODO(DMKuZu): for each Detection: drawCircle(color = AppColors.Maroon, ...) + drawText(species label)
+        // TODO(DMKuZu): highlight color switches to AppColors.Red when confidence < threshold
     }
 }
 

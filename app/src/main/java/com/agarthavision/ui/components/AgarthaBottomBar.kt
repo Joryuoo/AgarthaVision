@@ -39,7 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 sealed class Tab(
     val route: String,
@@ -63,8 +63,6 @@ val bottomBarRoutes: Set<String> = setOf(
     "records"
 )
 
-private val TopBorderColor = Color(0xFFEEF0F4) // Gray100
-
 /**
  * Custom bottom navigation bar built from basic Compose primitives.
  * Avoids Material3 NavigationBar inset issues entirely.
@@ -76,19 +74,21 @@ fun AgarthaBottomBar(
     verifyQueueCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
+    val colors = AgarthaTheme.colors
+    val topBorderColor = colors.border
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .drawBehind {
                 // 1px top border
                 drawLine(
-                    color = TopBorderColor,
+                    color = topBorderColor,
                     start = Offset(0f, 0f),
                     end = Offset(size.width, 0f),
                     strokeWidth = 1.dp.toPx()
                 )
             },
-        color = AppColors.White,
+        color = colors.surface,
         shadowElevation = 0.dp
     ) {
         Column(
@@ -105,12 +105,12 @@ fun AgarthaBottomBar(
                 val selected = currentRoute == tab.route
 
                 val iconColor by animateColorAsState(
-                    targetValue = if (selected) AppColors.Blue else AppColors.Gray400,
+                    targetValue = if (selected) colors.accent else colors.textTertiary,
                     animationSpec = tween(200),
                     label = "iconColor"
                 )
                 val labelColor by animateColorAsState(
-                    targetValue = if (selected) AppColors.Blue else AppColors.Gray500,
+                    targetValue = if (selected) colors.accent else colors.textSecondary,
                     animationSpec = tween(200),
                     label = "labelColor"
                 )
@@ -161,11 +161,12 @@ fun AgarthaBottomBar(
 
 @Composable
 private fun BadgedBox(count: Int) {
+    val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
             .offset(x = 10.dp, y = (-4).dp)
-            .background(AppColors.Red, RoundedCornerShape(999.dp))
-            .border(2.dp, AppColors.White, RoundedCornerShape(999.dp))
+            .background(colors.danger, RoundedCornerShape(999.dp))
+            .border(2.dp, colors.surface, RoundedCornerShape(999.dp))
             .padding(horizontal = 4.dp, vertical = 0.dp)
             .heightIn(min = 16.dp)
             .widthIn(min = 16.dp),
@@ -175,7 +176,7 @@ private fun BadgedBox(count: Int) {
             if (count > 99) "99+" else count.toString(),
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
-            color = AppColors.White,
+            color = colors.onAccent,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
         )
     }

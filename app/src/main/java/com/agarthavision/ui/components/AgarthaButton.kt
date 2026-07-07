@@ -14,12 +14,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
  * Visual variant for [AgarthaButton]. Replaces KomoUI's `ButtonVariant`.
  *
- * - [Primary]     filled brand blue, white text
+ * - [Primary]     filled brand maroon, on-accent text
  * - [Secondary]   filled neutral gray, dark text
  * - [Outline]     hairline border, transparent fill
  * - [Destructive] filled red, white text
@@ -37,8 +37,8 @@ private val PillShape = RoundedCornerShape(999.dp)
 
 /**
  * Variant-aware button wrapping Material3 [Button] / [OutlinedButton] / [TextButton],
- * styled entirely from [AppColors]. The pill shape and token palette match
- * `agartha-design-system.md`. Drop-in replacement for the legacy button component.
+ * styled entirely from [AgarthaTheme] tokens so every variant adapts to light and
+ * dark mode. Drop-in replacement for the legacy button component.
  */
 @Composable
 fun AgarthaButton(
@@ -50,6 +50,7 @@ fun AgarthaButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val sizedModifier = modifier.height(size.height)
+    val colors = AgarthaTheme.colors
 
     when (variant) {
         AgarthaButtonVariant.Primary -> Button(
@@ -58,8 +59,8 @@ fun AgarthaButton(
             enabled = enabled,
             shape = PillShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = AppColors.Blue,
-                contentColor = AppColors.White,
+                containerColor = colors.accent,
+                contentColor = colors.onAccent,
             ),
             content = content,
         )
@@ -70,8 +71,8 @@ fun AgarthaButton(
             enabled = enabled,
             shape = PillShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = AppColors.Gray100,
-                contentColor = AppColors.Gray900,
+                containerColor = colors.surfaceMuted,
+                contentColor = colors.textPrimary,
             ),
             content = content,
         )
@@ -82,8 +83,8 @@ fun AgarthaButton(
             enabled = enabled,
             shape = PillShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = AppColors.Red,
-                contentColor = AppColors.White,
+                containerColor = colors.danger,
+                contentColor = colors.surface,
             ),
             content = content,
         )
@@ -93,9 +94,9 @@ fun AgarthaButton(
             modifier = sizedModifier,
             enabled = enabled,
             shape = PillShape,
-            border = BorderStroke(1.dp, AppColors.Gray200),
+            border = BorderStroke(1.dp, colors.borderStrong),
             colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = AppColors.Gray900,
+                contentColor = colors.textPrimary,
             ),
             content = content,
         )
@@ -106,7 +107,7 @@ fun AgarthaButton(
             enabled = enabled,
             shape = PillShape,
             colors = ButtonDefaults.textButtonColors(
-                contentColor = AppColors.Gray700,
+                contentColor = colors.textSecondary,
             ),
             content = content,
         )

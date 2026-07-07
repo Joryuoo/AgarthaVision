@@ -81,6 +81,7 @@ import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaSpacing
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.verify.ManualSheet
@@ -131,7 +132,7 @@ private fun IconButtonGlass(
         modifier = Modifier
             .size(40.dp)
             .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-            .background(Color(20, 28, 42, (0.55f * 255).toInt()), CircleShape)
+            .background(Color(28, 20, 18, (0.55f * 255).toInt()), CircleShape)
             .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
             .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center,
@@ -289,7 +290,7 @@ fun CaptureScreen(
             Row(
                 modifier = Modifier
                     .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-                    .background(Color(20, 28, 42, (0.55f * 255).toInt()), CircleShape)
+                    .background(Color(28, 20, 18, (0.55f * 255).toInt()), CircleShape)
                     .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
                     .padding(start = 11.dp, end = 14.dp, top = 7.dp, bottom = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -339,8 +340,8 @@ fun CaptureScreen(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
                                 .offset(x = 6.dp, y = (-6).dp)
-                                .background(Color(0xFF1E3FD9), CircleShape)
-                                .border(2.dp, Color(20, 28, 42, (0.85f * 255).toInt()), CircleShape)
+                                .background(AppColors.MaroonBright, CircleShape)
+                                .border(2.dp, Color(28, 18, 16, (0.85f * 255).toInt()), CircleShape)
                                 .padding(horizontal = 5.dp)
                                 .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
                             contentAlignment = Alignment.Center,
@@ -386,7 +387,7 @@ fun CaptureScreen(
                 Column(
                     modifier = Modifier
                         .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .background(Color(20, 28, 42, (0.55f * 255).toInt()), RoundedCornerShape(16.dp))
+                        .background(Color(28, 20, 18, (0.55f * 255).toInt()), RoundedCornerShape(16.dp))
                         .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                         .defaultMinSize(minWidth = 64.dp),
@@ -556,7 +557,7 @@ private fun EndSessionConfirmDialog(
                         enabled = !isBusy,
                         modifier = Modifier.fillMaxWidth(),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AppColors.Blue,
+                            focusedBorderColor = AgarthaTheme.colors.accent,
                             unfocusedBorderColor = AppColors.Gray200,
                         ),
                         shape = RoundedCornerShape(12.dp),

@@ -55,17 +55,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.ui.navigation.Screen
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
-import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-
-// Species colors for the mix bar
-private val SpeciesBlue  = AppColors.Blue
-private val SpeciesCyan  = Color(0xFF0EA5E9)
-private val SpeciesAmber = AppColors.Amber
 
 @Composable
 fun DashboardScreen(
@@ -74,95 +69,96 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    AgarthaVisionTheme {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AppColors.White)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(AgarthaTheme.colors.background)
+    ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = Spacing.md)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = Spacing.md)
-            ) {
-                // 1. App Header
-                item {
-                    com.agarthavision.ui.components.AppHeader()
-                }
+            // 1. App Header (with theme toggle)
+            item {
+                com.agarthavision.ui.components.AppHeader(
+                    isDarkMode = state.isDarkMode,
+                    onToggleTheme = viewModel::onToggleTheme
+                )
+            }
 
-                // 2. Active Session Hero (only when active)
-                state.activeSession?.let { session ->
-                    item {
-                        ActiveSessionHero(
-                            sessionId    = session.label,
-                            elapsed      = session.startedAtAgo,
-                            frameCount   = session.totalFrames.toIntOrNull() ?: 0,
-                            onResume     = { onNavigate(Screen.Capture.route) },
-                            modifier     = Modifier.padding(horizontal = Spacing.xl)
-                        )
-                        Spacer(Modifier.height(Spacing.lg))
-                    }
-                }
-
-                // 3. Today's Activity KPI Grid
+            // 2. Active Session Hero (only when active)
+            state.activeSession?.let { session ->
                 item {
-                    SectionLabel(
-                        "Today's activity",
-                        modifier = Modifier.padding(horizontal = Spacing.xl)
+                    ActiveSessionHero(
+                        sessionId    = session.label,
+                        elapsed      = session.startedAtAgo,
+                        frameCount   = session.totalFrames.toIntOrNull() ?: 0,
+                        onResume     = { onNavigate(Screen.Capture.route) },
+                        modifier     = Modifier.padding(horizontal = Spacing.xl)
                     )
+                    Spacer(Modifier.height(Spacing.lg))
                 }
-                item {
-                    Spacer(Modifier.height(Spacing.sm))
-                    KpiGrid(
-                        kpis = state.kpis,
-                        modifier = Modifier.padding(horizontal = Spacing.xl)
-                    )
-                }
+            }
 
-                // 4. Sparkline card
+            // 3. Today's Activity KPI Grid
+            item {
+                SectionLabel(
+                    "Today's activity",
+                    modifier = Modifier.padding(horizontal = Spacing.xl)
+                )
+            }
+            item {
+                Spacer(Modifier.height(Spacing.sm))
+                KpiGrid(
+                    kpis = state.kpis,
+                    modifier = Modifier.padding(horizontal = Spacing.xl)
+                )
+            }
+
+            // 4. Sparkline card
+            item {
+                Spacer(Modifier.height(Spacing.lg))
+                SparklineCard(
+                    values = if (state.epgSparklineData.size == 7) state.epgSparklineData
+                             else List(7) { 0f },
+                    delta  = "+38%",
+                    modifier = Modifier.padding(horizontal = Spacing.xl)
+                )
+            }
+
+            // 5. Species mix card
+            if (state.topSpecies.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(Spacing.lg))
-                    SparklineCard(
-                        values = if (state.epgSparklineData.size == 7) state.epgSparklineData
-                                 else List(7) { 0f },
-                        delta  = "+38%",
-                        modifier = Modifier.padding(horizontal = Spacing.xl)
+                    SpeciesMixCard(
+                        speciesData = state.topSpecies,
+                        modifier    = Modifier.padding(horizontal = Spacing.xl)
                     )
                 }
+            }
 
-                // 5. Species mix card
-                if (state.topSpecies.isNotEmpty()) {
-                    item {
-                        Spacer(Modifier.height(Spacing.lg))
-                        SpeciesMixCard(
-                            speciesData = state.topSpecies,
-                            modifier    = Modifier.padding(horizontal = Spacing.xl)
-                        )
-                    }
-                }
-
-                // 6. Verify alert row
-                if (state.pendingReviewCount > 0) {
-                    item {
-                        Spacer(Modifier.height(Spacing.lg))
-                        VerifyAlertRow(
-                            pendingCount = state.pendingReviewCount,
-                            oldestAgo    = state.oldestPendingAgo,
-                            onClick      = { onNavigate(Screen.VerificationQueue.route) },
-                            modifier     = Modifier.padding(horizontal = Spacing.xl)
-                        )
-                    }
-                }
-
-                // 7. Sync status row
+            // 6. Verify alert row
+            if (state.pendingReviewCount > 0) {
                 item {
-                    Spacer(Modifier.height(Spacing.md))
-                    SyncStatusRow(
-                        allSynced      = state.allSynced,
-                        lastSyncLabel  = state.lastSyncLabel,
-                        samplesSynced  = state.syncedSamplesCount,
-                        modifier       = Modifier.padding(horizontal = Spacing.xl)
+                    Spacer(Modifier.height(Spacing.lg))
+                    VerifyAlertRow(
+                        pendingCount = state.pendingReviewCount,
+                        oldestAgo    = state.oldestPendingAgo,
+                        onClick      = { onNavigate(Screen.VerificationQueue.route) },
+                        modifier     = Modifier.padding(horizontal = Spacing.xl)
                     )
                 }
+            }
+
+            // 7. Sync status row
+            item {
+                Spacer(Modifier.height(Spacing.md))
+                SyncStatusRow(
+                    allSynced      = state.allSynced,
+                    lastSyncLabel  = state.lastSyncLabel,
+                    samplesSynced  = state.syncedSamplesCount,
+                    modifier       = Modifier.padding(horizontal = Spacing.xl)
+                )
             }
         }
     }
@@ -176,7 +172,7 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         text.uppercase(),
         fontSize = 11.sp,
         fontWeight = FontWeight.SemiBold,
-        color = AppColors.Gray500,
+        color = AgarthaTheme.colors.textSecondary,
         letterSpacing = 1.1.sp,
         modifier = modifier
     )
@@ -190,24 +186,25 @@ private fun ActiveSessionHero(
     onResume: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(AppColors.Blue)
+            .background(colors.accent)
             .clickable(onClick = onResume)
             .padding(18.dp)
     ) {
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                PulsingDot(color = AppColors.White, size = 6.dp)
+                PulsingDot(color = colors.onAccent, size = 6.dp)
                 Spacer(Modifier.width(6.dp))
                 Text(
                     "LIVE SESSION",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AppColors.White.copy(alpha = 0.92f),
+                    color = colors.onAccent.copy(alpha = 0.92f),
                     letterSpacing = 1.2.sp
                 )
             }
@@ -216,7 +213,7 @@ private fun ActiveSessionHero(
                 sessionId,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = AppColors.White,
+                color = colors.onAccent,
                 letterSpacing = (-0.7).sp,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 30.sp
@@ -224,27 +221,27 @@ private fun ActiveSessionHero(
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(elapsed,
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.White,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text("  ·  ", fontSize = 12.sp, color = AppColors.White.copy(alpha = 0.5f))
+                Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
                 Text(frameCount.toString(),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = AppColors.White,
+                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text(" frames", fontSize = 12.sp, color = AppColors.White.copy(alpha = 0.85f))
+                Text(" frames", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.85f))
             }
         }
 
         Box(
             modifier = Modifier
                 .size(56.dp)
-                .background(AppColors.White, CircleShape)
+                .background(colors.surface, CircleShape)
                 .clickable(onClick = onResume),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_play),
                 contentDescription = "Resume",
-                tint = AppColors.Blue,
+                tint = colors.accent,
                 modifier = Modifier.size(22.dp)
             )
         }
@@ -272,21 +269,29 @@ private fun PulsingDot(color: Color, size: Dp) {
 
 @Composable
 private fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             KpiTile("Sessions", kpis.sessionsCount, null, true,
-                bgColor = AppColors.Blue, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                bgColor = colors.accent,
+                contentColor = colors.onAccent,
+                labelColor = colors.onAccent.copy(alpha = 0.8f),
                 modifier = Modifier.weight(1f))
             KpiTile("Samples", kpis.samplesCount, null, true,
-                bgColor = AppColors.Gray700, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                bgColor = AppColors.Gray700,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White.copy(alpha = 0.8f),
                 modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
             KpiTile("Verified", kpis.verifiedRatio, null, true,
-                bgColor = AppColors.Gray900, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                bgColor = AppColors.Gray900,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White.copy(alpha = 0.8f),
+                borderColor = colors.border,
                 modifier = Modifier.weight(1f))
             KpiTile("EPG avg", kpis.epgAvgStatus, null, false,
-                bgColor = AppColors.Blue.copy(alpha = 0.7f), contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f),
+                bgColor = colors.gold, contentColor = colors.onGold, labelColor = colors.onGold.copy(alpha = 0.75f),
                 modifier = Modifier.weight(1f))
         }
     }
@@ -298,15 +303,16 @@ private fun KpiTile(
     value: String,
     trend: String?,
     trendUp: Boolean,
-    bgColor: Color = AppColors.White,
-    contentColor: Color = AppColors.Gray900,
-    labelColor: Color = AppColors.Gray500,
+    bgColor: Color,
+    contentColor: Color,
+    labelColor: Color,
+    borderColor: Color = Color.Transparent,
     modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
             .background(bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, if (bgColor == AppColors.White) AppColors.Gray100 else Color.Transparent, RoundedCornerShape(12.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
         Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = labelColor)
@@ -324,13 +330,13 @@ private fun KpiTile(
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (trendUp) {
-                    Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AppColors.Green)
+                    Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
                 }
                 Text(
                     trend,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (trendUp) AppColors.Green else labelColor,
+                    color = if (trendUp) AgarthaTheme.colors.success else labelColor,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                 )
             }
@@ -344,11 +350,12 @@ private fun SparklineCard(
     delta: String,
     modifier: Modifier = Modifier
 ) {
+    val colors = AgarthaTheme.colors
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.White, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
         Row(
@@ -357,24 +364,24 @@ private fun SparklineCard(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.weight(1f)) {
-                Text("7-day activity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray900)
+                Text("7-day activity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
                 Text(
                     "Eggs found per day",
                     fontSize = 11.sp,
-                    color = AppColors.Gray500,
+                    color = colors.textSecondary,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
             Box(
                 modifier = Modifier
-                    .background(AppColors.GreenTint, RoundedCornerShape(999.dp))
+                    .background(colors.successTint, RoundedCornerShape(999.dp))
                     .padding(horizontal = 9.dp, vertical = 3.dp)
             ) {
                 Text(
                     "↑ $delta",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AppColors.Green,
+                    color = colors.successText,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                 )
             }
@@ -391,7 +398,7 @@ private fun SparklineCard(
                     lbl.uppercase(),
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = if (i == 6) AppColors.Gray700 else AppColors.Gray400,
+                    color = if (i == 6) colors.textPrimary else colors.textTertiary,
                     letterSpacing = 0.6.sp
                 )
             }
@@ -401,7 +408,8 @@ private fun SparklineCard(
 
 @Composable
 private fun Sparkline(values: List<Float>, modifier: Modifier = Modifier) {
-    val lineColor = AppColors.Blue
+    val lineColor = AgarthaTheme.colors.accent
+    val knockoutColor = AgarthaTheme.colors.surface
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
@@ -435,12 +443,17 @@ private fun Sparkline(values: List<Float>, modifier: Modifier = Modifier) {
         )
 
         val sx = xAt(0); val sy = yAt(values.first())
-        drawCircle(Color.White, radius = 2.5.dp.toPx(), center = Offset(sx, sy))
-        drawCircle(lineColor,   radius = 2.5.dp.toPx(), center = Offset(sx, sy), style = Stroke(width = 1.5.dp.toPx()))
+        drawCircle(knockoutColor, radius = 2.5.dp.toPx(), center = Offset(sx, sy))
+        drawCircle(
+            lineColor,
+            radius = 2.5.dp.toPx(),
+            center = Offset(sx, sy),
+            style = Stroke(width = 1.5.dp.toPx())
+        )
 
         val ex = xAt(values.lastIndex); val ey = yAt(values.last())
-        drawCircle(lineColor,   radius = 4.dp.toPx(), center = Offset(ex, ey))
-        drawCircle(Color.White, radius = 4.dp.toPx(), center = Offset(ex, ey), style = Stroke(width = 2.dp.toPx()))
+        drawCircle(lineColor,     radius = 4.dp.toPx(), center = Offset(ex, ey))
+        drawCircle(knockoutColor, radius = 4.dp.toPx(), center = Offset(ex, ey), style = Stroke(width = 2.dp.toPx()))
     }
 }
 
@@ -450,22 +463,22 @@ private fun SpeciesMixCard(
     speciesData: List<SpeciesData>,
     modifier: Modifier = Modifier
 ) {
-    // Map SpeciesData to color-weighted segments
-    val colors = listOf(SpeciesBlue, SpeciesCyan, SpeciesAmber)
-    val total = speciesData.sumOf { it.ratio.toDouble() }.toFloat().coerceAtLeast(1f)
+    val theme = AgarthaTheme.colors
+    // Categorical series colors — brand tokens only (labels carry the meaning)
+    val colors = listOf(theme.accent, theme.gold, theme.success)
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.White, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(theme.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, theme.border, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
-        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AppColors.Gray900)
+        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
         Text(
             "${speciesData.size} species detected",
             fontSize = 11.sp,
-            color = AppColors.Gray500,
+            color = theme.textSecondary,
             modifier = Modifier.padding(top = 2.dp)
         )
         Spacer(Modifier.height(14.dp))
@@ -476,10 +489,10 @@ private fun SpeciesMixCard(
                 .fillMaxWidth()
                 .height(10.dp)
                 .clip(RoundedCornerShape(999.dp))
-                .background(AppColors.Gray100)
+                .background(theme.surfaceMuted)
         ) {
             speciesData.forEachIndexed { i, seg ->
-                val color = colors.getOrElse(i) { AppColors.Gray400 }
+                val color = colors.getOrElse(i) { theme.textTertiary }
                 Box(
                     modifier = Modifier
                         .weight(seg.ratio.coerceAtLeast(0.01f))
@@ -487,7 +500,7 @@ private fun SpeciesMixCard(
                         .background(color)
                 )
                 if (i < speciesData.lastIndex) {
-                    Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(AppColors.White))
+                    Box(modifier = Modifier.width(2.dp).fillMaxHeight().background(theme.surface))
                 }
             }
         }
@@ -500,7 +513,7 @@ private fun SpeciesMixCard(
             verticalArrangement   = Arrangement.spacedBy(6.dp)
         ) {
             speciesData.forEachIndexed { i, seg ->
-                val color = colors.getOrElse(i) { AppColors.Gray400 }
+                val color = colors.getOrElse(i) { theme.textTertiary }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(modifier = Modifier.size(8.dp).background(color, CircleShape))
                     Spacer(Modifier.width(6.dp))
@@ -509,14 +522,14 @@ private fun SpeciesMixCard(
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         fontStyle = FontStyle.Italic,
-                        color = AppColors.Gray700
+                        color = theme.textSecondary
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         seg.formattedPercentage,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        color = AppColors.Gray900,
+                        color = theme.textPrimary,
                         style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                     )
                 }
@@ -532,26 +545,27 @@ private fun VerifyAlertRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(AppColors.White)
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(AppColors.AmberTint, RoundedCornerShape(10.dp)),
+                .background(colors.warningTint, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_warning),
                 contentDescription = null,
-                tint = AppColors.Amber,
+                tint = colors.warning,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -561,12 +575,12 @@ private fun VerifyAlertRow(
                 "$pendingCount frames awaiting verification",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = AppColors.Gray900
+                color = colors.textPrimary
             )
             Text(
                 "Oldest pending · $oldestAgo",
                 fontSize = 11.sp,
-                color = AppColors.Gray500,
+                color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 1.dp)
             )
@@ -574,7 +588,7 @@ private fun VerifyAlertRow(
         Icon(
             painter = painterResource(R.drawable.ic_chevron_right),
             contentDescription = null,
-            tint = AppColors.Gray300,
+            tint = colors.textTertiary,
             modifier = Modifier.size(18.dp)
         )
     }
@@ -587,24 +601,25 @@ private fun SyncStatusRow(
     samplesSynced: Int,
     modifier: Modifier = Modifier
 ) {
+    val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .background(AppColors.White, RoundedCornerShape(12.dp))
-            .border(1.dp, AppColors.Gray100, RoundedCornerShape(12.dp))
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .padding(horizontal = 14.dp, vertical = 12.dp)
     ) {
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(AppColors.GreenTint, RoundedCornerShape(10.dp)),
+                .background(colors.successTint, RoundedCornerShape(10.dp)),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_check_circle),
                 contentDescription = null,
-                tint = AppColors.Green,
+                tint = colors.success,
                 modifier = Modifier.size(18.dp)
             )
         }
@@ -614,12 +629,12 @@ private fun SyncStatusRow(
                 if (allSynced) "All samples synced" else "Sync pending",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = AppColors.Gray900
+                color = colors.textPrimary
             )
             Text(
                 "Last sync $lastSyncLabel · $samplesSynced samples",
                 fontSize = 11.sp,
-                color = AppColors.Gray500,
+                color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 1.dp)
             )

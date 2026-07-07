@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.AsyncImage
 import com.agarthavision.data.remote.dto.PredictionDto
-import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 @Composable
 fun FrameWithBoxes(
@@ -28,8 +28,8 @@ fun FrameWithBoxes(
     val sourceW = inferenceImageWidth?.toFloat()?.takeIf { it > 0f }
     val sourceH = inferenceImageHeight?.toFloat()?.takeIf { it > 0f }
     // Capture tokens at composition time — DrawScope inside Canvas is not @Composable.
-    val activeBoxColor = AppColors.Red    // highlighted detection
-    val otherBoxColor = AppColors.Blue    // other detections
+    val activeBoxColor = AgarthaTheme.colors.danger    // highlighted detection
+    val otherBoxColor = AgarthaTheme.colors.accent     // other detections
     Box(modifier = modifier) {
         AsyncImage(
             model = jpegBytes,

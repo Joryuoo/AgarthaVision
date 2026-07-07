@@ -1,19 +1,49 @@
 package com.agarthavision.ui.sessions
 
 import android.content.Intent
-import androidx.compose.animation.core.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -22,7 +52,6 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -40,28 +69,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.ui.navigation.Screen
+import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-// --- Tokens ---
-private val Blue = Color(0xFF1E3FD9)
-private val BlueHover = Color(0xFF1A36BF)
-private val BlueTint = Color(0xFFE6EBFC)
-private val BlueTint2 = Color(0xFFF1F4FE)
-private val White = Color(0xFFFFFFFF)
-private val Gray50 = Color(0xFFF7F8FA)
-private val Gray100 = Color(0xFFEEF0F4)
-private val Gray200 = Color(0xFFE2E5EB)
-private val Gray300 = Color(0xFFCBD0DA)
-private val Gray400 = Color(0xFF9CA3AF)
-private val Gray500 = Color(0xFF6B7280)
-private val Gray700 = Color(0xFF374151)
-private val Gray900 = Color(0xFF0F172A)
-private val Red = Color(0xFFDC2626)
-private val RedTint = Color(0xFFFEE2E2)
-private val Green = Color(0xFF16A34A)
-private val GreenTint = Color(0xFFDCFCE7)
 
 @Composable
 fun SessionsScreen(
@@ -72,6 +84,7 @@ fun SessionsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val colors = AgarthaTheme.colors
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -96,7 +109,7 @@ fun SessionsScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(White)
+            .background(colors.background)
     ) {
             Column(
                 modifier = Modifier
@@ -152,8 +165,8 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(White)
-                        .border(1.dp, Gray100) // Top hairline
+                        .background(colors.surface)
+                        .border(1.dp, colors.border) // Top hairline
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
@@ -162,9 +175,17 @@ fun SessionsScreen(
                             .fillMaxWidth()
                             .height(49.dp),
                         shape = CircleShape,
-                        colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = White)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.accent,
+                            contentColor = colors.onAccent
+                        )
                     ) {
-                        SvgIcon("M12 5v14M5 12h14", strokeWidth = 2.2f, color = White, modifier = Modifier.size(18.dp))
+                        SvgIcon(
+                            "M12 5v14M5 12h14",
+                            strokeWidth = 2.2f,
+                            color = colors.onAccent,
+                            modifier = Modifier.size(18.dp)
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("New session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -187,6 +208,7 @@ fun SessionsScreen(
 
 @Composable
 private fun AppBar(activeCount: Int, totalCount: Int) {
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -199,7 +221,7 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
                 text = "Sessions",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = Gray900,
+                color = colors.textPrimary,
                 letterSpacing = (-0.02).em
             )
             Spacer(modifier = Modifier.height(2.dp))
@@ -207,7 +229,7 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
                 text = "$totalCount sessions · $activeCount active",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
-                color = Gray500
+                color = colors.textSecondary
             )
         }
     }
@@ -225,6 +247,7 @@ private fun SessionCard(
     onExport: () -> Unit,
     onEnd: () -> Unit
 ) {
+    val colors = AgarthaTheme.colors
     val session = sessionData.session
     val date = formatDate(session.startedAt)
     val time = formatTime(session.startedAt)
@@ -234,8 +257,8 @@ private fun SessionCard(
         "$date · $time · ${session.notes}"
     }
 
-    val bgColor = if (isActive) BlueTint2 else White
-    val borderColor = if (isActive) BlueTint else Gray100
+    val bgColor = if (isActive) colors.accentTint2 else colors.surface
+    val borderColor = if (isActive) colors.accentTint else colors.border
 
     Row(
         modifier = Modifier
@@ -251,7 +274,7 @@ private fun SessionCard(
                 text = session.label ?: "Session ${session.id.take(8)}",
                 fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
-                color = Blue,
+                color = colors.accent,
                 letterSpacing = (-0.015).em
             )
             Spacer(modifier = Modifier.height(3.dp))
@@ -259,7 +282,7 @@ private fun SessionCard(
                 text = meta,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = Blue.copy(alpha = 0.7f)
+                color = colors.accent.copy(alpha = 0.7f)
             )
         }
 
@@ -270,13 +293,13 @@ private fun SessionCard(
             if (isActive) {
                 Row(
                     modifier = Modifier
-                        .background(Blue, CircleShape)
+                        .background(colors.accent, CircleShape)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     LiveDot()
-                    Text("Active", color = White, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Active", color = colors.onAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                 }
 
                 Box(
@@ -286,13 +309,14 @@ private fun SessionCard(
                         .clickable { if (isKebabOpen) onKebabDismiss() else onKebabClick() },
                     contentAlignment = Alignment.Center
                 ) {
+                    val dotColor = colors.textPrimary
                     SvgIcon(
                         pathData = "",
                         drawExtras = {
                             val r = 1f
-                            drawCircle(Gray900, radius = r, center = Offset(12f, 5f), style = Stroke(width = 1.8f))
-                            drawCircle(Gray900, radius = r, center = Offset(12f, 12f), style = Stroke(width = 1.8f))
-                            drawCircle(Gray900, radius = r, center = Offset(12f, 19f), style = Stroke(width = 1.8f))
+                            drawCircle(dotColor, radius = r, center = Offset(12f, 5f), style = Stroke(width = 1.8f))
+                            drawCircle(dotColor, radius = r, center = Offset(12f, 12f), style = Stroke(width = 1.8f))
+                            drawCircle(dotColor, radius = r, center = Offset(12f, 19f), style = Stroke(width = 1.8f))
                         },
                         modifier = Modifier.size(24.dp)
                     )
@@ -308,8 +332,8 @@ private fun SessionCard(
                 }
             } else {
                 val eggs = sessionData.totalEpg
-                val badgeBg = if (eggs > 0) GreenTint else Gray100
-                val badgeColor = if (eggs > 0) Color(0xFF166534) else Gray700
+                val badgeBg = if (eggs > 0) colors.successTint else colors.surfaceMuted
+                val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
                 Box(
                     modifier = Modifier
                         .background(badgeBg, CircleShape)
@@ -336,7 +360,7 @@ fun LiveDot() {
     Box(
         modifier = Modifier
             .size(6.dp)
-            .background(White.copy(alpha = alpha), CircleShape)
+            .background(AgarthaTheme.colors.onAccent.copy(alpha = alpha), CircleShape)
     )
 }
 
@@ -347,6 +371,8 @@ private fun KebabMenu(
     onExport: () -> Unit,
     onEnd: () -> Unit
 ) {
+    val colors = AgarthaTheme.colors
+    val dangerColor = colors.danger
     Popup(
         onDismissRequest = onDismiss,
         properties = PopupProperties(focusable = true),
@@ -356,16 +382,24 @@ private fun KebabMenu(
         Column(
             modifier = Modifier
                 .width(168.dp)
-                .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), spotColor = Color(0x2E0F172A))
-                .background(White, RoundedCornerShape(12.dp))
-                .border(1.dp, Gray100, RoundedCornerShape(12.dp))
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(12.dp),
+                    spotColor = AppColors.Gray900.copy(alpha = 0.18f)
+                )
+                .background(colors.surface, RoundedCornerShape(12.dp))
+                .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                 .padding(4.dp)
         ) {
                 KebabItem("Resume capture", "M7 10l5-5 5 5M12 5v14", onClick = onResume)
-                KebabItem("Export session", "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3", onClick = onExport)
+                KebabItem(
+                    "Export session",
+                    "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
+                    onClick = onExport
+                )
                 KebabItem("End session", "", isDestructive = true, onClick = onEnd, drawExtras = {
                     drawRoundRect(
-                        color = Red,
+                        color = dangerColor,
                         topLeft = Offset(6f, 6f),
                         size = Size(12f, 12f),
                         cornerRadius = CornerRadius(1f, 1f),
@@ -384,7 +418,8 @@ private fun KebabItem(
     drawExtras: (DrawScope.() -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    val color = if (isDestructive) Red else Gray900
+    val colors = AgarthaTheme.colors
+    val color = if (isDestructive) colors.danger else colors.textPrimary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -405,18 +440,19 @@ private fun NewSessionSheet(
     onDismiss: () -> Unit,
     onSubmit: (label: String, note: String) -> Unit
 ) {
+    val colors = AgarthaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = White,
+        containerColor = colors.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(top = 8.dp, bottom = 8.dp)
                     .size(width = 36.dp, height = 4.dp)
-                    .background(Gray200, RoundedCornerShape(2.dp))
+                    .background(colors.borderStrong, RoundedCornerShape(2.dp))
             )
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
@@ -439,17 +475,33 @@ private fun NewSessionSheet(
                 verticalAlignment = Alignment.Top
             ) {
                 Column {
-                    Text("New session", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Gray900, letterSpacing = (-0.015).em)
+                    Text(
+                        "New session",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.015).em
+                    )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text("Set the label and a note before scanning", fontSize = 12.sp, color = Gray500, fontWeight = FontWeight.Medium)
+                    Text(
+                        "Set the label and a note before scanning",
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                        fontWeight = FontWeight.Medium
+                    )
                 }
                 IconButton(
                     onClick = onDismiss,
                     modifier = Modifier
                         .size(32.dp)
-                        .background(Gray100, CircleShape)
+                        .background(colors.surfaceMuted, CircleShape)
                 ) {
-                    SvgIcon("M18 6L6 18M6 6l12 12", color = Gray700, strokeWidth = 2f, modifier = Modifier.size(16.dp))
+                    SvgIcon(
+                        "M18 6L6 18M6 6l12 12",
+                        color = colors.textSecondary,
+                        strokeWidth = 2f,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
 
@@ -476,29 +528,66 @@ private fun NewSessionSheet(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (showError && label.isBlank()) {
+                    val bannerDanger = colors.danger
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(RedTint, RoundedCornerShape(8.dp))
-                            .border(1.dp, Red.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
+                            .background(colors.dangerTint, RoundedCornerShape(8.dp))
+                            .border(1.dp, colors.danger.copy(alpha = 0.2f), RoundedCornerShape(8.dp))
                             .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon("M12 8v4M12 16h.01", drawExtras = { drawCircle(Red, radius = 9f, center = Offset(12f, 12f), style = Stroke(width = 1.8f)) }, color = Red, modifier = Modifier.size(16.dp))
-                        Text("Please fill in the label field to continue.", fontSize = 12.sp, color = Color(0xFF991B1B), fontWeight = FontWeight.Medium, lineHeight = 16.sp)
+                        SvgIcon(
+                            "M12 8v4M12 16h.01",
+                            drawExtras = {
+                                drawCircle(
+                                    bannerDanger,
+                                    radius = 9f,
+                                    center = Offset(12f, 12f),
+                                    style = Stroke(width = 1.8f)
+                                )
+                            },
+                            color = colors.danger,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "Please fill in the label field to continue.",
+                            fontSize = 12.sp,
+                            color = colors.dangerText,
+                            fontWeight = FontWeight.Medium,
+                            lineHeight = 16.sp
+                        )
                     }
                 } else {
+                    val bannerAccent = colors.accent
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(BlueTint2, RoundedCornerShape(8.dp))
+                            .background(colors.accentTint2, RoundedCornerShape(8.dp))
                             .padding(horizontal = 12.dp, vertical = 11.dp),
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon("M12 8v4M12 16h.01", drawExtras = { drawCircle(Blue, radius = 9f, center = Offset(12f, 12f), style = Stroke(width = 1.8f)) }, color = Blue, modifier = Modifier.size(16.dp))
-                        Text("A session label is required by lab protocol. You can edit it later from Session Detail.", fontSize = 12.sp, color = Gray700, lineHeight = 16.sp)
+                        SvgIcon(
+                            "M12 8v4M12 16h.01",
+                            drawExtras = {
+                                drawCircle(
+                                    bannerAccent,
+                                    radius = 9f,
+                                    center = Offset(12f, 12f),
+                                    style = Stroke(width = 1.8f)
+                                )
+                            },
+                            color = colors.accent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "A session label is required by lab protocol. You can edit it later from Session Detail.",
+                            fontSize = 12.sp,
+                            color = colors.textSecondary,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }
@@ -514,7 +603,10 @@ private fun NewSessionSheet(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Gray100, contentColor = Gray900)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.surfaceMuted,
+                        contentColor = colors.textPrimary
+                    )
                 ) {
                     Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                 }
@@ -528,11 +620,16 @@ private fun NewSessionSheet(
                     },
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = Blue, contentColor = White)
+                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
                 ) {
                     Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.width(6.dp))
-                    SvgIcon("M5 12h14M13 5l7 7-7 7", color = White, strokeWidth = 2.2f, modifier = Modifier.size(16.dp))
+                    SvgIcon(
+                        "M5 12h14M13 5l7 7-7 7",
+                        color = colors.onAccent,
+                        strokeWidth = 2.2f,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             }
         }
@@ -549,21 +646,40 @@ private fun SheetInput(
     isTextArea: Boolean = false,
     isRequired: Boolean = true
 ) {
+    val colors = AgarthaTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = Gray700)
+            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textSecondary)
             if (isRequired) {
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("REQUIRED", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Red, modifier = Modifier.background(RedTint, RoundedCornerShape(4.dp)).padding(horizontal = 7.dp, vertical = 2.dp))
+                Text(
+                    "REQUIRED",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.04.em,
+                    color = colors.dangerText,
+                    modifier = Modifier
+                        .background(colors.dangerTint, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                )
             } else {
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("OPTIONAL", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.04.em, color = Gray500, modifier = Modifier.background(Gray100, RoundedCornerShape(4.dp)).padding(horizontal = 7.dp, vertical = 2.dp))
+                Text(
+                    "OPTIONAL",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.04.em,
+                    color = colors.textSecondary,
+                    modifier = Modifier
+                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                )
             }
         }
 
         var isFocused by remember { mutableStateOf(false) }
-        val borderColor = if (isError) Red else if (isFocused) Blue else Gray200
-        val bgColor = if (isError) RedTint.copy(alpha = 0.5f) else White
+        val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
+        val bgColor = if (isError) colors.dangerTint.copy(alpha = 0.5f) else colors.surface
 
         BasicTextField(
             value = value,
@@ -571,10 +687,10 @@ private fun SheetInput(
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = Gray900),
+            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = colors.textPrimary),
             singleLine = !isTextArea,
             minLines = if (isTextArea) 3 else 1,
-            cursorBrush = SolidColor(Blue),
+            cursorBrush = SolidColor(colors.accent),
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier
@@ -586,7 +702,7 @@ private fun SheetInput(
                     contentAlignment = if (isTextArea) Alignment.TopStart else Alignment.CenterStart
                 ) {
                     if (value.isEmpty()) {
-                        Text(placeholder, fontSize = 15.sp, color = Gray400, lineHeight = 21.75.sp)
+                        Text(placeholder, fontSize = 15.sp, color = colors.textTertiary, lineHeight = 21.75.sp)
                     }
                     innerTextField()
                 }

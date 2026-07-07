@@ -197,45 +197,70 @@ screen is foregrounded; only explicit **End Session** writes `ended_at`.
 
 ## 4. Design System
 
-> **Source of truth for all UI:** the Clinical Microscopy design spec (Inter font, cobalt
-> `#1E3FD9`). The prior KomoUI / "Clinical Pulse" guide (`#1F5BFF`, Geist + JetBrains Mono,
-> `ShadcnTheme`/`KomoTheme`) is **SUPERSEDED** and has been removed from the app code and
-> Gradle dependency graph. Where the two disagree, the spec below wins.
+> **Source of truth for all UI:** the CIT-U Clinical Microscopy design spec (Inter font,
+> maroon `#8C1823` + gold `#FFB81C`). The prior cobalt "Clinical Pulse" palette (`#1E3FD9`)
+> and the earlier KomoUI guide (`#1F5BFF`, Geist + JetBrains Mono, `ShadcnTheme`/`KomoTheme`)
+> are both **SUPERSEDED** and removed from the app code and Gradle dependency graph. Where
+> guides disagree, the spec below wins.
 
 ### Design principles
 
 1. **Clinical clean, not playful** — restrained whitespace, hairline borders, no ornament.
-2. **Single accent color** — cobalt blue, used sparingly for primary actions, active states,
-   focus rings, and AI bounding boxes. Semantic colors (red/green/amber) for specific states only.
+2. **Single accent color** — CIT-U maroon, used sparingly for primary actions, active states,
+   focus rings, and AI bounding boxes. Gold is a brand highlight (fill-only, dark text) — never
+   used as the accent or as text-on-light. Semantic colors (red/green/amber) for specific
+   states only; amber and gold are never adjacent on the same surface.
 3. **Tabular numerals for all data** — IDs, timestamps, GPS, confidence, EPG align in columns.
 4. **Italicized binomial nomenclature** — *Ascaris lumbricoides*, never upright.
-5. **Tool mode vs browse mode** — Capture is dark and immersive; every other screen is light.
+5. **Tool mode vs browse mode** — Capture is dark and immersive regardless of the light/dark
+   toggle; every other screen follows the user's theme preference (see below).
 6. **No heavy shadows** — flat; hairline borders separate. Real shadows only on modal sheets
    and the Active Session hero.
 7. **No charting library / no icon library** — small dataviz is hand-crafted inline SVG;
    icons are lucide-style inline SVG at 1.5–1.8 stroke. One external font (Inter).
 
+### Light / dark mode
+
+The app ships one theme with two modes, toggled from a sun/moon icon in the Dashboard header
+(`AppHeader`) and persisted via DataStore Preferences (`ThemePreferenceRepository`,
+`ObserveThemeModeUseCase` / `SetThemeModeUseCase`, domain model `ThemeMode`). Default on first
+launch is **light** (the clinical calibration). `AgarthaVisionTheme(darkTheme: Boolean)` swaps
+both the Material 3 `ColorScheme` and a mode-aware semantic palette (`ui/theme/Palette.kt` —
+`AgarthaColors`, read via `AgarthaTheme.colors`); screens must consume `AgarthaTheme.colors.*`
+rather than `AppColors.*` directly so they render correctly in both modes. Capture is exempt —
+it stays dark/immersive independent of the toggle, using fixed `AppColors` values.
+
 ### Color tokens
 
 ```
-Brand
-  --blue          #1E3FD9   Primary accent — CTAs, active states, focus rings, AI bboxes
-  --blue-hover    #1A36BF
-  --blue-pressed  #15309F
-  --blue-tint     #E6EBFC   Active card backgrounds
-  --blue-tint-2   #F1F4FE   Hint / info banner backgrounds
-Neutrals
-  --white #FFFFFF · --off-white #FAFBFC · --gray-50 #F7F8FA · --gray-100 #EEF0F4
-  --gray-200 #E2E5EB · --gray-300 #CBD0DA · --gray-400 #9CA3AF · --gray-500 #6B7280
-  --gray-700 #374151 · --gray-900 #0F172A
-Semantic
+Brand — light mode
+  --maroon         #8C1823   Primary accent — CTAs, active states, focus rings, AI bboxes
+  --maroon-hover    #75141E
+  --maroon-pressed  #5E1018
+  --maroon-tint     #F9E8EA   Active card backgrounds
+  --maroon-tint-2   #FCF3F4   Hint / info banner backgrounds
+  --gold            #FFB81C   Brand highlight — fill-only, always paired with dark text
+  --gold-tint       #FFF4D6   Gold badge background
+  --gold-text       #7A5A00   Text on gold-tint
+Neutrals — light mode (warm stone ramp)
+  --white #FFFFFF · --off-white #FAFAF9 · --gray-50 #F5F5F4 · --gray-100 #E7E5E4
+  --gray-200 #D6D3D1 · --gray-300 #A8A29E · --gray-400 #8A847F · --gray-500 #78716C
+  --gray-700 #44403C · --gray-900 #1C1917
+Brand / neutrals — dark mode
+  --dark-bg #171412 · --dark-surface #1F1B18 · --dark-surface-alt #262220
+  --dark-border #37322E · --dark-text #F5F5F4 · --dark-text-secondary #A8A29E
+  --maroon-bright #D9707A   Dark-mode accent text/icons (filled buttons keep --maroon + white)
+  --gold unchanged (9.8:1 on dark background — gold carries the brand at night)
+Semantic (brightened variants used automatically on dark surfaces)
   --red   #DC2626 / --red-tint   #FEE2E2    Destructive, REC indicator, errors
   --green #16A34A / --green-tint #DCFCE7    Sync OK, confirmed detections
   --amber #D97706 / --amber-tint #FEF3C7    Manual captures, pending review, sync warning
 ```
 
-In code these live as `AppColors.*` (`AppColors.Blue`, `AppColors.Gray300`, etc.). The
-logo uses a brighter `#036BFC` than the app accent `#1E3FD9` — kept distinct on purpose.
+In code, raw values live only in `AppColors.*` (`AppColors.Maroon`, `AppColors.Gold`,
+`AppColors.Gray300`, etc.); screens read the mode-aware wrapper `AgarthaTheme.colors.*`
+(`ui/theme/Palette.kt`) instead of `AppColors` directly, so light/dark both resolve correctly.
+The logo and launcher icon are maroon-bodied with gold accents, matching the app palette.
 
 ### Typography — Inter (Google Fonts), system fallback
 
@@ -259,15 +284,16 @@ Italic for *binomial species names*.
 - **Radius** — `sm 8` (inputs) · `md 12` (cards, list items) · `lg 16` (hero cards, sheet
   top corners) · `pill 999` (buttons, badges, chips).
 - **Elevation** — plain cards: no shadow, 1px `--gray-100` hairline. Active Session hero:
-  `0 10px 28px -10px rgba(30,63,217,.45)`. Modal sheet: `0 -16px 32px -8px rgba(15,23,42,.12)`.
-  Floating glass (Capture): `0 4px 14px -4px rgba(0,0,0,.35)`.
+  `0 10px 28px -10px rgba(140,24,35,.45)` (maroon shadow). Modal sheet:
+  `0 -16px 32px -8px rgba(15,23,42,.12)`. Floating glass (Capture): `0 4px 14px -4px rgba(0,0,0,.35)`.
 - **Motion** — default UI 150ms ease · sheet slide-up 320ms `cubic-bezier(.32,.72,0,1)` ·
   scrim fade 250ms · toast slide-down 400ms · REC pulse 1500ms infinite.
 
 ### Screens (9)
 
-Login · Dashboard · Session Picker · Capture (dark/immersive) · Verify Queue ·
-Records · Session Detail (+ empty variant) · Sample Detail · Settings.
+Login · Dashboard (theme toggle in header) · Session Picker · Capture (dark/immersive,
+theme-toggle-exempt) · Verify Queue · Records · Session Detail (+ empty variant) ·
+Sample Detail · Settings.
 Bottom tab bar (Home · Sessions · Records · Settings) on every screen **except** Login and
 Capture. Top app bar: `[← Back?] Title / sub-meta(caption, tabular) [icon actions]`.
 
@@ -278,20 +304,20 @@ New Session · Verify (AI) · Manual. Slide up over screen + tab bar; drag handl
 
 ### Component conventions
 
-- **Buttons** — pill; primary = `--blue` fill / white; secondary = `--gray-100` / `--gray-900`;
-  destructive = `--red` / white. Icon buttons 40×40, `lg` radius (utility chrome).
-- **Inputs** — white, `--gray-200` border, `sm` radius; focus = `--blue` border + 3px glow;
-  error = red border + light-red tint.
+- **Buttons** — pill; primary = accent fill / on-accent text; secondary = `--gray-100` /
+  `--gray-900`; destructive = `--red` / white. Icon buttons 40×40, `lg` radius (utility chrome).
+- **Inputs** — surface color, `--gray-200` border, `sm` radius; focus = accent border + 3px
+  glow; error = red border + light-red tint.
 - **Dialogs** — `AlertDialog` uses an 8dp radius via the shared `DialogShape` token
   (`ui/theme/Theme.kt`); always pass `shape = DialogShape`. Material 3 defaults dialogs to
   `shapes.extraLarge`, which here is the 999dp pill token — do not rely on it.
 - **Badges** — pill, 11px / 600. Status colors map to the semantic palette.
-- **Toggle / Switch** — 44×26 pill; off `--gray-200`, on `--blue`; white thumb. (The Boxes
+- **Toggle / Switch** — 44×26 pill; off `--gray-200`, on accent color; white thumb. (The Boxes
   toggle on `VerificationSheet` uses a Material 3 `Switch` with a box icon in the thumb when on.)
-- **Glass UI (Capture only)** — `rgba(20,28,42,.55)` + `blur(20px) saturate(160%)` +
-  `1px rgba(255,255,255,.08)` border, white text.
-- **Detection bbox** — 2px solid `--blue`, 4px radius, soft blue glow, white L-shaped corner
-  brackets + label chip.
+- **Glass UI (Capture only)** — `rgba(28,20,18,.55)` (warm charcoal, not navy) +
+  `blur(20px) saturate(160%)` + `1px rgba(255,255,255,.08)` border, white text.
+- **Detection bbox** — 2px solid accent color, 4px radius, soft accent glow, white L-shaped
+  corner brackets + label chip.
 
 ### Custom composables (not from any component lib)
 

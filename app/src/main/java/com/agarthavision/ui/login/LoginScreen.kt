@@ -58,7 +58,9 @@ import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastState
 import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.rememberAgarthaToastState
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import com.agarthavision.ui.theme.AppColors
 
 /**
  * Login route for dashboard-provisioned Supabase accounts.
@@ -111,9 +113,10 @@ private fun LoginScreenContent(
     toastState: AgarthaToastState,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = Color.White,
+        containerColor = colors.background,
         snackbarHost = {
             AgarthaToastHost(
                 state = toastState,
@@ -126,7 +129,7 @@ private fun LoginScreenContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White)
+                .background(colors.background)
                 .padding(padding)
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
@@ -136,8 +139,8 @@ private fun LoginScreenContent(
                     modifier = Modifier
                         .size(32.dp)
                         .align(Alignment.Center),
-                    color = Color(0xFF1E3FD9),
-                    trackColor = Color(0xFFE2E5EB),
+                    color = colors.accent,
+                    trackColor = colors.borderStrong,
                 )
             } else {
                 Column(
@@ -159,7 +162,7 @@ private fun LoginScreenContent(
                             Spacer(modifier = Modifier.height(16.dp))
                             Text(
                                 text = "AgarthaVision",
-                                color = Color(0xFF1E3FD9),
+                                color = colors.accent,
                                 fontSize = 30.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = (-0.75).sp, // -0.025em * 30px
@@ -168,7 +171,7 @@ private fun LoginScreenContent(
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
                                 text = "Sign in to continue your clinical work.",
-                                color = Color(0xFF6B7280),
+                                color = colors.textSecondary,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Normal,
                                 lineHeight = 21.75.sp, // 1.45
@@ -186,7 +189,7 @@ private fun LoginScreenContent(
                     ) {
                         Text(
                             text = "Forgot password?",
-                            color = Color(0xFF1E3FD9),
+                            color = colors.accent,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             modifier = Modifier
@@ -202,17 +205,18 @@ private fun LoginScreenContent(
 
 @Composable
 private fun AppMark() {
+    val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
             .size(80.dp)
             .shadow(
                 elevation = 8.dp,
                 shape = RoundedCornerShape(20.dp),
-                spotColor = Color(0x380F172A),
-                ambientColor = Color(0x0F0F172A)
+                spotColor = AppColors.Gray900.copy(alpha = 0.22f),
+                ambientColor = AppColors.Gray900.copy(alpha = 0.06f)
             )
-            .background(Color.White, RoundedCornerShape(20.dp))
-            .border(1.dp, Color(0x0F0F172A), RoundedCornerShape(20.dp)),
+            .background(colors.surface, RoundedCornerShape(20.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
         androidx.compose.foundation.Image(
@@ -267,15 +271,16 @@ private fun LoginForm(
 
         Spacer(modifier = Modifier.height(22.dp))
 
+        val themeColors = AgarthaTheme.colors
         Button(
             onClick = actions.onSubmit,
             enabled = state.canSubmit,
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF1E3FD9),
-                contentColor = Color.White,
-                disabledContainerColor = Color(0xFF1E3FD9).copy(alpha = 0.5f),
-                disabledContentColor = Color.White.copy(alpha = 0.5f)
+                containerColor = themeColors.accent,
+                contentColor = themeColors.onAccent,
+                disabledContainerColor = themeColors.accent.copy(alpha = 0.5f),
+                disabledContentColor = themeColors.onAccent.copy(alpha = 0.5f)
             ),
             contentPadding = PaddingValues(vertical = 14.dp),
             modifier = Modifier.fillMaxWidth()
@@ -283,7 +288,7 @@ private fun LoginForm(
             if (state.isSubmitting) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color.White,
+                    color = themeColors.onAccent,
                     strokeWidth = 2.dp
                 )
             } else {
@@ -310,19 +315,20 @@ private fun LoginInputGroup(
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
 ) {
+    val colors = AgarthaTheme.colors
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = label,
-            color = Color(0xFF374151),
+            color = colors.textSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
         )
 
         var isFocused by remember { mutableStateOf(false) }
-        val borderColor = if (isError) Color(0xFFDC2626) else if (isFocused) Color(0xFF1E3FD9) else Color(0xFFE2E5EB)
+        val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
 
         BasicTextField(
             value = value,
@@ -331,7 +337,7 @@ private fun LoginInputGroup(
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
             textStyle = TextStyle(
-                color = Color(0xFF0F172A),
+                color = colors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Normal
             ),
@@ -339,12 +345,12 @@ private fun LoginInputGroup(
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
-            cursorBrush = SolidColor(Color(0xFF1E3FD9)),
+            cursorBrush = SolidColor(colors.accent),
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (isError) Color(0xFFFEE2E2) else Color.White, RoundedCornerShape(12.dp))
+                        .background(if (isError) colors.dangerTint else colors.surface, RoundedCornerShape(12.dp))
                         .border(
                             width = 1.dp,
                             color = borderColor,
@@ -356,7 +362,7 @@ private fun LoginInputGroup(
                     if (value.isEmpty()) {
                         Text(
                             text = placeholder,
-                            color = Color(0xFF9CA3AF),
+                            color = colors.textTertiary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Normal
                         )
@@ -368,7 +374,7 @@ private fun LoginInputGroup(
         if (isError && errorText != null) {
             Text(
                 text = errorText,
-                color = Color(0xFFDC2626),
+                color = colors.danger,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)
             )

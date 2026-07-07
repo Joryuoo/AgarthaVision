@@ -69,11 +69,14 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 
 | Track | Status | Codebase check |
 |---|---:|---|
-| Clinical microscopy color, typography, spacing, component tokens | ✅ | `AppColors`, MaterialTheme, spacing, typography, and Agartha components are the canonical token surface |
-| Capture dark immersive mode | ✅ | capture UI components |
+| CIT-U maroon/gold rebrand (replaces cobalt "Clinical Pulse" palette) | ✅ | `AppColors` (maroon/gold/stone raw values), `ui/theme/Palette.kt` (`AgarthaColors` mode-aware wrapper), all screens migrated off `AppColors.Blue*` |
+| Light/dark theme toggle | ✅ | `ThemeMode`, `ThemePreferenceRepository` (DataStore-backed), `ObserveThemeModeUseCase`/`SetThemeModeUseCase`, `MainViewModel`, toggle in `AppHeader` on Dashboard |
+| Clinical microscopy typography, spacing, component tokens | ✅ | MaterialTheme, spacing, typography, and Agartha components are the canonical token surface |
+| Capture dark immersive mode (theme-toggle-exempt) | ✅ | capture UI components; glass tint warmed from navy to charcoal-maroon |
 | Login, Dashboard, Session Picker, Capture, Verify Queue, Records, Session Detail, Sample Detail | ✅ | screen packages exist |
-| Settings screen | ⏳ | placeholder exists, full settings experience not implemented |
+| Settings screen | ⏳ | placeholder exists, full settings experience not implemented; theme toggle currently lives only on Dashboard (see Sprint 3 backlog) |
 | Removal of KomoUI usage | ✅ | dependency, imports, and app-source references removed; final grep/compile audit passed |
+| App icon (`mipmap-*/ic_launcher*.webp`) | ❌ | Raster launcher icons are still the old blue mark — vector `ic_logo.xml`/`ic_launcher_foreground.xml` are recolored, but the baked `.webp` mipmaps need regenerating with image tooling outside this session |
 
 ### Testing / CI
 
@@ -107,6 +110,9 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 7. Add the Kato-Katz multiplier citation near `EpgCalculator.MULTIPLIER`.
 8. Normalize report/admin RLS style by replacing the `0008` inline admin check with `public.is_admin(uuid)` in a follow-up migration.
 9. Re-run lint/tests/build after documentation cleanup and record the result in the PR.
+10. Mirror the light/dark theme toggle into the Settings screen once its production UI is built (currently Dashboard-only).
+11. Regenerate the raster `mipmap-*/ic_launcher*.webp` launcher icons in CIT-U maroon/gold (vector sources are already recolored; only the baked mipmaps are stale).
+12. If an official CIT-U brand guide is published, reconcile the sampled hex values in `AppColors` (`#8C1823` maroon, `#FFB81C` gold) against it.
 
 ## Phase 2 Roadmap
 

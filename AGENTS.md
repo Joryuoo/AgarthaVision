@@ -60,7 +60,7 @@ Read the relevant root file before changing behavior. If a rule, data contract, 
 ## Required Compliance
 
 - Keep MVVM + Clean Architecture boundaries intact: ViewModels call use cases, domain stays Android-free, and data implementations stay behind repository interfaces.
-- Follow the single design system in `CONTEXT.md`: Inter typography, cobalt accent, clinical restrained UI, and MaterialTheme consolidation.
+- Follow the single design system in `CONTEXT.md`: Inter typography, CIT-U maroon/gold accent, clinical restrained UI, and MaterialTheme consolidation.
 - Keep Supabase/Auth/Storage/inference behavior aligned with `CONTEXT.md` and `schema.ts`.
 - Keep Kotlin style, naming, KDoc, tests, branch names, and conventional commits aligned with `CONTEXT.md`.
 - Treat `TODO.md` as the active implementation audit before starting Sprint 3 or Phase 2 work.
@@ -70,7 +70,7 @@ Read the relevant root file before changing behavior. If a rule, data contract, 
 - Do not invent new conventions without updating `CONTEXT.md`.
 - Do not change schema behavior without updating the migration SQL and `schema.ts`.
 - Do not claim a backlog item is complete without checking the codebase and updating `TODO.md`.
-- Do not reintroduce a second UI theme or new KomoUI-only surface while the theme consolidation is in progress.
+- Do not reintroduce a second UI theme or new KomoUI-only surface.
 - Never commit real secrets; use `local.properties` locally and CI `-P` properties.
 
 ## How to Work
