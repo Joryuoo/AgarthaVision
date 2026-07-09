@@ -272,12 +272,14 @@ private fun ManualSheetContent(
             }
 
             SheetActionRow(
-                primaryLabel = "Submit",
-                secondaryLabel = "Discard",
-                onPrimaryClick = actions.onSubmit,
-                onSecondaryClick = { showDiscardConfirm = true },
-                primaryLoading = state.isSubmitting,
-                primaryEnabled = state.canSubmit
+                SheetActionRowState(
+                    primaryLabel = "Submit",
+                    secondaryLabel = "Discard",
+                    onPrimaryClick = actions.onSubmit,
+                    onSecondaryClick = { showDiscardConfirm = true },
+                    primaryLoading = state.isSubmitting,
+                    primaryEnabled = state.canSubmit
+                )
             )
         }
     }

@@ -147,6 +147,10 @@ private fun IconButtonGlass(
     }
 }
 
+// Top-level screen composable wired directly from AgarthaNavGraph's single Capture destination
+// (viewModel, camera deps, and 5 distinct navigation callbacks); each param is independently
+// meaningful and bundling would only wrap a single-call-site composable, not simplify anything.
+@Suppress("LongParameterList")
 @Composable
 fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),

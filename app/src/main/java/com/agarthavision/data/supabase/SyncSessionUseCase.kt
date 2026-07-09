@@ -21,6 +21,9 @@ class SyncSessionUseCase @Inject constructor(
      * @return [Result.success] when the row reaches [SessionSyncStatus.SYNCED], otherwise
      * [Result.failure] after marking the local row [SessionSyncStatus.SYNC_FAILED].
      */
+    // Guard-clause early returns for the not-found/unowned precondition checks read more
+    // clearly than nesting the runCatching block inside two if-expressions.
+    @Suppress("ReturnCount")
     suspend operator fun invoke(sessionId: String): Result<Unit> {
         val session = sessionDao.getSessionById(sessionId)
             ?: return Result.failure(IllegalArgumentException("Session $sessionId does not exist."))

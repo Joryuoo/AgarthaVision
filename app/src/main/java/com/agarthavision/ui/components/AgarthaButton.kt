@@ -40,6 +40,10 @@ private val PillShape = RoundedCornerShape(999.dp)
  * styled entirely from [AgarthaTheme] tokens so every variant adapts to light and
  * dark mode. Drop-in replacement for the legacy button component.
  */
+// Shared design-system primitive used at call sites across the whole app; each param
+// (onClick, modifier, variant, size, enabled, content) is independently meaningful and
+// bundling would churn every caller for marginal benefit.
+@Suppress("LongParameterList")
 @Composable
 fun AgarthaButton(
     onClick: () -> Unit,

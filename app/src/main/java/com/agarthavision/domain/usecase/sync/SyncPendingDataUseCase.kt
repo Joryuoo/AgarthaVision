@@ -37,6 +37,10 @@ sealed interface SyncSummary {
  * [SyncSummary.Skipped] when unauthenticated or offline. The durable WorkManager-backed
  * queue with backoff stays Phase 2 — see TODO.md.
  */
+// Composition-root use case wiring 8 distinct, non-overlapping DI dependencies (auth,
+// connectivity, DAOs, per-entity sync use cases); each is independently meaningful and
+// bundling would not simplify the real dependency graph.
+@Suppress("LongParameterList")
 class SyncPendingDataUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,

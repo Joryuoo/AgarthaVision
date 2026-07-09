@@ -167,7 +167,9 @@ private class FakeReportRepository : ReportRepository {
 
     override suspend fun getById(reportId: String): com.agarthavision.domain.model.Report? = null
 
-    override suspend fun getReportsPendingSync(userId: String): List<com.agarthavision.domain.model.Report> = emptyList()
+    override suspend fun getReportsPendingSync(
+        userId: String,
+    ): List<com.agarthavision.domain.model.Report> = emptyList()
 
     override suspend fun updateSupabaseStatus(
         reportId: String,
@@ -244,7 +246,9 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
         userId: String,
     ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
-    override suspend fun getReportsPendingSync(userId: String): List<com.agarthavision.data.local.entity.ReportEntity> = emptyList()
+    override suspend fun getReportsPendingSync(
+        userId: String,
+    ): List<com.agarthavision.data.local.entity.ReportEntity> = emptyList()
     override suspend fun updateSupabaseStatus(reportId: String, status: String) = Unit
     override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) = Unit
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)

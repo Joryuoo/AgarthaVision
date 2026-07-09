@@ -6,14 +6,12 @@ import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,7 +23,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
@@ -47,33 +44,27 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
-import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-private data class SessionDetailUi(
+internal data class SessionDetailUi(
     val id: String,
     val label: String?,
     val dateLabel: String,
@@ -86,7 +77,7 @@ private data class SessionDetailUi(
     val verifiedSamples: List<SampleUi>,
 )
 
-private data class SampleUi(
+internal data class SampleUi(
     val id: String,
     val source: SampleSource,
     val species: String,
@@ -95,7 +86,13 @@ private data class SampleUi(
     val isRepeat: Boolean = false,
 )
 
-private enum class SampleSource { Ai, Manual }
+internal enum class SampleSource { Ai, Manual }
+
+/** Multiplier to convert a [0,1] confidence ratio into a whole-number percentage. */
+private const val CONFIDENCE_PERCENT_MULTIPLIER = 100
+
+/** Number of trailing session-id characters kept for the compact detail-screen label. */
+private const val SESSION_ID_SHORT_LENGTH = 4
 
 @Composable
 fun SessionDetailScreen(
@@ -148,24 +145,23 @@ fun SessionDetailScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = AgarthaTheme.colors.background,
     ) { inner ->
+        val contentState = SessionDetailContentState(
+            session = sessionDetail,
+            reports = state.reports,
+            isGenerating = state.isGenerating,
+            onGenerate = viewModel::generateReport,
+            onShare = { report -> shareReportCsv(context, report) },
+        )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
-                session = sessionDetail,
-                reports = state.reports,
-                isGenerating = state.isGenerating,
-                onGenerate = viewModel::generateReport,
-                onShare = { report -> shareReportCsv(context, report) },
+                state = contentState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(inner),
             )
         } else {
             SessionDetailPopulated(
-                session = sessionDetail,
-                reports = state.reports,
-                isGenerating = state.isGenerating,
-                onGenerate = viewModel::generateReport,
-                onShare = { report -> shareReportCsv(context, report) },
+                state = contentState,
                 onSampleClick = { sample -> onSampleClick(sample.id) },
                 modifier = Modifier
                     .fillMaxSize()
@@ -188,14 +184,14 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
             species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
-            confidence = primary?.confidence?.let { (it * 100).toInt() },
+            confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
             isRepeat = item.sample.isRepeat,
         )
     }
 
     return SessionDetailUi(
-        id = sessionRecord.id.takeLast(4),
+        id = sessionRecord.id.takeLast(SESSION_ID_SHORT_LENGTH),
         label = sessionRecord.label,
         dateLabel = startedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
         timeLabel = startedAt.format(DateTimeFormatter.ofPattern("HH:mm")),
@@ -254,8 +250,125 @@ private fun SessionDetailAppBar(
     }
 }
 
+/**
+ * Snapshot shared by [SessionDetailPopulated] and [SessionDetailEmpty] — both render the same
+ * hero + reports section, differing only in what follows.
+ */
+internal data class SessionDetailContentState(
+    val session: SessionDetailUi,
+    val reports: List<Report>,
+    val isGenerating: Boolean,
+    val onGenerate: () -> Unit,
+    val onShare: (Report) -> Unit,
+)
+
 @Composable
-private fun EpgHeroCard(
+private fun SessionDetailPopulated(
+    state: SessionDetailContentState,
+    onSampleClick: (SampleUi) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val session = state.session
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(3),
+        modifier = modifier,
+        contentPadding = PaddingValues(
+            start = Spacing.xl,
+            end = Spacing.xl,
+            top = Spacing.xs,
+            bottom = Spacing.xxl,
+        ),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column {
+                EpgHeroCard(
+                    epg = session.epg,
+                    confirmedEggs = session.confirmedEggs,
+                    speciesCount = session.speciesCount,
+                    samplesTotal = session.samplesTotal,
+                    modifier = Modifier.semantics(mergeDescendants = true) {
+                        contentDescription = "Eggs per gram: ${session.epg}, " +
+                            "${session.confirmedEggs} confirmed, " +
+                            "${session.speciesCount} species, " +
+                            "${session.samplesTotal} samples"
+                    },
+                )
+                Spacer(Modifier.height(Spacing.md))
+                ReportsSection(
+                    reports = state.reports,
+                    isGenerating = state.isGenerating,
+                    onGenerate = state.onGenerate,
+                    onShare = state.onShare,
+                )
+                Spacer(Modifier.height(Spacing.lg))
+                SectionHeader(
+                    title = "Verified samples",
+                    count = "${session.verifiedSamples.size} of ${session.samplesTotal}",
+                )
+                Spacer(Modifier.height(Spacing.sm))
+            }
+        }
+        items(session.verifiedSamples, key = { it.id }) { sample ->
+            SampleTile(sample = sample, onClick = { onSampleClick(sample) })
+        }
+    }
+}
+
+@Composable
+private fun SessionDetailEmpty(
+    state: SessionDetailContentState,
+    modifier: Modifier = Modifier,
+) {
+    val session = state.session
+    Column(
+        modifier = modifier
+            .padding(horizontal = Spacing.xl)
+            .padding(top = Spacing.xs)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        EpgHeroCard(
+            epg = session.epg,
+            confirmedEggs = session.confirmedEggs,
+            speciesCount = session.speciesCount,
+            samplesTotal = session.samplesTotal,
+        )
+        Spacer(Modifier.height(Spacing.md))
+        ReportsSection(
+            reports = state.reports,
+            isGenerating = state.isGenerating,
+            onGenerate = state.onGenerate,
+            onShare = state.onShare,
+        )
+        Spacer(Modifier.height(60.dp))
+        EmptyStateGraphic()
+    }
+}
+
+private fun shareReportCsv(context: Context, report: Report) {
+    val path = report.csvFilePath ?: return
+    val file = File(path)
+    if (!file.exists()) return
+
+    runCatching {
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+    }.onSuccess { uri ->
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, file.name)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(intent, file.name).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chooser) }
+    }
+}
+
+@Composable
+internal fun EpgHeroCard(
     epg: Int,
     confirmedEggs: Int,
     speciesCount: Int,
@@ -346,374 +459,3 @@ private fun DotSeparator() {
         modifier = Modifier.padding(horizontal = 7.dp),
     )
 }
-
-@Composable
-private fun ReportsSection(
-    reports: List<Report>,
-    isGenerating: Boolean,
-    onGenerate: () -> Unit,
-    onShare: (Report) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(12.dp))
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-            .padding(14.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(
-                    text = stringResource(R.string.report_section_title),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AgarthaTheme.colors.textPrimary,
-                )
-                Text(
-                    text = if (reports.isEmpty()) {
-                        stringResource(R.string.report_empty)
-                    } else {
-                        "${reports.size} generated"
-                    },
-                    fontSize = 12.sp,
-                    color = AgarthaTheme.colors.textSecondary,
-                )
-            }
-            SmallActionPill(
-                label = stringResource(if (isGenerating) R.string.report_generating else R.string.report_generate),
-                enabled = !isGenerating,
-                onClick = onGenerate,
-            )
-        }
-
-        reports.take(3).forEach { report ->
-            ReportRow(report = report, onShare = { onShare(report) })
-        }
-    }
-}
-
-@Composable
-private fun ReportRow(report: Report, onShare: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = report.csvFilePath != null, onClick = onShare)
-            .padding(vertical = 4.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = report.generatedAt.formatReportDateTime(),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = AgarthaTheme.colors.textPrimary,
-            )
-            Text(
-                text = report.positiveSpecies.joinToString(", ").ifBlank {
-                    stringResource(R.string.report_no_positive_species)
-                },
-                fontSize = 12.sp,
-                color = AgarthaTheme.colors.textSecondary,
-            )
-        }
-        ReportStatusPill(status = report.supabaseStatus)
-    }
-}
-
-@Composable
-private fun ReportStatusPill(status: ReportSyncStatus) {
-    val colors = AgarthaTheme.colors
-    val (bg, fg, label) = when (status) {
-        ReportSyncStatus.SYNCED -> Triple(colors.successTint, colors.successText, R.string.report_status_synced)
-        ReportSyncStatus.SYNC_FAILED -> Triple(colors.dangerTint, colors.dangerText, R.string.report_status_failed)
-        ReportSyncStatus.PENDING -> Triple(colors.warningTint, colors.warningText, R.string.report_status_pending)
-    }
-    Box(
-        modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(
-            text = stringResource(label),
-            color = fg,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-private fun SmallActionPill(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = AgarthaTheme.colors
-    Box(
-        modifier = Modifier
-            .background(if (enabled) colors.accent else colors.borderStrong, RoundedCornerShape(999.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) {
-        Text(label, color = colors.onAccent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    count: String,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AgarthaTheme.colors.textPrimary)
-        Text(
-            count,
-            fontSize = 12.sp,
-            color = AgarthaTheme.colors.textSecondary,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-        )
-    }
-}
-
-@Composable
-private fun SampleTile(
-    sample: SampleUi,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .aspectRatio(1f)
-            .clip(RoundedCornerShape(10.dp))
-            .background(AppColors.MicroscopeBrush)
-            .clickable(onClick = onClick)
-            .semantics(mergeDescendants = true) {
-                contentDescription = "Sample ${sample.id}, ${sample.species}" +
-                    (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
-            },
-    ) {
-        if (sample.filePath != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(File(sample.filePath))
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
-
-        sample.confidence?.let {
-            ConfidenceChip(
-                text = "$it%",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp),
-            )
-        }
-        if (sample.isRepeat) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp)
-                    .background(AgarthaTheme.colors.gold, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-            ) {
-                Text("R", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.onGold)
-            }
-        }
-        SpeciesBadge(
-            text = sample.species,
-            isManual = sample.source == SampleSource.Manual,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(6.dp),
-        )
-    }
-}
-
-@Composable
-private fun ConfidenceChip(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AppColors.White)
-    }
-}
-
-@Composable
-private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = Modifier) {
-    // On-image badges: fixed maroon/amber fills with white text (mode-independent).
-    val bg = if (isManual) AppColors.Amber else AppColors.Maroon
-    Box(
-        modifier = modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
-    ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AppColors.White)
-    }
-}
-
-@Composable
-private fun SessionDetailPopulated(
-    session: SessionDetailUi,
-    reports: List<Report>,
-    isGenerating: Boolean,
-    onGenerate: () -> Unit,
-    onShare: (Report) -> Unit,
-    onSampleClick: (SampleUi) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = modifier,
-        contentPadding = PaddingValues(
-            start = Spacing.xl,
-            end = Spacing.xl,
-            top = Spacing.xs,
-            bottom = Spacing.xxl,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Column {
-                EpgHeroCard(
-                    epg = session.epg,
-                    confirmedEggs = session.confirmedEggs,
-                    speciesCount = session.speciesCount,
-                    samplesTotal = session.samplesTotal,
-                    modifier = Modifier.semantics(mergeDescendants = true) {
-                        contentDescription = "Eggs per gram: ${session.epg}, " +
-                            "${session.confirmedEggs} confirmed, " +
-                            "${session.speciesCount} species, " +
-                            "${session.samplesTotal} samples"
-                    },
-                )
-                Spacer(Modifier.height(Spacing.md))
-                ReportsSection(
-                    reports = reports,
-                    isGenerating = isGenerating,
-                    onGenerate = onGenerate,
-                    onShare = onShare,
-                )
-                Spacer(Modifier.height(Spacing.lg))
-                SectionHeader(
-                    title = "Verified samples",
-                    count = "${session.verifiedSamples.size} of ${session.samplesTotal}",
-                )
-                Spacer(Modifier.height(Spacing.sm))
-            }
-        }
-        items(session.verifiedSamples, key = { it.id }) { sample ->
-            SampleTile(sample = sample, onClick = { onSampleClick(sample) })
-        }
-    }
-}
-
-@Composable
-private fun SessionDetailEmpty(
-    session: SessionDetailUi,
-    reports: List<Report>,
-    isGenerating: Boolean,
-    onGenerate: () -> Unit,
-    onShare: (Report) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .padding(horizontal = Spacing.xl)
-            .padding(top = Spacing.xs)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        EpgHeroCard(
-            epg = session.epg,
-            confirmedEggs = session.confirmedEggs,
-            speciesCount = session.speciesCount,
-            samplesTotal = session.samplesTotal,
-        )
-        Spacer(Modifier.height(Spacing.md))
-        ReportsSection(
-            reports = reports,
-            isGenerating = isGenerating,
-            onGenerate = onGenerate,
-            onShare = onShare,
-        )
-        Spacer(Modifier.height(60.dp))
-        EmptyStateGraphic()
-    }
-}
-
-@Composable
-private fun EmptyStateGraphic() {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .background(AgarthaTheme.colors.surfaceVariant, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_minus_circle),
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "No verified samples yet",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textSecondary
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Captured frames will appear here once verified.",
-            fontSize = 13.sp,
-            color = AgarthaTheme.colors.textSecondary,
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-private fun shareReportCsv(context: Context, report: Report) {
-    val path = report.csvFilePath ?: return
-    val file = File(path)
-    if (!file.exists()) return
-
-    runCatching {
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }.onSuccess { uri ->
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, file.name)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        val chooser = Intent.createChooser(intent, file.name).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { context.startActivity(chooser) }
-    }
-}
-
-private fun Instant.formatReportDateTime(): String =
-    atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))

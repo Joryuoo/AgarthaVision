@@ -84,13 +84,13 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 | Track | Status | Codebase check |
 |---|---:|---|
 | Unit tests for EPG, reports, sync, records, auth/capture ViewModels | ✅ | `app/src/test/...` |
-| ktlint/detekt scripts | ✅ | `package.json`, Gradle plugins |
+| ktlint/detekt scripts | ⏳ | `package.json`, Gradle plugins — detekt enforces the zero-violation bar (see below); `:app:ktlintCheck` currently only wires `runKtlintCheckOverKotlinScripts`/`ktlintKotlinScriptCheck` (Gradle `.kts` build-script linting), not a source-set task over `src/main`/`src/test` `.kt` files — confirmed via `--dry-run`, pre-existing plugin wiring gap, not caused by any recent change |
 | GitHub Actions workflows and PR template | ❌ | `.github/` is not present |
 | Full real-device E2E pass | ⏳ | required for Sprint 3 hardening |
 
 ## Known Issues / Technical Debt
 
-- Capture top bar is near its icon-density limit; Settings/Help should move behind an overflow menu.
+- **STALE** — Capture top bar overflow menu: the top bar currently has only 2 tappable icons (Back, Verify Queue — see `CaptureScreen.kt`'s comment noting action shortcuts were already removed since records/reports are reachable outside Capture); Settings/Help have no Capture entry point today. Revisit only if a future change adds more icons to that row.
 - Report sync retry behavior now has a manual affordance (Settings "Sync now" + failed counts); automatic background retry/backoff is still deferred to the Phase 2 WorkManager work.
 - `.github` CI workflows and pull-request template are documented but not created.
 - `0008_reports.sql` uses an inline admin-role subquery instead of the `public.is_admin(uuid)` helper used by migration `0004`.
@@ -100,7 +100,8 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 - ADR-007 offline-access follow-ups: (a) sign-out now exists (ADR-008) and partially mitigates the shared-device fail-open risk; (b) the "Link to account" toggle itself is still opt-out (fail-open on shared devices — assumes one medtech per device); (c) resolved — Settings mirrors the account/sign-in affordance alongside Dashboard; (d) `SubmitVerificationUseCase`/`SubmitManualCaptureUseCase` no longer inject `AuthRepository` — Hilt graph and their tests were updated accordingly.
 - Settings screen has no dedicated iconography (sign-out/sync/account icons) — status is communicated via text + semantic color only, consistent with the Dashboard banner; revisit if a design review asks for icons.
 - Supabase production project/application status should be confirmed before demos or deployments; migrations are committed but applied manually.
-- Detekt debt: 40 findings repo-wide, accepted at the last two QA gates (31 at the theme rebrand, 40 after offline access) instead of the nominal zero-violation stage-03 bar; needs a dedicated cleanup chore before the gate can be enforced literally.
+- ✅ Detekt debt resolved — the repo-wide baseline (40 findings, accepted across the prior two QA gates: 31 at the theme rebrand, 40 after offline access) was cleared via a dedicated 4-PR cleanup chore (`stages/01_scope/output/scope.md`): mechanical reflow/constant-extraction, justified `@Suppress` on composition-root DI constructors and shared design-system primitives (matching the existing `DashboardViewModel`/`SettingsViewModel` precedent), `TooManyFunctions` file/interface splits (`DashboardScreen`→`+DashboardCards.kt`, `SessionDetailScreen`→`+SessionDetailCards.kt`, dead-DAO-method removal), and Composable parameter-list bundling into local state/action data classes. Current detekt count: **0**. The stage-03 zero-violation gate can now be enforced literally instead of waived.
+- `ktlintCheck` does not actually lint `src/main`/`src/test` Kotlin source in this repo's current Gradle wiring — discovered while verifying the detekt cleanup chore above (`--dry-run` shows only `.kts` build-script tasks run; no main/test source-set ktlint task is registered). Pre-existing gap, not caused by the detekt chore or any other recent change. Needs a follow-up to fix the `org.jlleitschuh.gradle.ktlint` plugin wiring so `bun run lint`'s ktlint half is a real check again.
 
 ## Sprint 3 Backlog
 
@@ -108,7 +109,7 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 2. Confirm `0008_reports.sql` is applied in the active Supabase project and that report rows sync with RLS enabled.
 3. ✅ Manual retry affordance shipped (Settings "Sync now" + pending/failed counts); automatic backoff on connectivity resume remains deferred to Phase 2 WorkManager.
 4. ✅ Production Settings screen shipped: Account, Data & Sync, Appearance, About sections.
-5. Add Capture overflow menu for secondary actions so top-bar density stays readable on narrow devices.
+5. **STALE** — Add Capture overflow menu for secondary actions so top-bar density stays readable on narrow devices. Current top bar has only 2 icons (Back, Verify Queue); no density problem exists today. See Known Issues note.
 6. Add `.github` workflows for build/test/lint/commitlint plus a PR template.
 7. Add the Kato-Katz multiplier citation near `EpgCalculator.MULTIPLIER`.
 8. Normalize report/admin RLS style by replacing the `0008` inline admin check with `public.is_admin(uuid)` in a follow-up migration.
@@ -117,6 +118,8 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 11. Regenerate the raster `mipmap-*/ic_launcher*.webp` launcher icons in CIT-U maroon/gold (vector sources are already recolored; only the baked mipmaps are stale).
 12. If an official CIT-U brand guide is published, reconcile the sampled hex values in `AppColors` (`#8C1823` maroon, `#FFB81C` gold) against it.
 13. Add dedicated Settings iconography (sign-out, sync, account) if a design review requests it — current implementation is text/color-only.
+14. ✅ Detekt cleanup chore shipped: 40 → 0 findings across 4 PRs (see Known Issues).
+15. Fix `:app:ktlintCheck`'s Gradle wiring so it actually lints `src/main`/`src/test` `.kt` files instead of only Kotlin build scripts (see Known Issues) — needed before the stage-03 "ktlint + detekt both zero-violation" gate is fully real again.
 
 ## Phase 2 Roadmap
 

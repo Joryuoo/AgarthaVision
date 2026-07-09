@@ -120,7 +120,7 @@ private class StubRemoteDataSource(
     override suspend fun upsertReport(report: ReportEntity) {
         upsertCallCount++
         if (shouldThrow) {
-            throw IllegalStateException("simulated upstream failure")
+            error("simulated upstream failure")
         }
     }
 }

@@ -79,15 +79,21 @@ fun ScreenTopBar(
     }
 }
 
+/**
+ * Snapshot [SheetActionRow] renders from — bundled since this primary/secondary action pair
+ * always travels together at both its call sites ([VerificationSheet], [ManualSheet]).
+ */
+data class SheetActionRowState(
+    val primaryLabel: String,
+    val secondaryLabel: String,
+    val onPrimaryClick: () -> Unit,
+    val onSecondaryClick: () -> Unit,
+    val primaryLoading: Boolean = false,
+    val primaryEnabled: Boolean = true
+)
+
 @Composable
-fun SheetActionRow(
-    primaryLabel: String,
-    secondaryLabel: String,
-    onPrimaryClick: () -> Unit,
-    onSecondaryClick: () -> Unit,
-    primaryLoading: Boolean = false,
-    primaryEnabled: Boolean = true
-) {
+fun SheetActionRow(state: SheetActionRowState) {
     val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
@@ -101,12 +107,12 @@ fun SheetActionRow(
                 .weight(1f)
                 .background(colors.dangerTint, RoundedCornerShape(14.dp))
                 .border(0.5.dp, colors.danger.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
-                .clickable { onSecondaryClick() }
+                .clickable { state.onSecondaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = secondaryLabel,
+                text = state.secondaryLabel,
                 color = colors.dangerText,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -118,13 +124,16 @@ fun SheetActionRow(
         Box(
             modifier = Modifier
                 .weight(2f)
-                .background(if (primaryEnabled) colors.textPrimary else colors.textTertiary, RoundedCornerShape(14.dp))
-                .clickable(enabled = primaryEnabled && !primaryLoading) { onPrimaryClick() }
+                .background(
+                    if (state.primaryEnabled) colors.textPrimary else colors.textTertiary,
+                    RoundedCornerShape(14.dp),
+                )
+                .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = if (primaryLoading) "Loading..." else primaryLabel,
+                text = if (state.primaryLoading) "Loading..." else state.primaryLabel,
                 color = colors.background,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,

@@ -11,7 +11,12 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Data access object for capture sessions.
+ *
+ * Room binds one DAO interface per entity — this codebase follows that convention
+ * throughout, so splitting [SessionDao] across multiple interfaces would be
+ * inconsistent with every other `@Dao` in the project for no functional benefit.
  */
+@Suppress("TooManyFunctions")
 @Dao
 interface SessionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -25,23 +30,6 @@ interface SessionDao {
 
     @Query("SELECT * FROM sessions WHERE user_id = :userId ORDER BY started_at DESC")
     fun observeAllSessions(userId: String): Flow<List<SessionEntity>>
-
-    /**
-     * Sessions the SessionPicker should show: active ([SessionEntity.endedAt] is `null`)
-     * OR started on/after [sinceMillis]. Newest first. Per ADR-005.
-     */
-    @Query(
-        """
-        SELECT * FROM sessions
-        WHERE user_id = :userId
-          AND (ended_at IS NULL OR started_at >= :sinceMillis)
-        ORDER BY started_at DESC
-        """
-    )
-    fun observeActiveAndRecent(userId: String, sinceMillis: Long): Flow<List<SessionEntity>>
-
-    @Query("SELECT * FROM sessions WHERE ended_at IS NULL ORDER BY started_at DESC LIMIT 1")
-    suspend fun getOpenSession(): SessionEntity?
 
     @Query("UPDATE sessions SET label = :label WHERE session_id = :sessionId")
     suspend fun updateSessionLabel(sessionId: String, label: String)

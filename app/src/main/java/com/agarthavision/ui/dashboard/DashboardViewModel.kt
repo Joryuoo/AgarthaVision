@@ -308,11 +308,11 @@ class DashboardViewModel @Inject constructor(
         val pendingSync = flows[1] as PendingAndSync
         val activeSession = flows[2] as ActiveSessionState?
         @Suppress("UNCHECKED_CAST")
-        val speciesAndSparkline = flows[3] as Pair<List<SpeciesData>, List<Float>>
+        val speciesAndSparkline = flows[HISTORICAL_DATA_FLOW_INDEX] as Pair<List<SpeciesData>, List<Float>>
         val (topSpecies, sparkline) = speciesAndSparkline
-        val themeMode = flows[4] as ThemeMode
+        val themeMode = flows[THEME_MODE_FLOW_INDEX] as ThemeMode
         @Suppress("UNCHECKED_CAST")
-        val accountSync = flows[5] as Triple<Boolean, Boolean, Boolean>
+        val accountSync = flows[ACCOUNT_SYNC_FLOW_INDEX] as Triple<Boolean, Boolean, Boolean>
         val (isSignedIn, isOffline, isSyncing) = accountSync
         DashboardUiState(
             isLoading           = false,
@@ -368,5 +368,12 @@ class DashboardViewModel @Inject constructor(
         const val HISTORICAL_DAYS = 7
         const val TOP_SPECIES_COUNT = 3
         const val SPARKLINE_LAST_INDEX = HISTORICAL_DAYS - 1
+
+        // Positional indices into the combine(...) `flows` array above (kpiStateFlow=0,
+        // pendingAndSyncFlow=1, activeSessionStateFlow=2, historicalDataFlow=3,
+        // themeModeFlow=4, accountSyncFlow=5).
+        const val HISTORICAL_DATA_FLOW_INDEX = 3
+        const val THEME_MODE_FLOW_INDEX = 4
+        const val ACCOUNT_SYNC_FLOW_INDEX = 5
     }
 }

@@ -135,35 +135,37 @@ fun SessionsScreen(
                             sessionData = sessionData,
                             isActive = sessionData.session.endedAt == null,
                             isKebabOpen = sessionData.session.id == activeKebabSessionId,
-                            onClick = {
-                                if (sessionData.session.endedAt == null) {
+                            actions = SessionCardActions(
+                                onClick = {
+                                    if (sessionData.session.endedAt == null) {
+                                        viewModel.onResumeSession(sessionData.session.id)
+                                    } else {
+                                        onSessionSelected(sessionData.session.id)
+                                    }
+                                },
+                                onKebabClick = {
+                                    activeKebabSessionId = sessionData.session.id
+                                },
+                                onKebabDismiss = {
+                                    activeKebabSessionId = null
+                                },
+                                onResume = {
                                     viewModel.onResumeSession(sessionData.session.id)
-                                } else {
-                                    onSessionSelected(sessionData.session.id)
+                                    activeKebabSessionId = null
+                                },
+                                onExport = {
+                                    viewModel.onExportSession(sessionData.session.id)
+                                    activeKebabSessionId = null
+                                },
+                                onEnd = {
+                                    viewModel.onEndSession(sessionData.session.id)
+                                    activeKebabSessionId = null
+                                },
+                                onToggleLink = { link ->
+                                    viewModel.onToggleAccountLink(sessionData.session.id, link)
+                                    activeKebabSessionId = null
                                 }
-                            },
-                            onKebabClick = {
-                                activeKebabSessionId = sessionData.session.id
-                            },
-                            onKebabDismiss = {
-                                activeKebabSessionId = null
-                            },
-                            onResume = {
-                                viewModel.onResumeSession(sessionData.session.id)
-                                activeKebabSessionId = null
-                            },
-                            onExport = {
-                                viewModel.onExportSession(sessionData.session.id)
-                                activeKebabSessionId = null
-                            },
-                            onEnd = {
-                                viewModel.onEndSession(sessionData.session.id)
-                                activeKebabSessionId = null
-                            },
-                            onToggleLink = { link ->
-                                viewModel.onToggleAccountLink(sessionData.session.id, link)
-                                activeKebabSessionId = null
-                            }
+                            )
                         )
                     }
                 }
@@ -242,18 +244,23 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
     }
 }
 
+/** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
+private data class SessionCardActions(
+    val onClick: () -> Unit,
+    val onKebabClick: () -> Unit,
+    val onKebabDismiss: () -> Unit,
+    val onResume: () -> Unit,
+    val onExport: () -> Unit,
+    val onEnd: () -> Unit,
+    val onToggleLink: (link: Boolean) -> Unit
+)
+
 @Composable
 private fun SessionCard(
     sessionData: SessionWithStats,
     isActive: Boolean,
     isKebabOpen: Boolean,
-    onClick: () -> Unit,
-    onKebabClick: () -> Unit,
-    onKebabDismiss: () -> Unit,
-    onResume: () -> Unit,
-    onExport: () -> Unit,
-    onEnd: () -> Unit,
-    onToggleLink: (link: Boolean) -> Unit
+    actions: SessionCardActions
 ) {
     val colors = AgarthaTheme.colors
     val session = sessionData.session
@@ -277,7 +284,7 @@ private fun SessionCard(
             .fillMaxWidth()
             .background(bgColor, RoundedCornerShape(12.dp))
             .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
+            .clickable { actions.onClick() }
             .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -333,7 +340,7 @@ private fun SessionCard(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable { if (isKebabOpen) onKebabDismiss() else onKebabClick() },
+                        .clickable { if (isKebabOpen) actions.onKebabDismiss() else actions.onKebabClick() },
                     contentAlignment = Alignment.Center
                 ) {
                     val dotColor = colors.textPrimary
@@ -350,12 +357,8 @@ private fun SessionCard(
 
                     if (isKebabOpen) {
                         KebabMenu(
-                            onDismiss = onKebabDismiss,
-                            onResume = onResume,
-                            onExport = onExport,
-                            onEnd = onEnd,
                             linkState = linkState,
-                            onToggleLink = onToggleLink
+                            actions = actions
                         )
                     }
                 }
@@ -395,17 +398,13 @@ fun LiveDot() {
 
 @Composable
 private fun KebabMenu(
-    onDismiss: () -> Unit,
-    onResume: () -> Unit,
-    onExport: () -> Unit,
-    onEnd: () -> Unit,
     linkState: SessionLinkState,
-    onToggleLink: (link: Boolean) -> Unit
+    actions: SessionCardActions
 ) {
     val colors = AgarthaTheme.colors
     val dangerColor = colors.danger
     Popup(
-        onDismissRequest = onDismiss,
+        onDismissRequest = actions.onKebabDismiss,
         properties = PopupProperties(focusable = true),
         alignment = Alignment.TopEnd,
         offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 36.dp.roundToPx() })
@@ -422,11 +421,11 @@ private fun KebabMenu(
                 .border(1.dp, colors.border, RoundedCornerShape(12.dp))
                 .padding(4.dp)
         ) {
-                KebabItem("Resume capture", "M7 10l5-5 5 5M12 5v14", onClick = onResume)
+                KebabItem("Resume capture", "M7 10l5-5 5 5M12 5v14", onClick = actions.onResume)
                 KebabItem(
                     "Export session",
                     "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
-                    onClick = onExport
+                    onClick = actions.onExport
                 )
                 // Per ADR-007: hidden once SYNCED (ownership is permanent at that point).
                 if (linkState != SessionLinkState.SYNCED) {
@@ -438,11 +437,12 @@ private fun KebabMenu(
                     }
                     KebabItem(
                         linkLabel,
-                        "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
-                        onClick = { onToggleLink(!isLinked) }
+                        "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" +
+                            "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+                        onClick = { actions.onToggleLink(!isLinked) }
                     )
                 }
-                KebabItem("End session", "", isDestructive = true, onClick = onEnd, drawExtras = {
+                KebabItem("End session", "", isDestructive = true, onClick = actions.onEnd, drawExtras = {
                     drawRoundRect(
                         color = dangerColor,
                         topLeft = Offset(6f, 6f),
@@ -553,21 +553,25 @@ private fun NewSessionSheet(
             // Body
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 SheetInput(
-                    label = "Label",
                     value = label,
                     onValueChange = { label = it; showError = false },
-                    placeholder = "e.g. 325",
-                    isError = showError && label.isBlank()
+                    config = SheetInputConfig(
+                        label = "Label",
+                        placeholder = "e.g. 325",
+                        isError = showError && label.isBlank()
+                    )
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 SheetInput(
-                    label = "Note",
                     value = note,
                     onValueChange = { note = it; showError = false },
-                    placeholder = "Patient ID, clinical context, sample details...",
-                    isError = false, // Note is never in error since it's optional
-                    isTextArea = true,
-                    isRequired = false
+                    config = SheetInputConfig(
+                        label = "Note",
+                        placeholder = "Patient ID, clinical context, sample details...",
+                        isError = false, // Note is never in error since it's optional
+                        isTextArea = true,
+                        isRequired = false
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
@@ -681,17 +685,25 @@ private fun NewSessionSheet(
     }
 }
 
+/** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
+private data class SheetInputConfig(
+    val label: String,
+    val placeholder: String,
+    val isError: Boolean,
+    val isTextArea: Boolean = false,
+    val isRequired: Boolean = true
+)
+
 @Composable
 private fun SheetInput(
-    label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String,
-    isError: Boolean,
-    isTextArea: Boolean = false,
-    isRequired: Boolean = true
+    config: SheetInputConfig
 ) {
     val colors = AgarthaTheme.colors
+    val (label, placeholder, isError) = config
+    val isTextArea = config.isTextArea
+    val isRequired = config.isRequired
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textSecondary)

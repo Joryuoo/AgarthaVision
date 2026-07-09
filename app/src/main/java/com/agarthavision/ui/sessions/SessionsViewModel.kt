@@ -71,7 +71,10 @@ class SessionsViewModel @Inject constructor(
                     val filtered = if (latest.searchQuery.isBlank()) {
                         sessions
                     } else {
-                        sessions.filter { it.session.id.contains(latest.searchQuery, ignoreCase = true) || (it.session.label?.contains(latest.searchQuery, ignoreCase = true) == true) }
+                        sessions.filter {
+                            it.session.id.contains(latest.searchQuery, ignoreCase = true) ||
+                                (it.session.label?.contains(latest.searchQuery, ignoreCase = true) == true)
+                        }
                     }
                     latest.copy(sessions = filtered, isLoading = false)
                 }
@@ -174,7 +177,8 @@ class SessionsViewModel @Inject constructor(
                 val session = sessionRepository.getSessionById(sessionId) ?: return@runCatching
                 // In a real app, this would query samples and detections and generate a CSV.
                 // For now, we generate a basic summary text to share.
-                val content = "Export for Session ${session.id} (${session.label ?: "Unnamed"})\nStarted: ${Instant.ofEpochMilli(session.startedAt)}"
+                val content = "Export for Session ${session.id} (${session.label ?: "Unnamed"})\n" +
+                    "Started: ${Instant.ofEpochMilli(session.startedAt)}"
                 eventChannel.send(SessionsEvent.ShareExport(content))
             }.onFailure { error ->
                 internalState.update {

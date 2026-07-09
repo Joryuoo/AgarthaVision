@@ -46,7 +46,11 @@ class LocalIdentityCacheTest {
         val identity = fakeDataStore.data
             .map { prefs ->
                 prefs[USER_ID_KEY]?.let { id ->
-                    LocalIdentity(userId = id, email = prefs[EMAIL_KEY].orEmpty(), displayName = prefs[DISPLAY_NAME_KEY])
+                    LocalIdentity(
+                        userId = id,
+                        email = prefs[EMAIL_KEY].orEmpty(),
+                        displayName = prefs[DISPLAY_NAME_KEY],
+                    )
                 }
             }
             .first()

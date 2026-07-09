@@ -4,20 +4,21 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import androidx.room.Update
 import com.agarthavision.data.local.entity.SampleEntity
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Data access object for verified samples.
+ *
+ * Room binds one DAO interface per entity — this codebase follows that convention
+ * throughout, so splitting [SampleDao] across multiple interfaces would be
+ * inconsistent with every other `@Dao` in the project for no functional benefit.
  */
+@Suppress("TooManyFunctions")
 @Dao
 interface SampleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSample(sample: SampleEntity)
-
-    @Update
-    suspend fun updateSample(sample: SampleEntity)
 
     @Query("UPDATE samples SET status = :status WHERE sample_id = :sampleId")
     suspend fun updateStatus(sampleId: String, status: String)
@@ -44,10 +45,22 @@ interface SampleDao {
     @Query("SELECT * FROM samples WHERE sample_id = :sampleId LIMIT 1")
     suspend fun getSampleById(sampleId: String): SampleEntity?
 
-    @Query("SELECT * FROM samples WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged' ORDER BY timestamp DESC")
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged'
+        ORDER BY timestamp DESC
+        """,
+    )
     fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<SampleEntity>>
 
-    @Query("SELECT * FROM samples WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged' ORDER BY timestamp DESC")
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged'
+        ORDER BY timestamp DESC
+        """,
+    )
     suspend fun getSamplesForSession(sessionId: String, userId: String): List<SampleEntity>
 
     @Query(
@@ -67,9 +80,6 @@ interface SampleDao {
         """,
     )
     suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String): List<SampleEntity>
-
-    @Query("SELECT COUNT(*) FROM samples WHERE session_id = :sessionId AND user_id = :userId AND status = 'flagged'")
-    suspend fun countFlaggedForSession(sessionId: String, userId: String): Int
 
     @Query("UPDATE samples SET is_repeat = NOT is_repeat WHERE sample_id = :sampleId")
     suspend fun toggleIsRepeat(sampleId: String)
@@ -95,6 +105,10 @@ interface SampleDao {
         WHERE sample_id = :sampleId
         """,
     )
+    // Each parameter binds a distinct SET column in a single verify-commit UPDATE. Converting
+    // this to a partial-entity @Update would change the actual persistence mechanism, which is
+    // out of scope for a lint-only chore.
+    @Suppress("LongParameterList")
     suspend fun updateSampleOnVerify(
         sampleId: String,
         status: String,

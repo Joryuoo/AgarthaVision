@@ -304,12 +304,14 @@ private fun VerificationSheetContent(
             }
 
             SheetActionRow(
-                primaryLabel = "Submit",
-                secondaryLabel = "Discard",
-                onPrimaryClick = actions.onSubmit,
-                onSecondaryClick = { showDiscardConfirm.value = true },
-                primaryLoading = state.isSubmitting,
-                primaryEnabled = state.canSubmit,
+                SheetActionRowState(
+                    primaryLabel = "Submit",
+                    secondaryLabel = "Discard",
+                    onPrimaryClick = actions.onSubmit,
+                    onSecondaryClick = { showDiscardConfirm.value = true },
+                    primaryLoading = state.isSubmitting,
+                    primaryEnabled = state.canSubmit,
+                )
             )
         }
     }

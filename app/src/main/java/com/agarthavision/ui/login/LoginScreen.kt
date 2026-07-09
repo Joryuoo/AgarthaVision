@@ -284,11 +284,13 @@ private fun LoginForm(
             value = state.email,
             onValueChange = actions.onEmailChanged,
             placeholder = "you@hospital.org",
-            isError = state.emailError,
-            errorText = emailErrorText,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next,
+            config = LoginFieldConfig(
+                isError = state.emailError,
+                errorText = emailErrorText,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next,
+                )
             )
         )
 
@@ -299,14 +301,16 @@ private fun LoginForm(
             value = state.password,
             onValueChange = actions.onPasswordChanged,
             placeholder = "••••••••••",
-            isError = state.passwordError,
-            errorText = passwordErrorText,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { actions.onSubmit() })
+            config = LoginFieldConfig(
+                isError = state.passwordError,
+                errorText = passwordErrorText,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { actions.onSubmit() })
+            )
         )
 
         Spacer(modifier = Modifier.height(22.dp))
@@ -343,19 +347,31 @@ private fun LoginForm(
     }
 }
 
+/**
+ * Field-level config for [LoginInputGroup] — validation/keyboard behavior, kept separate from
+ * the always-required per-field identity/state params (label, value, onValueChange, placeholder).
+ */
+private data class LoginFieldConfig(
+    val isError: Boolean = false,
+    val errorText: String? = null,
+    val visualTransformation: VisualTransformation = VisualTransformation.None,
+    val keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    val keyboardActions: KeyboardActions = KeyboardActions.Default,
+)
+
 @Composable
 private fun LoginInputGroup(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    isError: Boolean = false,
-    errorText: String? = null,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    config: LoginFieldConfig = LoginFieldConfig(),
 ) {
     val colors = AgarthaTheme.colors
+    val (isError, errorText) = config
+    val visualTransformation = config.visualTransformation
+    val keyboardOptions = config.keyboardOptions
+    val keyboardActions = config.keyboardActions
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),

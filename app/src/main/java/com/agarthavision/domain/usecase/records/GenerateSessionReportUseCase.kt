@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.core.util.EpgCalculator
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.repository.AuthRepository
@@ -19,6 +20,10 @@ import javax.inject.Inject
 /**
  * Generates a persisted session report and writes the CSV to device storage.
  */
+// Composition-root use case wiring 8 distinct, non-overlapping DI dependencies (repositories,
+// file store, CSV builder, sync use case); each is independently meaningful and bundling would
+// not simplify the real dependency graph.
+@Suppress("LongParameterList")
 class GenerateSessionReportUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionRepository: SessionRepository,
@@ -56,7 +61,7 @@ class GenerateSessionReportUseCase @Inject constructor(
 
         val reportId = UUID.randomUUID().toString()
         val generatedAt = Instant.now()
-        val csv = reportCsvBuilder.build(
+        val metadata = ReportMetadata(
             reportId = reportId,
             session = session,
             generatedBy = userId,
@@ -65,6 +70,9 @@ class GenerateSessionReportUseCase @Inject constructor(
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positiveSpecies,
             epgPerSpecies = epgPerSpecies,
+        )
+        val csv = reportCsvBuilder.build(
+            metadata = metadata,
             samples = samples,
             detectionsBySample = detectionsBySample,
         )

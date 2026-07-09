@@ -245,32 +245,58 @@ private fun StatsRow(
         val colors = AgarthaTheme.colors
         StatTile(
             "Sessions", sessionsCount, Modifier.weight(1f),
-            bgColor = colors.accent, contentColor = colors.onAccent, labelColor = colors.onAccent.copy(alpha = 0.8f)
+            colors = StatTileColors(
+                bgColor = colors.accent,
+                contentColor = colors.onAccent,
+                labelColor = colors.onAccent.copy(alpha = 0.8f),
+            ),
         )
         StatTile(
             "Eggs found", eggsCount, Modifier.weight(1f),
-            bgColor = colors.gold, contentColor = colors.onGold, labelColor = colors.onGold.copy(alpha = 0.75f)
+            colors = StatTileColors(
+                bgColor = colors.gold,
+                contentColor = colors.onGold,
+                labelColor = colors.onGold.copy(alpha = 0.75f),
+            ),
         )
         StatTile(
             "Samples", samplesCount, Modifier.weight(1f),
-            bgColor = AppColors.Gray700, contentColor = AppColors.White, labelColor = AppColors.White.copy(alpha = 0.8f)
+            colors = StatTileColors(
+                bgColor = AppColors.Gray700,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White.copy(alpha = 0.8f),
+            ),
         )
     }
 }
+
+/**
+ * Color triad for [StatTile] — bundled since bg/content/label always travel together.
+ * No defaults: every call site supplies its own triad (theme-token defaults would require a
+ * @Composable context, which a plain data class constructor doesn't have).
+ */
+private data class StatTileColors(
+    val bgColor: androidx.compose.ui.graphics.Color,
+    val contentColor: androidx.compose.ui.graphics.Color,
+    val labelColor: androidx.compose.ui.graphics.Color,
+)
 
 @Composable
 private fun StatTile(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    bgColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.surfaceVariant,
-    contentColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.textPrimary,
-    labelColor: androidx.compose.ui.graphics.Color = AgarthaTheme.colors.textSecondary,
+    colors: StatTileColors = StatTileColors(
+        bgColor = AgarthaTheme.colors.surfaceVariant,
+        contentColor = AgarthaTheme.colors.textPrimary,
+        labelColor = AgarthaTheme.colors.textSecondary,
+    ),
 ) {
-    val neutralBg = bgColor == AgarthaTheme.colors.surfaceVariant || bgColor == AgarthaTheme.colors.surface
+    val neutralBg = colors.bgColor == AgarthaTheme.colors.surfaceVariant ||
+        colors.bgColor == AgarthaTheme.colors.surface
     Column(
         modifier = modifier
-            .background(bgColor, RoundedCornerShape(12.dp))
+            .background(colors.bgColor, RoundedCornerShape(12.dp))
             .border(
                 1.dp,
                 if (neutralBg) AgarthaTheme.colors.border else androidx.compose.ui.graphics.Color.Transparent,
@@ -282,7 +308,7 @@ private fun StatTile(
             label.uppercase(),
             fontSize = 10.sp,
             fontWeight = FontWeight.SemiBold,
-            color = labelColor,
+            color = colors.labelColor,
             letterSpacing = 0.6.sp,
         )
         Spacer(Modifier.height(4.dp))
@@ -290,7 +316,7 @@ private fun StatTile(
             value,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = contentColor,
+            color = colors.contentColor,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             lineHeight = 22.sp,
         )
