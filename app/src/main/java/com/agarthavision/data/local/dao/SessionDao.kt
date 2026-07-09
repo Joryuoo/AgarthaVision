@@ -129,6 +129,30 @@ interface SessionDao {
     suspend fun claimSession(sessionId: String, userId: String)
 
     /**
+     * Live count of owned, non-exempt sessions still awaiting cloud upload (`pending`
+     * only, not `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM sessions
+        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'pending'
+        """,
+    )
+    fun observePendingCount(userId: String): Flow<Int>
+
+    /**
+     * Live count of owned, non-exempt sessions whose last sync attempt failed. Drives
+     * the Settings Data & Sync section. Per ADR-007.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM sessions
+        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'sync_failed'
+        """,
+    )
+    fun observeFailedCount(userId: String): Flow<Int>
+
+    /**
      * Observes sessions with their associated sample, verification, and EPG counts.
      */
     @Query(

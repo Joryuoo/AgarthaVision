@@ -75,7 +75,7 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 | Clinical microscopy typography, spacing, component tokens | ✅ | MaterialTheme, spacing, typography, and Agartha components are the canonical token surface |
 | Capture dark immersive mode (theme-toggle-exempt) | ✅ | capture UI components; glass tint warmed from navy to charcoal-maroon |
 | Login, Dashboard, Session Picker, Capture, Verify Queue, Records, Session Detail, Sample Detail | ✅ | screen packages exist |
-| Settings screen | ⏳ | placeholder exists, full settings experience not implemented; theme toggle currently lives only on Dashboard (see Sprint 3 backlog) |
+| Settings screen | ✅ | `ui/settings/SettingsScreen.kt` — Account (identity, sign-in/sign-out), Data & Sync (pending/failed counts, Sync now), Appearance (theme toggle mirror), About (version/environment); `SettingsViewModel`, `ObservePendingSyncCountsUseCase`, `SignOutUseCase` (ADR-008) |
 | Removal of KomoUI usage | ✅ | dependency, imports, and app-source references removed; final grep/compile audit passed |
 | App icon (`mipmap-*/ic_launcher*.webp`) | ❌ | Raster launcher icons are still the old blue mark — vector `ic_logo.xml`/`ic_launcher_foreground.xml` are recolored, but the baked `.webp` mipmaps need regenerating with image tooling outside this session |
 
@@ -90,15 +90,15 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 
 ## Known Issues / Technical Debt
 
-- Settings screen is still a placeholder and needs real options, session/account affordances, and QA copy.
 - Capture top bar is near its icon-density limit; Settings/Help should move behind an overflow menu.
-- Report sync retry behavior is not robust yet; `sync_failed` report rows need background retry/backoff or an explicit manual retry affordance.
+- Report sync retry behavior now has a manual affordance (Settings "Sync now" + failed counts); automatic background retry/backoff is still deferred to the Phase 2 WorkManager work.
 - `.github` CI workflows and pull-request template are documented but not created.
 - `0008_reports.sql` uses an inline admin-role subquery instead of the `public.is_admin(uuid)` helper used by migration `0004`.
 - Administrative report types are deferred; Supabase currently CHECKs `report_type in ('session')` only.
 - Optional `detections.rejection_note` / reviewer free-text reason is deferred.
 - Shared sync-state abstractions are duplicated (`SampleStatus`, `ReportSyncStatus`, and now `SessionSyncStatus` per ADR-007); consolidate into a common local sync helper when adding WorkManager.
-- ADR-007 offline-access follow-ups: (a) no sign-out flow yet; (b) the "Link to account" toggle is opt-out (fail-open on shared devices — assumes one medtech per device); (c) Dashboard is the only sign-in entry point — mirror account/session affordances into the Settings screen with its Sprint 3 rework; (d) `SubmitVerificationUseCase`/`SubmitManualCaptureUseCase` no longer inject `AuthRepository` — Hilt graph and their tests were updated accordingly.
+- ADR-007 offline-access follow-ups: (a) sign-out now exists (ADR-008) and partially mitigates the shared-device fail-open risk; (b) the "Link to account" toggle itself is still opt-out (fail-open on shared devices — assumes one medtech per device); (c) resolved — Settings mirrors the account/sign-in affordance alongside Dashboard; (d) `SubmitVerificationUseCase`/`SubmitManualCaptureUseCase` no longer inject `AuthRepository` — Hilt graph and their tests were updated accordingly.
+- Settings screen has no dedicated iconography (sign-out/sync/account icons) — status is communicated via text + semantic color only, consistent with the Dashboard banner; revisit if a design review asks for icons.
 - Supabase production project/application status should be confirmed before demos or deployments; migrations are committed but applied manually.
 - Detekt debt: 40 findings repo-wide, accepted at the last two QA gates (31 at the theme rebrand, 40 after offline access) instead of the nominal zero-violation stage-03 bar; needs a dedicated cleanup chore before the gate can be enforced literally.
 
@@ -106,16 +106,17 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 
 1. Run a full physical-device E2E pass: login, start session, inference health, flag frame, verify, manual capture, end session, records, report generation, share.
 2. Confirm `0008_reports.sql` is applied in the active Supabase project and that report rows sync with RLS enabled.
-3. Harden report/sample retry behavior for connectivity resume, or clearly defer it behind a manual retry state.
-4. Replace remaining placeholder Settings UI with production actions and account/session information.
+3. ✅ Manual retry affordance shipped (Settings "Sync now" + pending/failed counts); automatic backoff on connectivity resume remains deferred to Phase 2 WorkManager.
+4. ✅ Production Settings screen shipped: Account, Data & Sync, Appearance, About sections.
 5. Add Capture overflow menu for secondary actions so top-bar density stays readable on narrow devices.
 6. Add `.github` workflows for build/test/lint/commitlint plus a PR template.
 7. Add the Kato-Katz multiplier citation near `EpgCalculator.MULTIPLIER`.
 8. Normalize report/admin RLS style by replacing the `0008` inline admin check with `public.is_admin(uuid)` in a follow-up migration.
 9. Re-run lint/tests/build after documentation cleanup and record the result in the PR.
-10. Mirror the light/dark theme toggle into the Settings screen once its production UI is built (currently Dashboard-only).
+10. ✅ Theme toggle mirrored into the Settings screen (Appearance section); Dashboard header toggle unchanged.
 11. Regenerate the raster `mipmap-*/ic_launcher*.webp` launcher icons in CIT-U maroon/gold (vector sources are already recolored; only the baked mipmaps are stale).
 12. If an official CIT-U brand guide is published, reconcile the sampled hex values in `AppColors` (`#8C1823` maroon, `#FFB81C` gold) against it.
+13. Add dedicated Settings iconography (sign-out, sync, account) if a design review requests it — current implementation is text/color-only.
 
 ## Phase 2 Roadmap
 

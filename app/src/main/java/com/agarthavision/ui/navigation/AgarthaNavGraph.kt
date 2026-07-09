@@ -36,7 +36,7 @@ import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.sessions.SessionsScreen
-import com.agarthavision.ui.settings.SettingsScreenPlaceholder
+import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
@@ -302,6 +302,10 @@ fun AgarthaNavHost(
             SampleDetailScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onSignInClick = { navController.navigate(Screen.Login.route) },
+            )
+        }
     }
 }

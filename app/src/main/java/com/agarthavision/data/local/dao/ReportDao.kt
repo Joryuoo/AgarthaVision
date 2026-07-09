@@ -40,6 +40,20 @@ interface ReportDao {
     suspend fun updateSupabaseStatus(reportId: String, status: String)
 
     /**
+     * Live count of owned reports still awaiting cloud upload (`pending` only, not
+     * `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM reports WHERE user_id = :userId AND supabase_status = 'pending'")
+    fun observePendingCount(userId: String): Flow<Int>
+
+    /**
+     * Live count of owned reports whose last sync attempt failed. Drives the Settings
+     * Data & Sync section. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM reports WHERE user_id = :userId AND supabase_status = 'sync_failed'")
+    fun observeFailedCount(userId: String): Flow<Int>
+
+    /**
      * Claims reports belonging to the given sessions for [userId], marking them pending
      * sync. Only touches currently-unowned rows so it is idempotent. Per ADR-007.
      */

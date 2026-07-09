@@ -192,4 +192,37 @@
 
     <string name="manual_sheet_title">Manual Capture · %1$s</string>
     <string name="manual_sheet_close_desc">Close manual capture sheet</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_account">Account</string>
+    <string name="settings_section_sync">Data &amp; Sync</string>
+    <string name="settings_section_appearance">Appearance</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_signed_in_as">Signed in as %1$s</string>
+    <string name="settings_not_signed_in">Not signed in</string>
+    <string name="settings_not_signed_in_body">Sign in to upload sessions and enable cloud sync.</string>
+    <string name="settings_cached_identity_body">Last signed in as %1$s. New offline work is attributed to this account until you sign out.</string>
+    <string name="settings_sign_in">Sign in</string>
+    <string name="settings_sign_out">Sign out</string>
+    <string name="settings_sign_out_dialog_title">Sign out?</string>
+    <string name="settings_sign_out_dialog_body_synced">You will need to sign in again to upload future sessions.</string>
+    <string name="settings_sign_out_dialog_body_pending">%1$d item(s) not yet uploaded — they stay on this device and upload the next time this account signs in.</string>
+    <string name="settings_sign_out_dialog_confirm">Sign out</string>
+    <string name="settings_sign_out_dialog_cancel">Cancel</string>
+    <string name="settings_sign_out_blocked">%1$s</string>
+    <string name="settings_connectivity_online">Online</string>
+    <string name="settings_connectivity_offline">Offline</string>
+    <string name="settings_sync_all_synced">All synced</string>
+    <string name="settings_sync_pending">%1$d pending upload</string>
+    <string name="settings_sync_failed">%1$d failed</string>
+    <string name="settings_sync_sessions">Sessions</string>
+    <string name="settings_sync_samples">Samples</string>
+    <string name="settings_sync_reports">Reports</string>
+    <string name="settings_sync_now">Sync now</string>
+    <string name="settings_sync_syncing">Syncing…</string>
+    <string name="settings_appearance_dark_mode">Dark mode</string>
+    <string name="settings_about_version">Version</string>
+    <string name="settings_about_environment">Environment</string>
+    <string name="settings_about_environment_dev">Development</string>
+    <string name="settings_about_environment_prod">Production</string>
 </resources>

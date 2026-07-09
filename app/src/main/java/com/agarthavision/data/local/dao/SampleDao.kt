@@ -117,6 +117,20 @@ interface SampleDao {
     suspend fun getSamplesPendingSync(userId: String): List<SampleEntity>
 
     /**
+     * Live count of owned samples still awaiting cloud upload (`verified` only, not
+     * `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM samples WHERE user_id = :userId AND status = 'verified'")
+    fun observePendingCount(userId: String): Flow<Int>
+
+    /**
+     * Live count of owned samples whose last sync attempt failed. Drives the Settings
+     * Data & Sync section. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM samples WHERE user_id = :userId AND status = 'sync_failed'")
+    fun observeFailedCount(userId: String): Flow<Int>
+
+    /**
      * Claims samples belonging to the given sessions for [userId]. Only touches
      * currently-unowned rows so it is idempotent. Per ADR-007.
      */

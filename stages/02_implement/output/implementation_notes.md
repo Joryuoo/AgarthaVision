@@ -1,44 +1,47 @@
-# Implementation Notes: Sign-out — core (PR1 of 2, Settings scope)
+# Implementation Notes: Production Settings screen (PR2 of 2, Settings scope)
 
 ## Changed files
 
 | File | Change summary |
 |---|---|
-| `domain/repository/AuthRepository.kt` | Added `suspend fun signOut()` with KDoc describing ADR-008 semantics |
-| `domain/usecase/auth/SignOutUseCase.kt` (new) | `invoke(): Result<Unit>`; fails via `check()` while `SessionManager.state` is `Active`; otherwise delegates to `authRepository.signOut()` |
-| `domain/usecase/auth/HasActiveSessionUseCase.kt` | Deleted — confirmed dead (only self-reference, no callers) after the ADR-007 `LoginViewModel` rewrite removed the cold-start auto-forward flow it backed |
-| `data/repository/SupabaseAuthRepository.kt` | Implemented `signOut()`: `runCatching { supabase.auth.signOut() }` (best-effort remote revoke) then unconditionally clears all three `LocalIdentity` DataStore keys |
-| `commitlint.config.js` | Added `settings` to the `scope-enum` allowlist, ahead of PR2 which will use it |
-| `CONTEXT.md` | Added **ADR-008** to §8 (full local sign-out, warn-don't-block via an Active-session guard, rejected token-only alternative, partial mitigation of the ADR-007 shared-device fail-open consequence) |
-| `TODO.md` | Marked ADR-007 known-issue arm (a) "no sign-out flow" as resolved by this PR |
-| `app/src/test/.../SignOutUseCaseTest.kt` (new) | Two tests covering the success path and the Active-session guard |
-| `app/src/test/.../GenerateSessionReportUseCaseTest.kt`, `GetRecordsUseCaseTest.kt`, `GetSampleDetailUseCaseTest.kt` | Added `override suspend fun signOut() = Unit` to each file's local `AuthRepository` fake — required by the new interface method, unrelated to those tests' actual assertions |
+| `domain/model/PendingSyncCounts.kt` (new) | `data class PendingSyncCounts(pendingSessions, pendingSamples, pendingReports, failed)` + `totalPending`/`allSynced` derived properties |
+| `domain/usecase/settings/ObservePendingSyncCountsUseCase.kt` (new) | Combines the three DAO count flows into one `Flow<PendingSyncCounts>` for a given `userId` |
+| `data/local/dao/SessionDao.kt`, `SampleDao.kt`, `ReportDao.kt` | Added `observePendingCount(userId): Flow<Int>` / `observeFailedCount(userId): Flow<Int>` query-only methods per DAO (no schema change) |
+| `ui/settings/SettingsViewModel.kt` (new) | `StateFlow<SettingsUiState>` combining identity, connectivity, theme mode, pending-sync counts, syncing state; intents `onToggleTheme`, `onSyncNow`, `onSignOut`; one-shot `SharedFlow<SettingsEvent>` for `SignedOut`/`SignOutBlocked` |
+| `ui/settings/SettingsScreen.kt` (new) | Top-level screen composable, `SettingsContent`, sign-out dialogs, preview |
+| `ui/settings/SettingsCards.kt` (new) | `SettingsSection`, `SettingsCard`, `AccountCard`, `SyncCard` (+ `SyncCardState`, `SyncCounts`, `SyncCountRow`, `SyncStatusBadge`) |
+| `ui/settings/SettingsAppearanceAboutCards.kt` (new) | `AppearanceCard`, `AboutCard` (+ `AboutLabel`/`AboutValue`) — split out to keep each file under detekt's function-count threshold |
+| `ui/settings/SettingsScreenPlaceholder.kt` | Deleted |
+| `ui/navigation/AgarthaNavGraph.kt` | Wired `SettingsScreen` in place of the placeholder; `onSignInClick` navigates to `Screen.Login.route` |
+| `app/src/main/res/values/strings.xml` | Added `settings_*` string block (titles, account/sync/appearance/about copy, sign-out dialog) |
+| `app/src/test/.../SyncReportUseCaseTest.kt`, `GenerateSessionReportUseCaseTest.kt` | Added `observePendingCount`/`observeFailedCount` stubs to the two `ReportDao` fakes — required by the new interface methods, unrelated to those tests' assertions |
+| `app/src/test/.../ui/settings/SettingsViewModelTest.kt` (new) | 7 tests covering signed-in/never-signed-in initial state, theme toggle persistence, sync-now gating (signed-in+online vs. signed-out), and both sign-out event outcomes |
 
 ## Decisions made
 
-- **Followed the scope's recommended sign-out semantics as-is**: full local sign-out (token + cached identity both cleared), not the token-only alternative. Reasoning is recorded in ADR-008 rather than repeated here.
-- **Did not wire `FlaggedFrameStore.clear()` into `SignOutUseCase`.** The scope draft anticipated this, but `FlaggedFrameStore.clear()` already early-returns unless `sessionManager.state` is `Active` — and `SignOutUseCase`'s own guard means it only ever runs when the state is *not* Active. Calling `clear()` there would always be a no-op, so it was left out rather than shipped as dead code. Documented as a KDoc cross-reference instead: any flagged frames belonging to the just-ended session are already cleared by the normal end-session path, consistent with the existing "flagged frames lost on logout" behavior.
-- **No DI module changes needed.** `AuthRepository` was already bound (`RepositoryModule.bindAuthRepository`); `SignOutUseCase`'s two dependencies (`AuthRepository`, `SessionManager`) are both existing `@Inject`-constructor/`@Singleton` types.
-- **Detekt**: verified zero new findings from every file touched in this PR (grepped detekt's full output against each changed filename — no matches). The pre-existing 40-finding baseline is unchanged.
+- **No new drawable icons.** The design system rule is "no external icon library / hand-crafted inline SVG only," and this task didn't warrant new SVG assets for a first pass — the sync/connectivity/theme states are communicated through text + semantic color (success/warning/danger tints), matching `DashboardScreen`'s existing account/sync banner, which also has no dedicated icon.
+- **`SyncCard` takes a `SyncCardState` data class instead of 5 primitive params.** Originally written with 6 individual parameters, which tripped detekt's `LongParameterList` (threshold 6). Bundling into a state object is a real simplification (fewer things to keep positionally aligned at call sites), not just a lint dodge.
+- **Split into three files** (`SettingsScreen.kt`, `SettingsCards.kt`, `SettingsAppearanceAboutCards.kt`) to stay under detekt's per-file `TooManyFunctions` threshold (11). This mirrors the existing codebase pattern where large screens (`DashboardScreen.kt`, `SessionDetailScreen.kt`) already sit at or over that threshold and are accepted as debt — rather than add to that debt, this task split proactively.
+- **`@Suppress("LongParameterList")` on `SettingsViewModel`'s constructor** (7 DI params), matching the identical justified precedent on `DashboardViewModel` — both are composition roots for their screen and every parameter is a distinct, non-overlapping dependency.
+- **`About` section reads `BuildConfig.VERSION_NAME`/`BuildConfig.DEBUG` directly** rather than adding a dedicated use case — this is build metadata, not app state, and every other screen in the codebase that needs build info reads `BuildConfig` inline.
 
 ## Deferred (not in this PR)
 
-- Everything in PR2 per the scope split: `SettingsScreen`, `SettingsViewModel`, `PendingSyncCounts`, `ObservePendingSyncCountsUseCase`, DAO count queries, navigation wiring, strings.xml, and deleting `SettingsScreenPlaceholder.kt`.
-- `schema.ts` — not touched; this PR has no schema change (token + DataStore only).
+- New Settings-specific iconography (sign-out, sync, account icons) — flagged as a possible follow-up if the design review asks for it; out of scope per the "no icon library, hand-crafted SVG" rule without an explicit design ask.
+- Nothing else from the original scope draft was deferred; both PR1 (sign-out core) and PR2 (this PR) together implement the full `stages/01_scope/output/scope.md`.
 
 ## Tests added / updated
 
 | Test file | What it covers |
 |---|---|
-| `domain/usecase/auth/SignOutUseCaseTest.kt` (new) | Signs out and calls `authRepository.signOut()` when no session is active; fails with `Result.failure` and never calls `signOut()` when `SessionManager.state` is `Active` |
-| `domain/usecase/records/GenerateSessionReportUseCaseTest.kt` | Interface-compliance fix only (`ReportAuthRepository` fake) |
-| `domain/usecase/records/GetRecordsUseCaseTest.kt` | Interface-compliance fix only (`FakeAuthRepository` fake) |
-| `domain/usecase/records/GetSampleDetailUseCaseTest.kt` | Interface-compliance fix only (`DetailAuthRepository` fake) |
+| `ui/settings/SettingsViewModelTest.kt` (new) | Initial state (signed-in / never-signed-in), theme toggle persistence, `onSyncNow` gating on identity + connectivity, `onSignOut` success (`SignedOut` event) and failure (`SignOutBlocked` event) |
+| `data/supabase/SyncReportUseCaseTest.kt` | Interface-compliance fix only (`FakeReportDao`) |
+| `domain/usecase/records/GenerateSessionReportUseCaseTest.kt` | Interface-compliance fix only (`NoOpReportDao`) |
 
 ## Verification
 
-- `bun run build` equivalent (`:app:compileDebugKotlin`): BUILD SUCCESSFUL
+- `:app:compileDebugKotlin`: BUILD SUCCESSFUL
 - `:app:compileDebugUnitTestKotlin`: BUILD SUCCESSFUL
-- `bun run test` (`:app:testDebugUnitTest`): BUILD SUCCESSFUL, all tests pass
+- `:app:testDebugUnitTest`: BUILD SUCCESSFUL, all tests pass
 - `ktlintCheck`: 0 violations
-- `detekt`: 40 findings, identical to the pre-existing tracked baseline; zero attributable to this PR's files
+- `detekt`: 40 findings — identical to the PR1 baseline; zero attributable to any file touched in this PR (verified via full detekt output grep for `settings`/new filenames — no matches)
