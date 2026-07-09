@@ -1,15 +1,19 @@
 package com.agarthavision.ui.dashboard
 
 import app.cash.turbine.test
+import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.ThemeMode
-import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
+import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,8 +37,17 @@ class DashboardViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
 
-    private val authRepository: AuthRepository = mock<AuthRepository>().also {
-        runBlocking { whenever(it.getCurrentUserId()).thenReturn("user-1") }
+    private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
+        mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(
+                flowOf(LocalIdentity(userId = "user-1", email = "user@example.com")),
+            )
+        }
+    private val connectivityObserver: ConnectivityObserver = mock<ConnectivityObserver>().also {
+        whenever(it.isOnline).thenReturn(MutableStateFlow(true))
+    }
+    private val syncPendingDataUseCase: SyncPendingDataUseCase = mock<SyncPendingDataUseCase>().also {
+        runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
     private val sessionManager: SessionManager = mock<SessionManager>().also {
         whenever(it.state).thenReturn(MutableStateFlow(SessionState.Idle))
@@ -58,7 +71,9 @@ class DashboardViewModelTest {
     private val setThemeModeUseCase: SetThemeModeUseCase = mock()
 
     private fun viewModel() = DashboardViewModel(
-        authRepository = authRepository,
+        observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+        connectivityObserver = connectivityObserver,
+        syncPendingDataUseCase = syncPendingDataUseCase,
         sessionManager = sessionManager,
         sessionRepository = sessionRepository,
         sampleRepository = sampleRepository,

@@ -38,4 +38,21 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun updateSessionLabel(sessionId: String, label: String) {
         sessionDao.updateSessionLabel(sessionId, label)
     }
+
+    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> {
+        val entities = if (userId == null) {
+            sessionDao.observeAllLocal()
+        } else {
+            sessionDao.observeOwnedOrUnowned(userId)
+        }
+        return entities.map { list -> list.map { it.toDomain() } }
+    }
+
+    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) {
+        sessionDao.setClaimExempt(sessionId, exempt)
+    }
+
+    override suspend fun claimSession(sessionId: String, userId: String) {
+        sessionDao.claimSession(sessionId, userId)
+    }
 }

@@ -1,13 +1,33 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.LocalIdentity
+import kotlinx.coroutines.flow.Flow
+
 /**
  * Authentication boundary used by presentation-facing use cases.
+ *
+ * Per ADR-007, identity (the cached last-known medtech) is tracked separately from
+ * live authentication: [observeLocalIdentity] survives token expiry and offline cold
+ * starts, while [isAuthenticated] reflects whether Supabase currently holds a token.
  */
 interface AuthRepository {
     /**
-     * Streams the current user's ID (null when signed out).
+     * Streams the cached [LocalIdentity], or null when no medtech has ever signed in
+     * on this device. Emits on sign-in and process restart.
      */
-    val userIdFlow: kotlinx.coroutines.flow.Flow<String?>
+    fun observeLocalIdentity(): Flow<LocalIdentity?>
+
+    /**
+     * Returns the cached [LocalIdentity]'s user id, or null when no medtech has signed
+     * in on this device. Survives offline cold starts (unlike [getCurrentUserId], which
+     * reads the live Supabase session). Used for offline ownership attribution.
+     */
+    suspend fun currentLocalUserId(): String?
+
+    /**
+     * Returns true when Supabase currently holds a valid authenticated session.
+     */
+    suspend fun isAuthenticated(): Boolean
 
     /**
      * Returns true when Supabase has a persisted authenticated session.
@@ -15,7 +35,8 @@ interface AuthRepository {
     suspend fun hasActiveSession(): Boolean
 
     /**
-     * Signs in an existing dashboard-provisioned user with email and password.
+     * Signs in an existing dashboard-provisioned user with email and password, and
+     * caches the resulting [LocalIdentity] for offline attribution.
      */
     suspend fun signIn(email: String, password: String)
 

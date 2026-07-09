@@ -52,7 +52,7 @@ class FlaggedFrameStore @Inject constructor(
      * Observable stream of flagged frames for the active session.
      */
     val state: StateFlow<List<FlaggedFrame>> = combine(
-        authRepository.userIdFlow,
+        authRepository.observeLocalIdentity().map { it?.userId },
         sessionManager.state,
     ) { userId, sessionState ->
         userId to sessionState

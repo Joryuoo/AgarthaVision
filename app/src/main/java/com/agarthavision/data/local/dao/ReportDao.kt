@@ -38,4 +38,17 @@ interface ReportDao {
 
     @Query("UPDATE reports SET supabase_status = :status WHERE report_id = :reportId")
     suspend fun updateSupabaseStatus(reportId: String, status: String)
+
+    /**
+     * Claims reports belonging to the given sessions for [userId], marking them pending
+     * sync. Only touches currently-unowned rows so it is idempotent. Per ADR-007.
+     */
+    @Query(
+        """
+        UPDATE reports
+        SET user_id = :userId, supabase_status = 'pending'
+        WHERE session_id IN (:sessionIds) AND user_id IS NULL
+        """,
+    )
+    suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String)
 }

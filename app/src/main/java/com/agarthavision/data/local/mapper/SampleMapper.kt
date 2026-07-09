@@ -8,7 +8,7 @@ fun Sample.toEntity(): SampleEntity =
     SampleEntity(
         sampleId = id,
         sessionId = sessionId,
-        userId = userId,
+        userId = requireNotNull(userId) { "Sample $id must be claimed before mapping to a sync-eligible entity." },
         deviceId = deviceId,
         timestamp = timestamp,
         verifiedAt = verifiedAt,

@@ -1,100 +1,237 @@
-# Scope: CIT-U brand rebrand (maroon/gold) + dashboard dark-mode toggle
+# Scope: Offline Access — Direct Entry, Deferred Login, Local-First Sessions
 
 ## Summary
 
-Replace the cobalt "clinical blue" design system with CIT-U maroon/gold branding across all
-screens (KPI: zero remaining blue components), and add a persisted light/dark theme toggle
-on the Dashboard. Single theme, two modes — no second theme system (AGENTS.md non-negotiable).
+Remove the login wall: the app opens straight into the Dashboard, sessions can be started
+and verified fully offline against Room, and Supabase login becomes an explicit action —
+required only to upload. Identity is handled with a **cached last-known identity + deferred
+ownership claim** model: offline work is attributed to the last signed-in medtech when one
+exists, otherwise stored unowned and claimed at the next login, after which a pending-sync
+pass pushes sessions → samples → reports to Supabase.
 
-Approved by developer in-session: brand hex sampled from the CIT-U reference image
-(maroon `#8C1823`, gold `#FFB81C`); logo vector recolored in-repo; toggle lives on Dashboard.
+## How this is usually done (context for review)
+
+The standard offline-first pattern for single-operator field apps has three parts, and this
+plan follows it:
+
+1. **Local-first writes.** Every row is written to Room first with a local sync status;
+   the cloud is a mirror, never a gate. (Samples and reports already work this way —
+   sessions are the exception this task fixes.)
+2. **Cached identity, deferred auth.** The device remembers *who* the last authenticated
+   user was (a DataStore snapshot of user id + email) separately from *whether* Supabase
+   currently holds a valid token. New offline rows are attributed to the cached identity;
+   a fresh install that has never logged in stores rows with `user_id = NULL` and they are
+   claimed at first login. Login itself always requires connectivity.
+3. **Trigger-based sync.** Pending rows are pushed when (a) login succeeds, (b) the app
+   starts while authenticated + online, or (c) connectivity returns. A durable
+   WorkManager-backed queue with backoff stays Phase 2, as already planned.
+
+## Current-state findings (verified in code)
+
+- `AgarthaNavGraph.kt` starts at `Screen.Login`; `LoginViewModel.checkPersistedSession()`
+  auto-forwards when a persisted Supabase session exists. There is no sign-out anywhere.
+- `SessionManager.startSession()` **cannot run offline**: it throws without an
+  authenticated user, and if the remote insert fails it marks the local session ended and
+  rethrows. `stopSession()`'s remote close failure is also unrecoverable (no retry state).
+- `SessionEntity.userId` is *already nullable* — schema.ts documents this as intentional
+  for pre-auth/offline sessions. Nothing uses that affordance yet, and no column records
+  whether a session row exists remotely.
+- `SampleEntity.userId` is **non-null**, set at flag-persist time
+  (`PersistFlaggedFrameUseCase` → `SampleMapper`). `SubmitVerificationUseCase` and
+  `SubmitManualCaptureUseCase` both hard-fail without `getCurrentUserId()`.
+- Sync primitives exist and are local-status driven (`SyncSampleUseCase`,
+  `SyncReportUseCase` in `data/supabase/`; `getSamplesPendingSync` / `getReportsPendingSync`
+  DAOs) — but no orchestrated retry entry point was found in code (docs claim "retried on
+  next session start"; stage 02 must confirm and, if absent, this task's sync trigger
+  replaces it).
+- `NetworkMonitor` only probes the **inference container** during an active session. There
+  is no device-level connectivity observer (needed for login gating and sync triggers).
+- `SessionsViewModel` imports `data.supabase.SessionRemoteDataSource` directly — an
+  existing hard-rule-1 violation this task fixes while replacing that identity read.
+- `DashboardViewModel` gates every flow on `userIdFlow.filterNotNull()` — a never-logged-in
+  or offline cold start would show a permanently empty dashboard.
+- **Honest limitation:** inference is cloud-hosted, so offline sessions cannot produce AI
+  detections (NetworkMonitor already stops recording on inference loss — unchanged).
+  Offline capture value = **manual captures** + verifying already-flagged frames + local
+  records/EPG/reports. The UI must not pretend otherwise.
+
+## Decisions from the review gate
+
+1. **Attribution policy — DECIDED: hybrid.** Cached identity when present, else NULL +
+   claim at login. Consequence to be aware of alongside decision 2: under hybrid, rows
+   attributed to the cached last user are assigned **silently**; the claim flow and the
+   "Link to account" toggle only ever cover NULL-owned rows (fresh installs /
+   never-logged-in devices). Assumes one-medtech-per-device as the operational norm
+   (recorded in ADR-007).
+2. **Claim UX — DECIDED (v3): silent claim-all + per-session opt-out toggle. No login
+   dialog.** Login never interrupts: on success, all *eligible* unowned sessions are
+   claimed silently by the logging-in account and queued for sync (one line of disclosure
+   copy on the Login screen). The "choose" control moves out of the login flow into the
+   session UI: every unowned session carries a **"Link to account" toggle (default ON)**
+   in its card overflow / Session Detail actions. Toggling OFF marks the session
+   claim-exempt — the silent login claim skips it, it stays local-only and unsynced, and
+   its card shows a neutral "Not linked" badge. A signed-in user can flip it back ON
+   later, which claims + syncs that one session (cascade to its samples/reports).
+   Reverting a claim ("unlink") is allowed only while the session is still sync-PENDING;
+   once synced, ownership is permanent (the cloud row already exists under that user).
+   Accepted trade-off vs. the dialog: zero friction for the normal case, but on a shared
+   device the borrower must remember to toggle their session OFF before the owner's next
+   login — recorded as an ADR-007 consequence.
+3. **Manual "Sync now" on Dashboard — DECIDED: include.** Ships in this task, wired to
+   `SyncPendingDataUseCase`, disabled while offline or signed out.
+
+## Offline analytics (clarification for review)
+
+Yes — analytics over unsynced, locally verified samples work offline **by construction**,
+because every read path is Room-first and ignores sync status: EPG
+(`SessionEggCountUseCase` + `EpgCalculator`) counts CONFIRMED detections from Room;
+Records/Session Detail/Sample Detail read Room (sample images prefer the local file —
+the Supabase signed-URL path is only a fallback); CSV report generation
+(`GenerateSessionReportUseCase`) is fully local (only the report *row* syncs); Dashboard
+KPIs/sparkline/species aggregate Room via repositories. `VERIFIED` / `SYNC_FAILED`
+samples count identically to `SYNCED` ones. The only thing blocking offline analytics
+today is **identity gating** — `DashboardViewModel.filterNotNull()` and owner-filtered
+queries render nothing for a signed-out user — which is exactly what this task's
+owner-or-unowned query changes fix. No separate analytics work is needed.
 
 ## Affected files
 
 | File | Change description | Layer |
 |---|---|---|
-| `ui/theme/Color.kt` | Replace `Blue*` ramp with `Maroon*`/`Gold*`; swap slate neutrals for stone ramp; add dark-mode raw values (`Dark*`, `MaroonBright`); remains the only raw-hex site | Presentation |
-| `ui/theme/Palette.kt` (new) | `AgarthaColors` semantic palette (background, surface, border, textPrimary, textSecondary, accent + states/tints, gold set, semantic red/green/amber + tints) with `Light`/`Dark` instances + `LocalAgarthaColors` | Presentation |
-| `ui/theme/Theme.kt` | Light + dark Material 3 `ColorScheme`s (primary = maroon, secondary = gold); `AgarthaVisionTheme(darkTheme: Boolean)` provides `LocalAgarthaColors`; maroon hero shadow spec | Presentation |
-| `MainActivity.kt` | Collect theme preference and pass `darkTheme` into `AgarthaVisionTheme` | Presentation |
-| `domain/model/ThemeMode.kt` (new) | `enum class ThemeMode { LIGHT, DARK }` — pure Kotlin | Domain |
-| `domain/repository/ThemePreferenceRepository.kt` (new) | `val themeMode: Flow<ThemeMode>` + `suspend fun setThemeMode(ThemeMode)` | Domain |
-| `domain/usecase/settings/ObserveThemeModeUseCase.kt` (new) | Flow-returning observe use case (precedent: `ObserveSessionReportsUseCase`) | Domain |
-| `domain/usecase/settings/SetThemeModeUseCase.kt` (new) | Returns `Result<Unit>` per Conventions §7 | Domain |
-| `data/repository/ThemePreferenceRepositoryImpl.kt` (new) | DataStore Preferences-backed impl; defaults to `LIGHT` on first launch | Data |
-| `core/di/PreferencesModule.kt` (new) | `@Singleton` `DataStore<Preferences>` provider + `@Binds` for the repository | Core |
-| `gradle/libs.versions.toml`, `app/build.gradle.kts` | Add `androidx.datastore:datastore-preferences` | Build |
-| `ui/dashboard/DashboardViewModel.kt` | Theme mode in screen state + toggle intent via the two use cases | Presentation |
-| `ui/dashboard/DashboardScreen.kt` | Sun/moon toggle icon button in header row (inline SVG, ≥44 px target, content description); rebrand stat tiles (Sessions = maroon, EPG = gold fill + dark text), maroon sparkline/hero | Presentation |
-| `ui/sessions/SessionsScreen.kt` | Delete private blue palette copy (lines 48–64); consume `AgarthaTheme` tokens; maroon Active pill, maroon New-session CTA | Presentation |
-| `ui/login/LoginScreen.kt` | Remove hardcoded `#1E3FD9`/gray hex; maroon title/CTA/links | Presentation |
-| `ui/capture/CaptureScreen.kt` | Hardcoded blue dot → accent token; glass tint navy → warm charcoal; REC red unchanged | Presentation |
-| `ui/capture/ConnectionLossBanner.kt` | Local `RedColor` → semantic token | Presentation |
-| `ui/records/SessionDetailScreen.kt` | Stray purple `#7C3AED` badge → sanctioned token; tab/accent rebrand | Presentation |
-| `ui/records/RecordsScreen.kt`, `ui/records/SampleDetailScreen.kt` | Token migration (tabs, back link, meta rows) | Presentation |
-| `ui/verify/VerificationSheet.kt`, `ModalSheetComponents.kt`, `SpeciesDropdown.kt`, `FrameWithBoxes.kt`, `ManualSheet.kt`, `VerificationQueueScreen.kt` | Token migration; AI-suggested chip + detection bbox → maroon | Presentation |
-| `ui/components/AgarthaButton.kt`, `AgarthaBadge.kt`, `AgarthaToast.kt`, `AgarthaBottomBar.kt`, `AppHeader.kt`, `DetectionOverlay.kt`, `MicroscopyViewport.kt`, `GlassModifiers.kt`, `SvgIcon.kt` | Token migration; bottom-bar active state maroon; microscope gradient navy → warm dark; remove hardcoded border hex | Presentation |
-| `ui/navigation/AgarthaNavGraph.kt` | Token migration (scaffold backgrounds) | Presentation |
-| `res/drawable/ic_logo.xml` | Recolor vector: maroon body + gold accent (removes blue `#036BFC`-family fills) | Resources |
-| `res/drawable/ic_launcher_foreground.xml`, `ic_launcher_background.xml` | Launcher icon recolor to match | Resources |
-| `CONTEXT.md` §4 | New token block (maroon/gold/stone + dark), elevation shadows → maroon, supersede "dark mode stays off", gold-vs-amber usage rule | Docs |
-| `TODO.md` | Record rebrand + dark mode under UI/Design System; add follow-ups (Settings theme control) | Docs |
+| `ui/navigation/AgarthaNavGraph.kt` | `startDestination` → Dashboard; Login stays a route, entered explicitly from Dashboard, gains back navigation; successful login pops back instead of resetting the stack | Presentation |
+| `ui/login/LoginViewModel.kt` | Delete `checkPersistedSession()` auto-forward; gate submit on connectivity (offline → inline message, disabled CTA); on success: silent `ClaimLocalDataUseCase` (all non-exempt unowned sessions) → trigger pending sync → emit pop-back event | Presentation |
+| `ui/login/LoginScreen.kt` | Back affordance; offline state copy; one-line claim disclosure ("Unlinked local sessions on this device will be added to this account"); `strings.xml` additions | Presentation |
+| `ui/dashboard/DashboardViewModel.kt` | Identity via `ObserveLocalIdentityUseCase` (nullable-tolerant — remove `filterNotNull` gate); expose signed-in/offline/pending-upload state incl. pending session count; `onSyncNow` intent → `SyncPendingDataUseCase` | Presentation |
+| `ui/dashboard/DashboardScreen.kt` | Signed-out / offline / "N items pending upload" banner with **Sign in** CTA and **Sync now** button (disabled offline/signed-out, progress state while syncing); replace mocked `userName` fallback for anonymous state | Presentation |
+| `ui/sessions/SessionsViewModel.kt` | Replace direct `SessionRemoteDataSource` read (hard-rule fix) with `ObserveLocalIdentityUseCase`; owner-or-unowned session query so offline/null identity still lists local work; derive per-session link state (unowned / not-linked / pending / synced); `onToggleAccountLink` intent → `SetSessionClaimExemptUseCase` or `ClaimLocalDataUseCase(ids)` per state | Presentation |
+| `ui/sessions/SessionsScreen.kt` | Neutral "Not linked" badge on unowned/exempt session cards; overflow action "Link to account / Don't link to account" (label follows link state; hidden once synced) | Presentation |
+| `domain/model/LocalIdentity.kt` (new) | `data class LocalIdentity(userId, email, displayName?)` — pure Kotlin | Domain |
+| `domain/model/SessionSyncStatus.kt` (new) | `PENDING / SYNCED / SYNC_FAILED` mirroring `ReportSyncStatus` (enum consolidation stays a tracked known issue) | Domain |
+| `domain/repository/AuthRepository.kt` | Add `observeLocalIdentity(): Flow<LocalIdentity?>`, `suspend fun isAuthenticated(): Boolean`; fix `userIdFlow` semantics (currently a one-shot flow) | Domain |
+| `domain/usecase/auth/ObserveLocalIdentityUseCase.kt` (new) | Flow-returning observe use case (existing `Observe*` precedent) | Domain |
+| `domain/usecase/auth/ClaimLocalDataUseCase.kt` (new) | `invoke(userId, sessionIds = null)`: `UPDATE user_id` on unowned **non-exempt** sessions (`null` ids = all eligible, the login path; explicit ids = the manual "Link to account" action) **cascading to their samples and reports** → `Result<Int>` (rows claimed); idempotent; only touches `user_id IS NULL` rows | Domain |
+| `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt` (new, new subpackage) | Toggle a session's claim exemption → `Result<Unit>`. Exempt ON allowed on unowned sessions; also unlinks a claimed session back to unowned+exempt **only while `supabase_status = PENDING`** (guard error once synced) | Domain |
+| `domain/usecase/sync/SyncPendingDataUseCase.kt` (new) | Orchestrates FK-ordered push: pending sessions → samples → reports; no-op with `Result.success(SKIPPED)` when unauthenticated/offline | Domain |
+| `domain/usecase/verify/SubmitVerificationUseCase.kt` | Drop hard auth requirement; owner from session/cached identity (nullable); sync attempt stays opportunistic (offline → `SYNC_FAILED`, picked up later) | Domain |
+| `domain/usecase/verify/SubmitManualCaptureUseCase.kt` | Same auth relaxation as above | Domain |
+| `domain/usecase/capture/PersistFlaggedFrameUseCase.kt` | Attribute sample owner from active session / cached identity instead of requiring auth | Domain |
+| `data/repository/SupabaseAuthRepository.kt` | Persist `LocalIdentity` to DataStore on successful sign-in; implement `observeLocalIdentity` / `isAuthenticated`; keep Supabase session restore behavior | Data |
+| `data/supabase/SessionRemoteDataSource.kt` | `insert` → `upsert` (idempotent re-push, also carries `ended_at`/`notes` for sessions closed offline) | Data |
+| `data/supabase/SyncSessionUseCase.kt` (new) | Push one pending session row; set `SessionSyncStatus` accordingly (mirrors `SyncReportUseCase` shape) | Data |
+| `data/local/entity/SessionEntity.kt` | Add Room-only `supabase_status` (default `synced` for existing rows) and `claim_exempt` (default `false`) columns | Data |
+| `data/local/entity/SampleEntity.kt` | `userId: String` → `String?` (Room-only relaxation; remote stays NOT NULL — enforced by claim-before-sync) | Data |
+| `data/local/dao/SessionDao.kt` | Owner-or-unowned observe queries; `getSessionsPendingSync`; claim `UPDATE` scoped to non-exempt / explicit ids; `claim_exempt` toggle + PENDING-guarded unlink `UPDATE` | Data |
+| `data/local/dao/SampleDao.kt` | Nullable-owner handling in existing queries; claim `UPDATE`; keep `getSamplesPendingSync` (claimed rows only) | Data |
+| `data/local/dao/ReportDao.kt` | Claim `UPDATE` for unowned reports | Data |
+| `data/local/mapper/SampleMapper.kt` | Nullable owner mapping | Data |
+| `core/database/AgarthaDatabase.kt` + `app/schemas/.../8.json` | Room v7→v8 migration (see below) | Core |
+| `core/session/SessionManager.kt` | `startSession`: local insert always (owner = cached identity or null, status `PENDING`), remote push best-effort, **no rollback/throw on remote failure**; `stopSession`: local end always, remote close best-effort → status stays `PENDING` on failure | Core |
+| `core/connectivity/ConnectivityObserver.kt` (new) | `@Singleton` ConnectivityManager network-callback → `StateFlow<Boolean>`; constructor-injected `@ApplicationContext` (no new DI module); distinct from inference-only `NetworkMonitor` | Core |
+| `CONTEXT.md` | §3 navigation flow, §5 Auth/Sync sections, new **ADR-007** (offline-first entry, cached identity, deferred claim, trigger-based sync) | Docs |
+| `schema.ts` | Note `SampleEntity.user_id` Room nullability + `sessions.supabase_status` Room-only column | Docs |
+| `TODO.md` | Record feature status; add follow-ups (sign-out, Settings account section, enum consolidation) | Docs |
 
 ## Schema / migration
 
-None — theme preference is device-local via DataStore Preferences. No Room migration
-(stays v7), no Supabase migration (stays `0008`), `schema.ts` untouched.
+**Room v8** (Supabase: **none** — remote schema, RLS, and migrations `0001–0008` unchanged):
+
+- `sessions`: add `supabase_status TEXT NOT NULL DEFAULT 'synced'` and
+  `claim_exempt INTEGER NOT NULL DEFAULT 0`. Default `synced` is correct for pre-existing
+  rows (the old code only kept sessions whose remote insert succeeded); the rare
+  pre-feature row whose remote insert failed was already marked ended and stays local-only
+  — accepted, noted in the migration KDoc.
+- `samples`: relax `user_id` to nullable (SQLite requires table-rebuild migration:
+  create/copy/drop/rename).
+- Export `app/schemas/.../8.json`; add a Room `MigrationTest` if instrumented tests exist
+  for prior versions (stage 02 verify — otherwise document manual check).
+
+**RLS compatibility:** unchanged policies hold because sync only ever runs authenticated
+and post-claim, so `user_id = auth.uid()` on every insert/upsert. Stage 02 must verify the
+`sessions` UPDATE policy permits the new upsert path (`closeSession` UPDATE works today, so
+owner-scoped UPDATE exists; confirm against `supabase/migrations/0001`).
 
 ## Design tokens (UI tasks only)
 
-Light (WCAG AA verified):
-
-- `AppColors.Maroon #8C1823` — primary accent; 9.3:1 on white (CTAs, active states, focus rings, AI bboxes)
-- `AppColors.MaroonHover #75141E` · `MaroonPressed #5E1018`
-- `AppColors.MaroonTint #F9E8EA` · `MaroonTint2 #FCF3F4` — active cards / info banners
-- `AppColors.Gold #FFB81C` — brand highlight, **fill-only with dark text** (11:1 with `Gray900`); never text-on-white
-- `AppColors.GoldTint #FFF4D6` · `GoldText #7A5A00` (6.4:1 on white, 5.8:1 on tint)
-- Neutrals: stone ramp `OffWhite #FAFAF9 · Gray50 #F5F5F4 · Gray100 #E7E5E4 · Gray200 #D6D3D1 · Gray300 #A8A29E · Gray500 #78716C · Gray700 #44403C · Gray900 #1C1917`
-- Semantic unchanged: `Red #DC2626`, `Green #16A34A`, `Amber #D97706` (+tints). Rule: gold = brand, amber = caution, never adjacent; destructive stays bright red, visibly distinct from maroon.
-
-Dark:
-
-- `DarkBackground #171412` · `DarkSurface #1F1B18` · `DarkSurfaceAlt #262220` · `DarkBorder #37322E`
-- `DarkTextPrimary #F5F5F4` (≥12:1) · `DarkTextSecondary #A8A29E` (≥4.5:1)
-- `MaroonBright #D9707A` — dark-mode accent text/icons (5.3:1 on background); filled buttons keep `Maroon` + white label (9.3:1 internal)
-- `Gold` unchanged (9.8:1 on dark background)
-- Brightened semantic tints for dark surfaces (red/green/amber)
-
-Typography (`Inter`, tabular numerals), spacing grid, radius scale, `DialogShape`: unchanged.
-Capture screen remains always-dark (tool mode), independent of the toggle.
+Banner/state/dialog UI only — existing tokens, no new colors or radii:
+`AgarthaTheme.colors.accent` (Sign in CTA, Sync now button), `warning`/`warningTint`/
+`warningText` (offline + pending-upload states, amber = sync warning per design system),
+`success`/`successTint` (all-synced), Caption/Label typography with `tnum` for pending
+counts, `pill` radius for status badges, hairline border card per no-shadow rule.
+"Not linked" badge: neutral pill (`gray-100` fill, `gray-700` text) — local-only is a
+neutral state, not a warning; amber stays reserved for pending-sync. The link toggle
+follows the design system Toggle spec (44×26 pill, off `gray-200`, on accent); overflow
+menu rows keep ≥44px touch targets and content descriptions.
 
 ## Tests to add / update
 
-- `SetThemeModeUseCaseTest` — persists mode; returns `Result.success`; surfaces repository failure.
-- `ObserveThemeModeUseCaseTest` — emits repository flow; defaults to `LIGHT`.
-- `ThemePreferenceRepositoryImplTest` — round-trip with an in-memory/fake DataStore; unknown stored value falls back to `LIGHT`.
-- `DashboardViewModelTest` — update/add: toggle intent flips state and invokes `SetThemeModeUseCase`; initial state reflects observed mode.
-- Existing test suite must stay green (rebrand is token-level; no behavioral change expected elsewhere).
+- `SessionManagerTest` (update): offline/no-auth start creates local `PENDING` row without
+  throwing; remote-insert failure no longer ends the session; offline `stopSession` keeps
+  `PENDING` with `endedAt` set locally.
+- `LoginViewModelTest` (update): no auto-forward on cold start; offline submit blocked with
+  message; success silently claims eligible sessions then syncs and pops — no dialog events.
+- `ClaimLocalDataUseCaseTest` (new): claims unowned **non-exempt** sessions cascading to
+  their samples/reports; skips exempt sessions and their children; explicit-ids mode claims
+  only those ids; skips rows already owned; returns claimed count; idempotent.
+- `SetSessionClaimExemptUseCaseTest` (new): toggles exemption on unowned sessions; unlink
+  reverts an owned session to unowned+exempt only while `PENDING`; returns failure once
+  `SYNCED`.
+- `SessionsViewModelTest` (update, additional): per-session link-state derivation
+  (unowned / not-linked / pending / synced); `onToggleAccountLink` routes to exempt-toggle
+  vs. manual claim correctly per state.
+- `DashboardViewModelTest` (update, additional): `onSyncNow` invokes
+  `SyncPendingDataUseCase`; disabled state when offline or signed out; in-progress state.
+- `SyncPendingDataUseCaseTest` (new): FK order sessions→samples→reports; skips cleanly when
+  unauthenticated or offline; per-row failure marks `SYNC_FAILED` without aborting the pass.
+- `SubmitVerificationUseCaseTest` / `SubmitManualCaptureUseCaseTest` (update): verification
+  persists without auth; owner attribution from session/cached identity; offline sync
+  failure leaves `SYNC_FAILED` and still returns success for the local write.
+- `SupabaseAuthRepositoryTest` (new/update): identity cached on sign-in; observe emits after
+  process-death simulation (fake DataStore).
+- `SessionsViewModelTest` / `DashboardViewModelTest` (update): null-identity state lists
+  local sessions / renders dashboard instead of empty-loading; pending-upload counts.
 
 ## Architecture checks
 
-- [x] No ViewModel imports Room / Retrofit / Supabase — Dashboard VM sees use cases only
-- [x] No Android import in `domain/` — `ThemeMode` + repository interface are pure Kotlin; DataStore lives in `data/`
-- [x] Use Case returns `Result<T>` — `SetThemeModeUseCase: Result<Unit>`; observe use case returns `Flow` (existing precedent)
-- [x] Repository interface in `domain/`, impl in `data/`, bound via Hilt `@Binds`
-- [x] New entity in `data/local/entity/`, domain model in `domain/model/` — no new entity; `ThemeMode` in `domain/model/`
-- `@Singleton` only for the `DataStore` provider (app-scoped I/O), consistent with rule 7
+- [x] No ViewModel imports Room / Retrofit / Supabase — **fixes** the existing
+  `SessionsViewModel` → `SessionRemoteDataSource` violation; new VM inputs are use cases
+  + core (`ConnectivityObserver`, `SessionManager` — existing precedent)
+- [x] No Android import in `domain/` — `LocalIdentity`, `SessionSyncStatus`, new use cases
+  are pure Kotlin; ConnectivityManager stays in `core/` ⚠ pre-existing tension: verify use
+  cases already import Room DAOs / `data.supabase` — this task follows that precedent
+  rather than expanding scope; consolidation noted in TODO.md
+- [x] Use Case returns `Result<T>` — `ClaimLocalDataUseCase: Result<Int>`,
+  `SyncPendingDataUseCase: Result<SyncSummary>`; `Observe*` returns `Flow` (precedent)
+- [x] Repository interface in `domain/`, impl in `data/` — `AuthRepository` extension only
+- [x] New entity in `data/local/entity/`, domain model in `domain/model/` — no new entity;
+  new columns on existing entities; `LocalIdentity`/`SessionSyncStatus` in `domain/model/`
+- [x] `@Singleton` only for app-scoped singletons — `ConnectivityObserver` qualifies (rule 7)
 
 ## Known-issues cross-reference (TODO.md)
 
-- "Settings screen is placeholder" (Sprint 3 #4): the toggle ships on Dashboard per request; mirroring it in Settings is deferred and noted as a follow-up.
-- "Capture top-bar icon density" (Sprint 3 #5): no toggle on Capture — avoids worsening this issue; Capture is always dark anyway.
-- "Theme consolidation still open" (Sprint 0 table): this task completes consolidation onto the single rebranded theme.
+- **WorkManager/offline sync queue (❌, Phase 2):** this task ships trigger-based
+  foreground sync only — an explicit stepping stone; the Phase 2 durable-queue item stays.
+- **Report retry not robust (Sprint 3 #3):** partially addressed — reports now ride the
+  pending-sync pass; backoff still deferred.
+- **Duplicated sync-state enums:** `SessionSyncStatus` knowingly adds a third; consolidate
+  when WorkManager lands (keep the known issue open, reference it in the new code's KDoc).
+- **Settings placeholder (Sprint 3 #4):** sign-in/account affordance lands on Dashboard;
+  the Settings account section (incl. sign-out) remains with the Settings rework.
+- **Persistent flagged queue (Phase 2):** unchanged — unverified FLAGGED frames are still
+  lost on process death; only *verified* samples survive offline.
 
-## Deferred
+## Deferred (explicitly out of scope)
 
-- Official CIT-U brand-guide hex swap (sampled values approved; swap is a `Color.kt`-only change if official values arrive).
-- Theme control inside the Settings screen (belongs to Sprint 3 #4 Settings rework).
-- Three-state "follow system" theme mode; `prefers-reduced-motion` handling.
-- Box-editing, admin reports, and all other Phase 2 items — untouched.
-- Physical-device E2E screenshot pass in both modes — executed in stage 03 QA, not here.
+- WorkManager durable queue, backoff, and conflict resolution (sync is last-write-wins
+  upsert; single-operator data makes conflicts implausible in Phase 1).
+- Sign-out flow and multi-user-per-device data isolation (the per-session "Don't link"
+  toggle mitigates mis-claiming, but it is opt-out: hybrid attribution plus silent
+  claim-all still assume one medtech per device; flagged as ADR-007 consequence).
+- Offline AI inference — impossible by design (cloud inference container); Phase 2 on-prem
+  hardware addresses it.
+- Settings account UI, admin flows, PDF/administrative reports.
+
+## Suggested PR split (≤400-line PRs per CONTEXT.md §6)
+
+1. `feat(core)`: identity cache + `ConnectivityObserver` + `AuthRepository` extension + Room v8.
+2. `feat(capture)`: offline-first `SessionManager` + auth-relaxed verify/manual/persist use cases.
+3. `feat(dashboard)`: direct-entry navigation + Login rework + claim/sync orchestration + Dashboard state UI + docs (ADR-007, schema.ts, TODO.md).

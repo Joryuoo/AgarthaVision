@@ -20,8 +20,14 @@ data class SampleEntity(
     @ColumnInfo(name = "session_id")
     val sessionId: String,
 
+    /**
+     * Owning medtech's Supabase user id, or `null` for a sample captured before any
+     * medtech signed in on this device. Per ADR-007 the owner is claimed at the next
+     * login before sync; the remote `samples.user_id` stays NOT NULL. **Room-only**
+     * nullability.
+     */
     @ColumnInfo(name = "user_id")
-    val userId: String,
+    val userId: String?,
 
     @ColumnInfo(name = "device_id")
     val deviceId: String,

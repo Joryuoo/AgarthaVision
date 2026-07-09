@@ -93,6 +93,16 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
     override suspend fun updateSupabaseStatus(reportId: String, status: String) {
         rows[reportId]?.let { rows[reportId] = it.copy(supabaseStatus = status) }
     }
+
+    override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) {
+        rows.replaceAll { _, row ->
+            if (row.sessionId in sessionIds && row.userId == null) {
+                row.copy(userId = userId, supabaseStatus = ReportSyncStatus.PENDING.value)
+            } else {
+                row
+            }
+        }
+    }
 }
 
 private class StubRemoteDataSource(

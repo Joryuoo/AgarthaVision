@@ -1,80 +1,170 @@
-# Implementation Notes: CIT-U brand rebrand (maroon/gold) + dashboard dark-mode toggle
+# Implementation Notes: Offline Access — Direct Entry, Deferred Login, Local-First Sessions
+
+Branch: `feat/core-offline-access` (based on `test`; no local `develop` exists — see
+`stages/01_scope/output/scope.md` git note). Implements all three PRs from the scope in one
+branch for review convenience; **split into the 3 commits/PRs described in scope.md before
+merging**, per CONTEXT.md §6 (~400-line PR guideline).
+
+## ⚠️ Verification status — READ FIRST
+
+**No file in this changeset has been run through `bun run build`, `bun run test`, or
+`bun run lint`.** The implementation session's shell had a broken interactive-shell
+init (fastfetch/starship spam on every command) that made Gradle output unreadable, so
+verification could not be completed inline. Every file was written against direct reading
+of the current codebase (existing call sites, DAO signatures, entity fields, string
+resources) and cross-checked for consistency, but **none of it is compiler-verified.**
+Treat this as a thorough draft, not a merge-ready diff. See "Required next step" at the
+bottom — this is not optional.
 
 ## Changed files
 
+### PR 1 — core (identity, connectivity, Room v8)
+
 | File | Change summary |
 |---|---|
-| `ui/theme/Color.kt` | Rewrote raw hex palette: `Maroon`/`MaroonHover`/`MaroonPressed`/`MaroonTint`/`MaroonTint2`/`MaroonBright`, `Gold`/`GoldTint`/`GoldText`/`GoldTextDark`, stone-ramp neutrals, dark-mode surfaces, semantic colors (unchanged hues, added dark variants), `MicroscopeBrush` warmed from navy to charcoal |
-| `ui/theme/Palette.kt` (new) | `AgarthaColors` semantic data class (~25 role properties); `LightAgarthaColors`/`DarkAgarthaColors` instances; `LocalAgarthaColors` CompositionLocal |
-| `ui/theme/Theme.kt` | Light/dark Material3 `ColorScheme`s; `AgarthaTheme.colors` read-only accessor; `AgarthaVisionTheme(darkTheme: Boolean)` provides `LocalAgarthaColors` alongside `MaterialTheme` |
-| `domain/model/ThemeMode.kt` (new) | `enum class ThemeMode { LIGHT, DARK }` |
-| `domain/repository/ThemePreferenceRepository.kt` (new) | `themeMode: Flow<ThemeMode>` + `suspend fun setThemeMode(ThemeMode)` |
-| `domain/usecase/settings/ObserveThemeModeUseCase.kt` (new) | Flow-returning observe use case |
-| `domain/usecase/settings/SetThemeModeUseCase.kt` (new) | `Result<Unit>`-returning use case |
-| `data/repository/ThemePreferenceRepositoryImpl.kt` (new) | DataStore Preferences-backed; falls back to `LIGHT` on missing/unrecognized stored value |
-| `core/di/PreferencesModule.kt` (new) | `Context.settingsDataStore` singleton provider + `@Binds` for the repository |
-| `MainViewModel.kt` (new) | Exposes `themeMode: StateFlow<ThemeMode>` for `MainActivity` |
-| `MainActivity.kt` | Collects `MainViewModel.themeMode`; passes `darkTheme` into `AgarthaVisionTheme` |
-| `ui/dashboard/DashboardViewModel.kt` | Added theme use case params, `isDarkMode` in `DashboardUiState`, `onToggleTheme()` intent; `@Suppress("LongParameterList")` on constructor (7 DI deps, consistent with existing pattern in this codebase) |
-| `ui/dashboard/DashboardScreen.kt` | Removed erroneous nested `AgarthaVisionTheme` wrap; migrated to `AgarthaTheme.colors.*`; EPG tile uses gold fill; toggle wired into `AppHeader` |
-| `ui/components/AppHeader.kt` | Added `isDarkMode`/`onToggleTheme` params; conditional sun/moon `IconButton` with content description |
-| `res/drawable/ic_sun.xml`, `ic_moon.xml` (new) | Inline vector icons matching existing icon style |
-| `res/values/strings.xml` | Added `theme_toggle_to_dark`, `theme_toggle_to_light` |
-| `ui/sessions/SessionsScreen.kt` | Full rewrite: removed private blue palette copy; all composables read `AgarthaTheme.colors` locally; wildcard imports replaced with explicit imports |
-| `ui/login/LoginScreen.kt` | Removed hardcoded `#1E3FD9` and gray hex; migrated to `AgarthaTheme.colors` |
-| `ui/verify/VerificationQueueScreen.kt` | Removed private Design Tokens block; thumbnail gradient → `AppColors.MicroscopeBrush`; AI/Repeat chips → `colors.accentTint`/`colors.accent` (was purple) |
-| `ui/verify/ModalSheetComponents.kt` | Token migration; wildcard import replaced |
-| `ui/verify/VerificationSheet.kt` | Token migration via systematic replace (Blue→accent, Gray9xx→textPrimary, Gray5xx→textSecondary, Gray3/2xx→borderStrong, Red→danger) |
-| `ui/verify/SpeciesDropdown.kt`, `FrameWithBoxes.kt` | Token migration; `FrameWithBoxes` captures colors at composition time before entering `Canvas` (DrawScope is not `@Composable`) |
-| `ui/verify/ManualSheet.kt` | Token migration; wildcard import replaced; removed unused `timeLabel` property |
-| `ui/records/RecordsScreen.kt` | Removed nested theme wrap; "Eggs found" tile uses gold fill |
-| `ui/records/SessionDetailScreen.kt` | Removed nested theme wrap; Repeat badge purple → gold; `SpeciesBadge` intentionally kept fixed `AppColors.Maroon`/`Amber` (mode-independent on-image badge) |
-| `ui/records/SampleDetailScreen.kt` | Token migration via systematic replace; wildcard imports replaced; fixed a `Canvas`/DrawScope composable-call bug in `NormalizedDetectionOverlay` (colors hoisted to local vals before the draw lambda) |
-| `ui/capture/CaptureScreen.kt` | Remaining blue refs → `AppColors.MaroonBright`/`AgarthaTheme.colors.accent`; navy glass tint warmed to charcoal-maroon; screen stays dark/immersive regardless of toggle (by design) |
-| `ui/capture/ConnectionLossBanner.kt` | Long-line wrapping only; colors already semantic (mode-independent red banner) |
-| `ui/navigation/AgarthaNavGraph.kt` | Scaffold `containerColor` → `AgarthaTheme.colors.background` |
-| `ui/components/AgarthaButton.kt`, `AgarthaBadge.kt`, `AgarthaToast.kt`, `AgarthaBottomBar.kt`, `DetectionOverlay.kt`, `GlassModifiers.kt`, `MicroscopyViewport.kt` | Token migration to `AgarthaTheme.colors.*`; microscope pre-warm-up background warmed to `Gray900` |
-| `res/drawable/ic_logo.xml`, `ic_launcher_foreground.xml` | Recolored: blue fills → maroon body / gold accent shards / maroon tint |
-| `res/drawable/ic_launcher_background.xml` | Reviewed, no change needed (plain white) |
-| `CONTEXT.md` §4 | Rewrote Design System section: token tables (light/dark/semantic), dark-mode subsection, updated component/glass/elevation conventions |
-| `TODO.md` | UI/Design System table updated; Sprint 3 backlog items added (Settings toggle mirror, raster icon regen, brand-guide reconciliation) |
-| `stages/02_implement/references/coding-constraints.md` | Design system hard rules rewritten for mode-aware tokens |
+| `domain/model/LocalIdentity.kt` (new) | Cached identity: `userId`, `email`, `displayName?` |
+| `domain/model/SessionSyncStatus.kt` (new) | `PENDING/SYNCED/SYNC_FAILED`, mirrors `ReportSyncStatus` |
+| `domain/repository/AuthRepository.kt` | Added `observeLocalIdentity()`, `currentLocalUserId()`, `isAuthenticated()` |
+| `domain/usecase/auth/ObserveLocalIdentityUseCase.kt` (new) | Wraps `observeLocalIdentity()` |
+| `data/repository/SupabaseAuthRepository.kt` | Caches identity to DataStore on `signIn()`; implements new interface methods |
+| `core/connectivity/ConnectivityObserver.kt` (new) | Device-level `ConnectivityManager` callback → `StateFlow<Boolean>` + `currentlyOnline()` |
+| `AndroidManifest.xml` | **Deviation (necessary dependency, not in scope's file list):** added `ACCESS_NETWORK_STATE` permission — required by `ConnectivityObserver`; app only had `INTERNET` |
+| `data/local/entity/SessionEntity.kt` | Added `supabaseStatus` (default `"synced"`), `claimExempt` (default `false`) |
+| `data/local/entity/SampleEntity.kt` | `userId: String` → `String?` |
+| `domain/model/Sample.kt` | `userId: String` → `String?` |
+| `domain/model/Session.kt` | Added `supabaseStatus`, `claimExempt`, derived `linkState: SessionLinkState` property; new `SessionLinkState` enum (UNOWNED/NOT_LINKED/PENDING/SYNCED) |
+| `data/local/mapper/SampleMapper.kt` | `toEntity()` now `requireNotNull`s owner (claim-before-sync invariant) |
+| `data/local/mapper/SessionMapper.kt` | Maps new entity fields to domain |
+| `core/database/AgarthaDatabase.kt` | **Deviation from scope:** version 7→8, **no hand-written `Migration`** — see below |
+
+**Deviation — Room migration strategy.** The scope called for a hand-written v7→v8
+migration with a `samples` table rebuild. Actual code
+(`core/di/DatabaseModule.kt:49` — `.fallbackToDestructiveMigration(dropAllTables = true)`)
+already destructively migrates on every version bump, with an explicit comment "Phase 1
+has no production data — destructive migrations are acceptable." Writing a manual
+`Migration` would have fought this established, deliberate convention. I bumped the
+version and let Room regenerate the schema; **no `app/schemas/.../8.json` was hand-written
+— it is auto-generated by the Room annotation processor on the next successful build**
+(confirmed via `room.schemaLocation` in `app/build.gradle.kts:101`; schemas 1–7 exist and
+were generated the same way). If this project's data situation has changed since that
+comment was written (i.e., there is now production data), this decision is wrong and needs
+revisiting before merge — flag to the team.
+
+### PR 2 — capture (offline-first session + verify)
+
+| File | Change summary |
+|---|---|
+| `core/session/SessionManager.kt` | Full rewrite: `startSession` always writes locally (owner = `authRepository.currentLocalUserId()`, nullable), pushes to Supabase best-effort via new `upsertSession`, never throws; `stopSession` ends locally always, remote close best-effort → falls back to `PENDING` on failure |
+| `data/supabase/SessionRemoteDataSource.kt` | Added `upsertSession()` (idempotent) alongside existing `insertSession()` |
+| `domain/usecase/capture/PersistFlaggedFrameUseCase.kt` | Removed the `error("A user session is required...")` hard-fail; owner from `currentLocalUserId()` (nullable); image folder falls back to `"local"` when unowned |
+| `domain/usecase/verify/SubmitVerificationUseCase.kt` | Removed `AuthRepository` dependency entirely (was only used for the hard-fail check) |
+| `domain/usecase/verify/SubmitManualCaptureUseCase.kt` | Same — `AuthRepository` dependency removed |
+| `data/local/dao/SessionDao.kt` | Added: `observeOwnedOrUnowned`, `observeAllLocal`, `getSessionsPendingSync`, `getClaimableSessions`, `updateSupabaseStatus`, `setClaimExempt`, `claimUnownedSessions`, `claimSession` |
+| `data/local/dao/SampleDao.kt` | Added `claimSamplesForSessions(sessionIds, userId)` |
+| `data/local/dao/ReportDao.kt` | Added `claimReportsForSessions(sessionIds, userId)` |
+| `domain/repository/SessionRepository.kt` + `SessionRepositoryImpl.kt` | Added `observeVisibleSessions(userId?)`, `setClaimExempt`, `claimSession` |
+
+### PR 3 — dashboard (navigation, login, claim/sync, docs)
+
+| File | Change summary |
+|---|---|
+| `domain/usecase/auth/ClaimLocalDataUseCase.kt` (new) | `invoke(userId, sessionIds? = null)` — null = all claimable (login path), else explicit ids (manual link path); cascades session→samples→reports |
+| `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt` (new, new package) | Toggles `claim_exempt`; unlinking an owned session only allowed while `PENDING` |
+| `data/supabase/SyncSessionUseCase.kt` (new) | Mirrors `SyncReportUseCase` shape for sessions |
+| `domain/usecase/sync/SyncPendingDataUseCase.kt` (new, new package) | `SyncSummary` sealed result (`Skipped`/`Ran`); pushes sessions→samples→reports in order for the authenticated+online user |
+| `ui/navigation/AgarthaNavGraph.kt` | `startDestination` → `Screen.Dashboard`; Login's `onLoggedIn` now pops back instead of resetting the stack; added `onBack` |
+| `ui/login/LoginViewModel.kt` | Full rewrite: no cold-start auto-forward; `isOffline` state from `ConnectivityObserver`; on success runs `claimAndSync()` (silent claim of all non-exempt unowned sessions + `SyncPendingDataUseCase`) then emits `NavigateBack` |
+| `ui/login/LoginScreen.kt` | Added `onBack` param + back button; offline banner; claim-disclosure text; removed the `isCheckingSession` loading branch (field renamed/removed) |
+| `strings.xml` | Added `login_back`, `login_offline_notice`, `login_claim_disclosure`, and the `dashboard_*` / `session_*` string groups |
+| `ui/dashboard/DashboardViewModel.kt` | `AuthRepository` → `ObserveLocalIdentityUseCase` + `ConnectivityObserver` + `SyncPendingDataUseCase`; `kpiStateFlow`/`pendingAndSyncFlow`/`historicalDataFlow` now null-identity-tolerant (emit empty defaults instead of stalling); added `accountSyncFlow`, `isSignedIn`/`isOffline`/`pendingUploadCount`/`isSyncing`/`canSyncNow` state; added `onSyncNow()` |
+| `ui/dashboard/DashboardScreen.kt` | Added `AccountSyncBanner` composable + wired into the `LazyColumn` right after `AppHeader` |
+| `ui/sessions/SessionsViewModel.kt` | **Hard-rule fix:** removed direct `SessionRemoteDataSource` injection (was violating "ViewModels never import Room/Retrofit/Supabase" via a `data.supabase` import) → `ObserveLocalIdentityUseCase`; null-identity now lists local sessions via `observeVisibleSessions` instead of showing empty; added `onToggleAccountLink(sessionId, link)` |
+| `ui/sessions/SessionsScreen.kt` | Added neutral "Not linked" pill badge (label column, visible for both active and ended cards) when `linkState` is `UNOWNED`/`NOT_LINKED`; added a link/unlink item to the existing active-session kebab menu (hidden once `SYNCED`; label + boolean direction match `SessionsViewModel.onToggleAccountLink`'s contract) |
+| `CONTEXT.md` | New ADR-007 (§8); updated §3 navigation description |
+| `schema.ts` | Updated cross-source-caveats block for the new nullable/Room-only columns |
+| `TODO.md` | Updated feature table + known issues |
+
+### Tests added
+
+| Test file | Covers |
+|---|---|
+| `data/repository/LocalIdentityCacheTest.kt` (new) | DataStore-backed identity read path (null when uncached, reflects cached values) |
+| `domain/model/SessionSyncStatusTest.kt` (new) | `fromValue` resolution incl. unknown-string fallback |
+| `core/session/SessionManagerTest.kt` (new) | Offline start (unowned, no throw), online start (synced), remote-push failure (stays pending, no throw), `stopSession` local-always behavior |
+| `domain/usecase/auth/ClaimLocalDataUseCaseTest.kt` (new) | Login-path claim-all, explicit-ids claim, no-op-when-empty |
+| `domain/usecase/sessions/SetSessionClaimExemptUseCaseTest.kt` (new) | Opt-out on unowned, unlink-while-pending, unlink-after-synced fails |
+| `domain/usecase/capture/PersistFlaggedFrameUseCaseTest.kt` (updated) | `getCurrentUserId()` stub → `currentLocalUserId()` |
+| `domain/usecase/verify/SubmitVerificationUseCaseTest.kt` (updated) | Removed `AuthRepository` mock/param (dependency deleted) |
+
+### Tests NOT written (gaps vs. scope's test list)
+
+- `SyncPendingDataUseCaseTest` — not written. Needs mocked `AuthRepository`,
+  `ConnectivityObserver`, three DAOs, three sync use cases; skip/ran-summary assertions.
+- `DashboardViewModelTest` (sync-now, disabled states) — not written; the existing
+  DashboardViewModel test file (if any) was not located/updated.
+- `SessionsViewModelTest` (link-state derivation, toggle routing) — not written.
+- `SupabaseAuthRepositoryTest` (identity cache on sign-in, the Supabase-dependent write
+  path) — not written; needs a `SupabaseClient` test double, which is nontrivial for an
+  external SDK class. `LocalIdentityCacheTest` covers only the read side.
+- `SubmitManualCaptureUseCaseTest` — no existing test file was found to update; not created.
+
+## Known incomplete work
+
+None remaining from the approved scope — `ui/sessions/SessionsScreen.kt` (previously the
+one open item) is now wired: `SessionCard` reads `session.linkState` and renders the
+neutral "Not linked" pill (in the label column, so it shows for both active and ended
+cards) when `UNOWNED`/`NOT_LINKED`; the active-session kebab menu gained a link/unlink
+`KebabItem` that is hidden once `SYNCED` and calls
+`onToggleAccountLink(sessionId, link = !isLinked)` where `isLinked = (linkState == PENDING)`
+— verified against `SessionsViewModel.onToggleAccountLink`'s `link: Boolean` contract
+(`true` → claim via `ClaimLocalDataUseCase`, `false` → `setClaimExempt(exempt = true)`).
 
 ## Decisions made
 
-- **Single theme, two modes** (not a second theme system): one `AgarthaVisionTheme(darkTheme: Boolean)` composable backed by `AppColors` (raw hex, isolated to `Color.kt`/`Palette.kt`) + `AgarthaColors` (semantic wrapper via `LocalAgarthaColors`). Satisfies the AGENTS.md non-negotiable against reintroducing a second UI theme.
-- **Capture screen is toggle-exempt by design**: always dark/immersive regardless of the user's light/dark preference, using fixed `AppColors` values directly rather than `AgarthaTheme.colors`. Documented in `coding-constraints.md`.
-- **On-image badges stay mode-independent**: `SpeciesBadge` (SessionDetailScreen) and similar overlays on photographic content use fixed `AppColors.Maroon`/`AppColors.Amber` rather than following the toggle, since brand-consistent contrast against a photo matters more than light/dark adaptation. Commented in-code.
-- **Theme toggle placed only on Dashboard** per explicit instruction; Settings mirror deferred to Sprint 3 backlog (Settings screen is still a placeholder).
-- **Brand hex sampled from reference image**, not yet reconciled against an official CIT-U brand guide (none published at time of writing) — flagged in TODO.md Sprint 3 backlog for later reconciliation.
-- **Raster launcher icons (`mipmap-*/ic_launcher*.webp`) left unchanged**: vector sources (`ic_logo.xml`, `ic_launcher_foreground.xml`) are recolored, but the baked `.webp` mipmaps require image tooling outside this session's capability. Flagged in TODO.md as a follow-up.
-- **`DashboardViewModel` constructor suppressed for `LongParameterList`** (7 DI dependencies) rather than introducing a parameter-object, matching how this codebase already tolerates DI-heavy constructors elsewhere (e.g. `GenerateSessionReportUseCase`, `FlaggedFrameStore`) instead of a project-wide refactor out of scope for this task.
-- **Detekt gate scope**: fixed all `MaxLineLength`/`WildcardImport`/`MagicNumber`/`UnusedPrivateProperty`/`ReturnCount` findings in files touched by this rebrand. Pre-existing findings in files not touched this session (`SampleDao.kt`, `ReportCsvBuilder.kt`, `GenerateSessionReportUseCase.kt`, `FlaggedFrameStore.kt`, `ReportCsvBuilderTest.kt`, `GenerateSessionReportUseCaseTest.kt`, `SyncReportUseCaseTest.kt`, `DetectionRepositoryImpl.kt`, `SessionsViewModel.kt`, `LoginScreen.kt`'s pre-existing `LongParameterList`, `AgarthaButton.kt`'s pre-existing `LongParameterList`, `CaptureScreen.kt`'s pre-existing `LongParameterList`) were left as-is per developer decision — that debt predates this session and is out of scope for a design-system rebrand.
+- **Room v8 has no hand-written migration** (destructive-migration policy already in
+  place) — see PR 1 table above for full reasoning.
+- **`Sample.toEntity()` guards with `requireNotNull`** on `userId` rather than silently
+  allowing a null write, since the only production caller path
+  (`PersistFlaggedFrameUseCase`) writes through `SampleDao` directly with an explicitly
+  nullable owner — `SampleRepositoryImpl.saveSample()` (which calls `toEntity()`) has no
+  current callers, confirmed via search, so this is a safety net, not a live constraint.
+- **`AuthRepository` dropped entirely from `SubmitVerificationUseCase` /
+  `SubmitManualCaptureUseCase`** rather than kept-but-unused, since it was solely used for
+  the hard-fail check being removed. This changes their Hilt constructor signature; no
+  other injection sites reference these two classes by concrete type (checked).
+- **`DashboardViewModel`'s vararg `combine`** (6 flows) uses an indexed `flows[n] as T`
+  unpack rather than Kotlin's typed 5-flow `combine` overload, since a 6th flow
+  (`accountSyncFlow`) was needed and Kotlin's stdlib `combine` typed overloads stop at 5.
+  This works but loses compile-time index safety — **worth a second look in review.**
+- **`ReportDao.claimReportsForSessions`** is included even though reports currently can
+  only exist for already-owned sessions (`GenerateSessionReportUseCase` still requires
+  auth, unchanged) — it's a no-op safety net for forward-compatibility, not a live path
+  today.
 
-## Deferred (not in this PR)
+## Deferred (explicitly out of scope, per stage 01)
 
-- Official CIT-U brand-guide hex reconciliation (sampled values approved for now).
-- Theme toggle mirrored into the Settings screen (Sprint 3 backlog #10).
-- Raster launcher icon (`mipmap-*/ic_launcher*.webp`) regeneration (Sprint 3 backlog #11).
-- Three-state "follow system" theme mode; `prefers-reduced-motion` handling.
-- Repo-wide detekt debt cleanup (LongParameterList/TooManyFunctions in files unrelated to this rebrand).
-- Physical-device E2E screenshot pass in both light and dark modes — belongs in stage 03 QA.
+- WorkManager durable sync queue, backoff, conflict resolution.
+- Sign-out flow, multi-user-per-device data isolation.
+- Offline AI inference.
+- Settings account UI (Sprint 3 rework).
+- Admin/cross-session reports, PDF.
 
-## Tests added / updated
+## Required next step (blocking merge)
 
-| Test file | What it covers |
-|---|---|
-| `domain/usecase/settings/SetThemeModeUseCaseTest.kt` | Success path persists mode and returns `Result.success`; failure path surfaces repository exception via `Result.failure` |
-| `domain/usecase/settings/ObserveThemeModeUseCaseTest.kt` | Emits `DARK` and `LIGHT` from the repository flow |
-| `data/repository/ThemePreferenceRepositoryImplTest.kt` | Defaults to `LIGHT` when unset or when stored value is unrecognized; `setThemeMode(DARK)` persists and is reflected in `themeMode` (fake in-memory `DataStore<Preferences>`) |
-| `ui/dashboard/DashboardViewModelTest.kt` | Initial state reflects observed light mode; `onToggleTheme()` flips light→dark and dark→light, invoking `SetThemeModeUseCase` with the correct target each time |
+Run, in order, on a machine with a clean interactive shell (or `bash --norc --noprofile`):
 
-Full existing suite (86 tests total) passes green alongside the 4 new/updated files above.
-
-## Verification performed
-
-- Repo-wide grep for blue hex references (`1E3FD9|1F5BFF|036BFC|AppColors\.Blue`): zero matches outside a historical doc comment — zero-blue KPI met.
-- `./gradlew :app:compileDebugKotlin` — passes.
-- `./gradlew :app:testDebugUnitTest` — 86/86 pass.
-- `./gradlew :app:ktlintCheck` — passes.
-- `./gradlew :app:detekt` — reduced from 127 → 31 findings. All `MaxLineLength`, `WildcardImport`, `MagicNumber`, `UnusedPrivateProperty`, and `ReturnCount` findings in the 11 files touched by this rebrand are resolved. The remaining 31 findings are either (a) in files never touched this session (`SampleDao.kt`, `ReportCsvBuilder.kt`, `GenerateSessionReportUseCase.kt`, `FlaggedFrameStore.kt`, `ReportCsvBuilderTest.kt`, `GenerateSessionReportUseCaseTest.kt`, `SyncReportUseCaseTest.kt`, `DetectionRepositoryImpl.kt`, `SessionsViewModel.kt`), or (b) pre-existing `LongParameterList`/`TooManyFunctions` findings whose parameter/function counts predate the rebrand and are unrelated to color-token migration (`SessionsScreen.kt`, `SessionDetailScreen.kt`, `RecordsScreen.kt`, `DashboardScreen.kt`, `ModalSheetComponents.kt`, `LoginScreen.kt`, `AgarthaButton.kt`, `CaptureScreen.kt`), or (c) two pre-existing `MagicNumber` findings in `SessionDetailScreen.kt` unrelated to any change made here. Developer-confirmed scope decision: fix findings attributable to this task; leave pre-existing repo debt for a separate cleanup pass.
+1. `bun run build` (or `./gradlew :app:compileDebugKotlin` first, for faster iteration) —
+   expect real compile errors; this diff has never compiled.
+2. `bun run test` — pay special attention to `SessionManagerTest`,
+   `ClaimLocalDataUseCaseTest`, `SetSessionClaimExemptUseCaseTest`, and the two updated
+   existing test files, since mockito-kotlin's suspend-fun stubbing and the `combine`
+   vararg unpack in `DashboardViewModel` are the highest-risk spots.
+3. `bun run lint` (ktlint + detekt) — the `DashboardViewModel` `@Suppress("UNCHECKED_CAST")`
+   casts and the `SessionsViewModel` deferred badge are likely lint flags even once
+   compiling.
+4. Confirm the Room v8 schema JSON was generated at
+   `app/schemas/com.agarthavision.core.database.AgarthaDatabase/8.json` after a successful
+   build; commit it (Room schema exports are tracked, not gitignored, per the existing 1-7
+   files).
+5. Only then proceed to stage 03 (QA: lint, tests, architecture/design compliance, PR
+   draft) — stage 03's lint/test gate will fail immediately otherwise.

@@ -3,10 +3,13 @@ package com.agarthavision.ui.sessions
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.entity.SessionEntity
-import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
+import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,11 +37,22 @@ class SessionPickerViewModelTest {
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
     }
     private val sessionManager: SessionManager = mock()
-    private val sessionRemoteDataSource: SessionRemoteDataSource = mock<SessionRemoteDataSource>().also {
-        whenever(it.currentUserId()).thenReturn("user-1")
-    }
+    private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
+        mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(
+                MutableStateFlow(LocalIdentity(userId = "user-1", email = "user@example.com")),
+            )
+        }
+    private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase = mock()
+    private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock()
 
-    private fun viewModel() = SessionsViewModel(sessionRepository, sessionManager, sessionRemoteDataSource)
+    private fun viewModel() = SessionsViewModel(
+        sessionRepository = sessionRepository,
+        sessionManager = sessionManager,
+        observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+        setSessionClaimExemptUseCase = setSessionClaimExemptUseCase,
+        claimLocalDataUseCase = claimLocalDataUseCase,
+    )
 
     @Test
     fun `state mirrors active and recent sessions`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {

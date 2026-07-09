@@ -31,6 +31,15 @@ class SessionRemoteDataSource @Inject constructor(
     }
 
     /**
+     * Upserts the session row (insert or update on primary-key conflict). Idempotent so a
+     * pending session can be re-pushed safely, carrying any `ended_at`/`notes` set while
+     * offline. Per ADR-007.
+     */
+    suspend fun upsertSession(session: SessionEntity) {
+        supabase.postgrest[SESSIONS_TABLE].upsert(session.toInsertRow())
+    }
+
+    /**
      * Marks the matching Supabase `sessions` row as ended. Persists [notes] when
      * provided so the End-Session confirmation dialog's final observations sync.
      */

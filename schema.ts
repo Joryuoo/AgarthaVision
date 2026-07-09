@@ -570,6 +570,13 @@ export type RelationshipMatrix = [
  *   upload succeeds.
  * - Remote `sessions.user_id` is NOT NULL; Room keeps it nullable for local
  *   resilience before auth ownership is attached.
+ * - ADR-007 (offline access): Room `samples.user_id` is now also nullable (a sample
+ *   captured before any medtech signed in is claimed at the next login before sync);
+ *   remote `samples.user_id` stays NOT NULL, enforced by claim-before-sync. Room
+ *   `sessions` gains two Room-only columns — `supabase_status`
+ *   (pending/synced/sync_failed, `SessionSyncStatus`) and `claim_exempt` (the
+ *   per-session "don't link to account" opt-out) — neither exists in Supabase. Room
+ *   schema is v8; no Supabase migration was added.
  * - Reports are implemented for session reports only; admin/cross-session
  *   report types require a future migration.
  */

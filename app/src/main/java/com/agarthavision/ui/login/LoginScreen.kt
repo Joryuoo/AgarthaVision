@@ -68,6 +68,7 @@ import com.agarthavision.ui.theme.AppColors
 @Composable
 fun LoginScreen(
     onLoggedIn: () -> Unit,
+    onBack: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -78,7 +79,7 @@ fun LoginScreen(
     LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
             when (event) {
-                LoginEvent.NavigateToCapture -> onLoggedIn()
+                LoginEvent.NavigateBack -> onLoggedIn()
                 is LoginEvent.ShowLoginError -> {
                     toastState.show(
                         message = "$loginFailedTitle\n${event.message ?: loginFailedGeneric}",
@@ -95,6 +96,7 @@ fun LoginScreen(
             onEmailChanged = viewModel::onEmailChanged,
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
+            onBack = onBack,
         ),
         toastState = toastState,
     )
@@ -104,6 +106,7 @@ private data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
+    val onBack: () -> Unit,
 )
 
 @Composable
@@ -134,72 +137,109 @@ private fun LoginScreenContent(
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            if (state.isCheckingSession) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .align(Alignment.Center),
-                    color = colors.accent,
-                    trackColor = colors.borderStrong,
-                )
-            } else {
+            Text(
+                text = stringResource(R.string.login_back),
+                color = colors.accent,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 16.dp, top = 20.dp)
+                    .clickable { actions.onBack() }
+                    .padding(8.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .widthIn(max = 480.dp)
+                    .padding(top = 72.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .widthIn(max = 480.dp)
-                        .padding(top = 72.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            AppMark()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = "AgarthaVision",
-                                color = colors.accent,
-                                fontSize = 30.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = (-0.75).sp, // -0.025em * 30px
-                                lineHeight = 33.sp, // 1.1
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = "Sign in to continue your clinical work.",
-                                color = colors.textSecondary,
-                                fontSize = 15.sp,
-                                fontWeight = FontWeight.Normal,
-                                lineHeight = 21.75.sp, // 1.45
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(32.dp))
-
-                        LoginForm(state = state, actions = actions)
-                    }
-
-                    Box(
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        AppMark()
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Forgot password?",
+                            text = "AgarthaVision",
                             color = colors.accent,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier
-                                .clickable { /* Handle forgot password */ }
-                                .padding(vertical = 8.dp)
+                            fontSize = 30.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.75).sp, // -0.025em * 30px
+                            lineHeight = 33.sp, // 1.1
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Sign in to continue your clinical work.",
+                            color = colors.textSecondary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Normal,
+                            lineHeight = 21.75.sp, // 1.45
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
                     }
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    if (state.isOffline) {
+                        OfflineNotice()
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    LoginForm(state = state, actions = actions)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.login_claim_disclosure),
+                        color = colors.textTertiary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        lineHeight = 17.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Forgot password?",
+                        color = colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clickable { /* Handle forgot password */ }
+                            .padding(vertical = 8.dp)
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OfflineNotice() {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.warningTint, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.warning, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.login_offline_notice),
+            color = colors.warningText,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 18.sp,
+        )
     }
 }
 
@@ -387,11 +427,12 @@ private fun LoginInputGroup(
 private fun LoginScreenContentPreview() {
     AgarthaVisionTheme {
         LoginScreenContent(
-            state = LoginUiState(isCheckingSession = false),
+            state = LoginUiState(),
             actions = LoginActions(
                 onEmailChanged = {},
                 onPasswordChanged = {},
                 onSubmit = {},
+                onBack = {},
             ),
             toastState = rememberAgarthaToastState(),
         )

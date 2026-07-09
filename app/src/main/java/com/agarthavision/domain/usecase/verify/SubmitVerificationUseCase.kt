@@ -6,14 +6,12 @@ import com.agarthavision.data.local.mapper.toDetectionEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.LocationProvider
 import java.time.Instant
 import javax.inject.Inject
 
 @Suppress("LongParameterList")
 class SubmitVerificationUseCase @Inject constructor(
-    private val authRepository: AuthRepository,
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
     private val locationProvider: LocationProvider,
@@ -26,8 +24,8 @@ class SubmitVerificationUseCase @Inject constructor(
         userNote: String? = null,
         isRepeat: Boolean = false,
     ): Result<String> = runCatching {
-        authRepository.getCurrentUserId()
-            ?: error("A user session is required to submit verification.")
+        // Per ADR-007, verification works offline. No auth is required — the sample keeps
+        // its existing owner (cached identity or null) and is claimed at the next login.
         val sampleId = frame.sampleId
         require(sampleId.isNotBlank()) { "Flagged sample id is required." }
         val location = locationProvider.getCurrentLocation()

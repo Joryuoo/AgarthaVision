@@ -27,4 +27,21 @@ interface SessionRepository {
      * Updates the label for a session.
      */
     suspend fun updateSessionLabel(sessionId: String, label: String)
+
+    /**
+     * Observes sessions owned by [userId] plus any unclaimed local sessions. When
+     * [userId] is null (never-signed-in device), observes all local sessions. Per ADR-007.
+     */
+    fun observeVisibleSessions(userId: String?): Flow<List<Session>>
+
+    /**
+     * Opts a session out of (or back into) being claimed at the next login. Per ADR-007.
+     */
+    suspend fun setClaimExempt(sessionId: String, exempt: Boolean)
+
+    /**
+     * Claims a single unowned session for [userId] (the manual "Link to account" action).
+     * Per ADR-007.
+     */
+    suspend fun claimSession(sessionId: String, userId: String)
 }

@@ -21,10 +21,12 @@ class PersistFlaggedFrameUseCase @Inject constructor(
     private val gson: Gson,
 ) {
     suspend operator fun invoke(frame: FlaggedFrame): String {
-        val userId = authRepository.getCurrentUserId()
-            ?: error("A user session is required to flag a frame.")
+        // Per ADR-007, capture works offline: attribute to the cached medtech when one
+        // exists, else leave the sample unowned to be claimed at the next login. The image
+        // is stored under the owner's folder, or a shared `local` folder when unowned.
+        val ownerId = authRepository.currentLocalUserId()
         val sampleId = UUID.randomUUID().toString()
-        val imagePath = sampleImageStore.persistJpeg(userId, sampleId, frame.jpegBytes)
+        val imagePath = sampleImageStore.persistJpeg(ownerId ?: UNOWNED_FOLDER, sampleId, frame.jpegBytes)
         val predictionsJson = frame.predictions
             .takeIf { it.isNotEmpty() }
             ?.let { gson.toJson(it) }
@@ -37,7 +39,7 @@ class PersistFlaggedFrameUseCase @Inject constructor(
             SampleEntity(
                 sampleId = sampleId,
                 sessionId = frame.sessionId,
-                userId = userId,
+                userId = ownerId,
                 deviceId = deviceIdProvider.id,
                 timestamp = frame.capturedAt.toEpochMilli(),
                 verifiedAt = 0L,
@@ -58,5 +60,10 @@ class PersistFlaggedFrameUseCase @Inject constructor(
         )
 
         return sampleId
+    }
+
+    private companion object {
+        /** Storage sub-folder for frames captured before any medtech signed in. */
+        const val UNOWNED_FOLDER = "local"
     }
 }

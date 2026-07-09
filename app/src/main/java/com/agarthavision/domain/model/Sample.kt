@@ -14,7 +14,11 @@ import java.util.UUID
  */
 data class Sample(
     val id: String = UUID.randomUUID().toString(),
-    val userId: String,
+    /**
+     * Owning medtech's Supabase user id, or `null` when captured before any medtech
+     * signed in on this device. Claimed at the next login before sync (ADR-007).
+     */
+    val userId: String?,
     val timestamp: Long = System.currentTimeMillis(),
     val verifiedAt: Long = timestamp,
     val deviceId: String,

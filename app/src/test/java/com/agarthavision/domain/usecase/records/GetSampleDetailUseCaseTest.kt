@@ -47,7 +47,10 @@ class GetSampleDetailUseCaseTest {
 }
 
 private class DetailAuthRepository(private val userId: String?) : AuthRepository {
-    override val userIdFlow: Flow<String?> = flowOf(userId)
+    override fun observeLocalIdentity(): Flow<com.agarthavision.domain.model.LocalIdentity?> =
+        flowOf(userId?.let { com.agarthavision.domain.model.LocalIdentity(userId = it, email = "user@example.com") })
+    override suspend fun currentLocalUserId(): String? = userId
+    override suspend fun isAuthenticated(): Boolean = userId != null
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId

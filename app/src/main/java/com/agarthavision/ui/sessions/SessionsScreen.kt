@@ -65,8 +65,11 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agarthavision.R
+import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -155,6 +158,10 @@ fun SessionsScreen(
                             },
                             onEnd = {
                                 viewModel.onEndSession(sessionData.session.id)
+                                activeKebabSessionId = null
+                            },
+                            onToggleLink = { link ->
+                                viewModel.onToggleAccountLink(sessionData.session.id, link)
                                 activeKebabSessionId = null
                             }
                         )
@@ -245,7 +252,8 @@ private fun SessionCard(
     onKebabDismiss: () -> Unit,
     onResume: () -> Unit,
     onExport: () -> Unit,
-    onEnd: () -> Unit
+    onEnd: () -> Unit,
+    onToggleLink: (link: Boolean) -> Unit
 ) {
     val colors = AgarthaTheme.colors
     val session = sessionData.session
@@ -259,6 +267,10 @@ private fun SessionCard(
 
     val bgColor = if (isActive) colors.accentTint2 else colors.surface
     val borderColor = if (isActive) colors.accentTint else colors.border
+    // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
+    // regardless of active/ended state — local-only is a neutral state, not a warning.
+    val linkState = session.linkState
+    val showNotLinkedBadge = linkState == SessionLinkState.UNOWNED || linkState == SessionLinkState.NOT_LINKED
 
     Row(
         modifier = Modifier
@@ -284,6 +296,21 @@ private fun SessionCard(
                 fontWeight = FontWeight.Medium,
                 color = colors.accent.copy(alpha = 0.7f)
             )
+            if (showNotLinkedBadge) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Box(
+                    modifier = Modifier
+                        .background(colors.surfaceMuted, CircleShape)
+                        .padding(horizontal = 9.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.session_not_linked),
+                        color = colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
 
         Row(
@@ -326,7 +353,9 @@ private fun SessionCard(
                             onDismiss = onKebabDismiss,
                             onResume = onResume,
                             onExport = onExport,
-                            onEnd = onEnd
+                            onEnd = onEnd,
+                            linkState = linkState,
+                            onToggleLink = onToggleLink
                         )
                     }
                 }
@@ -369,7 +398,9 @@ private fun KebabMenu(
     onDismiss: () -> Unit,
     onResume: () -> Unit,
     onExport: () -> Unit,
-    onEnd: () -> Unit
+    onEnd: () -> Unit,
+    linkState: SessionLinkState,
+    onToggleLink: (link: Boolean) -> Unit
 ) {
     val colors = AgarthaTheme.colors
     val dangerColor = colors.danger
@@ -397,6 +428,20 @@ private fun KebabMenu(
                     "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
                     onClick = onExport
                 )
+                // Per ADR-007: hidden once SYNCED (ownership is permanent at that point).
+                if (linkState != SessionLinkState.SYNCED) {
+                    val isLinked = linkState == SessionLinkState.PENDING
+                    val linkLabel = if (isLinked) {
+                        stringResource(R.string.session_dont_link)
+                    } else {
+                        stringResource(R.string.session_link_to_account)
+                    }
+                    KebabItem(
+                        linkLabel,
+                        "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+                        onClick = { onToggleLink(!isLinked) }
+                    )
+                }
                 KebabItem("End session", "", isDestructive = true, onClick = onEnd, drawExtras = {
                     drawRoundRect(
                         color = dangerColor,

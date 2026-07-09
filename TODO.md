@@ -39,7 +39,8 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 | Sample + detection sync on verification | ✅ | `SyncSampleUseCase`, `SampleRemoteDataSource` |
 | Report metadata sync | ✅ | `SyncReportUseCase`, `ReportRemoteDataSource` |
 | Retry behavior for failed sample/report syncs | ⏳ | sample retry exists around session flow; report retry/backoff needs hardening |
-| WorkManager/offline sync queue | ❌ | No worker package currently; Phase 2 will add WorkManager-backed sync |
+| Offline access: direct entry, deferred login, local-first sessions (ADR-007) | ⏳ | App starts at Dashboard; `SessionManager`/capture/verify work offline; cached `LocalIdentity` + login-time claim + trigger-based `SyncPendingDataUseCase`; per-session "Link to account" toggle. Room v8 (`sessions.supabase_status`, `sessions.claim_exempt`, nullable `samples.user_id`). **Pending: full `bun run build`/`test`/lint verification + device E2E.** |
+| WorkManager/offline sync queue | ❌ | ADR-007 ships foreground trigger-based sync only; Phase 2 still adds the durable WorkManager-backed queue with backoff |
 
 ### Module 3 / In-App Verification
 
@@ -96,7 +97,8 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 - `0008_reports.sql` uses an inline admin-role subquery instead of the `public.is_admin(uuid)` helper used by migration `0004`.
 - Administrative report types are deferred; Supabase currently CHECKs `report_type in ('session')` only.
 - Optional `detections.rejection_note` / reviewer free-text reason is deferred.
-- Shared sync-state abstractions are duplicated (`SampleStatus`, `ReportSyncStatus`); consider a common local sync helper when adding WorkManager.
+- Shared sync-state abstractions are duplicated (`SampleStatus`, `ReportSyncStatus`, and now `SessionSyncStatus` per ADR-007); consolidate into a common local sync helper when adding WorkManager.
+- ADR-007 offline-access follow-ups: (a) no sign-out flow yet; (b) the "Link to account" toggle is opt-out (fail-open on shared devices — assumes one medtech per device); (c) Dashboard is the only sign-in entry point — mirror account/session affordances into the Settings screen with its Sprint 3 rework; (d) `SubmitVerificationUseCase`/`SubmitManualCaptureUseCase` no longer inject `AuthRepository` — Hilt graph and their tests were updated accordingly.
 - Supabase production project/application status should be confirmed before demos or deployments; migrations are committed but applied manually.
 
 ## Sprint 3 Backlog

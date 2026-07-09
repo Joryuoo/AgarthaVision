@@ -3,16 +3,18 @@ package com.agarthavision.ui.dashboard
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.ThemeMode
-import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +48,16 @@ data class DashboardUiState(
     val lastSyncLabel: String = "—",
     val syncedSamplesCount: Int = 0,
     val isDarkMode: Boolean = false,
-)
+    // ADR-007 offline-access account/sync banner state.
+    val isSignedIn: Boolean = false,
+    val isOffline: Boolean = false,
+    val pendingUploadCount: Int = 0,
+    val isSyncing: Boolean = false,
+) {
+    /** Sync-now is available only to a signed-in medtech with an online connection. */
+    val canSyncNow: Boolean
+        get() = isSignedIn && !isOffline && !isSyncing
+}
 
 data class ActiveSessionState(
     val label: String,
@@ -83,7 +94,9 @@ data class PendingAndSync(
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+    observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
+    private val connectivityObserver: ConnectivityObserver,
+    private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val sessionManager: SessionManager,
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
@@ -94,34 +107,46 @@ class DashboardViewModel @Inject constructor(
 
     private val themeModeFlow = observeThemeModeUseCase()
 
-    private val userIdFlow = flow {
-        val uid = authRepository.getCurrentUserId()
-        if (uid != null) emit(uid)
-    }.stateIn(viewModelScope, SharingStarted.Lazily, null)
+    // Per ADR-007, drive identity from the cached local identity (survives offline cold
+    // starts) rather than the live Supabase session, so the dashboard renders signed-out.
+    private val localIdentityFlow = observeLocalIdentityUseCase()
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
 
-    // KPI State
-    private val kpiStateFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
-        combine(
-            sessionRepository.observeAllSessions(userId),
-            sampleRepository.observeAllSamples(userId)
-        ) { sessions, verifiedSamples ->
+    private val userIdFlow = localIdentityFlow
+        .map { it?.userId }
+        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+
+    // KPI State — tolerates a null identity (signed-out / offline) by showing empty stats
+    // instead of stalling the dashboard. Per ADR-007.
+    private val kpiStateFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(KpiState())
+        } else {
+            combine(
+                sessionRepository.observeAllSessions(userId),
+                sampleRepository.observeAllSamples(userId)
+            ) { sessions, verifiedSamples ->
             val totalSessions = sessions.size
             // Since observeAllSamples only gives verified samples based on its doc,
             // wait, observeAllSamples docs say: "Observes all verified samples for the given user"
             val totalSamples = verifiedSamples.size // Rough approximation for now
             val verifiedRatio = if (totalSamples > 0) "100%" else "0%" // Mock calculation
 
-            KpiState(
-                sessionsCount = totalSessions.toString(),
-                samplesCount = totalSamples.toString(),
-                verifiedRatio = verifiedRatio,
-                epgAvgStatus = if (totalSamples > 100) "Heavy" else "Light"
-            )
+                KpiState(
+                    sessionsCount = totalSessions.toString(),
+                    samplesCount = totalSamples.toString(),
+                    verifiedRatio = verifiedRatio,
+                    epgAvgStatus = if (totalSamples > 100) "Heavy" else "Light"
+                )
+            }
         }
     }
 
-    // Pending Reviews + Sync Status
-    private val pendingAndSyncFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
+    // Pending Reviews + Sync Status — null identity yields an empty (all-synced) state.
+    private val pendingAndSyncFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(PendingAndSync(0, "", allSynced = true, lastSyncLabel = "never", syncedSamplesCount = 0))
+        } else {
         combine(
             flow { emit(sampleRepository.getSamplesPendingSync(userId)) },
             sampleRepository.observeAllSamples(userId)
@@ -171,6 +196,7 @@ class DashboardViewModel @Inject constructor(
                 syncedSamplesCount = syncedSamples
             )
         }
+        }
     }
 
     // Active Session
@@ -205,8 +231,11 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Historical charts
-    private val historicalDataFlow = userIdFlow.filterNotNull().flatMapLatest { userId ->
+    // Historical charts — null identity yields empty species + a flat sparkline.
+    private val historicalDataFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(Pair(emptyList<SpeciesData>(), List(HISTORICAL_DAYS) { 0f }))
+        } else {
         val sevenDaysAgo = Instant.now().minus(Duration.ofDays(HISTORICAL_DAYS.toLong())).toEpochMilli()
         combine(
             detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo),
@@ -249,6 +278,20 @@ class DashboardViewModel @Inject constructor(
 
             Pair(topSpecies, normalizedSparkline)
         }
+        }
+    }
+
+    /** True while a manual "Sync now" pass is running. */
+    private val isSyncingFlow = MutableStateFlow(false)
+
+    // ADR-007 account/sync banner: signed-in derives from cached identity; offline from
+    // the connectivity observer; syncing from the manual sync-now action.
+    private val accountSyncFlow = combine(
+        localIdentityFlow,
+        connectivityObserver.isOnline,
+        isSyncingFlow,
+    ) { identity, online, syncing ->
+        Triple(identity != null, !online, syncing)
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -256,8 +299,21 @@ class DashboardViewModel @Inject constructor(
         pendingAndSyncFlow,
         activeSessionStateFlow,
         historicalDataFlow,
-        themeModeFlow
-    ) { kpis, pendingSync, activeSession, (topSpecies, sparkline), themeMode ->
+        themeModeFlow,
+        accountSyncFlow,
+    ) { flows ->
+        @Suppress("UNCHECKED_CAST")
+        val kpis = flows[0] as KpiState
+        @Suppress("UNCHECKED_CAST")
+        val pendingSync = flows[1] as PendingAndSync
+        val activeSession = flows[2] as ActiveSessionState?
+        @Suppress("UNCHECKED_CAST")
+        val speciesAndSparkline = flows[3] as Pair<List<SpeciesData>, List<Float>>
+        val (topSpecies, sparkline) = speciesAndSparkline
+        val themeMode = flows[4] as ThemeMode
+        @Suppress("UNCHECKED_CAST")
+        val accountSync = flows[5] as Triple<Boolean, Boolean, Boolean>
+        val (isSignedIn, isOffline, isSyncing) = accountSync
         DashboardUiState(
             isLoading           = false,
             kpis                = kpis,
@@ -269,7 +325,11 @@ class DashboardViewModel @Inject constructor(
             activeSession       = activeSession,
             topSpecies          = topSpecies,
             epgSparklineData    = sparkline,
-            isDarkMode          = themeMode == ThemeMode.DARK
+            isDarkMode          = themeMode == ThemeMode.DARK,
+            isSignedIn          = isSignedIn,
+            isOffline           = isOffline,
+            pendingUploadCount  = pendingSync.pendingCount,
+            isSyncing           = isSyncing,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -284,6 +344,18 @@ class DashboardViewModel @Inject constructor(
             setThemeModeUseCase(target).onFailure { error ->
                 Log.e(TAG, "Failed to persist theme mode $target", error)
             }
+        }
+    }
+
+    /** Runs a manual pending-sync pass (the Dashboard "Sync now" action). Per ADR-007. */
+    fun onSyncNow() {
+        if (!uiState.value.canSyncNow) return
+        viewModelScope.launch {
+            isSyncingFlow.value = true
+            syncPendingDataUseCase().onFailure { error ->
+                Log.e(TAG, "Manual sync failed", error)
+            }
+            isSyncingFlow.value = false
         }
     }
 

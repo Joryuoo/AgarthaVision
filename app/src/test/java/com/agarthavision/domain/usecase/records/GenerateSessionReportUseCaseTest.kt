@@ -94,7 +94,10 @@ class GenerateSessionReportUseCaseTest {
 }
 
 private class ReportAuthRepository(private val userId: String?) : AuthRepository {
-    override val userIdFlow: Flow<String?> = flowOf(userId)
+    override fun observeLocalIdentity(): Flow<com.agarthavision.domain.model.LocalIdentity?> =
+        flowOf(userId?.let { com.agarthavision.domain.model.LocalIdentity(userId = it, email = "user@example.com") })
+    override suspend fun currentLocalUserId(): String? = userId
+    override suspend fun isAuthenticated(): Boolean = userId != null
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
@@ -107,6 +110,10 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
+        flowOf(session?.let(::listOf).orEmpty())
+    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
+    override suspend fun claimSession(sessionId: String, userId: String) = Unit
 }
 
 private class ReportSampleRepository(
@@ -238,6 +245,7 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
     override suspend fun getReportsPendingSync(userId: String): List<com.agarthavision.data.local.entity.ReportEntity> = emptyList()
     override suspend fun updateSupabaseStatus(reportId: String, status: String) = Unit
+    override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) = Unit
 }
 
 private class NoOpReportRemoteDataSource : com.agarthavision.data.supabase.ReportRemoteDataSource(

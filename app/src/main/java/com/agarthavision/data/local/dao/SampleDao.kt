@@ -115,4 +115,17 @@ interface SampleDao {
         """,
     )
     suspend fun getSamplesPendingSync(userId: String): List<SampleEntity>
+
+    /**
+     * Claims samples belonging to the given sessions for [userId]. Only touches
+     * currently-unowned rows so it is idempotent. Per ADR-007.
+     */
+    @Query(
+        """
+        UPDATE samples
+        SET user_id = :userId
+        WHERE session_id IN (:sessionIds) AND user_id IS NULL
+        """,
+    )
+    suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
 }

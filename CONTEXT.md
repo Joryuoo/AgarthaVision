@@ -189,9 +189,11 @@ process death); a persistent per-account queue is Phase 2.
 
 ### Navigation (Phase 1)
 
-`Login → SessionPicker → Capture` (with `Verify Queue`, `Records`, `SessionDetail`,
-`SampleDetail`, `Settings`). Inference auto-pauses whenever any sheet / picker / child
-screen is foregrounded; only explicit **End Session** writes `ended_at`.
+`Dashboard → SessionPicker → Capture` (with `Verify Queue`, `Records`, `SessionDetail`,
+`SampleDetail`, `Settings`). Per ADR-007 the app opens directly on the Dashboard — no login
+wall; `Login` is an explicit destination reached from the Dashboard account banner and used
+only to enable cloud upload. Inference auto-pauses whenever any sheet / picker / child screen
+is foregrounded; only explicit **End Session** writes `ended_at`.
 
 ---
 
@@ -496,3 +498,33 @@ ADR history was consolidated from the former ADR files. Status as written: 001�
   columns. Surfaced on `SessionDetailScreen` (Reports card, FileProvider share). Excludes
   (Phase 2): administrative cross-session reports, PDF, CSV upload to Storage, auto-retry of
   failed syncs.
+
+- **ADR-007 — Offline-first entry, cached identity, deferred claim, trigger-based sync.**
+  Removes the login wall: the app now starts at the Dashboard (`AgarthaNavGraph`
+  `startDestination`), and Login is an explicit destination entered from the Dashboard
+  account banner. Sessions, manual captures, and verification all work fully offline —
+  `SessionManager.startSession()` writes a local row first (owner = cached identity or
+  `null`) and pushes to Supabase best-effort without rolling back on failure; the capture
+  and verify use cases no longer require an authenticated user. **Identity** is a cached
+  `LocalIdentity` (DataStore, written on sign-in) tracked separately from live auth, so
+  offline work is attributed to the last medtech; a never-signed-in device stores rows with
+  `user_id = NULL`. **Login always requires connectivity** (`ConnectivityObserver`) and, on
+  success, silently claims all unowned non-exempt sessions (cascading to their samples and
+  reports) then runs a **trigger-based** `SyncPendingDataUseCase` pass (sessions → samples →
+  reports). The per-session **"Link to account" toggle** (`claim_exempt`, default off →
+  linked) is the opt-out control: a session can be excluded from claiming and shows a
+  neutral "Not linked" badge; unlinking a claimed session is allowed only while still
+  `PENDING` (once synced, ownership is permanent). New Room v8 columns
+  (`sessions.supabase_status`, `sessions.claim_exempt`) and a nullable Room `samples.user_id`
+  back this (destructive migration per `DatabaseModule`); **no Supabase schema change** — sync
+  only runs authenticated + post-claim, so `user_id = auth.uid()` on every upsert.
+  **Consequences / accepted trade-offs:** the opt-out toggle is fail-open — on a shared
+  device a borrower who forgets to unlink has their session absorbed by the owner's next
+  login (assumes one-medtech-per-device); offline sessions cannot run AI inference (cloud
+  container) so offline value is manual capture + verification + local records/EPG/reports;
+  sync is foreground trigger-based (durable WorkManager queue + backoff + per-account
+  persistent flagged queue remain Phase 2); a third `SessionSyncStatus` enum is added,
+  consolidation deferred to the Phase 2 sync work. Sign-out and multi-user-per-device
+  isolation are out of scope. Requires Room v8; the Dashboard account/sync banner and the
+  Settings account section are the surfacing points (Settings account UI deferred to the
+  Sprint 3 Settings rework).

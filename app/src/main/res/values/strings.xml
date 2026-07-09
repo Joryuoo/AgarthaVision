@@ -15,6 +15,22 @@
     <string name="login_submit">Log in</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
+    <string name="login_back">Back</string>
+    <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
+    <string name="login_claim_disclosure">Unlinked local sessions on this device will be added to this account.</string>
+
+    <!-- Dashboard account / sync banner (ADR-007 offline access) -->
+    <string name="dashboard_signed_out">Not signed in</string>
+    <string name="dashboard_sign_in">Sign in</string>
+    <string name="dashboard_sync_now">Sync now</string>
+    <string name="dashboard_syncing">Syncing…</string>
+    <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
+    <string name="dashboard_all_synced">All records synced</string>
+
+    <!-- Sessions link-to-account control (ADR-007 offline access) -->
+    <string name="session_not_linked">Not linked</string>
+    <string name="session_link_to_account">Link to account</string>
+    <string name="session_dont_link">Don\'t link to account</string>
 
     <string name="verify_title">Flagged Frame · %1$s</string>
     <string name="verify_detection_header">Detection %1$d of %2$d</string>

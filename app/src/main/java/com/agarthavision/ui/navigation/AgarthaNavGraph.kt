@@ -118,7 +118,7 @@ fun AgarthaNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route,
+        startDestination = Screen.Dashboard.route,
         modifier = modifier,
         // Default for unspecified destinations: fade
         enterTransition    = { fadeIn(tween(220)) },
@@ -126,14 +126,12 @@ fun AgarthaNavHost(
         popEnterTransition = { fadeIn(tween(220)) },
         popExitTransition  = { fadeOut(tween(180)) }
     ) {
-        // Login → Dashboard
+        // Login is now an explicit destination entered from the Dashboard banner
+        // (per ADR-007); on success it pops back rather than resetting the stack.
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoggedIn = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
+                onLoggedIn = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
             )
         }
 

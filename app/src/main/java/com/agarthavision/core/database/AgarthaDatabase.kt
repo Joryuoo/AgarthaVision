@@ -17,8 +17,12 @@ import com.agarthavision.data.local.entity.SessionEntity
  * Phase 1 schema covers Room mirrors of the Supabase `sessions`, `samples`,
  * `detections`, and `reports` tables. See schema.ts.
  *
- * Version 7 adds persisted reports. Local schema history is exported under
- * `app/schemas/`.
+ * Version 7 adds persisted reports. Version 8 (offline access, ADR-007) adds
+ * `sessions.supabase_status` + `sessions.claim_exempt` and relaxes `samples.user_id`
+ * to nullable. No hand-written `Migration` is supplied: per [DatabaseModule] the app
+ * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
+ * these entities. Acceptable in Phase 1 (no production data). Local schema history is
+ * exported under `app/schemas/`.
  */
 @Database(
     entities = [
@@ -27,7 +31,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         DetectionEntity::class,
         ReportEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
