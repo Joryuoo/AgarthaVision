@@ -61,6 +61,15 @@ class SupabaseAuthRepository @Inject constructor(
 
     override suspend fun getCurrentUserId(): String? = supabase.auth.currentUserOrNull()?.id
 
+    override suspend fun signOut() {
+        runCatching { supabase.auth.signOut() }
+        dataStore.edit { preferences ->
+            preferences.remove(USER_ID_KEY)
+            preferences.remove(EMAIL_KEY)
+            preferences.remove(DISPLAY_NAME_KEY)
+        }
+    }
+
     /** Persists the signed-in user's identity for offline attribution. */
     private suspend fun cacheIdentity(email: String) {
         val user = supabase.auth.currentUserOrNull() ?: return

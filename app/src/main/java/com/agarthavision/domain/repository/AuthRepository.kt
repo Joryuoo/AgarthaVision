@@ -44,4 +44,13 @@ interface AuthRepository {
      * Returns the current user's ID, or null if not logged in.
      */
     suspend fun getCurrentUserId(): String?
+
+    /**
+     * Signs the medtech out per ADR-008: revokes the live Supabase session **and** clears
+     * the cached [LocalIdentity], returning the device to the never-signed-in state. Local
+     * clearing always succeeds, even when the remote token revocation fails, so sign-out
+     * works offline. Already-owned rows are unaffected — only future offline attribution
+     * changes.
+     */
+    suspend fun signOut()
 }

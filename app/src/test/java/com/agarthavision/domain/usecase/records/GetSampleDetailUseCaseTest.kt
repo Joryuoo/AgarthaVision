@@ -54,6 +54,7 @@ private class DetailAuthRepository(private val userId: String?) : AuthRepository
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
+    override suspend fun signOut() = Unit
 }
 
 private class DetailSampleRepository(

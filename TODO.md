@@ -39,7 +39,7 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 | Sample + detection sync on verification | ✅ | `SyncSampleUseCase`, `SampleRemoteDataSource` |
 | Report metadata sync | ✅ | `SyncReportUseCase`, `ReportRemoteDataSource` |
 | Retry behavior for failed sample/report syncs | ⏳ | sample retry exists around session flow; report retry/backoff needs hardening |
-| Offline access: direct entry, deferred login, local-first sessions (ADR-007) | ⏳ | App starts at Dashboard; `SessionManager`/capture/verify work offline; cached `LocalIdentity` + login-time claim + trigger-based `SyncPendingDataUseCase`; per-session "Link to account" toggle. Room v8 (`sessions.supabase_status`, `sessions.claim_exempt`, nullable `samples.user_id`). **Pending: full `bun run build`/`test`/lint verification + device E2E.** |
+| Offline access: direct entry, deferred login, local-first sessions (ADR-007) | ⏳ | App starts at Dashboard; `SessionManager`/capture/verify work offline; cached `LocalIdentity` + login-time claim + trigger-based `SyncPendingDataUseCase`; per-session "Link to account" toggle. Room v8 (`sessions.supabase_status`, `sessions.claim_exempt`, nullable `samples.user_id`). Build/test/ktlint verified green 2026-07-09 (`stages/03_qa/output/qa_report.md`); **pending: device E2E only.** |
 | WorkManager/offline sync queue | ❌ | ADR-007 ships foreground trigger-based sync only; Phase 2 still adds the durable WorkManager-backed queue with backoff |
 
 ### Module 3 / In-App Verification
@@ -100,6 +100,7 @@ Legend: ✅ done · ⏳ partial · ❌ not started
 - Shared sync-state abstractions are duplicated (`SampleStatus`, `ReportSyncStatus`, and now `SessionSyncStatus` per ADR-007); consolidate into a common local sync helper when adding WorkManager.
 - ADR-007 offline-access follow-ups: (a) no sign-out flow yet; (b) the "Link to account" toggle is opt-out (fail-open on shared devices — assumes one medtech per device); (c) Dashboard is the only sign-in entry point — mirror account/session affordances into the Settings screen with its Sprint 3 rework; (d) `SubmitVerificationUseCase`/`SubmitManualCaptureUseCase` no longer inject `AuthRepository` — Hilt graph and their tests were updated accordingly.
 - Supabase production project/application status should be confirmed before demos or deployments; migrations are committed but applied manually.
+- Detekt debt: 40 findings repo-wide, accepted at the last two QA gates (31 at the theme rebrand, 40 after offline access) instead of the nominal zero-violation stage-03 bar; needs a dedicated cleanup chore before the gate can be enforced literally.
 
 ## Sprint 3 Backlog
 

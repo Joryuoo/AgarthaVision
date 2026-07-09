@@ -528,3 +528,23 @@ ADR history was consolidated from the former ADR files. Status as written: 001�
   isolation are out of scope. Requires Room v8; the Dashboard account/sync banner and the
   Settings account section are the surfacing points (Settings account UI deferred to the
   Sprint 3 Settings rework).
+
+- **ADR-008 — Sign-out: full local sign-out, warn-don't-block, Active-session guard.**
+  Adds `AuthRepository.signOut()` (`SignOutUseCase`), closing the ADR-007 gap of having no
+  sign-out at all. Signing out revokes the live Supabase session **and** clears the cached
+  `LocalIdentity` (all three DataStore keys), returning the device to the never-signed-in
+  state — new offline work after sign-out is stored unowned (`user_id = NULL`) and claimed
+  at the next login, exactly the existing ADR-007 claim model. Already-owned rows (synced or
+  PENDING) keep their `user_id`; the existing per-session "Link to account" unlink flow
+  governs reverting attribution, unchanged by this ADR. Local clearing always succeeds even
+  when the remote token revocation fails, so sign-out works offline. Blocked with an
+  `IllegalStateException` while `SessionManager.state` is `Active` — the medtech must end
+  the session first, since clearing identity mid-session would strand its remaining captures
+  under an identity about to disappear. **Rejected alternative:** token-only sign-out
+  (keep the cached identity, only revoke the token) — preserves convenient re-attribution on
+  a single-operator device but makes sign-out nearly meaningless as a shared-device
+  safeguard, since offline work would keep silently attributing to the "signed out" medtech.
+  **Consequence:** this **partially mitigates** the ADR-007 shared-device fail-open risk — a
+  borrower can now sign the previous owner out before working — but the per-session
+  claim-exempt toggle itself is unchanged and multi-user-per-device isolation remains out of
+  scope. No schema change (token + DataStore only).
