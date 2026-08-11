@@ -1,0 +1,20 @@
+#!/usr/bin/env sh
+echo "🚀 [Husky] Running pre-push Gradle build check..."
+
+run_gradle() {
+  if [ -f "./gradlew" ]; then
+    ./gradlew "$@"
+  elif [ -f "./gradlew.bat" ]; then
+    ./gradlew.bat "$@"
+  else
+    gradle "$@"
+  fi
+}
+
+# Run full debug APK build
+run_gradle assembleDebug || {
+  echo "❌ [Husky] Gradle build (assembleDebug) failed! Push to remote cancelled."
+  exit 1
+}
+
+echo "✅ [Husky] Pre-push build verified! Proceeding with push to remote..."
