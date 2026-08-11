@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.sp
 import com.agarthavision.ui.components.SvgIcon
 
 private val RedColor = Color(0xFFDC2626)
+private const val WARNING_ICON_PATH =
+    "M 10.29 3.86 L 1.82 18 a 2 2 0 0 0 1.71 3 h 16.94 a 2 2 0 0 0 1.71 -3 " +
+        "L 13.71 3.86 a 2 2 0 0 0 -3.42 0 z M 12 9 v 4 M 12 17 h .01"
 
 @Composable
 fun ConnectionLossBanner(
@@ -75,7 +78,7 @@ fun ConnectionLossBanner(
                         contentAlignment = Alignment.Center
                     ) {
                         SvgIcon(
-                            pathData = "M 10.29 3.86 L 1.82 18 a 2 2 0 0 0 1.71 3 h 16.94 a 2 2 0 0 0 1.71 -3 L 13.71 3.86 a 2 2 0 0 0 -3.42 0 z M 12 9 v 4 M 12 17 h .01",
+                            pathData = WARNING_ICON_PATH,
                             color = Color.White,
                             modifier = Modifier.size(20.dp),
                             strokeWidth = 2f
@@ -102,7 +105,7 @@ fun ConnectionLossBanner(
                         contentAlignment = Alignment.Center
                     ) {
                         SvgIcon(
-                            pathData = "M 10.29 3.86 L 1.82 18 a 2 2 0 0 0 1.71 3 h 16.94 a 2 2 0 0 0 1.71 -3 L 13.71 3.86 a 2 2 0 0 0 -3.42 0 z M 12 9 v 4 M 12 17 h .01",
+                            pathData = WARNING_ICON_PATH,
                             color = Color.White,
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2f

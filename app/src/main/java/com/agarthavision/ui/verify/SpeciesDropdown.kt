@@ -22,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 
 @Composable
 fun SpeciesDropdown(
@@ -33,15 +33,16 @@ fun SpeciesDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val colors = AgarthaTheme.colors
     val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = AppColors.Blue,
-        unfocusedBorderColor = AppColors.Gray300,
-        focusedContainerColor = AppColors.White,
-        unfocusedContainerColor = AppColors.White,
-        focusedTextColor = AppColors.Gray900,
-        unfocusedTextColor = AppColors.Gray900,
-        focusedLabelColor = AppColors.Gray700,
-        unfocusedLabelColor = AppColors.Gray500,
+        focusedBorderColor = colors.accent,
+        unfocusedBorderColor = colors.borderStrong,
+        focusedContainerColor = colors.surface,
+        unfocusedContainerColor = colors.surface,
+        focusedTextColor = colors.textPrimary,
+        unfocusedTextColor = colors.textPrimary,
+        focusedLabelColor = colors.textSecondary,
+        unfocusedLabelColor = colors.textSecondary,
     )
 
     Column(modifier = modifier) {

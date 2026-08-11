@@ -9,6 +9,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -30,12 +31,12 @@ import com.agarthavision.ui.components.AgarthaBottomBar
 import com.agarthavision.ui.components.bottomBarRoutes
 import com.agarthavision.ui.dashboard.DashboardScreen
 import com.agarthavision.ui.login.LoginScreen
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.sessions.SessionsScreen
-import com.agarthavision.ui.settings.SettingsScreenPlaceholder
+import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
@@ -94,7 +95,8 @@ fun AgarthaNavGraph(
                 )
             }
         },
-        containerColor = AppColors.White
+        containerColor = AgarthaTheme.colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { inner ->
         AgarthaNavHost(
             navController = navController,
@@ -116,7 +118,7 @@ fun AgarthaNavHost(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Login.route,
+        startDestination = Screen.Dashboard.route,
         modifier = modifier,
         // Default for unspecified destinations: fade
         enterTransition    = { fadeIn(tween(220)) },
@@ -124,14 +126,12 @@ fun AgarthaNavHost(
         popEnterTransition = { fadeIn(tween(220)) },
         popExitTransition  = { fadeOut(tween(180)) }
     ) {
-        // Login → Dashboard
+        // Login is now an explicit destination entered from the Dashboard banner
+        // (per ADR-007); on success it pops back rather than resetting the stack.
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoggedIn = {
-                    navController.navigate(Screen.Dashboard.route) {
-                        popUpTo(Screen.Login.route) { inclusive = true }
-                    }
-                }
+                onLoggedIn = { navController.popBackStack() },
+                onBack = { navController.popBackStack() },
             )
         }
 
@@ -144,8 +144,11 @@ fun AgarthaNavHost(
         composable(Screen.Sessions.route) {
             SessionsScreen(
                 onNavigate = { route -> navController.navigate(route) },
-                onSessionSelected = {
+                onNavigateToCapture = {
                     navController.navigate(Screen.Capture.route)
+                },
+                onSessionSelected = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId))
                 }
             )
         }
@@ -299,6 +302,10 @@ fun AgarthaNavHost(
             SampleDetailScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.Settings.route) { SettingsScreenPlaceholder() }
+        composable(Screen.Settings.route) {
+            SettingsScreen(
+                onSignInClick = { navController.navigate(Screen.Login.route) },
+            )
+        }
     }
 }

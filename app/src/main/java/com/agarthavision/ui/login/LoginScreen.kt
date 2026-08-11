@@ -17,8 +17,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -26,7 +28,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -53,11 +54,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.AgarthaToastState
+import com.agarthavision.ui.components.AgarthaToastVariant
+import com.agarthavision.ui.components.rememberAgarthaToastState
+import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AgarthaVisionTheme
-import com.komoui.components.sooner.SonnerEvent
-import com.komoui.components.sooner.SonnerHost
-import com.komoui.components.sooner.SonnerVariant
-import com.komoui.components.sooner.showSonner
+import com.agarthavision.ui.theme.AppColors
 
 /**
  * Login route for dashboard-provisioned Supabase accounts.
@@ -65,25 +68,22 @@ import com.komoui.components.sooner.showSonner
 @Composable
 fun LoginScreen(
     onLoggedIn: () -> Unit,
+    onBack: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
+    val toastState = rememberAgarthaToastState()
     val loginFailedTitle = stringResource(R.string.login_failed_title)
     val loginFailedGeneric = stringResource(R.string.login_failed_generic)
 
-    LaunchedEffect(viewModel, snackbarHostState) {
+    LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
             when (event) {
-                LoginEvent.NavigateToCapture -> onLoggedIn()
+                LoginEvent.NavigateBack -> onLoggedIn()
                 is LoginEvent.ShowLoginError -> {
-                    snackbarHostState.showSonner(
-                        SonnerEvent(
-                            message = loginFailedTitle,
-                            subMessage = event.message ?: loginFailedGeneric,
-                            withDismissAction = true,
-                            variant = SonnerVariant.Destructive,
-                        ),
+                    toastState.show(
+                        message = "$loginFailedTitle\n${event.message ?: loginFailedGeneric}",
+                        variant = AgarthaToastVariant.Destructive,
                     )
                 }
             }
@@ -96,8 +96,9 @@ fun LoginScreen(
             onEmailChanged = viewModel::onEmailChanged,
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
+            onBack = onBack,
         ),
-        snackbarHostState = snackbarHostState,
+        toastState = toastState,
     )
 }
 
@@ -105,21 +106,23 @@ private data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
+    val onBack: () -> Unit,
 )
 
 @Composable
 private fun LoginScreenContent(
     state: LoginUiState,
     actions: LoginActions,
-    snackbarHostState: SnackbarHostState,
+    toastState: AgarthaToastState,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = Color.White,
+        containerColor = colors.background,
         snackbarHost = {
-            SonnerHost(
-                hostState = snackbarHostState,
+            AgarthaToastHost(
+                state = toastState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp),
@@ -129,35 +132,42 @@ private fun LoginScreenContent(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White)
+                .background(colors.background)
                 .padding(padding)
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            if (state.isCheckingSession) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .align(Alignment.Center),
-                    color = Color(0xFF1E3FD9),
-                    trackColor = Color(0xFFE2E5EB),
-                )
-            } else {
+            Text(
+                text = stringResource(R.string.login_back),
+                color = colors.accent,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 16.dp, top = 20.dp)
+                    .clickable { actions.onBack() }
+                    .padding(8.dp),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .widthIn(max = 480.dp)
+                    .padding(top = 72.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
                 Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .widthIn(max = 480.dp)
-                        .padding(top = 32.dp, start = 28.dp, end = 28.dp, bottom = 28.dp),
-                    verticalArrangement = Arrangement.SpaceBetween
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         AppMark()
-                        Spacer(modifier = Modifier.height(28.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "AgarthaVision",
-                            color = Color(0xFF0F172A),
+                            color = colors.accent,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.75).sp, // -0.025em * 30px
@@ -166,30 +176,47 @@ private fun LoginScreenContent(
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
                             text = "Sign in to continue your clinical work.",
-                            color = Color(0xFF6B7280),
+                            color = colors.textSecondary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Normal,
                             lineHeight = 21.75.sp, // 1.45
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(32.dp))
+                    }
+                    Spacer(modifier = Modifier.height(32.dp))
 
-                        LoginForm(state = state, actions = actions)
+                    if (state.isOffline) {
+                        OfflineNotice()
+                        Spacer(modifier = Modifier.height(16.dp))
                     }
 
-                    Box(
+                    LoginForm(state = state, actions = actions)
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.login_claim_disclosure),
+                        color = colors.textTertiary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Normal,
+                        lineHeight = 17.sp,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Forgot password?",
-                            color = Color(0xFF1E3FD9),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier
-                                .clickable { /* Handle forgot password */ }
-                                .padding(vertical = 8.dp)
-                        )
-                    }
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Forgot password?",
+                        color = colors.accent,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clickable { /* Handle forgot password */ }
+                            .padding(vertical = 8.dp)
+                    )
                 }
             }
         }
@@ -197,20 +224,46 @@ private fun LoginScreenContent(
 }
 
 @Composable
-private fun AppMark() {
+private fun OfflineNotice() {
+    val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
-            .size(64.dp)
+            .fillMaxWidth()
+            .background(colors.warningTint, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.warning, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.login_offline_notice),
+            color = colors.warningText,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 18.sp,
+        )
+    }
+}
+
+@Composable
+private fun AppMark() {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = Modifier
+            .size(80.dp)
             .shadow(
                 elevation = 8.dp,
-                shape = RoundedCornerShape(16.dp),
-                spotColor = Color(0x380F172A),
-                ambientColor = Color(0x0F0F172A)
+                shape = RoundedCornerShape(20.dp),
+                spotColor = AppColors.Gray900.copy(alpha = 0.22f),
+                ambientColor = AppColors.Gray900.copy(alpha = 0.06f)
             )
-            .background(Color.Transparent, RoundedCornerShape(16.dp))
-            .border(1.dp, Color(0x0F0F172A), RoundedCornerShape(16.dp))
+            .background(colors.surface, RoundedCornerShape(20.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(20.dp)),
+        contentAlignment = Alignment.Center
     ) {
-        // Logo SVG will be inserted here. Leave empty for now.
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_logo),
+            contentDescription = "AgarthaVision Logo",
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -231,11 +284,13 @@ private fun LoginForm(
             value = state.email,
             onValueChange = actions.onEmailChanged,
             placeholder = "you@hospital.org",
-            isError = state.emailError,
-            errorText = emailErrorText,
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next,
+            config = LoginFieldConfig(
+                isError = state.emailError,
+                errorText = emailErrorText,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Email,
+                    imeAction = ImeAction.Next,
+                )
             )
         )
 
@@ -246,27 +301,30 @@ private fun LoginForm(
             value = state.password,
             onValueChange = actions.onPasswordChanged,
             placeholder = "••••••••••",
-            isError = state.passwordError,
-            errorText = passwordErrorText,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { actions.onSubmit() })
+            config = LoginFieldConfig(
+                isError = state.passwordError,
+                errorText = passwordErrorText,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+                keyboardActions = KeyboardActions(onDone = { actions.onSubmit() })
+            )
         )
 
         Spacer(modifier = Modifier.height(22.dp))
 
+        val themeColors = AgarthaTheme.colors
         Button(
             onClick = actions.onSubmit,
             enabled = state.canSubmit,
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = Color(0xFF1E3FD9),
-                contentColor = Color.White,
-                disabledContainerColor = Color(0xFF1E3FD9).copy(alpha = 0.5f),
-                disabledContentColor = Color.White.copy(alpha = 0.5f)
+                containerColor = themeColors.accent,
+                contentColor = themeColors.onAccent,
+                disabledContainerColor = themeColors.accent.copy(alpha = 0.5f),
+                disabledContentColor = themeColors.onAccent.copy(alpha = 0.5f)
             ),
             contentPadding = PaddingValues(vertical = 14.dp),
             modifier = Modifier.fillMaxWidth()
@@ -274,7 +332,7 @@ private fun LoginForm(
             if (state.isSubmitting) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(20.dp),
-                    color = Color.White,
+                    color = themeColors.onAccent,
                     strokeWidth = 2.dp
                 )
             } else {
@@ -289,31 +347,44 @@ private fun LoginForm(
     }
 }
 
+/**
+ * Field-level config for [LoginInputGroup] — validation/keyboard behavior, kept separate from
+ * the always-required per-field identity/state params (label, value, onValueChange, placeholder).
+ */
+private data class LoginFieldConfig(
+    val isError: Boolean = false,
+    val errorText: String? = null,
+    val visualTransformation: VisualTransformation = VisualTransformation.None,
+    val keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    val keyboardActions: KeyboardActions = KeyboardActions.Default,
+)
+
 @Composable
 private fun LoginInputGroup(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
-    isError: Boolean = false,
-    errorText: String? = null,
-    visualTransformation: VisualTransformation = VisualTransformation.None,
-    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
-    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    config: LoginFieldConfig = LoginFieldConfig(),
 ) {
+    val colors = AgarthaTheme.colors
+    val (isError, errorText) = config
+    val visualTransformation = config.visualTransformation
+    val keyboardOptions = config.keyboardOptions
+    val keyboardActions = config.keyboardActions
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Text(
             text = label,
-            color = Color(0xFF374151),
+            color = colors.textSecondary,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium
         )
 
         var isFocused by remember { mutableStateOf(false) }
-        val borderColor = if (isError) Color(0xFFDC2626) else if (isFocused) Color(0xFF1E3FD9) else Color(0xFFE2E5EB)
+        val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
 
         BasicTextField(
             value = value,
@@ -322,7 +393,7 @@ private fun LoginInputGroup(
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
             textStyle = TextStyle(
-                color = Color(0xFF0F172A),
+                color = colors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Normal
             ),
@@ -330,12 +401,12 @@ private fun LoginInputGroup(
             visualTransformation = visualTransformation,
             keyboardOptions = keyboardOptions,
             keyboardActions = keyboardActions,
-            cursorBrush = SolidColor(Color(0xFF1E3FD9)),
+            cursorBrush = SolidColor(colors.accent),
             decorationBox = { innerTextField ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(if (isError) Color(0xFFFEE2E2) else Color.White, RoundedCornerShape(12.dp))
+                        .background(if (isError) colors.dangerTint else colors.surface, RoundedCornerShape(12.dp))
                         .border(
                             width = 1.dp,
                             color = borderColor,
@@ -347,7 +418,7 @@ private fun LoginInputGroup(
                     if (value.isEmpty()) {
                         Text(
                             text = placeholder,
-                            color = Color(0xFF9CA3AF),
+                            color = colors.textTertiary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Normal
                         )
@@ -359,7 +430,7 @@ private fun LoginInputGroup(
         if (isError && errorText != null) {
             Text(
                 text = errorText,
-                color = Color(0xFFDC2626),
+                color = colors.danger,
                 fontSize = 12.sp,
                 modifier = Modifier.padding(top = 2.dp)
             )
@@ -372,13 +443,14 @@ private fun LoginInputGroup(
 private fun LoginScreenContentPreview() {
     AgarthaVisionTheme {
         LoginScreenContent(
-            state = LoginUiState(isCheckingSession = false),
+            state = LoginUiState(),
             actions = LoginActions(
                 onEmailChanged = {},
                 onPasswordChanged = {},
                 onSubmit = {},
+                onBack = {},
             ),
-            snackbarHostState = remember { SnackbarHostState() },
+            toastState = rememberAgarthaToastState(),
         )
     }
 }

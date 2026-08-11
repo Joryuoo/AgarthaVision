@@ -1,6 +1,6 @@
 -- AgarthaVision Phase 1 MVP — initial schema
 -- Run via: Supabase dashboard → SQL Editor → paste → Run
--- See docs/04_CLOUD_BACKEND_PLAN.md §4 for schema rationale.
+-- See CONTEXT.md and schema.ts
 
 -- ── Extensions ───────────────────────────────────────────────────────────────
 create extension if not exists "uuid-ossp";

@@ -1,5 +1,5 @@
 -- AgarthaVision — verification redesign (ADR-004)
--- Per docs/adr/004-verification-as-hitl-correction.md:
+-- Per CONTEXT.md:
 --   - Rejections persist as labeled FALSE_POSITIVE detections (not deleted)
 --   - Each detection carries a per-box expert verdict
 --   - Sample row gains needs_reannotation flag for frame-level false-negative reports

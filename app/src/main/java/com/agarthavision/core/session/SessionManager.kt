@@ -4,6 +4,8 @@ import com.agarthavision.core.util.DeviceIdProvider
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.SessionSyncStatus
+import com.agarthavision.domain.repository.AuthRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,18 +17,20 @@ import javax.inject.Singleton
 /**
  * App-scoped tracker of the active capture session.
  *
- * Per ADR-005, a session = one fecal smear. The SessionPicker drives creation
- * via [startSession] with a required `label` (smear name) and optional `notes`
- * (in-session observations). [resumeSession] is used when the medtech reopens
- * an existing active session from the picker. [stopSession] sets `ended_at`
- * locally and remotely.
+ * Per ADR-005, a session = one fecal smear. Per ADR-007, session creation is now
+ * **offline-first**: [startSession] always writes a local row (owner = cached identity or
+ * null when never signed in) and pushes to Supabase best-effort — a remote failure leaves
+ * the session [SessionSyncStatus.PENDING] rather than rolling it back. The pending row is
+ * pushed later by the sync trigger. [stopSession] ends the session locally regardless of
+ * connectivity.
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.1.
+ * See CONTEXT.md.
  */
 @Singleton
 class SessionManager @Inject constructor(
     private val sessionDao: SessionDao,
     private val remoteDataSource: SessionRemoteDataSource,
+    private val authRepository: AuthRepository,
     private val deviceIdProvider: DeviceIdProvider,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
@@ -37,35 +41,35 @@ class SessionManager @Inject constructor(
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
     /**
-     * Starts a capture session for the currently authenticated Supabase user.
+     * Starts a capture session, attributing it to the cached medtech when one exists.
+     *
+     * Works fully offline: the local row is always written. If a Supabase user session is
+     * available the row is pushed immediately and marked [SessionSyncStatus.SYNCED];
+     * otherwise it stays [SessionSyncStatus.PENDING] for the next sync pass. Never throws
+     * on a missing auth session or a failed remote push.
      *
      * @param label The fecal-smear name the medtech entered in the picker.
      * @param notes Optional in-session observations (slide condition, prep quality, etc.).
-     * @return The locally persisted session row mirrored to Supabase.
-     * @throws IllegalStateException when no Supabase user session is available.
+     * @return The locally persisted session row.
      */
     suspend fun startSession(label: String, notes: String? = null): SessionEntity {
         val now = Instant.now()
-        val userId = remoteDataSource.currentUserId()
-            ?: error("A Supabase user session is required to start a recording session.")
+        val ownerId = authRepository.currentLocalUserId()
         val entity = SessionEntity(
             sessionId = UUID.randomUUID().toString(),
-            userId = userId,
+            userId = ownerId,
             deviceId = deviceIdProvider.id,
             startedAt = now.toEpochMilli(),
             endedAt = null,
             notes = notes,
             label = label,
+            supabaseStatus = SessionSyncStatus.PENDING.value,
+            claimExempt = false,
         )
         sessionDao.insertSession(entity)
-        runCatching {
-            remoteDataSource.insertSession(entity)
-        }.onFailure {
-            sessionDao.updateSession(entity.copy(endedAt = Instant.now().toEpochMilli()))
-            throw it
-        }
-        _state.value = SessionState.Active(entity, now, isInferenceRunning = true)
-        return entity
+        val synced = pushSessionInsert(entity)
+        _state.value = SessionState.Active(synced, now, isInferenceRunning = true)
+        return synced
     }
 
     /**
@@ -105,8 +109,10 @@ class SessionManager @Inject constructor(
     }
 
     /**
-     * Ends the active session, if one exists. Optional [notes] override lets the
-     * End-Session confirmation dialog save final observations.
+     * Ends the active session, if one exists. The local row is always updated with
+     * `ended_at`; the remote close is best-effort so ending works offline. A remote
+     * failure leaves the row [SessionSyncStatus.PENDING] for the next sync pass. Optional
+     * [notes] override lets the End-Session confirmation dialog save final observations.
      */
     suspend fun stopSession(notes: String? = null) {
         val current = _state.value
@@ -118,17 +124,34 @@ class SessionManager @Inject constructor(
                 notes = resolvedNotes,
             )
             sessionDao.updateSession(ended)
-            try {
-                remoteDataSource.closeSession(
-                    sessionId = ended.sessionId,
-                    endedAt = endedAt,
-                    notes = resolvedNotes,
-                )
-            } finally {
-                _state.value = SessionState.Idle
+            if (ended.userId != null && !ended.claimExempt) {
+                runCatching {
+                    remoteDataSource.closeSession(
+                        sessionId = ended.sessionId,
+                        endedAt = endedAt,
+                        notes = resolvedNotes,
+                    )
+                }.onFailure {
+                    sessionDao.updateSupabaseStatus(ended.sessionId, SessionSyncStatus.PENDING.value)
+                }
             }
-        } else {
-            _state.value = SessionState.Idle
         }
+        _state.value = SessionState.Idle
+    }
+
+    /**
+     * Pushes the local session row to Supabase when an owner is set and not opted out.
+     * Returns the entity with its resolved [SessionSyncStatus]; never throws.
+     */
+    private suspend fun pushSessionInsert(entity: SessionEntity): SessionEntity {
+        if (entity.userId == null || entity.claimExempt) {
+            return entity
+        }
+        return runCatching {
+            remoteDataSource.upsertSession(entity)
+            val synced = entity.copy(supabaseStatus = SessionSyncStatus.SYNCED.value)
+            sessionDao.updateSession(synced)
+            synced
+        }.getOrElse { entity }
     }
 }

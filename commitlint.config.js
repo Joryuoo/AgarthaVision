@@ -9,6 +9,7 @@ export default {
       "theme",
       "core",
       "data",
+      "settings",
       "ci",
       "docs",
     ]],

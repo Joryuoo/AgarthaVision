@@ -59,7 +59,7 @@ class PersistFlaggedFrameUseCaseTest {
     @Test
     fun `persist stores flagged sample with predictions JSON`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
             whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
 
@@ -94,7 +94,7 @@ class PersistFlaggedFrameUseCaseTest {
     @Test
     fun `persist marks manual samples and omits predictions JSON`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
             whenever(deviceIdProvider.id).thenReturn("device-1")
             whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
 

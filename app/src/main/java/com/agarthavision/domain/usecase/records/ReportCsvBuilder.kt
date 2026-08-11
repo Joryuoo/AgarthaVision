@@ -2,8 +2,8 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.Sample
-import com.agarthavision.domain.model.Session
 import java.time.Instant
 import javax.inject.Inject
 
@@ -12,28 +12,12 @@ import javax.inject.Inject
  */
 class ReportCsvBuilder @Inject constructor() {
     fun build(
-        reportId: String,
-        session: Session,
-        generatedBy: String,
-        generatedAt: Instant,
-        totalSamples: Int,
-        totalEggsConfirmed: Int,
-        positiveSpecies: List<String>,
-        epgPerSpecies: Map<String, Int>,
+        metadata: ReportMetadata,
         samples: List<Sample>,
         detectionsBySample: Map<String, List<Detection>>,
     ): String {
         val rows = mutableListOf<String>()
-        rows += buildHeaderBlock(
-            reportId = reportId,
-            session = session,
-            generatedBy = generatedBy,
-            generatedAt = generatedAt,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpecies = positiveSpecies,
-            epgPerSpecies = epgPerSpecies,
-        )
+        rows += buildHeaderBlock(metadata)
         rows += ""
         rows += CSV_HEADER
         samples.forEach { sample ->
@@ -49,40 +33,32 @@ class ReportCsvBuilder @Inject constructor() {
         return rows.joinToString(separator = "\n", postfix = "\n\n")
     }
 
-    private fun buildHeaderBlock(
-        reportId: String,
-        session: Session,
-        generatedBy: String,
-        generatedAt: Instant,
-        totalSamples: Int,
-        totalEggsConfirmed: Int,
-        positiveSpecies: List<String>,
-        epgPerSpecies: Map<String, Int>,
-    ): List<String> {
-        val positiveValue = if (positiveSpecies.isEmpty()) {
+    private fun buildHeaderBlock(metadata: ReportMetadata): List<String> {
+        val session = metadata.session
+        val positiveValue = if (metadata.positiveSpecies.isEmpty()) {
             "none"
         } else {
-            positiveSpecies.joinToString(",")
+            metadata.positiveSpecies.joinToString(",")
         }
         val headerLines = mutableListOf(
             "# AgarthaVision Session Report",
-            "# report_id: $reportId",
+            "# report_id: ${metadata.reportId}",
             "# session_id: ${session.id}",
             "# session_label: ${session.label.orEmpty()}",
             "# session_started_at: ${Instant.ofEpochMilli(session.startedAt)}",
             "# session_ended_at: ${session.endedAt?.let { Instant.ofEpochMilli(it).toString() }.orEmpty()}",
             "# device_id: ${session.deviceId}",
-            "# generated_by: $generatedBy",
-            "# generated_at: $generatedAt",
-            "# total_samples: $totalSamples",
-            "# total_eggs_confirmed: $totalEggsConfirmed",
+            "# generated_by: ${metadata.generatedBy}",
+            "# generated_at: ${metadata.generatedAt}",
+            "# total_samples: ${metadata.totalSamples}",
+            "# total_eggs_confirmed: ${metadata.totalEggsConfirmed}",
             "# positive_species: $positiveValue",
         )
         EggSpecies.entries
             .mapNotNull { it.canonicalClass }
             .forEach { canonical ->
                 val key = canonical.toEpgHeaderKey()
-                val value = epgPerSpecies[canonical] ?: 0
+                val value = metadata.epgPerSpecies[canonical] ?: 0
                 headerLines += "# $key: $value"
             }
         return headerLines

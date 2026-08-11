@@ -50,7 +50,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.ui.records.AppColors
+import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.DialogShape
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -80,7 +83,7 @@ fun VerificationSheet(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AppColors.Gray200)
+            .background(AgarthaTheme.colors.background)
             .systemBarsPadding(),
     ) {
         VerificationSheetContent(
@@ -121,7 +124,6 @@ private fun VerificationSheetContent(
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
     val speciesName = currentPrediction?.classLabel ?: "Unknown"
-    val confidence = currentPrediction?.confidence ?: 0f
 
     Column(
         modifier = Modifier
@@ -139,10 +141,14 @@ private fun VerificationSheetContent(
                     modifier = Modifier
                         .size(40.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (state.isRepeat) AppColors.BlueTint else Color.Transparent)
+                        .background(if (state.isRepeat) AgarthaTheme.colors.accentTint else Color.Transparent)
                         .border(
                             width = 0.5.dp,
-                            color = if (state.isRepeat) AppColors.Blue.copy(alpha = 0.35f) else AppColors.Gray300,
+                            color = if (state.isRepeat) {
+                                AgarthaTheme.colors.accent.copy(alpha = 0.35f)
+                            } else {
+                                AgarthaTheme.colors.borderStrong
+                            },
                             shape = RoundedCornerShape(12.dp),
                         )
                         .clickable { actions.onToggleRepeat() },
@@ -151,7 +157,7 @@ private fun VerificationSheetContent(
                     Icon(
                         imageVector = if (state.isRepeat) Icons.Filled.Flag else Icons.Outlined.Flag,
                         contentDescription = if (state.isRepeat) "Repeat sample (enabled)" else "Mark as repeat sample",
-                        tint = if (state.isRepeat) AppColors.Blue else AppColors.Gray700,
+                        tint = if (state.isRepeat) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
                     )
                 }
             },
@@ -178,7 +184,7 @@ private fun VerificationSheetContent(
                     .height(220.dp)
                     .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .border(0.5.dp, Color.Black.copy(alpha = 0.08f), RoundedCornerShape(18.dp)),
+                    .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
             )
 
             Row(
@@ -192,20 +198,15 @@ private fun VerificationSheetContent(
                         text = speciesName,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 18.sp,
-                        color = AppColors.Gray900,
+                        color = AgarthaTheme.colors.textPrimary,
                     )
                     Text(
                         text = "Detection ${state.currentDetectionIndex + 1} of ${state.answers.size.coerceAtLeast(1)}",
-                        color = AppColors.Gray500,
+                        color = AgarthaTheme.colors.textSecondary,
                         fontSize = 12.sp,
                     )
                 }
-                Text(
-                    text = "${(confidence * 100).toInt()}% Conf",
-                    color = AppColors.Blue,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+                SourceBadge(source = frame.source)
             }
 
             Row(
@@ -259,7 +260,7 @@ private fun VerificationSheetContent(
             ) {
                 Text(
                     text = "Boxes",
-                    color = AppColors.Gray700,
+                    color = AgarthaTheme.colors.textSecondary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -278,10 +279,10 @@ private fun VerificationSheetContent(
                     } else null,
                     colors = SwitchDefaults.colors(
                         checkedThumbColor = AppColors.White,
-                        checkedTrackColor = AppColors.Blue,
-                        checkedIconColor = AppColors.Blue,
-                        uncheckedThumbColor = AppColors.Gray500,
-                        uncheckedTrackColor = AppColors.Gray200,
+                        checkedTrackColor = AgarthaTheme.colors.accent,
+                        checkedIconColor = AgarthaTheme.colors.accent,
+                        uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
+                        uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
                     ),
                 )
             }
@@ -296,19 +297,21 @@ private fun VerificationSheetContent(
             state.errorMessage?.let {
                 Text(
                     text = it,
-                    color = AppColors.Red,
+                    color = AgarthaTheme.colors.danger,
                     fontSize = 12.sp,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
 
             SheetActionRow(
-                primaryLabel = "Submit",
-                secondaryLabel = "Discard",
-                onPrimaryClick = actions.onSubmit,
-                onSecondaryClick = { showDiscardConfirm.value = true },
-                primaryLoading = state.isSubmitting,
-                primaryEnabled = state.canSubmit,
+                SheetActionRowState(
+                    primaryLabel = "Submit",
+                    secondaryLabel = "Discard",
+                    onPrimaryClick = actions.onSubmit,
+                    onSecondaryClick = { showDiscardConfirm.value = true },
+                    primaryLoading = state.isSubmitting,
+                    primaryEnabled = state.canSubmit,
+                )
             )
         }
     }
@@ -316,6 +319,7 @@ private fun VerificationSheetContent(
     if (showDiscardConfirm.value) {
         AlertDialog(
             onDismissRequest = { showDiscardConfirm.value = false },
+            shape = DialogShape,
             title = { Text("Discard this frame?") },
             text = { Text("This will remove the current frame from the verification queue.") },
             confirmButton = {
@@ -326,7 +330,7 @@ private fun VerificationSheetContent(
                     },
                     enabled = !state.isSubmitting,
                 ) {
-                    Text("Discard", color = AppColors.Red)
+                    Text("Discard", color = AgarthaTheme.colors.danger)
                 }
             },
             dismissButton = {
@@ -334,6 +338,27 @@ private fun VerificationSheetContent(
                     Text("Cancel")
                 }
             },
+        )
+    }
+}
+
+@Composable
+private fun SourceBadge(source: FrameSource) {
+    val isModelSource = source == FrameSource.MODEL
+
+    Box(
+        modifier = Modifier
+            .background(
+                color = if (isModelSource) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.warningTint,
+                shape = RoundedCornerShape(999.dp),
+            )
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = if (isModelSource) "AI-suggested" else "Manual",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (isModelSource) AgarthaTheme.colors.accent else AgarthaTheme.colors.warningText,
         )
     }
 }
@@ -350,7 +375,7 @@ private fun <T> QuestionSection(
         fontFamily = FontFamily.Monospace,
         fontSize = 10.sp,
         fontWeight = FontWeight.SemiBold,
-        color = AppColors.Gray500,
+        color = AgarthaTheme.colors.textSecondary,
         letterSpacing = 0.8.sp,
         modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
     )
@@ -365,15 +390,22 @@ private fun <T> QuestionSection(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .background(if (isSelected) AppColors.Blue else AppColors.White, RoundedCornerShape(8.dp))
-                    .border(1.dp, if (isSelected) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(8.dp))
+                    .background(
+                        if (isSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.surface,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .border(
+                        1.dp,
+                        if (isSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
+                        RoundedCornerShape(8.dp)
+                    )
                     .clickable { onSelect(value) }
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = label,
-                    color = if (isSelected) AppColors.White else AppColors.Gray900,
+                    color = if (isSelected) AgarthaTheme.colors.onAccent else AgarthaTheme.colors.textPrimary,
                     fontWeight = FontWeight.SemiBold,
                 )
             }
@@ -390,15 +422,22 @@ private fun SmallToggle(
 ) {
     Box(
         modifier = modifier
-            .background(if (selected) AppColors.BlueTint else AppColors.White, RoundedCornerShape(10.dp))
-            .border(1.dp, if (selected) AppColors.Blue else AppColors.Gray300, RoundedCornerShape(10.dp))
+            .background(
+                if (selected) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
+                RoundedCornerShape(10.dp)
+            )
+            .border(
+                1.dp,
+                if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
+                RoundedCornerShape(10.dp)
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = if (selected) AppColors.Blue else AppColors.Gray700,
+            color = if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )
@@ -416,17 +455,17 @@ private fun NoteField(
         value = value,
         onValueChange = onValueChange,
         modifier = modifier.fillMaxWidth(),
-        placeholder = { Text(placeholder, color = AppColors.Gray400, fontSize = 13.sp) },
+        placeholder = { Text(placeholder, color = AgarthaTheme.colors.textTertiary, fontSize = 13.sp) },
         minLines = 1,
         maxLines = 3,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = AppColors.Blue,
-            unfocusedBorderColor = AppColors.Gray300,
-            focusedContainerColor = AppColors.White,
-            unfocusedContainerColor = AppColors.White,
-            focusedTextColor = AppColors.Gray900,
-            unfocusedTextColor = AppColors.Gray900,
+            focusedBorderColor = AgarthaTheme.colors.accent,
+            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
+            focusedContainerColor = AgarthaTheme.colors.surface,
+            unfocusedContainerColor = AgarthaTheme.colors.surface,
+            focusedTextColor = AgarthaTheme.colors.textPrimary,
+            unfocusedTextColor = AgarthaTheme.colors.textPrimary,
         ),
     )
 }

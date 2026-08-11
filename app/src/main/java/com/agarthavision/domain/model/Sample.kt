@@ -10,11 +10,15 @@ import java.util.UUID
  *
  * Additional fields (`userId`, `verifiedAt`, `storagePath`, `inferenceModelVersion`)
  * may be added in Sprint 1 implementation tracks as the sync flow is built out.
- * See docs/03_MOBILE_APP_PLAN.md §1.10.
+ * See CONTEXT.md.
  */
 data class Sample(
     val id: String = UUID.randomUUID().toString(),
-    val userId: String,
+    /**
+     * Owning medtech's Supabase user id, or `null` when captured before any medtech
+     * signed in on this device. Claimed at the next login before sync (ADR-007).
+     */
+    val userId: String?,
     val timestamp: Long = System.currentTimeMillis(),
     val verifiedAt: Long = timestamp,
     val deviceId: String,

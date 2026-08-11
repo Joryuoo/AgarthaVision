@@ -93,6 +93,19 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
     override suspend fun updateSupabaseStatus(reportId: String, status: String) {
         rows[reportId]?.let { rows[reportId] = it.copy(supabaseStatus = status) }
     }
+
+    override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) {
+        rows.replaceAll { _, row ->
+            if (row.sessionId in sessionIds && row.userId == null) {
+                row.copy(userId = userId, supabaseStatus = ReportSyncStatus.PENDING.value)
+            } else {
+                row
+            }
+        }
+    }
+
+    override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
 }
 
 private class StubRemoteDataSource(
@@ -107,7 +120,7 @@ private class StubRemoteDataSource(
     override suspend fun upsertReport(report: ReportEntity) {
         upsertCallCount++
         if (shouldThrow) {
-            throw IllegalStateException("simulated upstream failure")
+            error("simulated upstream failure")
         }
     }
 }

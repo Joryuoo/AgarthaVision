@@ -33,6 +33,10 @@ import kotlinx.coroutines.flow.stateIn
 /**
  * Room-backed store for frames flagged during a recording session.
  */
+// Composition-root use case wiring 7 distinct, non-overlapping DI dependencies (auth, session
+// state, DAO, image store, capture use cases, JSON codec); each is independently meaningful and
+// bundling would not simplify the real dependency graph.
+@Suppress("LongParameterList")
 @Singleton
 @OptIn(ExperimentalCoroutinesApi::class)
 class FlaggedFrameStore @Inject constructor(
@@ -52,7 +56,7 @@ class FlaggedFrameStore @Inject constructor(
      * Observable stream of flagged frames for the active session.
      */
     val state: StateFlow<List<FlaggedFrame>> = combine(
-        authRepository.userIdFlow,
+        authRepository.observeLocalIdentity().map { it?.userId },
         sessionManager.state,
     ) { userId, sessionState ->
         userId to sessionState

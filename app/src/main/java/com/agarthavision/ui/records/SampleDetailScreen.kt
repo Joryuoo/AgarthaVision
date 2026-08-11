@@ -6,16 +6,41 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import androidx.compose.runtime.*
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,10 +66,14 @@ import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleRecordItem
+import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AppTypography
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 fun SampleDetailScreen(
@@ -55,10 +84,10 @@ fun SampleDetailScreen(
     val item = state.item
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    Box(modifier = Modifier.fillMaxSize().background(AppColors.Gray50)) {
+    Box(modifier = Modifier.fillMaxSize().background(AgarthaTheme.colors.surfaceVariant)) {
         if (item == null) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppColors.Blue)
+                CircularProgressIndicator(color = AgarthaTheme.colors.accent)
             }
         } else {
             Column(
@@ -97,7 +126,7 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .height(80.dp)
-            .background(AppColors.Gray50)
+            .background(AgarthaTheme.colors.surfaceVariant)
             .padding(top = 32.dp, start = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -106,8 +135,13 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
             modifier = Modifier.clickable { onBack() }.padding(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "Back", tint = AppColors.Blue, modifier = Modifier.size(28.dp))
-            Text("Back", color = AppColors.Blue, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
+            Icon(
+                Icons.Default.ChevronLeft,
+                contentDescription = "Back",
+                tint = AgarthaTheme.colors.accent,
+                modifier = Modifier.size(28.dp)
+            )
+            Text("Back", color = AgarthaTheme.colors.accent, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
         }
 
         Spacer(Modifier.weight(1f))
@@ -115,7 +149,7 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
         Text(
             text = title,
             style = AppTypography.titleLarge,
-            color = AppColors.Gray900,
+            color = AgarthaTheme.colors.textPrimary,
             modifier = Modifier.offset(x = (-24).dp)
         )
 
@@ -129,19 +163,19 @@ fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
 
     TabRow(
         selectedTabIndex = selectedTab,
-        containerColor = AppColors.Gray50,
-        contentColor = AppColors.Blue,
+        containerColor = AgarthaTheme.colors.surfaceVariant,
+        contentColor = AgarthaTheme.colors.accent,
         indicator = { tabPositions ->
             if (selectedTab < tabPositions.size) {
                 TabRowDefaults.SecondaryIndicator(
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = AppColors.Blue,
+                    color = AgarthaTheme.colors.accent,
                     height = 2.dp
                 )
             }
         },
         divider = {
-            HorizontalDivider(color = AppColors.Gray200, thickness = 0.5.dp)
+            HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 0.5.dp)
         }
     ) {
         tabs.forEachIndexed { index, label ->
@@ -153,7 +187,11 @@ fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
                         text = label,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (selectedTab == index) AppColors.Blue else AppColors.Gray500,
+                        color = if (selectedTab == index) {
+                            AgarthaTheme.colors.accent
+                        } else {
+                            AgarthaTheme.colors.textSecondary
+                        },
                         letterSpacing = 0.8.sp
                     )
                 }
@@ -235,25 +273,34 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(12.dp))
-                .background(AppColors.White)
+                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+                .background(AgarthaTheme.colors.surface)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Capture Type", fontSize = 15.sp, color = AppColors.Gray900)
-                Text(provenanceText, fontSize = 15.sp, color = AppColors.Gray500)
+                Text("Capture Type", fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
+                Text(provenanceText, fontSize = 15.sp, color = AgarthaTheme.colors.textSecondary)
             }
-            HorizontalDivider(modifier = Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = AppColors.Gray200)
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 16.dp),
+                thickness = 0.5.dp,
+                color = AgarthaTheme.colors.border
+            )
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Timestamp", fontSize = 15.sp, color = AppColors.Gray900)
-                Text(timeStr, fontSize = 15.sp, color = AppColors.Gray500, style = TextStyle(fontFeatureSettings = "tnum"))
+                Text("Timestamp", fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
+                Text(
+                    timeStr,
+                    fontSize = 15.sp,
+                    color = AgarthaTheme.colors.textSecondary,
+                    style = TextStyle(fontFeatureSettings = "tnum")
+                )
             }
         }
     }
@@ -261,6 +308,9 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
 
 @Composable
 private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Modifier = Modifier) {
+    // Capture tokens at composition time — DrawScope inside Canvas is not @Composable.
+    val verifiedColor = AgarthaTheme.colors.accent
+    val unverifiedColor = AgarthaTheme.colors.danger
     Canvas(modifier = modifier) {
         detections.forEach { detection ->
             val bx = detection.bboxX ?: return@forEach
@@ -271,7 +321,7 @@ private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Mo
             val top = by.coerceIn(0f, 1f) * size.height
             val width = bw.coerceIn(0f, 1f) * size.width
             val height = bh.coerceIn(0f, 1f) * size.height
-            val color = if (detection.verifiedByUser) AppColors.Blue else AppColors.Red
+            val color = if (detection.verifiedByUser) verifiedColor else unverifiedColor
             drawRect(
                 color = color,
                 topLeft = Offset(left, top),
@@ -288,7 +338,7 @@ private fun DetectionsTab(detections: List<Detection>) {
         Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
             Text(
                 text = "No detections on this sample.",
-                color = AppColors.Gray500,
+                color = AgarthaTheme.colors.textSecondary,
                 fontSize = 15.sp
             )
         }
@@ -312,14 +362,18 @@ private fun DetectionCard(index: Int, detection: Detection) {
     val aiGenerated = detection.bboxX != null
     val provenanceText = if (aiGenerated) "AI DETECTION" else "MANUAL ANNOTATION"
     val speciesLabel = detection.expertClass ?: detection.classLabel
-    val isItalic = speciesLabel.contains("Ascaris") || speciesLabel.contains("Trichuris") || speciesLabel.contains("Necator") || speciesLabel.contains("Hymenolepis") || speciesLabel.contains(".")
+    val isItalic = speciesLabel.contains("Ascaris") ||
+        speciesLabel.contains("Trichuris") ||
+        speciesLabel.contains("Necator") ||
+        speciesLabel.contains("Hymenolepis") ||
+        speciesLabel.contains(".")
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(AppColors.White)
-            .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(14.dp))
+            .background(AgarthaTheme.colors.surface)
+            .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(14.dp))
     ) {
         // Header
         Row(
@@ -331,44 +385,66 @@ private fun DetectionCard(index: Int, detection: Detection) {
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
-                    modifier = Modifier.size(24.dp).background(if (aiGenerated) AppColors.Blue else AppColors.Blue, CircleShape),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .background(
+                            if (aiGenerated) AgarthaTheme.colors.accent else AgarthaTheme.colors.accent,
+                            CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text((index + 1).toString(), color = AppColors.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        (index + 1).toString(),
+                        color = AgarthaTheme.colors.surface,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
                 Text(
                     text = speciesLabel,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = AppColors.Gray900,
+                    color = AgarthaTheme.colors.textPrimary,
                     fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
                 )
             }
             Box(
                 modifier = Modifier
-                    .background(AppColors.Gray100, RoundedCornerShape(100.dp))
+                    .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(100.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             ) {
                 Text(
                     text = provenanceText,
                     fontSize = 9.sp,
                     fontWeight = FontWeight.Bold,
-                    color = AppColors.Gray500,
+                    color = AgarthaTheme.colors.textSecondary,
                     letterSpacing = 0.4.sp
                 )
             }
         }
 
-        HorizontalDivider(thickness = 0.5.dp, color = AppColors.Gray200)
+        HorizontalDivider(thickness = 0.5.dp, color = AgarthaTheme.colors.border)
 
         // Fields
         Column(modifier = Modifier.padding(start = 16.dp)) {
-            val confidenceStr = if (aiGenerated) "${(detection.confidence * 100).toInt()}%" else "—"
-            DetailRow(label = "Confidence", value = confidenceStr, isLast = false, valueFontFamily = FontFamily.Monospace)
-            DetailRow(label = "Verdict", value = if (isVerified) "Verified" else "Rejected", valueColor = if (isVerified) AppColors.Green else AppColors.Red, isLast = false)
+            val sourceStr = if (aiGenerated) "AI-suggested" else "Manual"
+            DetailRow(label = "Source", value = sourceStr, isLast = false)
+            DetailRow(
+                label = "Verdict",
+                value = if (isVerified) "Verified" else "Rejected",
+                valueColor = if (isVerified) AgarthaTheme.colors.success else AgarthaTheme.colors.danger,
+                isLast = false,
+            )
 
             val bboxStr = if (detection.bboxX != null) {
-                String.format("[%.3f, %.3f, %.3f, %.3f]", detection.bboxX, detection.bboxY, detection.bboxW, detection.bboxH)
+                String.format(
+                    Locale.US,
+                    "[%.3f, %.3f, %.3f, %.3f]",
+                    detection.bboxX,
+                    detection.bboxY,
+                    detection.bboxW,
+                    detection.bboxH,
+                )
             } else {
                 "None"
             }
@@ -386,9 +462,24 @@ private fun MetadataTab(sample: Sample) {
     ) {
         item {
             GroupedList(title = "IDENTITY") {
-                DetailRow(label = "Sample ID", value = sample.id, isLast = false, valueFontFamily = FontFamily.Monospace)
-                DetailRow(label = "Session ID", value = sample.sessionId, isLast = false, valueFontFamily = FontFamily.Monospace)
-                DetailRow(label = "Device ID", value = sample.deviceId, isLast = true, valueFontFamily = FontFamily.Monospace)
+                DetailRow(
+                    label = "Sample ID",
+                    value = sample.id,
+                    isLast = false,
+                    valueFontFamily = FontFamily.Monospace
+                )
+                DetailRow(
+                    label = "Session ID",
+                    value = sample.sessionId,
+                    isLast = false,
+                    valueFontFamily = FontFamily.Monospace
+                )
+                DetailRow(
+                    label = "Device ID",
+                    value = sample.deviceId,
+                    isLast = true,
+                    valueFontFamily = FontFamily.Monospace
+                )
             }
         }
 
@@ -396,30 +487,49 @@ private fun MetadataTab(sample: Sample) {
             GroupedList(title = "STATUS & TIMING") {
                 val statusStr = sample.status.name.uppercase()
                 val isSynced = sample.status == SampleStatus.SYNCED
-                DetailRow(label = "Sync Status", value = statusStr, isLast = false, valueColor = if (isSynced) AppColors.Green else AppColors.Gray500)
+                DetailRow(
+                    label = "Sync Status",
+                    value = statusStr,
+                    isLast = false,
+                    valueColor = if (isSynced) AgarthaTheme.colors.success else AgarthaTheme.colors.textSecondary
+                )
 
                 val capturedAt = Instant.ofEpochMilli(sample.timestamp)
                     .atZone(ZoneId.systemDefault())
                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
-                DetailRow(label = "Captured At", value = capturedAt, isLast = false, valueFontFamily = FontFamily.Monospace)
+                DetailRow(
+                    label = "Captured At",
+                    value = capturedAt,
+                    isLast = false,
+                    valueFontFamily = FontFamily.Monospace
+                )
 
                 val verifiedAt = Instant.ofEpochMilli(sample.verifiedAt)
                     .atZone(ZoneId.systemDefault())
                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
-                DetailRow(label = "Verified At", value = verifiedAt, isLast = true, valueFontFamily = FontFamily.Monospace)
+                DetailRow(
+                    label = "Verified At",
+                    value = verifiedAt,
+                    isLast = true,
+                    valueFontFamily = FontFamily.Monospace
+                )
             }
         }
 
         item {
             GroupedList(title = "CAPTURE DATA") {
                 val locString = if (sample.latitude != null && sample.longitude != null) {
-                    String.format("%.4f, %.4f", sample.latitude, sample.longitude)
+                    String.format(Locale.US, "%.4f, %.4f", sample.latitude, sample.longitude)
                 } else {
                     "None"
                 }
                 DetailRow(label = "Location", value = locString, isLast = false)
                 DetailRow(label = "Model Version", value = sample.inferenceModelVersion, isLast = false)
-                DetailRow(label = "Needs Reannotation", value = if (sample.needsReannotation) "Yes" else "No", isLast = true)
+                DetailRow(
+                    label = "Needs Reannotation",
+                    value = if (sample.needsReannotation) "Yes" else "No",
+                    isLast = true
+                )
             }
         }
     }
@@ -432,7 +542,7 @@ fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
             text = title,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
-            color = AppColors.Gray500,
+            color = AgarthaTheme.colors.textSecondary,
             letterSpacing = 0.5.sp,
             modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
         )
@@ -440,8 +550,8 @@ fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, AppColors.Gray200, RoundedCornerShape(12.dp))
-                .background(AppColors.White)
+                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+                .background(AgarthaTheme.colors.surface)
         ) {
             content()
         }
@@ -453,7 +563,7 @@ fun DetailRow(
     label: String,
     value: String,
     isLast: Boolean,
-    valueColor: Color = AppColors.Gray500,
+    valueColor: Color = AgarthaTheme.colors.textSecondary,
     valueFontFamily: FontFamily = FontFamily.Default
 ) {
     Row(
@@ -463,7 +573,7 @@ fun DetailRow(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 15.sp, color = AppColors.Gray900)
+        Text(label, fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
 
         // Handle long monospace strings like UUIDs by breaking them
         val textModifier = if (valueFontFamily == FontFamily.Monospace) {
@@ -479,10 +589,14 @@ fun DetailRow(
             fontFamily = valueFontFamily,
             textAlign = TextAlign.End,
             modifier = textModifier,
-            style = if (valueFontFamily == FontFamily.Monospace) TextStyle(fontFeatureSettings = "tnum") else TextStyle.Default
+            style = if (valueFontFamily == FontFamily.Monospace) {
+                TextStyle(fontFeatureSettings = "tnum")
+            } else {
+                TextStyle.Default
+            }
         )
     }
     if (!isLast) {
-        HorizontalDivider(thickness = 0.5.dp, color = AppColors.Gray200)
+        HorizontalDivider(thickness = 0.5.dp, color = AgarthaTheme.colors.border)
     }
 }

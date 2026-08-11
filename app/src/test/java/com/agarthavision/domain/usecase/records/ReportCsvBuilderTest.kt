@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
@@ -10,6 +11,10 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ReportCsvBuilderTest {
+    // Long by nature: a data-table-heavy CSV golden test (two full sample fixtures + the
+    // full expected header/row text block). Splitting it would scatter one assertion's
+    // context across several helpers without reducing real complexity.
+    @Suppress("LongMethod")
     @Test
     fun `builds session report csv with header and rows`() {
         val builder = ReportCsvBuilder()
@@ -24,32 +29,32 @@ class ReportCsvBuilderTest {
         )
         val samples = listOf(
             sample(
-                id = "sample-1",
-                sessionId = "session-1",
-                userId = "user-1",
-                timestamp = 1_000L,
-                verifiedAt = 2_000L,
-                inferenceModelVersion = "model-1",
-                userNote = "note,one",
-                isManual = false,
-                isRepeat = false,
-                latitude = 10.0,
-                longitude = 20.0,
-                accuracyMeters = 5f,
+                SampleTestData(
+                    id = "sample-1",
+                    timestamp = 1_000L,
+                    verifiedAt = 2_000L,
+                    inferenceModelVersion = "model-1",
+                    userNote = "note,one",
+                    isManual = false,
+                    isRepeat = false,
+                    latitude = 10.0,
+                    longitude = 20.0,
+                    accuracyMeters = 5f,
+                ),
             ),
             sample(
-                id = "sample-2",
-                sessionId = "session-1",
-                userId = "user-1",
-                timestamp = 3_000L,
-                verifiedAt = 4_000L,
-                inferenceModelVersion = "model-2",
-                userNote = null,
-                isManual = true,
-                isRepeat = true,
-                latitude = null,
-                longitude = null,
-                accuracyMeters = null,
+                SampleTestData(
+                    id = "sample-2",
+                    timestamp = 3_000L,
+                    verifiedAt = 4_000L,
+                    inferenceModelVersion = "model-2",
+                    userNote = null,
+                    isManual = true,
+                    isRepeat = true,
+                    latitude = null,
+                    longitude = null,
+                    accuracyMeters = null,
+                ),
             ),
         )
         val detectionsBySample = mapOf(
@@ -70,7 +75,7 @@ class ReportCsvBuilderTest {
             ),
         )
 
-        val csv = builder.build(
+        val metadata = ReportMetadata(
             reportId = "report-1",
             session = session,
             generatedBy = "user-1",
@@ -79,6 +84,9 @@ class ReportCsvBuilderTest {
             totalEggsConfirmed = 3,
             positiveSpecies = listOf("Ascaris lumbricoides"),
             epgPerSpecies = mapOf("Ascaris lumbricoides" to 24),
+        )
+        val csv = builder.build(
+            metadata = metadata,
             samples = samples,
             detectionsBySample = detectionsBySample,
         )
@@ -110,35 +118,41 @@ class ReportCsvBuilderTest {
     }
 }
 
-private fun sample(
-    id: String,
-    sessionId: String,
-    userId: String,
-    timestamp: Long,
-    verifiedAt: Long,
-    inferenceModelVersion: String,
-    userNote: String?,
-    isManual: Boolean,
-    isRepeat: Boolean,
-    latitude: Double?,
-    longitude: Double?,
-    accuracyMeters: Float?,
-): Sample =
+/**
+ * Test-fixture defaults for building a [Sample] — named per-field so a call site only needs
+ * to override the 1-2 fields relevant to the case under test.
+ */
+private data class SampleTestData(
+    val id: String,
+    val sessionId: String = "session-1",
+    val userId: String = "user-1",
+    val timestamp: Long = 1_000L,
+    val verifiedAt: Long = 2_000L,
+    val inferenceModelVersion: String = "model-1",
+    val userNote: String? = null,
+    val isManual: Boolean = false,
+    val isRepeat: Boolean = false,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val accuracyMeters: Float? = null,
+)
+
+private fun sample(data: SampleTestData): Sample =
     Sample(
-        id = id,
-        userId = userId,
-        timestamp = timestamp,
-        verifiedAt = verifiedAt,
+        id = data.id,
+        userId = data.userId,
+        timestamp = data.timestamp,
+        verifiedAt = data.verifiedAt,
         deviceId = "device-1",
-        sessionId = sessionId,
-        filePath = "/tmp/$id.jpg",
-        storagePath = "$userId/$id.jpg",
-        inferenceModelVersion = inferenceModelVersion,
-        userNote = userNote,
-        isManual = isManual,
-        isRepeat = isRepeat,
-        latitude = latitude,
-        longitude = longitude,
-        accuracyMeters = accuracyMeters,
+        sessionId = data.sessionId,
+        filePath = "/tmp/${data.id}.jpg",
+        storagePath = "${data.userId}/${data.id}.jpg",
+        inferenceModelVersion = data.inferenceModelVersion,
+        userNote = data.userNote,
+        isManual = data.isManual,
+        isRepeat = data.isRepeat,
+        latitude = data.latitude,
+        longitude = data.longitude,
+        accuracyMeters = data.accuracyMeters,
         status = SampleStatus.SYNCED,
     )

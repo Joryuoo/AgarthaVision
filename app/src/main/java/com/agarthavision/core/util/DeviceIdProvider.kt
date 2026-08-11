@@ -12,7 +12,7 @@ import javax.inject.Singleton
  *
  * Uses [Settings.Secure.ANDROID_ID], which is stable across reboots and resets
  * only when the user wipes the device or reinstalls the app on a factory-reset
- * device. See docs/03_MOBILE_APP_PLAN.md §1.10.
+ * device. See CONTEXT.md.
  */
 @Singleton
 class DeviceIdProvider @Inject constructor(

@@ -2,6 +2,7 @@ package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionSyncStatus
 
 /**
  * Converts a Room session row into the domain model used by records screens.
@@ -15,4 +16,6 @@ fun SessionEntity.toDomain(): Session =
         endedAt = endedAt,
         notes = notes,
         label = label,
+        supabaseStatus = SessionSyncStatus.fromValue(supabaseStatus),
+        claimExempt = claimExempt,
     )

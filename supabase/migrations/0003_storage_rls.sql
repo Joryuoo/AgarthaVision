@@ -1,6 +1,6 @@
 -- AgarthaVision — Supabase Storage RLS for the `samples` bucket
 -- Bucket `samples` is private; these policies scope all access to the uploading user's folder.
--- Path convention: {user_id}/{sample_id}.jpg  (see docs/04_CLOUD_BACKEND_PLAN.md §4.2)
+-- Path convention: {user_id}/{sample_id}.jpg  (see CONTEXT.md and schema.ts).
 --
 -- Apply via: Supabase dashboard → SQL Editor → paste → Run.
 -- Prerequisite: bucket `samples` must already exist (create via dashboard or CLI:

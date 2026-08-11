@@ -9,12 +9,12 @@ import com.agarthavision.ui.theme.AgarthaVisionTheme
 
 // Canvas drawn on top of MicroscopyViewport.
 // Renders bounding circles and species label chips for each detection.
-// See docs/components.md §6.
+// See CONTEXT.md.
 @Composable
 fun DetectionOverlay(modifier: Modifier = Modifier) {
     Canvas(modifier = modifier.fillMaxSize()) {
-        // TODO: for each Detection: drawCircle(color = ClinicalBlue, ...) + drawText(species label)
-        // TODO: highlight color switches to AlertCoral when confidence < threshold
+        // TODO(DMKuZu): for each Detection: drawCircle(color = AppColors.Maroon, ...) + drawText(species label)
+        // TODO(DMKuZu): highlight color switches to AppColors.Red when confidence < threshold
     }
 }
 

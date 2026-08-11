@@ -10,8 +10,7 @@ import java.time.Instant
  * [csvFilePath] is local-only; only the metadata + aggregate stats here
  * round-trip to Supabase.
  *
- * See docs/ERD.md (Module 3.1) and the Phase 1 REPORTS rollout in
- * mutable-growing-graham.md.
+ * See schema.ts and CONTEXT.md.
  */
 data class Report(
     val id: String,

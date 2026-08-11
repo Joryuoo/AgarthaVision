@@ -7,7 +7,6 @@ import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.LocationProvider
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -34,12 +33,10 @@ class SubmitManualCaptureUseCaseTest {
 
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
-    private val authRepository: AuthRepository = mock()
     private val locationProvider: LocationProvider = mock()
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val useCase = SubmitManualCaptureUseCase(
-        authRepository = authRepository,
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         locationProvider = locationProvider,
@@ -58,7 +55,6 @@ class SubmitManualCaptureUseCaseTest {
     fun `manual submit writes sample and detection with null bbox`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
-            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val result = useCase(
@@ -95,7 +91,6 @@ class SubmitManualCaptureUseCaseTest {
     fun `manual submit uses other species text when selected`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
-            whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val result = useCase(

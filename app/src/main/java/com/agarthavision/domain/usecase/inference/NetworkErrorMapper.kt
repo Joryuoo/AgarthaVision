@@ -19,7 +19,7 @@ import javax.inject.Singleton
  * val result = mapper.execute { api.infer(body) }
  * ```
  *
- * See docs/03_MOBILE_APP_PLAN.md §1.9.
+ * See CONTEXT.md.
  */
 @Singleton
 class NetworkErrorMapper @Inject constructor() {
