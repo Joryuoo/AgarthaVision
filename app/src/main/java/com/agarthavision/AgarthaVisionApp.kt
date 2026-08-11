@@ -5,5 +5,3 @@ import dagger.hilt.android.HiltAndroidApp
 
 @HiltAndroidApp
 class AgarthaVisionApp : Application()
-//testing husky
-
