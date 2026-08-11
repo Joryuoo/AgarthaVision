@@ -21,7 +21,7 @@ import kotlin.coroutines.resumeWithException
 /**
  * Binds the device camera for **continuous frame analysis** (no shutter).
  *
- * Per CONTEXT.md and TODO.md
+ * Per CONTEXT.md
  * [ImageAnalysis] — frames flow into the supplied [ImageAnalysis.Analyzer], which
  * the `FrameSampler` throttles to one frame every two seconds and dispatches to
  * `InferFrameUseCase`. There is no `ImageCapture` use case in Phase 1.

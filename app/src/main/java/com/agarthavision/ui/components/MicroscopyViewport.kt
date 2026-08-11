@@ -22,7 +22,7 @@ import com.agarthavision.ui.theme.AppColors
  *
  * Binds [CameraManager.bindAnalysis] to the lifecycle and routes frames into the
  * supplied [analyzer] (typically the `FrameSampler` injected into the
- * `CaptureViewModel`). See CONTEXT.md and TODO.md
+ * `CaptureViewModel`). See CONTEXT.md.
  */
 @Composable
 fun MicroscopyViewport(

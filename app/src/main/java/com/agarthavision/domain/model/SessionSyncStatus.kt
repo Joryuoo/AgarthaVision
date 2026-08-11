@@ -9,7 +9,7 @@ package com.agarthavision.domain.model
  *
  * Note: this is the third `*SyncStatus` enum ([SampleStatus], [ReportSyncStatus]).
  * Consolidation into a shared local sync helper is deferred to the Phase 2
- * WorkManager work — see TODO.md.
+ * WorkManager work — see CONTEXT.md.
  */
 enum class SessionSyncStatus(val value: String) {
     PENDING("pending"),

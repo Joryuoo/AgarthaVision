@@ -8,7 +8,7 @@ package com.agarthavision.domain.model
  * taps Verify in the sheet. `SYNCED` is the state after a successful upload to Supabase.
  * `SYNC_FAILED` is set when the upload fails and a retry is queued.
  *
- * See CONTEXT.md and TODO.md
+ * See CONTEXT.md.
  */
 enum class SampleStatus(val value: String) {
     FLAGGED("flagged"),

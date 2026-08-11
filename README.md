@@ -16,8 +16,15 @@
   <img alt="Supabase Postgres" src="https://img.shields.io/badge/SUPABASE_POSTGRES-16A34A?style=for-the-badge&logo=supabase&logoColor=white&labelColor=16A34A" />
   <img alt="FastAPI Inference" src="https://img.shields.io/badge/FASTAPI_INFERENCE-0F766E?style=for-the-badge&logo=fastapi&logoColor=white&labelColor=0F766E" />
   <img alt="CameraX" src="https://img.shields.io/badge/CAMERAX-C2410C?style=for-the-badge&logo=android&logoColor=white&labelColor=C2410C" />
-  <img alt="MVP Sprint 3" src="https://img.shields.io/badge/MVP_SPRINT_3-374151?style=for-the-badge&logoColor=white&labelColor=374151" />
 </p>
+
+## Staging / Dev Rules
+
+- **No `TODO.md` in repository**: Do not create or re-introduce a `TODO.md` file in the project directory. All tasks and sprint items are managed in ClickUp.
+- **Commit Message Format**: Format all commit messages using the following structure:
+  `[type][ClickUp-ID][Lastname] Task title`
+  *(e.g. `[feat][CU-869234][Beansman] Implement settings screen account section` or `[chore][CU-869235][DMKuZu] Detekt cleanup chore`)*
+- **Build Before Push**: Always build and test your branch locally (`bun run build` / `.\gradlew.bat assembleDebug` and `bun run test`) before pushing changes to the repository.
 
 ## Overview
 
@@ -149,17 +156,16 @@ The mobile app persists verified samples locally with Room, uploads images to Su
 
 ## Project Status
 
-The current root audit records Sprint 3 hardening as the active implementation phase. Core records browsing, sample detail with Supabase image fallback, CSV export, session-as-smear semantics, manual capture, EPG calculation, user notes, and persisted session reports are implemented. Open follow-ups include theme cleanup, report-sync retry behavior, CI setup, Settings completion, and remaining Phase 2 planning items.
-
-See `TODO.md` for the current code-vs-spec audit and backlog.
+The current root audit records Sprint 3 hardening as the active implementation phase. Core records browsing, sample detail with Supabase image fallback, CSV export, session-as-smear semantics, manual capture, EPG calculation, user notes, persisted session reports, light/dark theme toggle, detekt 0-violation cleanup, and the production Settings screen are implemented. Open follow-ups include physical-device E2E verification, GitHub Actions CI setup, `:app:ktlintCheck` Gradle wiring fix, launcher icon regeneration, and remaining Phase 2 roadmap items. Active tasks and sprint items are tracked in ClickUp.
 
 ## Documentation
 
-The project source of truth now lives in three root files:
+The project source of truth lives in two core root files:
 
 - `CONTEXT.md` - project overview, tech stack, architecture rules, design system, Supabase/inference contracts, git workflow, coding conventions, and ADR summaries.
 - `schema.ts` - ground-truth data model for Supabase, Room, domain enums, Storage, and relationships.
-- `TODO.md` - implemented state, known issues, Sprint 3 backlog, Phase 2 roadmap, and deferred documentation notes.
+
+*(Sprint backlog items and tasks are managed in ClickUp).*
 
 When a rule is unclear or missing, update the relevant root source-of-truth file before changing the implementation.
 
@@ -167,9 +173,10 @@ When a rule is unclear or missing, update the relevant root source-of-truth file
 
 This repository follows the documented GitHub Flow process:
 
-- Branch from `develop` for feature, fix, docs, test, and CI work.
-- Use conventional commits enforced by commitlint and Husky.
+- Branch from `staging` for feature, fix, docs, test, and CI work.
+- Use conventional commits formatted as `[type][ClickUp-ID][Lastname] Task title`.
 - Run lint, tests, and build checks before opening a pull request.
+- Target `staging` for PRs (never `main` directly).
 - Keep source changes aligned with the relevant plan, ADR, or design-system document.
 
 ## Contributors

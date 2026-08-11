@@ -13,7 +13,7 @@ import javax.inject.Inject
  * Orchestrates a single inference call for a sampled camera frame.
  *
  * If detections are found, the frame is added to the [FlaggedFrameStore].
- * See CONTEXT.md and TODO.md
+ * See CONTEXT.md.
  */
 class InferFrameUseCase @Inject constructor(
     private val inferenceApi: InferenceApi,

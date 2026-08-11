@@ -8,7 +8,7 @@ package com.agarthavision.domain.usecase.inference
  * they indicate an API contract issue, not a connectivity failure.
  *
  * Supabase connectivity failures are a separate concern and do NOT produce this
- * exception. See CONTEXT.md and TODO.md
+ * exception. See CONTEXT.md.
  */
 class InferenceConnectionException(cause: Throwable? = null) :
     Exception("Inference container unreachable", cause)

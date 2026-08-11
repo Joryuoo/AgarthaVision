@@ -7,8 +7,6 @@
 | Layer 4 (working) | `../01_scope/output/scope.md` | The confirmed scoped plan — implement only what is listed |
 | Layer 3 (reference) | `../../CONTEXT.md` | §3 Architecture Rules, §4 Design System, §7 Coding Conventions |
 | Layer 3 (reference) | `../../schema.ts` | Any entity or migration in scope |
-| Layer 3 (reference) | `../../_config/conventions.md` | Kotlin style, naming, KDoc, commit rules |
-| Layer 3 (reference) | `references/coding-constraints.md` | Quick-reference enforcement list |
 
 ## Process
 

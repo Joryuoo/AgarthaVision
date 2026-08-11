@@ -16,7 +16,7 @@ import javax.inject.Inject
  * Note: this reaches into DAOs directly, following the existing precedent of the verify
  * use cases (see [com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase]).
  * The shared local-sync abstraction is deferred to the Phase 2 WorkManager work — see
- * TODO.md.
+ * CONTEXT.md.
  */
 class ClaimLocalDataUseCase @Inject constructor(
     private val sessionDao: SessionDao,

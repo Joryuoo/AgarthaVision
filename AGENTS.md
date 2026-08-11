@@ -31,30 +31,27 @@ A human reviews each stage's `output/` before the next stage runs — that is th
 
 | Path | What it is |
 |---|---|
-| `_config/voice.md` | Clinical voice and tone — load when writing user-facing text or docs |
-| `_config/conventions.md` | Kotlin style, naming, KDoc, commit, branch rules — load for all coding stages |
-| `CONTEXT.md` | Full project reference: tech stack, architecture rules, design system, ADRs |
+| `CONTEXT.md` | Full project reference: tech stack, architecture rules, design system, ADRs, conventions, voice & tone |
 | `schema.ts` | Ground-truth data model for Supabase, Room, and domain enums |
-| `TODO.md` | Implementation state, Sprint 3 backlog, Phase 2 roadmap |
 
 ---
 
 ## Source of Truth
 
-The former documentation tree has been consolidated into three root files:
+The documentation tree is consolidated into two core root files:
 
 - `CONTEXT.md` — project overview, tech stack, architecture rules, design system, Supabase/inference contracts, git workflow, coding conventions, and ADR summaries.
 - `schema.ts` — ground-truth data model for Supabase, Room, domain enums, Storage, and relationships.
-- `TODO.md` — current implementation state, known issues, Sprint 3 backlog, Phase 2 roadmap, and deferred documentation notes.
 
-Read the relevant root file before changing behavior. If a rule, data contract, or backlog item changes, update the matching root file in the same work.
+*(Active sprint backlog items and task tracking are managed externally in ClickUp).*
+
+Read the relevant root file before changing behavior. If a rule or data contract changes, update the matching root file in the same work.
 
 ## Precedence Rules
 
 - For database columns, constraints, RLS, and CHECKs, `supabase/migrations/*.sql` wins.
 - For readable data-model summaries and Room/domain mismatches, use `schema.ts`.
 - For architecture, design, security, workflow, and coding standards, use `CONTEXT.md`.
-- For implementation status and next work, use `TODO.md`.
 - The Clinical Microscopy design system in `CONTEXT.md` is the UI authority. The old KomoUI design guidance is superseded.
 
 ## Required Compliance
@@ -63,20 +60,21 @@ Read the relevant root file before changing behavior. If a rule, data contract, 
 - Follow the single design system in `CONTEXT.md`: Inter typography, CIT-U maroon/gold accent, clinical restrained UI, and MaterialTheme consolidation.
 - Keep Supabase/Auth/Storage/inference behavior aligned with `CONTEXT.md` and `schema.ts`.
 - Keep Kotlin style, naming, KDoc, tests, branch names, and conventional commits aligned with `CONTEXT.md`.
-- Treat `TODO.md` as the active implementation audit before starting Sprint 3 or Phase 2 work.
 
 ## Non-Negotiables
 
 - Do not invent new conventions without updating `CONTEXT.md`.
+- Do not create or re-introduce a `TODO.md` file in the project directory.
+- Format commit messages as `[type][ClickUp-ID][Lastname] Task title` (e.g. `[feat][CU-869234][Beansman] Task title`).
+- Always build and test your branch locally before pushing.
 - Do not change schema behavior without updating the migration SQL and `schema.ts`.
-- Do not claim a backlog item is complete without checking the codebase and updating `TODO.md`.
 - Do not reintroduce a second UI theme or new KomoUI-only surface.
 - Never commit real secrets; use `local.properties` locally and CI `-P` properties.
 
 ## How to Work
 
-1. Read `CONTEXT.md`, `schema.ts`, and/or `TODO.md` depending on the task.
+1. Read `CONTEXT.md` and/or `schema.ts` depending on the task.
 2. Inspect the relevant code and migrations; trust actual code over stale assumptions.
 3. Implement the change within the documented package boundaries.
 4. Add or update focused tests when behavior changes.
-5. Update the root source-of-truth file when the public contract, design rule, or implementation status changes.
+5. Update the root source-of-truth file when the public contract or design rule changes.

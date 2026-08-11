@@ -23,7 +23,7 @@ import javax.inject.Singleton
  * Enforces a 2-second interval between sampled frames while a session is active.
  * Per ADR-005, also caches the most recent JPEG ([latestFrameBytes]) so the
  * Manual Capture flow (Track 2.13) can snapshot the live frame without spinning
- * up a separate ImageCapture use case. See CONTEXT.md and TODO.md
+ * up a separate ImageCapture use case. See CONTEXT.md.
  */
 @Singleton
 @Suppress("TooGenericExceptionCaught")

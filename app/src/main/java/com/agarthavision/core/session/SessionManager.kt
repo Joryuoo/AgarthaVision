@@ -24,7 +24,7 @@ import javax.inject.Singleton
  * pushed later by the sync trigger. [stopSession] ends the session locally regardless of
  * connectivity.
  *
- * See CONTEXT.md and TODO.md
+ * See CONTEXT.md.
  */
 @Singleton
 class SessionManager @Inject constructor(

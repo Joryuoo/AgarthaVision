@@ -79,7 +79,7 @@ sealed interface VerificationEvent {
  * The store collector (`init`) keeps `queueSize` + `frameIndexInQueue` in sync
  * as frames are added/removed by other surfaces (Capture toast/queue, delete).
  *
- * See CONTEXT.md and TODO.md
+ * See CONTEXT.md.
  */
 @Suppress("TooManyFunctions")
 @HiltViewModel

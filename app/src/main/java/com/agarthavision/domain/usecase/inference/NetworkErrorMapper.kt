@@ -19,7 +19,7 @@ import javax.inject.Singleton
  * val result = mapper.execute { api.infer(body) }
  * ```
  *
- * See CONTEXT.md and TODO.md
+ * See CONTEXT.md.
  */
 @Singleton
 class NetworkErrorMapper @Inject constructor() {

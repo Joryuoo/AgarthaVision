@@ -35,7 +35,7 @@ sealed interface SyncSummary {
  * Per ADR-007 this is the trigger-based foreground sync: it runs on login success, on app
  * start while authenticated, and when connectivity returns. It no-ops cleanly with
  * [SyncSummary.Skipped] when unauthenticated or offline. The durable WorkManager-backed
- * queue with backoff stays Phase 2 — see TODO.md.
+ * queue with backoff stays Phase 2 — see CONTEXT.md.
  */
 // Composition-root use case wiring 8 distinct, non-overlapping DI dependencies (auth,
 // connectivity, DAOs, per-entity sync use cases); each is independently meaningful and

@@ -10,7 +10,7 @@ import java.time.Instant
  * [csvFilePath] is local-only; only the metadata + aggregate stats here
  * round-trip to Supabase.
  *
- * See schema.ts and the Phase 1 reports rollout in TODO.md.
+ * See schema.ts and CONTEXT.md.
  */
 data class Report(
     val id: String,

@@ -4,11 +4,9 @@
 
 | Kind | File / source | What to load |
 |---|---|---|
-| Layer 4 (working) | Task description (user message or TODO.md item) | The full task text |
+| Layer 4 (working) | Task description (user message or task item) | The full task text |
 | Layer 3 (reference) | `../../CONTEXT.md` | §1 Project Overview, §3 Architecture Rules, §7 Coding Conventions |
 | Layer 3 (reference) | `../../schema.ts` | Any entity or migration the task touches |
-| Layer 3 (reference) | `../../TODO.md` | Sprint 3 Backlog + Known Issues |
-| Layer 3 (reference) | `references/what-to-read.md` | Package map and source-file locator |
 
 Load nothing else. Smaller context = better scope.
 
@@ -18,8 +16,8 @@ Produce a concrete implementation plan for the given task.
 
 1. Identify affected layers: Presentation / Domain / Data / Core. Name each file that changes.
 2. Check whether a Room migration and/or Supabase SQL migration is required.
-3. Cross-reference Known Issues in `TODO.md` that intersect the task.
-4. For UI tasks: identify which design tokens apply (AppColors.*, typography style, spacing, radius).
+3. Cross-reference existing architecture guidelines in `CONTEXT.md`.
+4. For UI tasks: identify which design tokens apply (`AgarthaTheme.colors.*`, typography style, spacing, radius).
 5. List all tests that must be added or updated.
 6. Check each of the seven Architecture hard rules — any violation is a blocker; flag it explicitly.
 7. Describe anything deferred (explicitly out of scope for this task).

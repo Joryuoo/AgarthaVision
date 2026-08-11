@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.combine
  * Note: this reaches into DAOs directly, following the existing precedent of the sync
  * and verify use cases (see [com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase]).
  * Consolidation into a shared local-sync abstraction is deferred to the Phase 2
- * WorkManager work — see TODO.md.
+ * WorkManager work — see CONTEXT.md.
  */
 class ObservePendingSyncCountsUseCase @Inject constructor(
     private val sessionDao: SessionDao,

@@ -2,8 +2,7 @@
 
 > The single context file for the AgarthaVision codebase — tech stack, architecture
 > rules, design system, backend/security model, git workflow, conventions, and ADR
-> history. Companion files: [`schema.ts`](schema.ts) (data model) and
-> [`TODO.md`](TODO.md) (state + roadmap).
+> history. Companion file: [`schema.ts`](schema.ts) (data model). Tasks are tracked in ClickUp.
 >
 > **Team code:** 2526-sem2-cs342-02 · **Repo:** https://github.com/Joryuoo/AgarthaVision.git
 
@@ -359,7 +358,7 @@ folder; **no DELETE policy** by design — samples persist as training data (ADR
 
 > ⚠ `0008_reports.sql` reintroduced an inline `(select role from profiles …) = 'admin'`
 > subquery instead of `is_admin()` — functionally fine, stylistically inconsistent. Tracked
-> in [`TODO.md`](TODO.md).
+> in ClickUp.
 
 ### Inference container (self-hosted; owned by DMKuZu — ADR-003)
 
@@ -394,19 +393,20 @@ inference-container loss stops it.
 ## 6. Git Workflow
 
 - **Branches** — GitHub Flow: long-lived `main` (production, protected: PR + 2 approvals +
-  CI + no force-push) and `develop` (integration, protected: PR + 1 approval + CI). Feature
-  branches off `develop`: `feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+  CI + no force-push) and `staging` (development/integration branch, protected: PR + 1 approval + CI). Feature
+  branches off `staging`: `feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
   `test/…`.
-- **Conventional commits** (commitlint-enforced): `<type>(<scope>): <desc>`.
+- **Commits format**: `[type][ClickUp-ID][Lastname] Task title`
   Types: `feat fix refactor docs style test ci chore`.
-  Scopes: `capture inference dashboard reports theme core data ci docs`.
-- **PRs** — open against `develop`, ≤ ~400 lines ideal (split if larger); reviewer responds
+  Example: `[feat][CU-869234][Beansman] Implement settings screen account section`.
+- **Pre-push rule**: Always build and test locally (`bun run build` / `.\gradlew.bat assembleDebug` and `bun run test`) before pushing changes to remote.
+- **PRs** — open against `staging`, ≤ ~400 lines ideal (split if larger); reviewer responds
   within 24h; request changes with specific, actionable feedback.
-- **Release** — cut `release/x.y.z` from `develop`, bump `versionCode`/`versionName`, test,
-  PR → `main` (2 approvals), tag `vX.Y.Z`, merge `main` back to `develop`.
+- **Release** — cut `release/x.y.z` from `staging`, bump `versionCode`/`versionName`, test,
+  PR → `main` (2 approvals), tag `vX.Y.Z`, merge `main` back to `staging`.
 - **Status:** branch/commit conventions are live. The `.github/` CI workflows
   (`pr-check.yml`, `commitlint.yml`) and the PR template are **proposed, not yet created** —
-  part of the first CI-setup PR. See [`TODO.md`](TODO.md).
+  part of the first CI-setup PR. Tracked in ClickUp.
 - `.gitignore` tracks `gradle/libs.versions.toml`, `package.json`, `bun.lock`,
   `commitlint.config.js`, `.github/`, and `schemas/`; ignores `local.properties`, build
   artifacts, `.idea/`, secrets.
