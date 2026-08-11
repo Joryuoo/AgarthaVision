@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
 echo "🔍 [Husky] Running pre-commit checks..."
 
+# Auto-detect JAVA_HOME if missing (Windows Android Studio JBR fallback)
+if [ -z "$JAVA_HOME" ]; then
+  if [ -d "C:/Program Files/Android/Android Studio/jbr" ]; then
+    export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+    export PATH="$JAVA_HOME/bin:$PATH"
+  fi
+fi
+
 run_gradle() {
   if [ -f "./gradlew" ]; then
     ./gradlew "$@"
@@ -25,11 +33,18 @@ run_gradle :app:testDebugUnitTest || {
   exit 1
 }
 
-# 3. Run ktlint and detekt linting
+# 3. Run full Gradle debug build
+echo "⏳ Building Gradle debug APK..."
+run_gradle assembleDebug || {
+  echo "❌ [Husky] Gradle build (assembleDebug) failed! Commit cancelled."
+  exit 1
+}
+
+# 4. Run ktlint and detekt linting
 echo "⏳ Checking ktlint & detekt linting..."
 run_gradle :app:ktlintCheck :app:detekt || {
   echo "❌ [Husky] Linting check failed! Commit cancelled."
   exit 1
 }
 
-echo "✅ [Husky] Pre-commit checks passed successfully!"
+echo "✅ [Husky] All pre-commit build and test checks passed!"

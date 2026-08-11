@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
 echo "🚀 [Husky] Running pre-push Gradle build check..."
 
+# Auto-detect JAVA_HOME if missing (Windows Android Studio JBR fallback)
+if [ -z "$JAVA_HOME" ]; then
+  if [ -d "C:/Program Files/Android/Android Studio/jbr" ]; then
+    export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+    export PATH="$JAVA_HOME/bin:$PATH"
+  fi
+fi
+
 run_gradle() {
   if [ -f "./gradlew" ]; then
     ./gradlew "$@"
