@@ -1,0 +1,28 @@
+#!/usr/bin/env sh
+echo "🚀 [Husky] Running pre-push Gradle build check..."
+
+# Auto-detect JAVA_HOME if missing (Windows Android Studio JBR fallback)
+if [ -z "$JAVA_HOME" ]; then
+  if [ -d "C:/Program Files/Android/Android Studio/jbr" ]; then
+    export JAVA_HOME="C:/Program Files/Android/Android Studio/jbr"
+    export PATH="$JAVA_HOME/bin:$PATH"
+  fi
+fi
+
+run_gradle() {
+  if [ -f "./gradlew" ]; then
+    ./gradlew "$@"
+  elif [ -f "./gradlew.bat" ]; then
+    ./gradlew.bat "$@"
+  else
+    gradle "$@"
+  fi
+}
+
+# Run full debug APK build
+run_gradle assembleDebug || {
+  echo "❌ [Husky] Gradle build (assembleDebug) failed! Push to remote cancelled."
+  exit 1
+}
+
+echo "✅ [Husky] Pre-push build verified! Proceeding with push to remote..."
