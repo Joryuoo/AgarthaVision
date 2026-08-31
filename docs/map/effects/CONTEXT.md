@@ -63,7 +63,7 @@ Client and server must move together, and they are versioned independently — t
 container image, the client is an APK.
 
 **The non-obvious break:** coordinates are **centre-x, centre-y, width, height in pixels**
-(`inference/server.py:53`), copied verbatim into `bbox_*`
+(`inference/server.py:47`), copied verbatim into `bbox_*`
 (`data/local/mapper/VerificationMapper.kt:36-39`), despite comments in `DetectionEntity.kt:13`
 and `supabase/migrations/0001_init.sql:64` claiming they are normalised. And renaming a model
 class silently changes every verdict and every EPG grouping, because

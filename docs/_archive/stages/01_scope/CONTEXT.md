@@ -1,12 +1,19 @@
 # Stage 01 — Scope (Layer 2 contract)
 
+> **ARCHIVED AND STALE.** This file describes a superseded three-stage pipeline. Do not
+> implement against it. The paths in the Inputs table below no longer resolve — the root
+> `CONTEXT.md`, `AGENTS.md`, and the `stages/` location they were written for are all gone.
+> The live entry point is `SESSION_INIT.md` at the repository root; the live rules are
+> `docs/constraints.md` and `docs/non-negotiables.md`. See `../../CONTEXT.md` for why this
+> folder is retained.
+
 ## Inputs
 
 | Kind | File / source | What to load |
 |---|---|---|
 | Layer 4 (working) | Task description (user message or task item) | The full task text |
-| Layer 3 (reference) | `../../CONTEXT.md` | §1 Project Overview, §3 Architecture Rules, §7 Coding Conventions |
-| Layer 3 (reference) | `../../schema.ts` | Any entity or migration the task touches |
+| ~~Layer 3 (reference)~~ | ~~`../../CONTEXT.md`~~ | **Stale — file deleted.** Nearest live equivalent: `/SESSION_INIT.md`, `/docs/constraints.md` |
+| ~~Layer 3 (reference)~~ | ~~`../../schema.ts`~~ | **Stale path.** `schema.ts` is at the repository root; see `/docs/map/objects/` for the cards |
 
 Load nothing else. Smaller context = better scope.
 
