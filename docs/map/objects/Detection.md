@@ -48,7 +48,7 @@ PK column is `detection_id`. Two things to know:
 "normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says
 "source-image pixels" (`DetectionEntity.kt:43-46`); `0001_init.sql:64` also says normalized.
 **The pixel reading is correct** — the server returns `box.xywh`, which is centre-x, centre-y,
-width, height in pixels (`inference/server.py:49-57`), and the mapper stores those values
+width, height in pixels (`inference/server.py:47-55`), and the mapper stores those values
 unchanged (`data/local/mapper/VerificationMapper.kt:36-39`). Treat the "normalized" comments as
 stale.
 
