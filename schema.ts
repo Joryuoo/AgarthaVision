@@ -429,6 +429,9 @@ export interface ValidationRecord {
  * - `0003_storage_rls.sql` creates policies for the `samples` bucket and
  *   enforces object names under `{auth.uid()}/{sample_id}.jpg` with
  *   `storage.foldername(name)`.
+ * - `0009_storage_admin_read.sql`: adds an admin-only SELECT policy using
+ *   `public.is_admin(auth.uid())`. Policies are OR'd, so admins can read across
+ *   all user folders while writes stay owner-scoped through `0003`.
  *
  * Room mirror: none. `SampleEntity.storage_path` stores the object key after
  * upload.
