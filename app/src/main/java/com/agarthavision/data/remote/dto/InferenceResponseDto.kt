@@ -12,6 +12,13 @@ data class InferenceResponseDto(
     @SerializedName("predictions") val predictions: List<PredictionDto> = emptyList(),
     @SerializedName("image") val image: ImageMetaDto? = null,
     @SerializedName("model_version") val modelVersion: String? = null,
+    /**
+     * Server-side compute time in milliseconds, when the container reports it.
+     *
+     * Null against older containers. Used by the benchmark harness to separate cloud compute
+     * from network round-trip so it can be compared fairly against on-device compute.
+     */
+    @SerializedName("inference_ms") val inferenceMs: Float? = null,
 )
 
 data class PredictionDto(
