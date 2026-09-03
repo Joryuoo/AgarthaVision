@@ -1,6 +1,6 @@
 package com.agarthavision.domain.model
 
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import java.time.Instant
 
 data class FlaggedFrame(
@@ -8,7 +8,7 @@ data class FlaggedFrame(
     val sessionId: String,
     val capturedAt: Instant,
     val jpegBytes: ByteArray,
-    val predictions: List<PredictionDto>,
+    val predictions: List<Prediction>,
     val source: FrameSource = FrameSource.MODEL,
     val markedAsRepeat: Boolean = false,
     val inferenceModelVersion: String? = null,

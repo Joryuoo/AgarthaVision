@@ -5,7 +5,7 @@ import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.entity.SessionEntity
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.util.MainDispatcherRule
@@ -73,7 +73,7 @@ class CaptureViewModelTest {
         sessionId = "session-1",
         capturedAt = Instant.EPOCH,
         jpegBytes = ByteArray(4),
-        predictions = listOf(PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)),
+        predictions = listOf(Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)),
     )
 
     @Test

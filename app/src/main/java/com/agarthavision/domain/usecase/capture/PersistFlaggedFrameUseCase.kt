@@ -1,6 +1,7 @@
 package com.agarthavision.domain.usecase.capture
 
 import com.agarthavision.core.util.DeviceIdProvider
+import com.agarthavision.data.inference.toPredictionDtos
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
@@ -27,9 +28,11 @@ class PersistFlaggedFrameUseCase @Inject constructor(
         val ownerId = authRepository.currentLocalUserId()
         val sampleId = UUID.randomUUID().toString()
         val imagePath = sampleImageStore.persistJpeg(ownerId ?: UNOWNED_FOLDER, sampleId, frame.jpegBytes)
+        // Serialized through the DTO, not the domain model, so the persisted JSON shape
+        // stays identical to what the container returns and to every row already on disk.
         val predictionsJson = frame.predictions
             .takeIf { it.isNotEmpty() }
-            ?.let { gson.toJson(it) }
+            ?.let { gson.toJson(it.toPredictionDtos()) }
         val inferenceModelVersion = when (frame.source) {
             FrameSource.MANUAL -> frame.inferenceModelVersion ?: "manual"
             FrameSource.MODEL -> frame.inferenceModelVersion ?: "unknown"

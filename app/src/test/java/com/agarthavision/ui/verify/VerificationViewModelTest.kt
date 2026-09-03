@@ -1,7 +1,7 @@
 package com.agarthavision.ui.verify
 
 import app.cash.turbine.test
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -41,7 +41,7 @@ class VerificationViewModelTest {
 
     private fun makeFrame(predictions: Int = 2): FlaggedFrame {
         val preds = List(predictions) {
-            PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
+            Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
         }
         return FlaggedFrame(
             sessionId = "session-1",
@@ -54,7 +54,7 @@ class VerificationViewModelTest {
     private fun makeFrameWithId(id: Int, predictions: Int = 1): FlaggedFrame {
         // Distinct capturedAt so equals/hashCode see each frame as unique
         val preds = List(predictions) {
-            PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
+            Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
         }
         return FlaggedFrame(
             sessionId = "session-1",
