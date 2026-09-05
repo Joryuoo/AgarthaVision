@@ -48,38 +48,46 @@ interface SampleDao {
     @Query(
         """
         SELECT * FROM samples
-        WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged'
+        WHERE session_id = :sessionId
+          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND status != 'flagged'
         ORDER BY timestamp DESC
         """,
     )
-    fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<SampleEntity>>
+    fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<SampleEntity>>
 
     @Query(
         """
         SELECT * FROM samples
-        WHERE session_id = :sessionId AND user_id = :userId AND status != 'flagged'
+        WHERE session_id = :sessionId
+          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND status != 'flagged'
         ORDER BY timestamp DESC
         """,
     )
-    suspend fun getSamplesForSession(sessionId: String, userId: String): List<SampleEntity>
+    suspend fun getSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
     @Query(
         """
         SELECT * FROM samples
-        WHERE session_id = :sessionId AND user_id = :userId AND status = 'flagged'
+        WHERE session_id = :sessionId
+          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND status = 'flagged'
         ORDER BY timestamp DESC
         """,
     )
-    fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<SampleEntity>>
+    fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<SampleEntity>>
 
     @Query(
         """
         SELECT * FROM samples
-        WHERE session_id = :sessionId AND user_id = :userId AND status = 'flagged'
+        WHERE session_id = :sessionId
+          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND status = 'flagged'
         ORDER BY timestamp DESC
         """,
     )
-    suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String): List<SampleEntity>
+    suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
     @Query("UPDATE samples SET is_repeat = NOT is_repeat WHERE sample_id = :sampleId")
     suspend fun toggleIsRepeat(sampleId: String)
@@ -87,8 +95,15 @@ interface SampleDao {
     @Query("DELETE FROM samples WHERE sample_id = :sampleId")
     suspend fun deleteSample(sampleId: String)
 
-    @Query("DELETE FROM samples WHERE session_id = :sessionId AND user_id = :userId AND status = 'flagged'")
-    suspend fun deleteFlaggedSamplesForSession(sessionId: String, userId: String)
+    @Query(
+        """
+        DELETE FROM samples
+        WHERE session_id = :sessionId
+          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND status = 'flagged'
+        """,
+    )
+    suspend fun deleteFlaggedSamplesForSession(sessionId: String, userId: String?)
 
     @Query(
         """

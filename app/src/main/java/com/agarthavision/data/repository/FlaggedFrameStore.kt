@@ -64,7 +64,7 @@ class FlaggedFrameStore @Inject constructor(
     }
         .flatMapLatest { (userId, sessionState) ->
             val sessionId = (sessionState as? SessionState.Active)?.session?.sessionId
-            if (userId == null || sessionId == null) {
+            if (sessionId == null) {
                 flowOf(emptyList())
             } else {
                 sampleDao.observeFlaggedSamplesForSession(sessionId, userId)
@@ -91,7 +91,7 @@ class FlaggedFrameStore @Inject constructor(
     }
 
     suspend fun clear() {
-        val userId = authRepository.getCurrentUserId() ?: return
+        val userId = authRepository.getCurrentUserId()
         val sessionId = (sessionManager.state.value as? SessionState.Active)?.session?.sessionId
             ?: return
         val samples = sampleDao.getFlaggedSamplesForSession(sessionId, userId)
