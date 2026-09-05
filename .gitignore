@@ -23,6 +23,7 @@ app/release/
 node_modules/
 
 .env
+mcp.json
 *.keystore
 
 .DS_Store
