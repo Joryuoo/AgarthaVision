@@ -208,7 +208,6 @@
     <string name="nav_tab_home">Home</string>
     <string name="nav_tab_sessions">Sessions</string>
     <string name="nav_tab_records">Records</string>
-    <string name="nav_tab_badge_pending">%1$s, %2$d pending</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_section_account">Account</string>
