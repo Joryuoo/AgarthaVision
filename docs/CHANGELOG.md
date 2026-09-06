@@ -9,6 +9,50 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/build-optimization — cloud-only inference, bug fixes for validation · 2026-09-06
+
+Cut from `staging`. Carries forward the documentation shelf, the admin storage policy fix,
+the offline-access fixes and the tooling templates, and leaves on-device inference behind.
+
+**Mobile compute deferred.** An on-device TFLite path was built and benchmarked on a Redmi
+Note 11 over 14 real capture frames, 3 iterations, 42 frames per engine, 0 failures:
+
+- Device infer p50 **20,800 ms** (p95 21,804, max 29,389) against cloud end-to-end p50
+  **2,784 ms** — 7.5x slower, and 10x slower than the 2-second capture cadence the app
+  samples at. The GPU delegate never ran: TFLite built it, rejected the graph over a
+  dynamic-sized tensor, and fell back to XNNPACK CPU, so that is the CPU ceiling. The
+  exported artifact is 78 MB against the 40-45 MB the export README predicted.
+- 0.00% recall against cloud with **zero boxes matched** at IoU 0.5, while detection counts
+  agreed on 13 of 14 frames including the negative. That pattern is a coordinate-decode
+  fault, not a weak model — fixable, and irrelevant, because fixing geometry does not fix
+  21 seconds.
+
+The engine, selector, benchmark harness and Python export tooling are preserved on
+`feat/offline-inference`. Rationale and next steps are in the vault note
+`offline-inference-deferred.md`.
+
+**Kept from that branch, because neither needs TFLite:**
+
+- The domain inference abstraction — `domain/inference/` types, and `FlaggedFrame` now holds
+  domain `Prediction` values instead of the wire `PredictionDto`, so `domain/` no longer
+  imports a response type.
+- `RemoteInferenceEngine`, now the cloud call path. `InferFrameUseCase` routes through it
+  rather than reaching into `InferenceApi` itself (C1), transport errors go through
+  `NetworkErrorMapper`, and the container's `inference_ms` reaches the app so cloud compute
+  is separable from network time.
+
+**Also in this branch:**
+
+- Fixed: the Settings screen was unreachable — the route was registered but no tab or
+  affordance pointed at it. The bottom bar now carries a fourth tab, and tab labels moved
+  from hardcoded literals to `strings.xml`.
+- Fixed: C11 and `non-negotiables.md` claimed "no icon library" while
+  `material-icons-extended` has been a declared dependency and is used in four screens.
+- Fixed: `features.md` claimed the bottom bar shows on every screen but Login and Capture;
+  it is gated on `bottomBarRoutes`, so drill-downs hide it too.
+- Restored the ignore rules for model artifacts and capture fixtures, which had arrived with
+  the dropped on-device commits.
+
 ## Unreleased — documentation architecture · 2026-08-31
 
 Replaced the previous agent-documentation setup with a router plus a shelf.

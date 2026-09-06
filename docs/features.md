@@ -36,8 +36,12 @@ as working.
   `ImageCapture` use case (`core/camera/CameraManager.kt:42-78`).
 - **2-second frame sampling** with in-flight skip rather than queueing
   (`core/camera/FrameSampler.kt:36`, `:66-68`).
-- **Synchronous inference** against the self-hosted FastAPI container
-  (`data/remote/InferenceApi.kt:19-25`, `domain/usecase/capture/InferFrameUseCase.kt:29-57`).
+- **Synchronous inference** against the self-hosted FastAPI container, called through
+  `RemoteInferenceEngine` behind the `InferenceEngine` interface
+  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`,
+  `domain/usecase/capture/InferFrameUseCase.kt`). Cloud is the only backend: on-device TFLite
+  was built, benchmarked at 20.8 s per frame against a 2-second capture cadence, and deferred
+  to `feat/offline-inference`.
 - **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
   consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
   surface as `ui/capture/ConnectionLossBanner.kt`.

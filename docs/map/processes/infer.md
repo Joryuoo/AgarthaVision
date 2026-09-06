@@ -10,9 +10,16 @@ Asking the model what is in a frame.
 
 ## Movement
 
-1. **POST the raw bytes.** `InferFrameUseCase` wraps the JPEG as an `image/jpeg` request body
-   and calls `InferenceApi.infer` (`domain/usecase/capture/InferFrameUseCase.kt:29-36`). No
-   multipart, no base64 — the body *is* the image (`data/remote/InferenceApi.kt:23-24`).
+1. **POST the raw bytes.** `InferFrameUseCase` hands the JPEG to `RemoteInferenceEngine`
+   (`domain/usecase/capture/InferFrameUseCase.kt:31`), which wraps it as an `image/jpeg`
+   request body and calls `InferenceApi.infer` (`data/inference/RemoteInferenceEngine.kt:38-40`).
+   No multipart, no base64 — the body *is* the image (`data/remote/InferenceApi.kt:23-24`).
+   Transport failures route through `NetworkErrorMapper` rather than being wrapped by hand.
+
+   The engine sits behind the `InferenceEngine` interface (`domain/inference/InferenceEngine.kt`)
+   and is injected directly, not chosen: there is exactly one backend. An on-device TFLite
+   implementation was built and benchmarked, then deferred — 20.8 s per frame against a
+   2-second capture cadence. It lives on `feat/offline-inference`, not here.
 2. **Authenticate.** An OkHttp interceptor attaches
    `Authorization: Bearer <BuildConfig.INFERENCE_API_KEY>` to every request
    (`core/di/InferenceModule.kt:41-46`). The server compares it literally
@@ -26,16 +33,20 @@ Asking the model what is in a frame.
 4. **Apply no filter.** The server returns every box the model produced. There is no
    confidence threshold on either side; the human is the threshold
    (`../../constraints.md` C7).
-5. **Discard empties.** An empty `predictions` array returns early — no toast, no row, nothing
-   persisted (`domain/usecase/capture/InferFrameUseCase.kt:43-44`). Most frames end here.
-6. **Flag.** A non-empty response builds a `FlaggedFrame` carrying the JPEG, the predictions,
+5. **Discard empties.** An empty `predictions` list returns early — no toast, no row, nothing
+   persisted (`domain/usecase/capture/InferFrameUseCase.kt:34`). Most frames end here.
+6. **Flag.** A non-empty result builds a `FlaggedFrame` carrying the JPEG, the predictions,
    the model version, and the image dimensions, and adds it to the store
-   (`domain/usecase/capture/InferFrameUseCase.kt:46-56`).
+   (`domain/usecase/capture/InferFrameUseCase.kt:36-46`). The predictions are domain
+   `Prediction` values by this point, not the wire DTO — `RemoteInferenceEngine` maps them
+   (`data/inference/PredictionMapper.kt`), so nothing under `domain/` imports a response type.
 
 ## The contract
 
 `POST /infer` → `{ predictions: [{ class, confidence, x, y, width, height }],
-image: { width, height }, model_version }`. Client side that is
+image: { width, height }, model_version, inference_ms }`. `inference_ms` is the server's own
+compute time, optional so older containers still work; when absent the client books the whole
+round trip as network (`data/inference/RemoteInferenceEngine.kt:54`, `inference/server.py`). Client side that is
 `data/remote/dto/InferenceResponseDto.kt:11-29`; server side
 `inference/server.py:59-63`. The shape is intentionally Roboflow-compatible so the hosting
 backend can change without touching the mobile code — Roboflow itself is a dead path.
