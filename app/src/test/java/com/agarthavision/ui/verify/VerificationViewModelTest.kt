@@ -5,6 +5,7 @@ import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.util.MainDispatcherRule
@@ -65,6 +66,9 @@ class VerificationViewModelTest {
             predictions = preds,
         )
     }
+
+    private fun makeManualFrame(sampleId: String) =
+        makeIdentifiedFrame(sampleId).copy(source = FrameSource.MANUAL, predictions = emptyList())
 
     /** A frame with an explicit sample id, for assertions that turn on queue position. */
     private fun makeIdentifiedFrame(sampleId: String, predictions: Int = 1) = FlaggedFrame(
@@ -390,6 +394,47 @@ class VerificationViewModelTest {
 
             // Position still resolves: navigation matches on sampleId, not equality.
             assertEquals(1, vm.state.value.frameIndexInQueue)
+            assertEquals(1, vm.state.value.queueSize)
+        }
+
+    @Test
+    fun `frame cycling skips manual frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Manual captures belong to ManualSheet. The host picks a sheet from the frame
+            // it opened with and never re-evaluates, so paging onto a manual frame here
+            // would keep rendering the AI sheet against a frame with no detections.
+            val ai1 = makeIdentifiedFrame("ai-1")
+            val manual = makeManualFrame("manual-1")
+            val ai2 = makeIdentifiedFrame("ai-2")
+            storeState.value = listOf(ai1, manual, ai2)
+            val vm = viewModel()
+            vm.setFrame(ai1)
+            advanceUntilIdle()
+
+            // Two AI frames in the cycle, not three entries in the store.
+            assertEquals(2, vm.state.value.queueSize)
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(ai2, vm.state.value.frame)
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+            assertFalse(vm.state.value.canGoNext)
+        }
+
+    @Test
+    fun `queueSize counts only AI frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            storeState.value = listOf(
+                makeIdentifiedFrame("ai-1"),
+                makeManualFrame("manual-1"),
+                makeManualFrame("manual-2"),
+            )
+            val vm = viewModel()
+            vm.setFrame(makeIdentifiedFrame("ai-1"))
+            advanceUntilIdle()
+
             assertEquals(1, vm.state.value.queueSize)
         }
 }

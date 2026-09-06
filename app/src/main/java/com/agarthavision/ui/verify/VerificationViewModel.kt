@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -107,16 +108,30 @@ class VerificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
+                val cycle = frames.aiFrames()
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
-                        queueSize = frames.size,
-                        frameIndexInQueue = positionOf(frame, frames, current.frameIndexInQueue),
+                        queueSize = cycle.size,
+                        frameIndexInQueue = positionOf(frame, cycle, current.frameIndexInQueue),
                     )
                 }
             }
         }
     }
+
+    /**
+     * The frames this sheet cycles through: model detections only.
+     *
+     * Manual captures are reviewed in [ManualSheet], which asks a different set of
+     * questions, so paging onto one from here would render the wrong sheet — the host
+     * picks the sheet from the frame it was opened with and never re-evaluates.
+     */
+    private fun List<FlaggedFrame>.aiFrames(): List<FlaggedFrame> =
+        filter { it.source == FrameSource.MODEL }
+
+    /** The AI frames currently in the store, in queue order. */
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.aiFrames()
 
     /**
      * 1-based position of [frame] within [frames], or [fallback] when it cannot be
@@ -127,7 +142,7 @@ class VerificationViewModel @Inject constructor(
      */
     private fun positionOf(
         frame: FlaggedFrame?,
-        frames: List<FlaggedFrame> = flaggedFrameStore.state.value,
+        frames: List<FlaggedFrame> = cycleFrames(),
         fallback: Int,
     ): Int {
         if (frame == null) return fallback
@@ -209,7 +224,7 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onFramePrev() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
         val idx = frames.indexOfSample(current)
         if (idx <= 0) return
@@ -217,7 +232,7 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onFrameNext() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
         val idx = frames.indexOfSample(current)
         if (idx < 0 || idx >= frames.size - 1) return
@@ -225,7 +240,7 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onDeleteFrame() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
         val idx = frames.indexOfSample(current)
         // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
