@@ -27,7 +27,7 @@ app/
 └── src/
     ├── main/
     │   ├── AndroidManifest.xml    Permissions, single Activity, FileProvider for CSV sharing
-    │   ├── res/                   Icons (hand-built inline SVG drawables), strings, themes
+    │   ├── res/                   Icons (hand-built stroke drawables), strings, themes
     │   └── java/com/agarthavision/
     │       ├── MainActivity.kt · MainViewModel.kt · AgarthaVisionApp.kt
     │       ├── core/          Platform services. Everything Android-specific that is not UI
@@ -86,7 +86,7 @@ Contains no Android imports. Does import `data/` in eleven files — see `constr
 |---|---|
 | `navigation/` | `AgarthaNavGraph` — routes, start destination, bottom-bar visibility |
 | `theme/` | The design system. Raw hex exists here and nowhere else |
-| `components/` | Shared composables: buttons, badges, bottom bar, toast, detection overlay, microscopy viewport, glass modifiers, inline SVG icons |
+| `components/` | Shared composables: buttons, badges, bottom bar, toast, detection overlay, microscopy viewport, glass modifiers, hand-drawn icons |
 | `capture/` | The dark immersive capture screen and its connection-loss banner |
 | `verify/` | Verification queue, verification sheet, manual sheet, box overlay, species dropdown |
 | `records/` | Records list, session detail, sample detail, and their cards |

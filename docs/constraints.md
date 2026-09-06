@@ -162,8 +162,12 @@ One theme, two modes. CIT-U maroon + gold, Inter typography, tabular numerals, i
 binomials, 8-px spacing grid, radii `8 / 12 / 16 / 999`. Raw hex appears **only** in the
 palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather than
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
-immersive regardless of the toggle. No second theme, no charting library, no icon library:
-small dataviz and icons are hand-built inline SVG.
+immersive regardless of the toggle. No second theme and no charting library: small dataviz
+is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
+(`app/build.gradle.kts:115`) supplies utility glyphs inside screens (chevrons, back arrows,
+filter, flag), while the bottom bar, brand marks and anything read as house identity are
+hand-authored 1.7-stroke outline drawables in `res/drawable/`. Match the neighbours: a new
+tab or brand icon is drawn, a new in-screen affordance may come from Material.
 
 **Enforcement:** review only. The token definitions are the single source —
 `ui/theme/Color.kt`, `ui/theme/Palette.kt`, `ui/theme/Spacing.kt`, `ui/theme/Theme.kt`,

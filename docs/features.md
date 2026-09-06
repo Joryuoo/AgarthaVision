@@ -89,8 +89,11 @@ as working.
 ### Shell and appearance
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session
   Detail, Sample Detail, Settings (`ui/navigation/AgarthaNavGraph.kt:42-56`).
-- **Bottom tab bar** on every screen except Login and Capture
-  (`ui/components/AgarthaBottomBar.kt`).
+- **Bottom tab bar with four tabs** — Home, Sessions, Records, Settings
+  (`ui/components/AgarthaBottomBar.kt:46-57`). It shows on those four root destinations only;
+  `bottomBarRoutes` (`:63-68`) is the gate, checked in `AgarthaNavGraph`, so Login, Capture
+  and every drill-down hide it. Settings has no back button because it is a tab, not a
+  drill-down.
 - **Light/dark toggle** persisted in DataStore, with Capture exempt and always dark
   (`domain/usecase/settings/SetThemeModeUseCase.kt`, `ui/theme/Palette.kt`,
   `ui/theme/Theme.kt`).

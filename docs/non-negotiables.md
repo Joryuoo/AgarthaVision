@@ -32,7 +32,9 @@ The terse list. No explanation here — each line points at the constraint that 
 
 ## Design
 
-- **Never introduce a second theme, a charting library, or an icon library.** → C11
+- **Never introduce a second theme or a charting library.** → C11
+- **Never give the bottom bar or a brand mark a Material icon.** Those are hand-drawn
+  outline drawables; Material glyphs stay inside screens. → C11
 - **Never write a raw hex colour outside the palette definition file.** → C11
 - **Never hardcode user-facing text.** It goes in `strings.xml`. → C11
 

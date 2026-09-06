@@ -1,6 +1,7 @@
 package com.agarthavision.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -32,6 +33,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -43,15 +45,16 @@ import com.agarthavision.ui.theme.AgarthaTheme
 
 sealed class Tab(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     @DrawableRes val iconRes: Int
 ) {
-    data object Home     : Tab("dashboard", "Home",     R.drawable.ic_home)
-    data object Sessions : Tab("sessions",  "Sessions", R.drawable.ic_layers)
-    data object Records  : Tab("records",   "Records",  R.drawable.ic_chart)
+    data object Home     : Tab("dashboard", R.string.nav_tab_home,     R.drawable.ic_home)
+    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, R.drawable.ic_layers)
+    data object Records  : Tab("records",   R.string.nav_tab_records,  R.drawable.ic_chart)
+    data object Settings : Tab("settings",  R.string.settings_title,   R.drawable.ic_settings)
 }
 
-val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records)
+val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records, Tab.Settings)
 
 /**
  * Screens that should show the bottom bar.
@@ -60,7 +63,8 @@ val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records)
 val bottomBarRoutes: Set<String> = setOf(
     "dashboard",
     "sessions",
-    "records"
+    "records",
+    "settings"
 )
 
 /**
@@ -103,6 +107,12 @@ fun AgarthaBottomBar(
             ) {
             tabs.forEach { tab ->
                 val selected = currentRoute == tab.route
+                val label = stringResource(tab.labelRes)
+                val badgeDescription = if (tab is Tab.Sessions && verifyQueueCount > 0) {
+                    stringResource(R.string.nav_tab_badge_pending, label, verifyQueueCount)
+                } else {
+                    null
+                }
 
                 val iconColor by animateColorAsState(
                     targetValue = if (selected) colors.accent else colors.textTertiary,
@@ -126,9 +136,7 @@ fun AgarthaBottomBar(
                         )
                         .padding(vertical = 6.dp)
                         .semantics {
-                            if (tab is Tab.Sessions && verifyQueueCount > 0) {
-                                contentDescription = "Sessions, $verifyQueueCount pending"
-                            }
+                            badgeDescription?.let { contentDescription = it }
                         },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -136,7 +144,7 @@ fun AgarthaBottomBar(
                     Box {
                         Icon(
                             painter = painterResource(tab.iconRes),
-                            contentDescription = tab.label,
+                            contentDescription = label,
                             modifier = Modifier.size(22.dp),
                             tint = iconColor
                         )
@@ -145,7 +153,7 @@ fun AgarthaBottomBar(
                         }
                     }
                     Text(
-                        text = tab.label,
+                        text = label,
                         color = labelColor,
                         fontSize = 10.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
