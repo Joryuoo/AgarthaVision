@@ -275,10 +275,12 @@ fun CaptureScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.state
-            .map { it.flaggedFrames.firstOrNull()?.capturedAt }
+            // Keyed on the id, not capturedAt: two frames sharing a millisecond used to
+            // look like one arrival to distinctUntilChanged, and neither got a toast.
+            .map { it.flaggedFrames.firstOrNull()?.sampleId }
             .distinctUntilChanged()
-            .collect { capturedAt ->
-                if (capturedAt == null) return@collect
+            .collect { sampleId ->
+                if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
                 val message = if (frame.source == FrameSource.MODEL) {
