@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -373,10 +372,19 @@ fun CaptureScreen(
                 )
             }
 
-            // Balances the back button so the session pill stays centred. The verify
-            // queue shortcut used to sit here; the toast covered it, so it moved to
-            // the bottom-left slot.
-            Spacer(modifier = Modifier.width(40.dp))
+            // Records shortcut for the active session. Reuses ic_chart's bar geometry so
+            // it reads the same as the Records tab in the bottom bar.
+            Box(
+                modifier = Modifier.width(40.dp),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
+                )
+            }
         }
 
         // Connection loss banner positioned under the top chrome (77b5 spacing)
@@ -446,13 +454,16 @@ fun CaptureScreen(
             }
         }
 
-        // Detection toast (top-center so it never blocks the bottom chrome)
+        // Detection toast, below the back button and session pill rather than over them.
+        // Same band as ConnectionLossBanner, which cannot be showing at the same time:
+        // losing the connection stops recording, so no detections arrive.
         AgarthaToastHost(
             state = toastState,
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(top = 108.dp)
+                .padding(horizontal = 20.dp),
         )
     }
 
