@@ -420,37 +420,13 @@ private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
     if (confirmedEggs == 0) {
         Text("No confirmed eggs yet", fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     } else {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MetaItem(confirmedEggs.toString(), "confirmed")
-            DotSeparator()
-            MetaItem(speciesCount.toString(), "species")
-            DotSeparator()
-            MetaItem(samplesTotal.toString(), "samples")
-        }
-    }
-}
-
-@Composable
-private fun MetaItem(value: String, label: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textPrimary,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+        StatRun(
+            listOf(
+                Stat(confirmedEggs.toString(), "confirmed"),
+                Stat(speciesCount.toString(), "species"),
+                Stat(samplesTotal.toString(), "samples"),
+            )
         )
-        Spacer(Modifier.width(3.dp))
-        Text(label, fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     }
 }
 
-@Composable
-private fun DotSeparator() {
-    Text(
-        "·",
-        fontSize = 13.sp,
-        color = AgarthaTheme.colors.textTertiary,
-        modifier = Modifier.padding(horizontal = 7.dp),
-    )
-}

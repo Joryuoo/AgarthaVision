@@ -418,29 +418,12 @@ private fun RecordCard(
         HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 1.dp)
         Spacer(Modifier.height(10.dp))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            RecordStat(record.totalEpg.toString(), "eggs")
-            RecordStat(speciesCount, "species")
-            RecordStat(record.sampleCount.toString(), "samples")
-        }
-    }
-}
-
-@Composable
-private fun RecordStat(value: String, label: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            value,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = AgarthaTheme.colors.textPrimary,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(
-            label,
-            fontSize = 12.sp,
-            color = AgarthaTheme.colors.textSecondary,
+        StatRun(
+            listOf(
+                Stat(record.totalEpg.toString(), "eggs"),
+                Stat(speciesCount, "species"),
+                Stat(record.sampleCount.toString(), "samples"),
+            )
         )
     }
 }
