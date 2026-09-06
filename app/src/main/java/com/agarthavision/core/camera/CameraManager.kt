@@ -6,11 +6,18 @@ import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executor
 import javax.inject.Inject
@@ -25,12 +32,26 @@ import kotlin.coroutines.resumeWithException
  * [ImageAnalysis] — frames flow into the supplied [ImageAnalysis.Analyzer], which
  * the `FrameSampler` throttles to one frame every two seconds and dispatches to
  * `InferFrameUseCase`. There is no `ImageCapture` use case in Phase 1.
+ *
+ * Both use cases are pinned to the same 4:3 aspect-ratio strategy so they share one
+ * field of view. That is what lets the capture screen draw an honest boundary: what
+ * the preview shows is what the analyzer receives, and the frame posted for
+ * inference is the centred square of it (see `ImageProxy.toJpegBytes`).
  */
 @Singleton
 @Suppress("TooGenericExceptionCaught")
 class CameraManager @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
+
+    private val _previewAspectRatio = MutableStateFlow<Float?>(null)
+
+    /**
+     * Width / height of the bound preview stream **as displayed**, or null before the
+     * first successful bind. The capture boundary overlay needs this to work out where
+     * `PreviewView`'s letterboxed image actually sits inside the view.
+     */
+    val previewAspectRatio: StateFlow<Float?> = _previewAspectRatio.asStateFlow()
 
     /**
      * Binds the [Preview] + [ImageAnalysis] use cases to [lifecycleOwner].
@@ -51,14 +72,30 @@ class CameraManager @Inject constructor(
             try {
                 val provider = cameraProviderFuture.get()
 
-                val preview = Preview.Builder().build().apply {
-                    surfaceProvider = previewView.surfaceProvider
-                }
+                val preview = Preview.Builder()
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(FOUR_BY_THREE)
+                            .build(),
+                    )
+                    .build()
+                    .apply { surfaceProvider = previewView.surfaceProvider }
 
-                @Suppress("DEPRECATION") // setTargetResolution — Roboflow input dims
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setTargetResolution(Size(INFERENCE_INPUT_SIZE_PX, INFERENCE_INPUT_SIZE_PX))
+                    .setResolutionSelector(
+                        ResolutionSelector.Builder()
+                            .setAspectRatioStrategy(FOUR_BY_THREE)
+                            // CLOSEST_HIGHER_THEN_LOWER prefers a stream at or above the
+                            // model input size, so toJpegBytes only ever downscales.
+                            .setResolutionStrategy(
+                                ResolutionStrategy(
+                                    Size(CAPTURE_FRAME_SIZE_PX, CAPTURE_FRAME_SIZE_PX),
+                                    ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER,
+                                ),
+                            )
+                            .build(),
+                    )
                     .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
                     .build()
                     .apply { setAnalyzer(analyzerExecutor, analyzer) }
@@ -70,6 +107,7 @@ class CameraManager @Inject constructor(
                     preview,
                     imageAnalysis,
                 )
+                _previewAspectRatio.value = preview.resolutionInfo?.displayAspectRatio()
                 continuation.resume(camera)
             } catch (e: Exception) {
                 continuation.resumeWithException(e)
@@ -77,7 +115,22 @@ class CameraManager @Inject constructor(
         }, ContextCompat.getMainExecutor(context))
     }
 
+    /**
+     * Aspect ratio of this stream once its rotation is applied. A 640x480 buffer
+     * delivered with a 90-degree rotation is displayed 480x640, so the ratio flips.
+     */
+    private fun androidx.camera.core.ResolutionInfo.displayAspectRatio(): Float {
+        val swapped = rotationDegrees == QUARTER_TURN || rotationDegrees == THREE_QUARTER_TURN
+        val width = if (swapped) resolution.height else resolution.width
+        val height = if (swapped) resolution.width else resolution.height
+        return if (height == 0) 1f else width.toFloat() / height.toFloat()
+    }
+
     private companion object {
-        private const val INFERENCE_INPUT_SIZE_PX = 640
+        private val FOUR_BY_THREE = AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+
+        /** Rotations that swap a stream's width and height when displayed. */
+        private const val QUARTER_TURN = 90
+        private const val THREE_QUARTER_TURN = 270
     }
 }

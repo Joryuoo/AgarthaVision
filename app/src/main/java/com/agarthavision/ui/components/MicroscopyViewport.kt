@@ -8,12 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.ui.theme.AppColors
 
@@ -23,6 +25,11 @@ import com.agarthavision.ui.theme.AppColors
  * Binds [CameraManager.bindAnalysis] to the lifecycle and routes frames into the
  * supplied [analyzer] (typically the `FrameSampler` injected into the
  * `CaptureViewModel`). See CONTEXT.md.
+ *
+ * The preview uses `FIT_CENTER`, not `FILL_CENTER`: the analysed stream is wider
+ * than a phone screen, so filling would push part of what the model sees off the
+ * display and make [CaptureFrameBoundary] a lie. Fitting letterboxes against the
+ * dark backdrop instead, and every pixel the analyzer receives is on screen.
  */
 @Composable
 fun MicroscopyViewport(
@@ -37,11 +44,12 @@ fun MicroscopyViewport(
     val previewView = remember {
         PreviewView(context).apply {
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            scaleType = PreviewView.ScaleType.FILL_CENTER
+            scaleType = PreviewView.ScaleType.FIT_CENTER
         }
     }
 
     val cameraState = remember { mutableStateOf<Camera?>(null) }
+    val previewAspectRatio by cameraManager.previewAspectRatio.collectAsStateWithLifecycle()
 
     LaunchedEffect(cameraManager, analyzer) {
         val camera = cameraManager.bindAnalysis(
@@ -56,11 +64,17 @@ fun MicroscopyViewport(
     Box(
         modifier = modifier
             .fillMaxSize()
-            // Capture is dark tool mode — dark backdrop while the camera warms up.
+            // Capture is dark tool mode — dark backdrop while the camera warms up,
+            // and the letterbox bars either side of the fitted preview.
             .background(AppColors.Gray900),
     ) {
         AndroidView(
             factory = { previewView },
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        CaptureFrameBoundary(
+            previewAspectRatio = previewAspectRatio,
             modifier = Modifier.fillMaxSize(),
         )
     }
