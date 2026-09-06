@@ -33,7 +33,7 @@ as working.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
-  `ImageCapture` use case (`core/camera/CameraManager.kt:42-78`).
+  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`).
 - **2-second frame sampling** with in-flight skip rather than queueing
   (`core/camera/FrameSampler.kt:36`, `:66-68`).
 - **Synchronous inference** against the self-hosted FastAPI container, called through
@@ -57,8 +57,7 @@ as working.
   (`domain/usecase/verify/SubmitVerificationUseCase.kt:38`).
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
-- **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`,
-  `ui/components/DetectionOverlay.kt`).
+- **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
 - **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
@@ -85,10 +84,11 @@ as working.
   Row-only sync — the CSV file itself stays on the device
   (`domain/usecase/records/GenerateSessionReportUseCase.kt:37-97`,
   `data/supabase/SyncReportUseCase.kt:25-35`).
-- **CSV export** to the Downloads directory with a comment-prefixed header block, then shared
-  through `FileProvider` (`data/repository/DownloadsReportFileStore.kt:17-28`,
+- **CSV export** to `Documents/AgarthaVision/` with a comment-prefixed header block, then
+  shared from the generation snackbar or a report row
+  (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
-  `ui/records/SessionDetailScreen.kt:355-357`).
+  `ui/records/ReportSharing.kt:30-37`).
 
 ### Shell and appearance
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session

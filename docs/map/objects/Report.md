@@ -56,10 +56,11 @@ PK column is `report_id`. Differences:
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
-- **Looks like but is not** the CSV file. The file lives in the device Downloads directory
-  under a name built from the session and report ids
-  (`data/repository/DownloadsReportFileStore.kt:17-28`) and is shared through `FileProvider`.
-  `csv_file_path` is a pointer to it that no other device can resolve.
+- **Looks like but is not** the CSV file. The file lives in `Documents/AgarthaVision/` under a
+  name built from the session and report ids (`data/repository/DocumentsReportFileStore.kt:31-38`)
+  and is shared from `ui/records/ReportSharing.kt`. `csv_file_path` is a pointer to it that no
+  other device can resolve — and its shape depends on the API level the report was written on: a
+  MediaStore `content://` URI on 29+, an absolute path on 26-28.
 
 ## If you change this
 

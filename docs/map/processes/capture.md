@@ -11,13 +11,20 @@ Getting a frame off the microscope and into a state a human can review.
 ## Movement
 
 1. **Bind the camera.** `CaptureScreen` calls `CameraManager.bindAnalysis` with the
-   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:261`). Only `Preview` and
+   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:312`). Only `Preview` and
    `ImageAnalysis` are bound — there is **no `ImageCapture` use case**, so there is no shutter
-   anywhere in Phase 1 (`core/camera/CameraManager.kt:54-72`). Target resolution 640×640,
-   backpressure `KEEP_ONLY_LATEST` (`core/camera/CameraManager.kt:59-63`).
+   anywhere in Phase 1 (`core/camera/CameraManager.kt:63-116`). Both use cases are pinned to
+   the same 4:3 aspect-ratio strategy so they share one field of view; the analyzer asks for
+   640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which prefers a stream at or above
+   that size so the frame is only ever downscaled. Backpressure `KEEP_ONLY_LATEST`
+   (`core/camera/CameraManager.kt:84-101`).
 2. **Cache every frame.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG bytes and
    stores them in `latestFrameBytes` on *every* frame, before any throttling
    (`core/camera/FrameSampler.kt:57-62`). This cache is what manual capture snapshots.
+   `toJpegBytes` rotates by `imageInfo.rotationDegrees`, centre-crops to a square, then
+   downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
+   geometry. Cropping before scaling is what keeps the image from stretching. A device that
+   cannot supply 640 is encoded at its native square size rather than upscaled.
 3. **Gate on session state.** If the session is not `Active`, or inference is paused, the frame
    is dropped here (`core/camera/FrameSampler.kt:64`). Pausing is driven by
    `SessionManager.pauseInference()` whenever a sheet or child screen comes forward
@@ -65,6 +72,11 @@ nothing verified is deletable (`../../constraints.md` C8).
   second.
 - Changing the analysis resolution changes the coordinate space of every bounding box, since
   the server returns pixel coordinates.
+- Changing the crop, the aspect-ratio strategy, or `PreviewView.scaleType` breaks
+  `CaptureFrameBoundary`. The brackets it draws are only truthful because preview and analysis
+  share a field of view and the preview is `FIT_CENTER` — under `FILL_CENTER` the analysed
+  region is wider than the display and no on-screen box can mark it
+  (`ui/components/CaptureFrameBoundary.kt`, `ui/components/MicroscopyViewport.kt:46-49`).
 
 ## Does not hit
 

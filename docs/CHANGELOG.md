@@ -53,6 +53,30 @@ The engine, selector, benchmark harness and Python export tooling are preserved 
 - Restored the ignore rules for model artifacts and capture fixtures, which had arrived with
   the dropped on-device commits.
 
+**Field-test fixes · 2026-09-06.** Four issues from a session on real hardware, plus the two
+latent defects they exposed. Remaining findings are logged in the vault, not here.
+
+- Fixed: the verification sheet's frame counter was stuck at `1/144` while Next/Previous
+  changed the image underneath. `setFrame` never recomputed `frameIndexInQueue` — only the
+  store collector did, and paging does not make the store re-emit. Both paths now share one
+  helper, and the frame buttons dim at the ends of the queue.
+- Fixed: the toast rendered top-center over the verification queue button. That button and its
+  badge moved to the bottom-left slot, replacing a `FRAMES` pill that counted the same value.
+- Fixed: the JPEG posted for inference had device-dependent geometry, was never rotated out of
+  sensor orientation, and had no on-screen boundary. Preview and analysis now share a 4:3
+  field of view, frames are rotated, centre-cropped square and downscaled to a uniform 640,
+  and `CaptureFrameBoundary` marks the captured region. The preview moved to `FIT_CENTER`, so
+  it is no longer edge-to-edge — under `FILL_CENTER` the analysed region is wider than the
+  screen and no boundary could be honest.
+- Fixed: detection toasts were verbose, queued behind one another, and could not be dismissed.
+  Copy is now `{species} detected` through `EggSpecies.fromClassLabel`, they last 2s, a new one
+  replaces the old, and either swipe dismisses. Manual capture gained a toast at all.
+- Fixed: sharing a report meant leaving the app for a file manager. The generation snackbar
+  carries a `Share` action, and reports moved from the Downloads root to
+  `Documents/AgarthaVision/` — through `MediaStore` on API 29+, which is the only way to make
+  a folder in shared storage. `shareReportCsv` handles both the `content://` and path shapes
+  and now reports failures instead of returning silently.
+
 ## Unreleased — documentation architecture · 2026-08-31
 
 Replaced the previous agent-documentation setup with a router plus a shelf.

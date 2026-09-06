@@ -81,7 +81,7 @@ Documented shape: `schema.ts:298-335`.
 - The CSV, which emits `model_class`, `expert_class`, and `verdict` as separate columns.
 
 **Does not hit**
-- The overlay geometry. `DetectionOverlay` / `FrameWithBoxes` render from the live
+- The overlay geometry. `FrameWithBoxes` renders from the live
   `PredictionDto` during verification, not from persisted `DetectionEntity` rows — changing the
   entity's box columns does not change what the medtech sees while verifying.
 - Sample-level state. `needs_reannotation` is a *frame*-level answer set on the sample

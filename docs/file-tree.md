@@ -86,7 +86,7 @@ Contains no Android imports. Does import `data/` in eleven files — see `constr
 |---|---|
 | `navigation/` | `AgarthaNavGraph` — routes, start destination, bottom-bar visibility |
 | `theme/` | The design system. Raw hex exists here and nowhere else |
-| `components/` | Shared composables: buttons, badges, bottom bar, toast, detection overlay, microscopy viewport, glass modifiers, hand-drawn icons |
+| `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, hand-drawn icons |
 | `capture/` | The dark immersive capture screen and its connection-loss banner |
 | `verify/` | Verification queue, verification sheet, manual sheet, box overlay, species dropdown |
 | `records/` | Records list, session detail, sample detail, and their cards |

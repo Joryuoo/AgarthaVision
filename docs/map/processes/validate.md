@@ -19,7 +19,7 @@ The human-in-the-loop gate. Nothing counts until this runs.
    short-circuits the rest — `isComplete` encodes exactly which questions still matter
    (`VerificationAnswers.kt:11-20`).
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
-   `needs_reannotation` (`ui/verify/VerificationViewModel.kt:171`).
+   `needs_reannotation` (`ui/verify/VerificationViewModel.kt:194`).
 4. **Compute the verdict.** One function, first-match-wins:
    not an egg → `FALSE_POSITIVE`; box wrong → `BOX_INCORRECT`; species is `OTHER` or differs
    from the model's → `WRONG_CLASS`; otherwise `CONFIRMED`
@@ -27,7 +27,7 @@ The human-in-the-loop gate. Nothing counts until this runs.
    rule.** Note a null species also yields `FALSE_POSITIVE`
    (`VerificationMapper.kt:13`).
 5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and dismisses on success
-   (`ui/verify/VerificationViewModel.kt:225-250`).
+   (`ui/verify/VerificationViewModel.kt:248-273`).
 6. **Update the sample.** One UPDATE sets `status = verified`, `verified_at`,
    `needs_reannotation`, the note, the repeat flag, GPS — and **nulls `predictions_json`**,
    because the cache's job is done (`domain/usecase/verify/SubmitVerificationUseCase.kt:34-44`,
