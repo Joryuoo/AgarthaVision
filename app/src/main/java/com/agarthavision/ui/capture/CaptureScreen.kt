@@ -147,6 +147,53 @@ private fun IconButtonGlass(
     }
 }
 
+/**
+ * Shortcut into the verification queue, with a badge counting the frames still
+ * awaiting review. Lives in the bottom-left of the capture chrome: the toast
+ * renders top-center and used to sit on top of this button.
+ */
+@Composable
+private fun VerificationQueueButton(
+    count: Int,
+    onClick: () -> Unit,
+) {
+    Box {
+        IconButtonGlass(
+            "M9 12l2 2 4-4",
+            drawExtras = {
+                drawRoundRect(
+                    Color.White,
+                    Offset(3f, 3f),
+                    Size(18f, 18f),
+                    CornerRadius(2f, 2f),
+                    style = Stroke(1.6f),
+                )
+            },
+            onClick = onClick,
+        )
+
+        if (count > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 6.dp, y = (-6).dp)
+                    .background(AppColors.MaroonBright, CircleShape)
+                    .border(2.dp, Color(28, 18, 16, (0.85f * 255).toInt()), CircleShape)
+                    .padding(horizontal = 5.dp)
+                    .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "$count",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
 // Top-level screen composable wired directly from AgarthaNavGraph's single Capture destination
 // (viewModel, camera deps, and 5 distinct navigation callbacks); each param is independently
 // meaningful and bundling would only wrap a single-call-site composable, not simplify anything.
@@ -318,48 +365,10 @@ fun CaptureScreen(
                 )
             }
 
-            // Top-right: Verify Queue (kept from 77b5; records/reports shortcuts removed)
-            Box(
-                modifier = Modifier.width(40.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Box {
-                    IconButtonGlass(
-                        "M9 12l2 2 4-4",
-                        drawExtras = {
-                            drawRoundRect(
-                                Color.White,
-                                Offset(3f, 3f),
-                                Size(18f, 18f),
-                                CornerRadius(2f, 2f),
-                                style = Stroke(1.6f),
-                            )
-                        },
-                        onClick = onVerifyQueueClick,
-                    )
-
-                    val verifyCount = state.flaggedFrames.size
-                    if (verifyCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 6.dp, y = (-6).dp)
-                                .background(AppColors.MaroonBright, CircleShape)
-                                .border(2.dp, Color(28, 18, 16, (0.85f * 255).toInt()), CircleShape)
-                                .padding(horizontal = 5.dp)
-                                .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                "$verifyCount",
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
-            }
+            // Balances the back button so the session pill stays centred. The verify
+            // queue shortcut used to sit here; the toast covered it, so it moved to
+            // the bottom-left slot.
+            Spacer(modifier = Modifier.width(40.dp))
         }
 
         // Connection loss banner positioned under the top chrome (77b5 spacing)
@@ -383,35 +392,17 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: frame count pill
+            // Left: verification queue shortcut. Its badge already counts the
+            // unverified frames, so the separate FRAMES pill that used to sit here
+            // was redundant.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                Column(
-                    modifier = Modifier
-                        .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .background(Color(28, 20, 18, (0.55f * 255).toInt()), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .defaultMinSize(minWidth = 64.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        "FRAMES",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.55f),
-                        letterSpacing = 1.2.sp,
-                    )
-                    Text(
-                        "${state.flaggedFrames.size}",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        letterSpacing = (-0.15).sp,
-                    )
-                }
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
+                )
             }
 
             // Center: shutter
