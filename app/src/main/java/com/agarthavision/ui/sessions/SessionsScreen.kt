@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -292,15 +293,35 @@ private fun SessionCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isActive) {
+                // Frames still to review, repeats excluded — the same count that blocks
+                // ending the session, so this row and that dialog always agree.
+                val unverified = sessionData.unverifiedSamples
                 Row(
                     modifier = Modifier
-                        .background(colors.accent, CircleShape)
+                        .background(
+                            if (unverified > 0) colors.accent else colors.surfaceMuted,
+                            CircleShape,
+                        )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    LiveDot()
-                    Text("Active", color = colors.onAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    if (unverified > 0) LiveDot()
+                    Text(
+                        // English has no `zero` plural, so 0 needs its own string.
+                        text = if (unverified == 0) {
+                            stringResource(R.string.session_all_verified)
+                        } else {
+                            pluralStringResource(
+                                R.plurals.session_unverified_count,
+                                unverified,
+                                unverified,
+                            )
+                        },
+                        color = if (unverified > 0) colors.onAccent else colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
 
             } else {

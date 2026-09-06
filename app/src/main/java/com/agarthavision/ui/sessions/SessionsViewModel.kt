@@ -62,7 +62,7 @@ class SessionsViewModel @Inject constructor(
             .flatMapLatest { userId ->
                 val sessionsFlow = if (userId == null) {
                     sessionRepository.observeVisibleSessions(null)
-                        .map { sessions -> sessions.map { SessionWithStats(it, 0, 0, 0) } }
+                        .map { sessions -> sessions.map { SessionWithStats(it, 0, 0, 0, 0) } }
                 } else {
                     val since = Instant.now().minus(Duration.ofDays(RECENT_WINDOW_DAYS)).toEpochMilli()
                     sessionRepository.observeSessionsWithStats(userId, since)

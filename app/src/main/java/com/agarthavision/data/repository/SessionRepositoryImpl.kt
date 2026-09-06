@@ -30,6 +30,7 @@ class SessionRepositoryImpl @Inject constructor(
                     session = item.session.toDomain(),
                     totalSamples = item.totalSamples,
                     verifiedSamples = item.verifiedSamples,
+                    unverifiedSamples = item.unverifiedSamples,
                     totalEpg = item.totalEpg
                 )
             }
