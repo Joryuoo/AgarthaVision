@@ -133,7 +133,12 @@ private fun VerificationSheetContent(
     ) {
         ScreenTopBar(
             title = "Verify detection",
-            metaText = "Frame ${state.frameIndexInQueue}/${state.queueSize} · $timeLabel",
+            metaText = stringResource(
+                R.string.verify_frame_meta,
+                state.frameIndexInQueue,
+                state.queueSize,
+                timeLabel,
+            ),
             onBack = actions.onCancel,
             actions = {
                 // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)
@@ -168,8 +173,20 @@ private fun VerificationSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                SmallToggle("Previous frame", false, actions.onFramePrev, Modifier.weight(1f))
-                SmallToggle("Next frame", false, actions.onFrameNext, Modifier.weight(1f))
+                SmallToggle(
+                    label = stringResource(R.string.verify_prev_frame),
+                    selected = false,
+                    onClick = actions.onFramePrev,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoPrev,
+                )
+                SmallToggle(
+                    label = stringResource(R.string.verify_next_frame),
+                    selected = false,
+                    onClick = actions.onFrameNext,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoNext,
+                )
             }
 
             FrameWithBoxes(
@@ -413,31 +430,43 @@ private fun <T> QuestionSection(
     }
 }
 
+/**
+ * Compact pill button. When [enabled] is false it dims and stops accepting taps —
+ * used to show the ends of the verification queue.
+ */
 @Composable
 private fun SmallToggle(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
+    val borderColor = when {
+        !enabled -> AgarthaTheme.colors.border
+        selected -> AgarthaTheme.colors.accent
+        else -> AgarthaTheme.colors.borderStrong
+    }
+    val labelColor = when {
+        !enabled -> AgarthaTheme.colors.textTertiary
+        selected -> AgarthaTheme.colors.accent
+        else -> AgarthaTheme.colors.textSecondary
+    }
+
     Box(
         modifier = modifier
             .background(
-                if (selected) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
+                if (selected && enabled) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
                 RoundedCornerShape(10.dp)
             )
-            .border(
-                1.dp,
-                if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
-                RoundedCornerShape(10.dp)
-            )
-            .clickable(onClick = onClick)
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            color = if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
+            color = labelColor,
             fontSize = 12.sp,
             fontWeight = FontWeight.SemiBold,
         )

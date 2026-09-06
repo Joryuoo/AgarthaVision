@@ -64,6 +64,20 @@ class VerificationViewModelTest {
         )
     }
 
+    /**
+     * Frames that are genuinely distinct. [makeFrameWithId] varies only `capturedAt`,
+     * but `FlaggedFrame.equals`/`hashCode` compare `sampleId` alone
+     * (`domain/model/FlaggedFrame.kt:18-20`), so those frames all compare equal and
+     * any `indexOf` against them returns 0. Position assertions need a real id.
+     */
+    private fun makeIdentifiedFrame(sampleId: String, predictions: Int = 1) = FlaggedFrame(
+        sampleId = sampleId,
+        sessionId = "session-1",
+        capturedAt = Instant.EPOCH,
+        jpegBytes = ByteArray(4),
+        predictions = List(predictions) { Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f) },
+    )
+
     @Test
     fun `setFrame initialises answers list matching prediction count`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
@@ -285,5 +299,76 @@ class VerificationViewModelTest {
                 assertEquals(VerificationEvent.Dismiss, awaitItem())
             }
             verify(flaggedFrameStore).remove(onlyFrame)
+        }
+
+    @Test
+    fun `frameIndexInQueue advances with onFrameNext`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `frameIndexInQueue retreats with onFramePrev`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[2])
+            advanceUntilIdle()
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+
+            vm.onFramePrev()
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `canGoPrev is false on the first frame and canGoNext false on the last`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+            assertFalse(vm.state.value.canGoPrev)
+            assertTrue(vm.state.value.canGoNext)
+
+            vm.setFrame(frames[1])
+            advanceUntilIdle()
+            assertTrue(vm.state.value.canGoPrev)
+            assertFalse(vm.state.value.canGoNext)
+        }
+
+    @Test
+    fun `setFrame recomputes position without waiting for a store emission`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The regression: only the init collector used to write frameIndexInQueue, so
+            // paging the queue left the counter pinned to whatever the last emission saw.
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+
+            // No further store emission from here on.
+            vm.setFrame(frames[2])
+            advanceUntilIdle()
+
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+            assertEquals(3, vm.state.value.queueSize)
         }
 }

@@ -54,6 +54,14 @@ data class VerificationUiState(
 ) {
     val canSubmit: Boolean
         get() = answers.isNotEmpty() && answers.all { it.isComplete } && !isSubmitting
+
+    /** False on the first frame of the queue, or when the position is unknown. */
+    val canGoPrev: Boolean
+        get() = frameIndexInQueue > 1
+
+    /** False on the last frame of the queue, or when the position is unknown. */
+    val canGoNext: Boolean
+        get() = frameIndexInQueue in 1 until queueSize
 }
 
 sealed interface VerificationEvent {
@@ -103,14 +111,28 @@ class VerificationViewModel @Inject constructor(
                 _state.update { current ->
                     current.copy(
                         queueSize = frames.size,
-                        frameIndexInQueue = if (frame != null) {
-                            val idx = frames.indexOf(frame)
-                            if (idx >= 0) idx + 1 else current.frameIndexInQueue
-                        } else current.frameIndexInQueue,
+                        frameIndexInQueue = positionOf(frame, frames, current.frameIndexInQueue),
                     )
                 }
             }
         }
+    }
+
+    /**
+     * 1-based position of [frame] within [frames], or [fallback] when it cannot be
+     * located (no current frame, or a frame the store no longer holds).
+     *
+     * Both [setFrame] and the store collector route through this so the counter and
+     * the displayed frame cannot drift apart.
+     */
+    private fun positionOf(
+        frame: FlaggedFrame?,
+        frames: List<FlaggedFrame> = flaggedFrameStore.state.value,
+        fallback: Int,
+    ): Int {
+        if (frame == null) return fallback
+        val index = frames.indexOf(frame)
+        return if (index >= 0) index + 1 else fallback
     }
 
     fun setFrame(frame: FlaggedFrame) {
@@ -119,6 +141,7 @@ class VerificationViewModel @Inject constructor(
             it.copy(
                 isVisible = true,
                 frame = frame,
+                frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
                 answers = List(frame.predictions.size) { VerificationAnswers() },
                 missedEgg = null,
