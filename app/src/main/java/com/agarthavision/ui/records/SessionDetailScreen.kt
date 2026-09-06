@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -166,6 +168,9 @@ fun SessionDetailScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = AgarthaTheme.colors.background,
+        // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
+        // its own. Without this the app bar draws under the status bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         val contentState = SessionDetailContentState(
             session = sessionDetail,
@@ -240,6 +245,7 @@ private fun SessionDetailAppBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.background)
+            .statusBarsPadding()
             .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
     ) {
         IconButton(onClick = onBack) {
