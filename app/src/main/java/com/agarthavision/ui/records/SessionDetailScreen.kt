@@ -161,9 +161,7 @@ fun SessionDetailScreen(
                 } else {
                     "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
                 },
-                isGenerating = state.isGenerating,
                 onBack = onBack,
-                onGenerateReport = viewModel::generateReport,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -235,9 +233,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
 private fun SessionDetailAppBar(
     title: String,
     subtitle: String,
-    isGenerating: Boolean,
     onBack: () -> Unit,
-    onGenerateReport: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
     Row(
@@ -265,14 +261,6 @@ private fun SessionDetailAppBar(
                 color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        IconButton(onClick = onGenerateReport, enabled = !isGenerating) {
-            Icon(
-                painter = painterResource(R.drawable.ic_download),
-                contentDescription = stringResource(R.string.report_generate),
-                tint = if (isGenerating) colors.textTertiary else colors.textSecondary,
-                modifier = Modifier.size(22.dp),
             )
         }
     }

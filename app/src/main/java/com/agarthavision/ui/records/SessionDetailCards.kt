@@ -83,11 +83,10 @@ internal fun ReportsSection(
                     color = AgarthaTheme.colors.textSecondary,
                 )
             }
-            SmallActionPill(
-                label = stringResource(if (isGenerating) R.string.report_generating else R.string.report_generate),
-                enabled = !isGenerating,
-                onClick = onGenerate,
-            )
+            // Icon rather than a label: the text pill fought the subtitle for width and
+            // lost its shape. The app bar's duplicate download button is gone, so this is
+            // now the only way to generate from here.
+            GenerateReportButton(isGenerating = isGenerating, onClick = onGenerate)
         }
 
         reports.take(3).forEach { report ->
@@ -149,19 +148,26 @@ private fun ReportStatusPill(status: ReportSyncStatus) {
 }
 
 @Composable
-private fun SmallActionPill(
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
+private fun GenerateReportButton(isGenerating: Boolean, onClick: () -> Unit) {
     val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
-            .background(if (enabled) colors.accent else colors.borderStrong, RoundedCornerShape(999.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
+            .size(34.dp)
+            .background(
+                if (isGenerating) colors.borderStrong else colors.accent,
+                RoundedCornerShape(999.dp),
+            )
+            .clickable(enabled = !isGenerating, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(label, color = colors.onAccent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Icon(
+            painter = painterResource(R.drawable.ic_download),
+            contentDescription = stringResource(
+                if (isGenerating) R.string.report_generating else R.string.report_generate
+            ),
+            tint = colors.onAccent,
+            modifier = Modifier.size(17.dp),
+        )
     }
 }
 

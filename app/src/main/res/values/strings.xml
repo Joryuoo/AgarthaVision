@@ -139,7 +139,7 @@
     <string name="report_section_title">Reports</string>
     <string name="report_generate">Generate Report</string>
     <string name="report_generating">Generating…</string>
-    <string name="report_empty">No reports yet. Tap Generate Report to create one.</string>
+    <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
     <string name="report_status_failed">Sync failed</string>
