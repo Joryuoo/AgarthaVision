@@ -209,7 +209,7 @@ fun VerificationQueueScreen(
             ) {
                 items(
                     items = filteredFrames,
-                    key = { frame -> frame.capturedAt.toEpochMilli() }
+                    key = { frame -> frame.sampleId }
                 ) { frame ->
                     FrameRow(
                         frame = frame,
