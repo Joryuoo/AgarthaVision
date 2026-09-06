@@ -11,7 +11,7 @@ as working.
   provisioned in the Supabase dashboard. `ui/login/LoginScreen.kt`,
   `domain/usecase/auth/SignInUseCase.kt`, `data/repository/SupabaseAuthRepository.kt:54-60`.
 - **Offline-first entry.** The app opens on the Dashboard, not Login
-  (`ui/navigation/AgarthaNavGraph.kt:121`). Login is an explicit destination reached from the
+  (`ui/navigation/AgarthaNavGraph.kt:120`). Login is an explicit destination reached from the
   account banner, and is required only to enable cloud upload.
 - **Cached local identity.** The signed-in user id, email, and display name are cached in
   DataStore so offline work is attributed to the last medtech
@@ -58,7 +58,8 @@ as working.
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
-- **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced
+- **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced,
+  and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
 
@@ -94,7 +95,7 @@ as working.
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session
   Detail, Sample Detail, Settings (`ui/navigation/AgarthaNavGraph.kt:42-56`).
 - **Bottom tab bar with four tabs** — Home, Sessions, Records, Settings
-  (`ui/components/AgarthaBottomBar.kt:46-57`). It shows on those four root destinations only;
+  (`ui/components/AgarthaBottomBar.kt:44-55`). It shows on those four root destinations only;
   `bottomBarRoutes` (`:63-68`) is the gate, checked in `AgarthaNavGraph`, so Login, Capture
   and every drill-down hide it. Settings has no back button because it is a tab, not a
   drill-down.

@@ -77,6 +77,49 @@ latent defects they exposed. Remaining findings are logged in the vault, not her
   a folder in shared storage. `shareReportCsv` handles both the `content://` and path shapes
   and now reports failures instead of returning silently.
 
+**Second defect pass · 2026-09-07.** Six latent defects found while fixing the field-test
+issues, plus ten items from a second round of testing.
+
+*Correctness.*
+
+- Fixed: marking a frame as repeat left the verification queue's Repeat filter and chip counts
+  stale. `FlaggedFrame.equals` compared `sampleId` alone, so the Room re-emission compared equal
+  to the list already held and `StateFlow` conflated it away. Equality now covers every property
+  except `jpegBytes`, which must stay out — the store re-reads the JPEG from disk on each
+  emission, so array reference equality would make a frame unequal to itself. Both sheets moved
+  their `LaunchedEffect` key to `sampleId` in the same change: widening equality alone would have
+  re-seeded the sheet on every emission and wiped in-progress answers.
+- Fixed: the queue list keyed rows by `capturedAt` millis, so two frames captured in the same
+  millisecond crashed it. Keyed by `sampleId` now.
+- Fixed: the capture toast keyed on `capturedAt` too, so two frames sharing a millisecond
+  produced no toast at all.
+- Fixed: frame analysis ran on the main thread. `FrameSampler` JPEG-encodes every frame before
+  throttling, and the capture-boundary work had made that heavier.
+- Changed: repeat frames no longer block ending a session. Only unverified, non-repeat frames do.
+
+*Frame cycling.*
+
+- Fixed: Next/Previous walked the whole store, so paging from a detection could land on a manual
+  capture while the AI sheet kept rendering. Each sheet now cycles its own source only.
+- Added: the manual sheet gained the navigation the AI sheet always had — prev/next, a position
+  readout, and delete advancing to a neighbour. `ManualCaptureViewModel` had no tests; it has six.
+
+*Interface.*
+
+- Changed: the capture toast moved below the top chrome instead of over it, and the vacated
+  top-right slot became a Records shortcut to the active session.
+- Removed: the session row kebab menu. Its export item was a stub, but note that link/unlink
+  account and end-session-from-the-list had no other entry point and are now unreachable.
+- Changed: session rows show unverified frame counts — repeats excluded, matching the
+  end-of-session check — in place of the Active badge.
+- Removed: the bottom bar's Sessions badge, which the nav graph had always passed 0.
+- Fixed: the record and settings screens drew under the status bar. One cause — the root graph
+  zeroes `contentWindowInsets` app-wide and those two screens never applied their own.
+- Fixed: settings used a Switch for the theme while the dashboard used a sun/moon button; the
+  empty report state showed two identical generate affordances and a subtitle that squeezed the
+  pill out of shape; the two record screens each had their own stat-run composable; back was
+  rendered six different ways; and sample detail's label rows had no left padding.
+
 ## Unreleased — documentation architecture · 2026-08-31
 
 Replaced the previous agent-documentation setup with a router plus a shelf.
@@ -109,7 +152,7 @@ detekt run.
 The largest behavioural change in the project's history.
 
 - The app now opens on the Dashboard; the login wall is gone
-  (`ui/navigation/AgarthaNavGraph.kt:121`).
+  (`ui/navigation/AgarthaNavGraph.kt:120`).
 - Sessions, manual captures, and verification work fully offline; a cached `LocalIdentity`
   attributes offline work to the last signed-in medtech.
 - Unowned rows are claimed at the next login, cascading sessions → samples → reports, followed

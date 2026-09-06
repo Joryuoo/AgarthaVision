@@ -13,13 +13,17 @@ The human-in-the-loop gate. Nothing counts until this runs.
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`).
+   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). Each sheet pages only through
+   its own source: the AI sheet cycles `FrameSource.MODEL` frames, the manual sheet cycles
+   `FrameSource.MANUAL`, and `Frame n/N` counts that subset rather than the whole queue. The
+   host picks a sheet from the frame it opened with and never re-evaluates, so crossing
+   between the two would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
    which species (`domain/usecase/verify/VerificationAnswers.kt:5-20`). A "no" at any step
    short-circuits the rest — `isComplete` encodes exactly which questions still matter
    (`VerificationAnswers.kt:11-20`).
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
-   `needs_reannotation` (`ui/verify/VerificationViewModel.kt:194`).
+   `needs_reannotation` (`ui/verify/VerificationViewModel.kt:209`).
 4. **Compute the verdict.** One function, first-match-wins:
    not an egg → `FALSE_POSITIVE`; box wrong → `BOX_INCORRECT`; species is `OTHER` or differs
    from the model's → `WRONG_CLASS`; otherwise `CONFIRMED`
@@ -27,7 +31,7 @@ The human-in-the-loop gate. Nothing counts until this runs.
    rule.** Note a null species also yields `FALSE_POSITIVE`
    (`VerificationMapper.kt:13`).
 5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and dismisses on success
-   (`ui/verify/VerificationViewModel.kt:248-273`).
+   (`ui/verify/VerificationViewModel.kt:263-288`).
 6. **Update the sample.** One UPDATE sets `status = verified`, `verified_at`,
    `needs_reannotation`, the note, the repeat flag, GPS — and **nulls `predictions_json`**,
    because the cache's job is done (`domain/usecase/verify/SubmitVerificationUseCase.kt:34-44`,
@@ -44,7 +48,8 @@ The human-in-the-loop gate. Nothing counts until this runs.
 
 ## Movement — manual captures
 
-Same destination, shorter path. `SubmitManualCaptureUseCase` requires a species, resolves the
+Same destination, shorter path, and since this pass the manual sheet pages its queue the same
+way the AI sheet does. `SubmitManualCaptureUseCase` requires a species, resolves the
 label (canonical name, or free text for `OTHER`), and writes **one** detection with
 `confidence = 1.0f`, all four box columns null, `verdict = CONFIRMED`, and `expert_class` set to
 the same label (`domain/usecase/verify/SubmitManualCaptureUseCase.kt:34-72`). It sets

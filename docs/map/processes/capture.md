@@ -11,7 +11,7 @@ Getting a frame off the microscope and into a state a human can review.
 ## Movement
 
 1. **Bind the camera.** `CaptureScreen` calls `CameraManager.bindAnalysis` with the
-   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:312`). Only `Preview` and
+   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:313`). Only `Preview` and
    `ImageAnalysis` are bound — there is **no `ImageCapture` use case**, so there is no shutter
    anywhere in Phase 1 (`core/camera/CameraManager.kt:63-116`). Both use cases are pinned to
    the same 4:3 aspect-ratio strategy so they share one field of view; the analyzer asks for
@@ -20,7 +20,9 @@ Getting a frame off the microscope and into a state a human can review.
    (`core/camera/CameraManager.kt:84-101`).
 2. **Cache every frame.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG bytes and
    stores them in `latestFrameBytes` on *every* frame, before any throttling
-   (`core/camera/FrameSampler.kt:57-62`). This cache is what manual capture snapshots.
+   (`core/camera/FrameSampler.kt:57-62`). This cache is what manual capture snapshots. It runs
+   on a single background thread owned by `CameraManager`, not the main one — encoding every
+   frame on the UI thread was visible as preview jank.
    `toJpegBytes` rotates by `imageInfo.rotationDegrees`, centre-crops to a square, then
    downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
    geometry. Cropping before scaling is what keeps the image from stretching. A device that
