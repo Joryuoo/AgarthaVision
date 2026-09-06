@@ -142,3 +142,46 @@ fun SheetActionRow(state: SheetActionRowState) {
         }
     }
 }
+
+/**
+ * Compact pill button. When [enabled] is false it dims and stops accepting taps —
+ * used to show the ends of the verification queue.
+ */
+@Composable
+internal fun SmallToggle(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    val borderColor = when {
+        !enabled -> AgarthaTheme.colors.border
+        selected -> AgarthaTheme.colors.accent
+        else -> AgarthaTheme.colors.borderStrong
+    }
+    val labelColor = when {
+        !enabled -> AgarthaTheme.colors.textTertiary
+        selected -> AgarthaTheme.colors.accent
+        else -> AgarthaTheme.colors.textSecondary
+    }
+
+    Box(
+        modifier = modifier
+            .background(
+                if (selected && enabled) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
+                RoundedCornerShape(10.dp)
+            )
+            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            color = labelColor,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}

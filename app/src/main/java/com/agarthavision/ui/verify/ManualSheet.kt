@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +57,8 @@ import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.components.glassChrome
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun ManualSheet(
@@ -94,7 +98,8 @@ fun ManualSheet(
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
-                onToggleRepeat = viewModel::onToggleRepeat,
+                onFramePrev = viewModel::onFramePrev,
+                onFrameNext = viewModel::onFrameNext,
                 onDeleteFrame = viewModel::onDeleteFrame,
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
@@ -107,7 +112,8 @@ private data class ManualSheetActions(
     val onSpeciesSelected: (EggSpecies) -> Unit,
     val onOtherSpeciesChanged: (String) -> Unit,
     val onUserNoteChanged: (String) -> Unit,
-    val onToggleRepeat: () -> Unit,
+    val onFramePrev: () -> Unit,
+    val onFrameNext: () -> Unit,
     val onDeleteFrame: () -> Unit,
     val onSubmit: () -> Unit,
     val onCancel: () -> Unit,
@@ -131,13 +137,45 @@ private fun ManualSheetContent(
             .padding(bottom = 32.dp)
             .verticalScroll(rememberScrollState()),
     ) {
+        val timeLabel = remember(frame.capturedAt) {
+            DateTimeFormatter.ofPattern("HH:mm:ss")
+                .withZone(ZoneId.systemDefault())
+                .format(frame.capturedAt)
+        }
+
         ScreenTopBar(
             title = "Label sample",
-            metaText = "MANUAL · ${frame.capturedAt.toEpochMilli().toString().takeLast(3)}",
+            metaText = stringResource(
+                R.string.manual_frame_meta,
+                state.frameIndexInQueue,
+                state.queueSize,
+                timeLabel,
+            ),
             onBack = actions.onCancel
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
+
+            // Cycles manual captures only — model detections need the other sheet.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            ) {
+                SmallToggle(
+                    label = stringResource(R.string.verify_prev_frame),
+                    selected = false,
+                    onClick = actions.onFramePrev,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoPrev,
+                )
+                SmallToggle(
+                    label = stringResource(R.string.verify_next_frame),
+                    selected = false,
+                    onClick = actions.onFrameNext,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoNext,
+                )
+            }
 
             // Image preview
             Box(
