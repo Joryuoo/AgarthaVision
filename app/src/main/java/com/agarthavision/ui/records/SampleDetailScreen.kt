@@ -555,7 +555,7 @@ fun DetailRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(end = 16.dp, top = 12.dp, bottom = 12.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -583,6 +583,10 @@ fun DetailRow(
         )
     }
     if (!isLast) {
-        HorizontalDivider(thickness = 0.5.dp, color = AgarthaTheme.colors.border)
+        HorizontalDivider(
+            modifier = Modifier.padding(start = 16.dp),
+            thickness = 0.5.dp,
+            color = AgarthaTheme.colors.border,
+        )
     }
 }
