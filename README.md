@@ -193,8 +193,7 @@ This repository follows the documented GitHub Flow process:
 - Joryuoo
 - IgnisFrostburn
 - jojseph
-- Tabada
-- DMKuZu
+- kazuretsu
 
 ## Disclaimer
 

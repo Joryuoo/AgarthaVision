@@ -23,7 +23,7 @@ app/release/
 node_modules/
 
 .env
-mcp.json
+.mcp.json
 AGENTS.md
 *.keystore
 
