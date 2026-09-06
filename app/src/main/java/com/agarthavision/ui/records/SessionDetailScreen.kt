@@ -3,7 +3,6 @@
 package com.agarthavision.ui.records
 
 import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -30,13 +29,17 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,14 +55,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -104,14 +105,35 @@ fun SessionDetailScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val generatedMessage = stringResource(R.string.report_generated_toast)
+    val shareActionLabel = stringResource(R.string.report_share_action)
+    var shareError by remember { mutableStateOf<Int?>(null) }
     val generationFailedTemplate = stringResource(R.string.report_generation_failed)
     val sessionDetail = mapToUiModel(state)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionDetailEvent.ReportGenerated -> snackbarHostState.showSnackbar(generatedMessage)
+                is SessionDetailEvent.ReportGenerated -> {
+                    // Offer the share sheet right here: hunting the file down in a file
+                    // manager was the whole complaint.
+                    val result = snackbarHostState.showSnackbar(
+                        message = generatedMessage,
+                        actionLabel = shareActionLabel,
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        shareError = shareReportCsv(context, event.csvPath)
+                    }
+                }
             }
+        }
+    }
+
+    // Surface a failed share instead of dropping it — a stale path used to be a dead tap.
+    LaunchedEffect(shareError) {
+        shareError?.let { messageRes ->
+            snackbarHostState.showSnackbar(context.getString(messageRes))
+            shareError = null
         }
     }
 
@@ -150,7 +172,7 @@ fun SessionDetailScreen(
             reports = state.reports,
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
-            onShare = { report -> shareReportCsv(context, report) },
+            onShare = { report -> shareError = shareReportCsv(context, report.csvFilePath) },
         )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
@@ -343,27 +365,6 @@ private fun SessionDetailEmpty(
         )
         Spacer(Modifier.height(60.dp))
         EmptyStateGraphic()
-    }
-}
-
-private fun shareReportCsv(context: Context, report: Report) {
-    val path = report.csvFilePath ?: return
-    val file = File(path)
-    if (!file.exists()) return
-
-    runCatching {
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }.onSuccess { uri ->
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, file.name)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        val chooser = Intent.createChooser(intent, file.name).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { context.startActivity(chooser) }
     }
 }
 

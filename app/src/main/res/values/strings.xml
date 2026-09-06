@@ -138,7 +138,11 @@
     <string name="report_status_synced">Synced</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
-    <string name="report_generated_toast">Generated · shared to Downloads</string>
+    <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
+    <string name="report_share_action">Share</string>
+    <string name="report_share_missing_path">This report has no saved file.</string>
+    <string name="report_share_file_gone">The report file is no longer on this device.</string>
+    <string name="report_share_no_app">No app available to share the report.</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
     <string name="session_detail_unknown_detection">No detection</string>
     <string name="session_detail_confidence">Source: %1$s</string>

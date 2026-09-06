@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- For sharing CSV reports written to the public Downloads directory. -->
+    <!-- For sharing CSV reports written to public Documents on API 26-28. On API 29+
+         the store returns a MediaStore content:// URI and never comes through here. -->
+    <external-path
+        name="documents"
+        path="Documents" />
+    <!-- Reports written to Downloads by builds before the Documents/AgarthaVision move. -->
     <external-path
         name="downloads"
         path="Download" />
