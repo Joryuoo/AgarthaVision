@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -54,17 +55,33 @@ class CameraManager @Inject constructor(
     val previewAspectRatio: StateFlow<Float?> = _previewAspectRatio.asStateFlow()
 
     /**
+     * Where frame analysis runs by default.
+     *
+     * Single-threaded on purpose. `FrameSampler.analyze` JPEG-encodes — and now rotates,
+     * crops and downscales — on every frame before any throttling, which is far too much
+     * for the main thread. Serialising also keeps `FrameSampler`'s `lastSentAt` and
+     * `inFlight` fields on one thread, as they were when this ran on the main executor,
+     * and `STRATEGY_KEEP_ONLY_LATEST` already drops frames rather than queueing them, so
+     * a pool would buy nothing.
+     */
+    private val analysisExecutor: Executor by lazy {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "agartha-frame-analysis").apply { isDaemon = true }
+        }
+    }
+
+    /**
      * Binds the [Preview] + [ImageAnalysis] use cases to [lifecycleOwner].
      *
-     * @param analyzerExecutor where the [analyzer] runs — usually
-     *   `Dispatchers.IO.asExecutor()` or the main executor for low-latency UI overlays.
+     * @param analyzerExecutor where the [analyzer] runs. Defaults to [analysisExecutor],
+     *   off the main thread; pass the main executor only for a genuinely trivial analyzer.
      * @return the bound [Camera] so callers can adjust torch / zoom if needed.
      */
     suspend fun bindAnalysis(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         analyzer: ImageAnalysis.Analyzer,
-        analyzerExecutor: Executor = ContextCompat.getMainExecutor(context),
+        analyzerExecutor: Executor = analysisExecutor,
     ): Camera = suspendCancellableCoroutine { continuation ->
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
