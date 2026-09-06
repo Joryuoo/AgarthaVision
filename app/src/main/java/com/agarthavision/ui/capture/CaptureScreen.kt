@@ -475,7 +475,9 @@ fun CaptureScreen(
         EndSessionConfirmDialog(
             initialNotes = "",
             isBusy = state.isBusy,
-            blockedCount = state.flaggedFrames.size,
+            // Repeat frames are duplicates the medtech already accounted for, so they
+            // do not hold a session open. Only unverified, non-repeat frames block.
+            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat },
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)
