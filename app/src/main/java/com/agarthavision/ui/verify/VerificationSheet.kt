@@ -65,7 +65,10 @@ fun VerificationSheet(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(frame) {
+    // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
+    // like markedAsRepeat, so keying on the frame would re-seed the sheet — and wipe
+    // the in-progress answers — every time the store re-emits.
+    LaunchedEffect(frame.sampleId) {
         viewModel.setFrame(frame)
     }
 

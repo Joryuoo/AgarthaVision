@@ -131,7 +131,7 @@ class VerificationViewModel @Inject constructor(
         fallback: Int,
     ): Int {
         if (frame == null) return fallback
-        val index = frames.indexOf(frame)
+        val index = frames.indexOfSample(frame)
         return if (index >= 0) index + 1 else fallback
     }
 
@@ -211,7 +211,7 @@ class VerificationViewModel @Inject constructor(
     fun onFramePrev() {
         val frames = flaggedFrameStore.state.value
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         if (idx <= 0) return
         setFrame(frames[idx - 1])
     }
@@ -219,7 +219,7 @@ class VerificationViewModel @Inject constructor(
     fun onFrameNext() {
         val frames = flaggedFrameStore.state.value
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         if (idx < 0 || idx >= frames.size - 1) return
         setFrame(frames[idx + 1])
     }
@@ -227,7 +227,7 @@ class VerificationViewModel @Inject constructor(
     fun onDeleteFrame() {
         val frames = flaggedFrameStore.state.value
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
         val nextFrame = frames.getOrNull(idx + 1) ?: frames.getOrNull(idx - 1)
         viewModelScope.launch {
@@ -275,6 +275,14 @@ class VerificationViewModel @Inject constructor(
     fun onCancel() {
         viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
     }
+
+    /**
+     * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
+     * rather than equality keeps navigation working regardless of how `FlaggedFrame`
+     * defines equals, which now covers mutable fields such as `markedAsRepeat`.
+     */
+    private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
+        indexOfFirst { it.sampleId == frame.sampleId }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {
         val index = _state.value.currentDetectionIndex

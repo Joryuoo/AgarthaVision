@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -52,11 +53,12 @@ class VerificationViewModelTest {
     }
 
     private fun makeFrameWithId(id: Int, predictions: Int = 1): FlaggedFrame {
-        // Distinct capturedAt so equals/hashCode see each frame as unique
+        // Distinct sampleId so equals/hashCode see each frame as unique
         val preds = List(predictions) {
             Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
         }
         return FlaggedFrame(
+            sampleId = "sample-$id",
             sessionId = "session-1",
             capturedAt = Instant.ofEpochMilli(id.toLong()),
             jpegBytes = ByteArray(4),
@@ -64,12 +66,7 @@ class VerificationViewModelTest {
         )
     }
 
-    /**
-     * Frames that are genuinely distinct. [makeFrameWithId] varies only `capturedAt`,
-     * but `FlaggedFrame.equals`/`hashCode` compare `sampleId` alone
-     * (`domain/model/FlaggedFrame.kt:18-20`), so those frames all compare equal and
-     * any `indexOf` against them returns 0. Position assertions need a real id.
-     */
+    /** A frame with an explicit sample id, for assertions that turn on queue position. */
     private fun makeIdentifiedFrame(sampleId: String, predictions: Int = 1) = FlaggedFrame(
         sampleId = sampleId,
         sessionId = "session-1",
@@ -370,5 +367,29 @@ class VerificationViewModelTest {
 
             assertEquals(3, vm.state.value.frameIndexInQueue)
             assertEquals(3, vm.state.value.queueSize)
+        }
+
+    @Test
+    fun `store emission differing only in markedAsRepeat is not conflated away`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The regression: FlaggedFrame.equals compared sampleId alone, so a Room
+            // re-emission that only flipped is_repeat compared equal to the list already
+            // held. StateFlow conflated it, and the queue's Repeat filter went stale.
+            val frame = makeIdentifiedFrame("a")
+            storeState.value = listOf(frame)
+            val vm = viewModel()
+            vm.setFrame(frame)
+            advanceUntilIdle()
+
+            val toggled = frame.copy(markedAsRepeat = true)
+            assertNotEquals(frame, toggled)
+            assertNotEquals(listOf(frame), listOf(toggled))
+
+            storeState.value = listOf(toggled)
+            advanceUntilIdle()
+
+            // Position still resolves: navigation matches on sampleId, not equality.
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+            assertEquals(1, vm.state.value.queueSize)
         }
 }

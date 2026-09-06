@@ -25,6 +25,9 @@ class VerificationQueueFilterTest {
         repeat: Boolean = false,
         id: Int = 1,
     ): FlaggedFrame = FlaggedFrame(
+        // Real ids: without them every frame compares equal and the assertions below
+        // check only list length, not which frames came back.
+        sampleId = "sample-$id-${source.name}-$repeat",
         sessionId = "session-1",
         capturedAt = Instant.ofEpochMilli(id.toLong()),
         jpegBytes = ByteArray(4),
