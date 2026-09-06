@@ -153,6 +153,7 @@
     <string name="session_detail_unknown_detection">No detection</string>
     <string name="session_detail_confidence">Source: %1$s</string>
     <string name="session_detail_captured">Captured: %1$s</string>
+    <string name="nav_back">Back</string>
     <string name="session_detail_back">Back to records</string>
     <string name="session_detail_open_sample">Open sample</string>
     <string name="session_detail_epg_title">EPG</string>

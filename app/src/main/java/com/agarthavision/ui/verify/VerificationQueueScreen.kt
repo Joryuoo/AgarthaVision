@@ -54,7 +54,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
-import com.agarthavision.ui.components.SvgIcon
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.time.Duration
@@ -114,20 +114,7 @@ fun VerificationQueueScreen(
                     .padding(top = 2.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onBackClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    SvgIcon(
-                        "M 15 18 L 9 12 L 15 6",
-                        color = colors.textPrimary,
-                        strokeWidth = 1.8f,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
+                BackArrow(onBack = onBackClick)
 
                 Spacer(modifier = Modifier.width(8.dp))
 

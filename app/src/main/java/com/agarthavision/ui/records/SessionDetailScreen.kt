@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -61,6 +60,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -244,14 +244,10 @@ private fun SessionDetailAppBar(
             .statusBarsPadding()
             .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                painter = painterResource(R.drawable.ic_chevron_left),
-                contentDescription = stringResource(R.string.session_detail_back),
-                tint = colors.textSecondary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        BackArrow(
+            onBack = onBack,
+            contentDescription = stringResource(R.string.session_detail_back),
+        )
         Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary)
             Text(

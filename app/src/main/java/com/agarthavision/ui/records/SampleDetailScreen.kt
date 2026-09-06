@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,7 +25,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -66,6 +64,7 @@ import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleRecordItem
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
@@ -130,19 +129,7 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
             .padding(top = 32.dp, start = 8.dp, end = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Back Button
-        Row(
-            modifier = Modifier.clickable { onBack() }.padding(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Default.ChevronLeft,
-                contentDescription = "Back",
-                tint = AgarthaTheme.colors.accent,
-                modifier = Modifier.size(28.dp)
-            )
-            Text("Back", color = AgarthaTheme.colors.accent, fontSize = 17.sp, modifier = Modifier.offset(x = (-4).dp))
-        }
+        BackArrow(onBack = onBack)
 
         Spacer(Modifier.weight(1f))
 
@@ -150,7 +137,6 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
             text = title,
             style = AppTypography.titleLarge,
             color = AgarthaTheme.colors.textPrimary,
-            modifier = Modifier.offset(x = (-24).dp)
         )
 
         Spacer(Modifier.weight(1f))
