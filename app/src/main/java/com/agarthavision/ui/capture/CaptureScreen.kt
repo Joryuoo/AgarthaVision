@@ -72,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
@@ -88,7 +89,6 @@ import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 
 @Composable
 private fun PulsingDot() {
@@ -216,6 +216,7 @@ fun CaptureScreen(
     val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
     val detectionMessage = stringResource(R.string.capture_detection_message)
+    val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -277,22 +278,27 @@ fun CaptureScreen(
             .map { it.flaggedFrames.firstOrNull()?.capturedAt }
             .distinctUntilChanged()
             .collect { capturedAt ->
-                if (capturedAt != null) {
-                    // Capture the frame NOW — before the coroutine suspends on the toast
-                    val frameAtToastTime =
-                        viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-                    if (frameAtToastTime.source != FrameSource.MODEL) return@collect
-                    val eggType =
-                        frameAtToastTime.predictions.firstOrNull()?.classLabel ?: detectionFallback
-                    launch {
-                        toastState.show(
-                            message = detectionMessage.format(eggType),
-                            variant = AgarthaToastVariant.Default,
-                            actionLabel = detectionView,
-                            onAction = { viewModel.onDetectionToastTap(frameAtToastTime) },
-                        )
-                    }
+                if (capturedAt == null) return@collect
+                val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
+
+                val message = if (frame.source == FrameSource.MODEL) {
+                    // Prefer the canonical binomial: the server emits whatever its class
+                    // list is named, which may be an alias like "Ascaris".
+                    val label = frame.predictions.firstOrNull()?.classLabel
+                    val species = label
+                        ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
+                        ?: detectionFallback
+                    detectionMessage.format(species)
+                } else {
+                    manualCaptureMessage
                 }
+
+                toastState.show(
+                    message = message,
+                    variant = AgarthaToastVariant.Default,
+                    actionLabel = detectionView,
+                    onAction = { viewModel.onDetectionToastTap(frame) },
+                )
             }
     }
 
