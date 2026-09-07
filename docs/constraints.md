@@ -22,8 +22,9 @@ complexity, naming, and magic numbers — there is no import-boundary rule in it
 `retrofit2`, or `io.github.jan.*`. The spirit is bent in four ViewModels that inject the
 data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:9`,
 `ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`,
-`ui/verify/ManualCaptureViewModel.kt:5`), and one composable renders a remote DTO
-(`ui/verify/FrameWithBoxes.kt:15`).
+`ui/verify/ManualCaptureViewModel.kt:5`). The composable that once rendered a wire DTO no
+longer does — `FrameWithBoxes` takes domain `Prediction` values
+(`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
 
 ## C2 — `domain/` stays Android-free
 

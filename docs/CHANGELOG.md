@@ -120,6 +120,20 @@ issues, plus ten items from a second round of testing.
   pill out of shape; the two record screens each had their own stat-run composable; back was
   rendered six different ways; and sample detail's label rows had no left padding.
 
+**Repeat filter and preview fixes · 2026-09-07.**
+
+- Fixed: a frame marked repeat still appeared under the AI chip and was still reachable by
+  Next/Previous, so a duplicate could be verified by accident. The AI category now means "AI
+  frames still needing review"; repeats stay reachable under Repeat and All. Marking the open
+  frame drops it from the cycle but keeps it on screen so the mark can be undone — it reports no
+  position and both frame buttons dim, rather than showing `Frame 0/N`.
+- Fixed: the manual capture preview used `ContentScale.Crop` where the AI sheet uses `Fit`, so a
+  square 640x640 frame overflowed the landscape container and the rounded clip cut the top and
+  bottom off. The medtech was labelling a specimen they could only partly see.
+- Corrected in `constraints.md`: C1's as-built note claimed a composable still rendered a wire
+  DTO. That stopped being true when `FlaggedFrame` moved to domain `Prediction` values; nothing
+  under `ui/` imports from `data/remote/dto/`.
+
 ## Unreleased — documentation architecture · 2026-08-31
 
 Replaced the previous agent-documentation setup with a router plus a shelf.
