@@ -81,13 +81,12 @@ fun VerificationQueueScreen(
         filterQueueFrames(state.flaggedFrames, state.queueFilter)
     }
 
+    // Counted through filterQueueFrames rather than a second copy of the predicates —
+    // the duplication is how a chip's count and its list drift apart.
     val counts = remember(state.flaggedFrames) {
-        mapOf(
-            QueueFilter.ALL to state.flaggedFrames.size,
-            QueueFilter.FLAGGED to state.flaggedFrames.count { it.source == FrameSource.MODEL },
-            QueueFilter.MANUAL to state.flaggedFrames.count { it.source == FrameSource.MANUAL },
-            QueueFilter.REPEAT to state.flaggedFrames.count { it.markedAsRepeat },
-        )
+        QueueFilter.entries.associateWith { filter ->
+            filterQueueFrames(state.flaggedFrames, filter).size
+        }
     }
 
     val pendingCount = state.flaggedFrames.size

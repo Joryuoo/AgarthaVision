@@ -27,7 +27,9 @@ internal fun filterQueueFrames(
     frames.filter { frame ->
         when (filter) {
             QueueFilter.ALL -> true
-            QueueFilter.FLAGGED -> frame.source == FrameSource.MODEL
+            // Repeats are excluded so a duplicate cannot be verified by accident. They
+            // stay reachable on purpose under REPEAT and ALL.
+            QueueFilter.FLAGGED -> frame.source == FrameSource.MODEL && !frame.markedAsRepeat
             QueueFilter.MANUAL -> frame.source == FrameSource.MANUAL
             QueueFilter.REPEAT -> frame.markedAsRepeat
         }

@@ -55,6 +55,8 @@
     <string name="connection_lost_probing">Checking connection…</string>
 
     <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
+    <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
+    <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>

@@ -136,12 +136,18 @@ private fun VerificationSheetContent(
     ) {
         ScreenTopBar(
             title = "Verify detection",
-            metaText = stringResource(
-                R.string.verify_frame_meta,
-                state.frameIndexInQueue,
-                state.queueSize,
-                timeLabel,
-            ),
+            // A frame marked repeat leaves the cycle and has no position, so show what it
+            // is rather than "Frame 0/4".
+            metaText = if (state.frameIndexInQueue > 0) {
+                stringResource(
+                    R.string.verify_frame_meta,
+                    state.frameIndexInQueue,
+                    state.queueSize,
+                    timeLabel,
+                )
+            } else {
+                stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
+            },
             onBack = actions.onCancel,
             actions = {
                 // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)

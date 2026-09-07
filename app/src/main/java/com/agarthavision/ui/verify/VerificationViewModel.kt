@@ -121,24 +121,32 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * The frames this sheet cycles through: model detections only.
+     * The frames this sheet cycles through: model detections that still need review.
      *
      * Manual captures are reviewed in [ManualSheet], which asks a different set of
      * questions, so paging onto one from here would render the wrong sheet — the host
      * picks the sheet from the frame it was opened with and never re-evaluates.
+     *
+     * Frames marked repeat are excluded too: they are duplicates the medtech has already
+     * accounted for, and paging onto one invites verifying it by accident.
      */
     private fun List<FlaggedFrame>.aiFrames(): List<FlaggedFrame> =
-        filter { it.source == FrameSource.MODEL }
+        filter { it.source == FrameSource.MODEL && !it.markedAsRepeat }
 
     /** The AI frames currently in the store, in queue order. */
     private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.aiFrames()
 
     /**
-     * 1-based position of [frame] within [frames], or [fallback] when it cannot be
-     * located (no current frame, or a frame the store no longer holds).
+     * 1-based position of [frame] within [frames], or [OUT_OF_CYCLE] when the frame is
+     * held but no longer part of the cycle — which happens the moment the medtech marks
+     * the open frame as repeat. [fallback] covers the no-frame case only.
      *
-     * Both [setFrame] and the store collector route through this so the counter and
-     * the displayed frame cannot drift apart.
+     * Returning a sentinel rather than a stale number is deliberate: `canGoPrev` and
+     * `canGoNext` both fail against it, so the frame buttons dim and the sheet stays put
+     * instead of paging out from under a frame that has no position.
+     *
+     * Both [setFrame] and the store collector route through this so the counter and the
+     * displayed frame cannot drift apart.
      */
     private fun positionOf(
         frame: FlaggedFrame?,
@@ -147,7 +155,7 @@ class VerificationViewModel @Inject constructor(
     ): Int {
         if (frame == null) return fallback
         val index = frames.indexOfSample(frame)
-        return if (index >= 0) index + 1 else fallback
+        return if (index >= 0) index + 1 else OUT_OF_CYCLE
     }
 
     fun setFrame(frame: FlaggedFrame) {
@@ -298,6 +306,11 @@ class VerificationViewModel @Inject constructor(
      */
     private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
         indexOfFirst { it.sampleId == frame.sampleId }
+
+    private companion object {
+        /** [VerificationUiState.frameIndexInQueue] when the open frame left the cycle. */
+        const val OUT_OF_CYCLE = 0
+    }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {
         val index = _state.value.currentDetectionIndex

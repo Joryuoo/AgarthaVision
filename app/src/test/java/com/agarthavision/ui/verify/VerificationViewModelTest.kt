@@ -392,9 +392,12 @@ class VerificationViewModelTest {
             storeState.value = listOf(toggled)
             advanceUntilIdle()
 
-            // Position still resolves: navigation matches on sampleId, not equality.
-            assertEquals(1, vm.state.value.frameIndexInQueue)
-            assertEquals(1, vm.state.value.queueSize)
+            // The emission getting through is the whole point, and now it is visible twice
+            // over: a repeat leaves the AI cycle, so the size drops to zero and the open
+            // frame reports no position. Under the old sampleId-only equality this
+            // emission was swallowed and both would have stayed at 1.
+            assertEquals(0, vm.state.value.queueSize)
+            assertEquals(0, vm.state.value.frameIndexInQueue)
         }
 
     @Test
@@ -436,5 +439,50 @@ class VerificationViewModelTest {
             advanceUntilIdle()
 
             assertEquals(1, vm.state.value.queueSize)
+        }
+
+    @Test
+    fun `frame cycling skips repeat frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val first = makeIdentifiedFrame("ai-1")
+            val repeat = makeIdentifiedFrame("ai-2").copy(markedAsRepeat = true)
+            val last = makeIdentifiedFrame("ai-3")
+            storeState.value = listOf(first, repeat, last)
+            val vm = viewModel()
+            vm.setFrame(first)
+            advanceUntilIdle()
+
+            // Two frames in the cycle, not the three in the store.
+            assertEquals(2, vm.state.value.queueSize)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(last, vm.state.value.frame)
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `marking the open frame repeat leaves it on screen but out of cycle`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val open = makeIdentifiedFrame("ai-1")
+            val other = makeIdentifiedFrame("ai-2")
+            storeState.value = listOf(open, other)
+            val vm = viewModel()
+            vm.setFrame(open)
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+            assertTrue(vm.state.value.canGoNext)
+
+            // What the store emits after onToggleRepeat writes is_repeat.
+            storeState.value = listOf(open.copy(markedAsRepeat = true), other)
+            advanceUntilIdle()
+
+            // Still showing it, so a mistap can be undone — but with no position, and
+            // both frame buttons disabled so it cannot page from here.
+            assertEquals(open, vm.state.value.frame)
+            assertEquals(0, vm.state.value.frameIndexInQueue)
+            assertFalse(vm.state.value.canGoPrev)
+            assertFalse(vm.state.value.canGoNext)
         }
 }
