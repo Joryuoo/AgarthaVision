@@ -189,7 +189,11 @@ private fun ManualSheetContent(
                 AsyncImage(
                     model = frame.jpegBytes,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    // Fit, matching FrameWithBoxes on the AI sheet. Crop overflowed a
+                    // square 640x640 frame against this landscape container and the
+                    // parent's clip cut the top and bottom off — the medtech was
+                    // labelling a specimen they could only partly see.
+                    contentScale = ContentScale.Fit,
                     modifier = Modifier.fillMaxSize()
                 )
             }
