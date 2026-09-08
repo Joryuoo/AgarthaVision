@@ -160,14 +160,22 @@ The current root audit records Sprint 3 hardening as the active implementation p
 
 ## Documentation
 
-The project source of truth lives in two core root files:
+Start at `SESSION_INIT.md`. It is the single entry point for both contributors and automated
+agents: what the project is, the repo/ClickUp boundary, a routing table from situation to
+file, and the thirteen project constraints by name.
 
-- `CONTEXT.md` - project overview, tech stack, architecture rules, design system, Supabase/inference contracts, git workflow, coding conventions, and ADR summaries.
+Everything it routes to lives under `docs/`:
+
+- `docs/constraints.md` and `docs/non-negotiables.md` - the rules, with their enforcement points.
+- `docs/stack.md` and `docs/commands.md` - versions and everything runnable.
+- `docs/features.md`, `docs/CHANGELOG.md`, `docs/file-tree.md` - what ships, what changed, where things live.
+- `docs/map/` - object cards, process cards, and the change-impact index.
 - `schema.ts` - ground-truth data model for Supabase, Room, domain enums, Storage, and relationships.
 
 *(Sprint backlog items and tasks are managed in ClickUp).*
 
-When a rule is unclear or missing, update the relevant root source-of-truth file before changing the implementation.
+Documentation here is as-built and cited to `path:line`. Where a document and the code
+disagree, the code wins - fix the document in the same change.
 
 ## Git Workflow
 
@@ -185,8 +193,7 @@ This repository follows the documented GitHub Flow process:
 - Joryuoo
 - IgnisFrostburn
 - jojseph
-- Tabada
-- DMKuZu
+- kazuretsu
 
 ## Disclaimer
 

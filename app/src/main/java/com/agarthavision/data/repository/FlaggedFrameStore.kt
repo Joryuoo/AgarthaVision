@@ -5,6 +5,7 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.inference.toDomainPredictions
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
@@ -63,7 +64,7 @@ class FlaggedFrameStore @Inject constructor(
     }
         .flatMapLatest { (userId, sessionState) ->
             val sessionId = (sessionState as? SessionState.Active)?.session?.sessionId
-            if (userId == null || sessionId == null) {
+            if (sessionId == null) {
                 flowOf(emptyList())
             } else {
                 sampleDao.observeFlaggedSamplesForSession(sessionId, userId)
@@ -90,7 +91,7 @@ class FlaggedFrameStore @Inject constructor(
     }
 
     suspend fun clear() {
-        val userId = authRepository.getCurrentUserId() ?: return
+        val userId = authRepository.getCurrentUserId()
         val sessionId = (sessionManager.state.value as? SessionState.Active)?.session?.sessionId
             ?: return
         val samples = sampleDao.getFlaggedSamplesForSession(sessionId, userId)
@@ -100,7 +101,7 @@ class FlaggedFrameStore @Inject constructor(
 
     private fun SampleEntity.toFlaggedFrame(): FlaggedFrame {
         val predictions = predictionsJson
-            ?.let { gson.fromJson<List<PredictionDto>>(it, predictionListType) }
+            ?.let { gson.fromJson<List<PredictionDto>>(it, predictionListType).toDomainPredictions() }
             .orEmpty()
         val jpegBytes = runCatching { File(imagePath).readBytes() }.getOrDefault(ByteArray(0))
 

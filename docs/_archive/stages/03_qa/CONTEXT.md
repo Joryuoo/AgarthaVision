@@ -1,12 +1,19 @@
 # Stage 03 — QA (Layer 2 contract)
 
+> **ARCHIVED AND STALE.** This file describes a superseded three-stage pipeline. Do not
+> implement against it. The paths in the Inputs table below no longer resolve — the root
+> `CONTEXT.md`, `AGENTS.md`, and the `stages/` location they were written for are all gone.
+> The live entry point is `SESSION_INIT.md` at the repository root; the live rules are
+> `docs/constraints.md` and `docs/non-negotiables.md`. See `../../CONTEXT.md` for why this
+> folder is retained.
+
 ## Inputs
 
 | Kind | File / source | What to load |
 |---|---|---|
-| Layer 4 (working) | `../02_implement/output/implementation_notes.md` | Changed files and decisions |
-| Layer 3 (reference) | `../../CONTEXT.md` | §3 Architecture Rules, §6 Git Workflow, §7 Coding Conventions |
-| Layer 3 (reference) | `../../AGENTS.md` | Compliance rules and source-of-truth precedence |
+| ~~Layer 4 (working)~~ | ~~`../02_implement/output/implementation_notes.md`~~ | **Stale.** The stage pipeline no longer runs; `output/` is empty |
+| ~~Layer 3 (reference)~~ | ~~`../../CONTEXT.md`~~ | **Stale — file deleted.** Nearest live equivalent: `/docs/constraints.md` |
+| ~~Layer 3 (reference)~~ | ~~`../../AGENTS.md`~~ | **Stale — file deleted.** Nearest live equivalent: `/docs/non-negotiables.md`, `/SESSION_INIT.md` |
 
 ## Process
 

@@ -23,6 +23,8 @@ app/release/
 node_modules/
 
 .env
+.mcp.json
+AGENTS.md
 *.keystore
 
 .DS_Store
@@ -39,3 +41,20 @@ temp-backup/
 screenshots/
 
 .claude/
+# Model artifacts and capture fixtures are build outputs and patient-adjacent
+# imagery, not source. Kept out of git regardless of which branch produced them.
+app/src/main/assets/models/*.tflite
+app/src/main/assets/models/*.onnx
+app/src/main/assets/models/model_manifest.json
+app/src/androidTest/assets/fixtures/*.jpg
+app/src/androidTest/assets/fixtures/*.jpeg
+app/src/androidTest/assets/fixtures/*.png
+inference/export/out/
+inference/weights/*.onnx
+inference/weights/*_saved_model/
+
+# Python bytecode and export temp files
+__pycache__/
+*.pyc
+*.npy
+.venv*/

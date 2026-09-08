@@ -54,6 +54,10 @@
     <string name="connection_lost_resume">Resume Recording</string>
     <string name="connection_lost_probing">Checking connection…</string>
 
+    <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
+    <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
+    <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
+    <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
     <string name="verify_delete_frame">Delete</string>
@@ -91,6 +95,11 @@
     <string name="capture_end_session">End Session</string>
     <string name="capture_end_session_title">End this session?</string>
     <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <string name="session_all_verified">All verified</string>
+    <plurals name="session_unverified_count">
+        <item quantity="one">%1$d to verify</item>
+        <item quantity="other">%1$d to verify</item>
+    </plurals>
     <plurals name="capture_end_blocked_body">
         <item quantity="one">You have %1$d unverified frame. Verify or delete it before ending the session.</item>
         <item quantity="other">You have %1$d unverified frames. Verify or delete them before ending the session.</item>
@@ -104,7 +113,8 @@
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_detection_fallback">egg</string>
-    <string name="capture_detection_message">%1$s detected — tap to review</string>
+    <string name="capture_detection_message">%1$s detected</string>
+    <string name="capture_manual_capture_message">Frame captured</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
@@ -131,16 +141,21 @@
     <string name="report_section_title">Reports</string>
     <string name="report_generate">Generate Report</string>
     <string name="report_generating">Generating…</string>
-    <string name="report_empty">No reports yet. Tap Generate Report to create one.</string>
+    <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
-    <string name="report_generated_toast">Generated · shared to Downloads</string>
+    <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
+    <string name="report_share_action">Share</string>
+    <string name="report_share_missing_path">This report has no saved file.</string>
+    <string name="report_share_file_gone">The report file is no longer on this device.</string>
+    <string name="report_share_no_app">No app available to share the report.</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
     <string name="session_detail_unknown_detection">No detection</string>
     <string name="session_detail_confidence">Source: %1$s</string>
     <string name="session_detail_captured">Captured: %1$s</string>
+    <string name="nav_back">Back</string>
     <string name="session_detail_back">Back to records</string>
     <string name="session_detail_open_sample">Open sample</string>
     <string name="session_detail_epg_title">EPG</string>
@@ -192,6 +207,10 @@
 
     <string name="manual_sheet_title">Manual Capture · %1$s</string>
     <string name="manual_sheet_close_desc">Close manual capture sheet</string>
+
+    <string name="nav_tab_home">Home</string>
+    <string name="nav_tab_sessions">Sessions</string>
+    <string name="nav_tab_records">Records</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_section_account">Account</string>

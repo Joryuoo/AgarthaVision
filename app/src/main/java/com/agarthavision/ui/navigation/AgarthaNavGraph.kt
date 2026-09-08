@@ -91,7 +91,6 @@ fun AgarthaNavGraph(
                             restoreState = true
                         }
                     },
-                    verifyQueueCount = 0 // In a real app, wire this to a ViewModel that observes the queue globally
                 )
             }
         },

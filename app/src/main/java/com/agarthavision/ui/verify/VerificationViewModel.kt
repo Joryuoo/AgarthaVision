@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,6 +55,14 @@ data class VerificationUiState(
 ) {
     val canSubmit: Boolean
         get() = answers.isNotEmpty() && answers.all { it.isComplete } && !isSubmitting
+
+    /** False on the first frame of the queue, or when the position is unknown. */
+    val canGoPrev: Boolean
+        get() = frameIndexInQueue > 1
+
+    /** False on the last frame of the queue, or when the position is unknown. */
+    val canGoNext: Boolean
+        get() = frameIndexInQueue in 1 until queueSize
 }
 
 sealed interface VerificationEvent {
@@ -99,18 +108,54 @@ class VerificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
+                val cycle = frames.aiFrames()
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
-                        queueSize = frames.size,
-                        frameIndexInQueue = if (frame != null) {
-                            val idx = frames.indexOf(frame)
-                            if (idx >= 0) idx + 1 else current.frameIndexInQueue
-                        } else current.frameIndexInQueue,
+                        queueSize = cycle.size,
+                        frameIndexInQueue = positionOf(frame, cycle, current.frameIndexInQueue),
                     )
                 }
             }
         }
+    }
+
+    /**
+     * The frames this sheet cycles through: model detections that still need review.
+     *
+     * Manual captures are reviewed in [ManualSheet], which asks a different set of
+     * questions, so paging onto one from here would render the wrong sheet — the host
+     * picks the sheet from the frame it was opened with and never re-evaluates.
+     *
+     * Frames marked repeat are excluded too: they are duplicates the medtech has already
+     * accounted for, and paging onto one invites verifying it by accident.
+     */
+    private fun List<FlaggedFrame>.aiFrames(): List<FlaggedFrame> =
+        filter { it.source == FrameSource.MODEL && !it.markedAsRepeat }
+
+    /** The AI frames currently in the store, in queue order. */
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.aiFrames()
+
+    /**
+     * 1-based position of [frame] within [frames], or [OUT_OF_CYCLE] when the frame is
+     * held but no longer part of the cycle — which happens the moment the medtech marks
+     * the open frame as repeat. [fallback] covers the no-frame case only.
+     *
+     * Returning a sentinel rather than a stale number is deliberate: `canGoPrev` and
+     * `canGoNext` both fail against it, so the frame buttons dim and the sheet stays put
+     * instead of paging out from under a frame that has no position.
+     *
+     * Both [setFrame] and the store collector route through this so the counter and the
+     * displayed frame cannot drift apart.
+     */
+    private fun positionOf(
+        frame: FlaggedFrame?,
+        frames: List<FlaggedFrame> = cycleFrames(),
+        fallback: Int,
+    ): Int {
+        if (frame == null) return fallback
+        val index = frames.indexOfSample(frame)
+        return if (index >= 0) index + 1 else OUT_OF_CYCLE
     }
 
     fun setFrame(frame: FlaggedFrame) {
@@ -119,6 +164,7 @@ class VerificationViewModel @Inject constructor(
             it.copy(
                 isVisible = true,
                 frame = frame,
+                frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
                 answers = List(frame.predictions.size) { VerificationAnswers() },
                 missedEgg = null,
@@ -186,25 +232,25 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onFramePrev() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         if (idx <= 0) return
         setFrame(frames[idx - 1])
     }
 
     fun onFrameNext() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         if (idx < 0 || idx >= frames.size - 1) return
         setFrame(frames[idx + 1])
     }
 
     fun onDeleteFrame() {
-        val frames = flaggedFrameStore.state.value
+        val frames = cycleFrames()
         val current = currentFrame ?: return
-        val idx = frames.indexOf(current)
+        val idx = frames.indexOfSample(current)
         // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
         val nextFrame = frames.getOrNull(idx + 1) ?: frames.getOrNull(idx - 1)
         viewModelScope.launch {
@@ -251,6 +297,19 @@ class VerificationViewModel @Inject constructor(
 
     fun onCancel() {
         viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+    }
+
+    /**
+     * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
+     * rather than equality keeps navigation working regardless of how `FlaggedFrame`
+     * defines equals, which now covers mutable fields such as `markedAsRepeat`.
+     */
+    private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
+        indexOfFirst { it.sampleId == frame.sampleId }
+
+    private companion object {
+        /** [VerificationUiState.frameIndexInQueue] when the open frame left the cycle. */
+        const val OUT_OF_CYCLE = 0
     }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {

@@ -63,8 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -107,7 +106,6 @@ fun SessionsScreen(
     }
 
     var showCreateDialog by remember { mutableStateOf(false) }
-    var activeKebabSessionId by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -134,7 +132,6 @@ fun SessionsScreen(
                         SessionCard(
                             sessionData = sessionData,
                             isActive = sessionData.session.endedAt == null,
-                            isKebabOpen = sessionData.session.id == activeKebabSessionId,
                             actions = SessionCardActions(
                                 onClick = {
                                     if (sessionData.session.endedAt == null) {
@@ -143,28 +140,6 @@ fun SessionsScreen(
                                         onSessionSelected(sessionData.session.id)
                                     }
                                 },
-                                onKebabClick = {
-                                    activeKebabSessionId = sessionData.session.id
-                                },
-                                onKebabDismiss = {
-                                    activeKebabSessionId = null
-                                },
-                                onResume = {
-                                    viewModel.onResumeSession(sessionData.session.id)
-                                    activeKebabSessionId = null
-                                },
-                                onExport = {
-                                    viewModel.onExportSession(sessionData.session.id)
-                                    activeKebabSessionId = null
-                                },
-                                onEnd = {
-                                    viewModel.onEndSession(sessionData.session.id)
-                                    activeKebabSessionId = null
-                                },
-                                onToggleLink = { link ->
-                                    viewModel.onToggleAccountLink(sessionData.session.id, link)
-                                    activeKebabSessionId = null
-                                }
                             )
                         )
                     }
@@ -247,19 +222,12 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
-    val onKebabClick: () -> Unit,
-    val onKebabDismiss: () -> Unit,
-    val onResume: () -> Unit,
-    val onExport: () -> Unit,
-    val onEnd: () -> Unit,
-    val onToggleLink: (link: Boolean) -> Unit
 )
 
 @Composable
 private fun SessionCard(
     sessionData: SessionWithStats,
     isActive: Boolean,
-    isKebabOpen: Boolean,
     actions: SessionCardActions
 ) {
     val colors = AgarthaTheme.colors
@@ -325,43 +293,37 @@ private fun SessionCard(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isActive) {
+                // Frames still to review, repeats excluded — the same count that blocks
+                // ending the session, so this row and that dialog always agree.
+                val unverified = sessionData.unverifiedSamples
                 Row(
                     modifier = Modifier
-                        .background(colors.accent, CircleShape)
+                        .background(
+                            if (unverified > 0) colors.accent else colors.surfaceMuted,
+                            CircleShape,
+                        )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    LiveDot()
-                    Text("Active", color = colors.onAccent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { if (isKebabOpen) actions.onKebabDismiss() else actions.onKebabClick() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    val dotColor = colors.textPrimary
-                    SvgIcon(
-                        pathData = "",
-                        drawExtras = {
-                            val r = 1f
-                            drawCircle(dotColor, radius = r, center = Offset(12f, 5f), style = Stroke(width = 1.8f))
-                            drawCircle(dotColor, radius = r, center = Offset(12f, 12f), style = Stroke(width = 1.8f))
-                            drawCircle(dotColor, radius = r, center = Offset(12f, 19f), style = Stroke(width = 1.8f))
+                    if (unverified > 0) LiveDot()
+                    Text(
+                        // English has no `zero` plural, so 0 needs its own string.
+                        text = if (unverified == 0) {
+                            stringResource(R.string.session_all_verified)
+                        } else {
+                            pluralStringResource(
+                                R.plurals.session_unverified_count,
+                                unverified,
+                                unverified,
+                            )
                         },
-                        modifier = Modifier.size(24.dp)
+                        color = if (unverified > 0) colors.onAccent else colors.textSecondary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
-
-                    if (isKebabOpen) {
-                        KebabMenu(
-                            linkState = linkState,
-                            actions = actions
-                        )
-                    }
                 }
+
             } else {
                 val eggs = sessionData.totalEpg
                 val badgeBg = if (eggs > 0) colors.successTint else colors.surfaceMuted
@@ -396,88 +358,6 @@ fun LiveDot() {
     )
 }
 
-@Composable
-private fun KebabMenu(
-    linkState: SessionLinkState,
-    actions: SessionCardActions
-) {
-    val colors = AgarthaTheme.colors
-    val dangerColor = colors.danger
-    Popup(
-        onDismissRequest = actions.onKebabDismiss,
-        properties = PopupProperties(focusable = true),
-        alignment = Alignment.TopEnd,
-        offset = androidx.compose.ui.unit.IntOffset(0, with(LocalDensity.current) { 36.dp.roundToPx() })
-    ) {
-        Column(
-            modifier = Modifier
-                .width(168.dp)
-                .shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(12.dp),
-                    spotColor = AppColors.Gray900.copy(alpha = 0.18f)
-                )
-                .background(colors.surface, RoundedCornerShape(12.dp))
-                .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-                .padding(4.dp)
-        ) {
-                KebabItem("Resume capture", "M7 10l5-5 5 5M12 5v14", onClick = actions.onResume)
-                KebabItem(
-                    "Export session",
-                    "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3",
-                    onClick = actions.onExport
-                )
-                // Per ADR-007: hidden once SYNCED (ownership is permanent at that point).
-                if (linkState != SessionLinkState.SYNCED) {
-                    val isLinked = linkState == SessionLinkState.PENDING
-                    val linkLabel = if (isLinked) {
-                        stringResource(R.string.session_dont_link)
-                    } else {
-                        stringResource(R.string.session_link_to_account)
-                    }
-                    KebabItem(
-                        linkLabel,
-                        "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" +
-                            "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
-                        onClick = { actions.onToggleLink(!isLinked) }
-                    )
-                }
-                KebabItem("End session", "", isDestructive = true, onClick = actions.onEnd, drawExtras = {
-                    drawRoundRect(
-                        color = dangerColor,
-                        topLeft = Offset(6f, 6f),
-                        size = Size(12f, 12f),
-                        cornerRadius = CornerRadius(1f, 1f),
-                        style = Stroke(width = 1.6f)
-                    )
-                })
-        }
-    }
-}
-
-@Composable
-private fun KebabItem(
-    label: String,
-    pathData: String,
-    isDestructive: Boolean = false,
-    drawExtras: (DrawScope.() -> Unit)? = null,
-    onClick: () -> Unit
-) {
-    val colors = AgarthaTheme.colors
-    val color = if (isDestructive) colors.danger else colors.textPrimary
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(6.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        SvgIcon(pathData, color = color, strokeWidth = 1.6f, modifier = Modifier.size(15.dp), drawExtras = drawExtras)
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = color)
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
