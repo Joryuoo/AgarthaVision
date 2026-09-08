@@ -152,7 +152,7 @@ Replaced the previous agent-documentation setup with a router plus a shelf.
   `pre-push` runs `assembleDebug`. `JAVA_HOME` auto-detection with an Android Studio JBR
   fallback.
 - **The `commit-msg` hook was added and then removed in the same day's work** — commit
-  format is no longer checked by anything. See `constraints.md` C9.
+  format went unchecked from then until `12509f8` restored it. See `constraints.md` C9.
 - Documentation consolidation: the previous multi-file documentation tree collapsed into two
   root files, `CONTEXT.md` and `schema.ts`.
 

@@ -129,17 +129,26 @@ deletable.
 
 ## C9 — Commit and branch format
 
-Commits: `[type][ClickUp-ID][Lastname] Task title`, types
-`feat fix refactor docs style test ci chore`. Branches: cut from `staging` as
-`feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`, `test/…`. PRs target
-`staging`, never `main`.
+Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
+Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
+cut from `staging` as `feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+`test/…`. PRs target `staging`, never `main`.
 
-**Enforcement: nothing enforces this.** The `commit-msg` hook that once checked the format
-was removed (see commit `172ab4d`), and `.husky/` now contains only `pre-commit` and
-`pre-push`. `commitlint.config.js` is still committed and still extends
+**Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
+above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
+because git writes those itself; only the first line is checked, so bodies are free-form.
+A rejected commit prints the format, the type list with a gloss for each, and the subject
+that failed.
+
+**History predates the colon.** Every commit before `12509f8` uses the older
+`[type][ClickUp-ID][Lastname] Task title` shape with no colon — the hook only sees new
+commits, so the log is mixed and that is expected, not drift.
+
+**Caveat:** `commitlint.config.js` is still committed and still extends
 `@commitlint/config-conventional` with a scope enum (`commitlint.config.js:1-16`) — a
 *conventional-commit* shape that contradicts the bracket format above and is wired to no
-hook. `lint-staged.config.js` is likewise unreferenced by either hook.
+hook. `lint-staged.config.js` is likewise unreferenced by any hook. Both are dead
+configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
