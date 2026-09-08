@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -105,6 +106,7 @@ fun SheetActionRow(state: SheetActionRowState) {
         Box(
             modifier = Modifier
                 .weight(1f)
+                .testTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
                 .background(colors.dangerTint, RoundedCornerShape(14.dp))
                 .border(0.5.dp, colors.danger.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
                 .clickable { state.onSecondaryClick() }
@@ -124,6 +126,7 @@ fun SheetActionRow(state: SheetActionRowState) {
         Box(
             modifier = Modifier
                 .weight(2f)
+                .testTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
                 .background(
                     if (state.primaryEnabled) colors.textPrimary else colors.textTertiary,
                     RoundedCornerShape(14.dp),

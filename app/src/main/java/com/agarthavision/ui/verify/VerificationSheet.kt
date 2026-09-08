@@ -3,6 +3,7 @@
 package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -112,8 +114,9 @@ fun VerificationSheet(
     }
 }
 
+@VisibleForTesting
 @Composable
-private fun VerificationSheetContent(
+internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
 ) {
@@ -165,7 +168,8 @@ private fun VerificationSheetContent(
                             },
                             shape = RoundedCornerShape(12.dp),
                         )
-                        .clickable { actions.onToggleRepeat() },
+                        .clickable { actions.onToggleRepeat() }
+                        .testTag(VerifyTestTags.REPEAT_TOGGLE),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -186,14 +190,18 @@ private fun VerificationSheetContent(
                     label = stringResource(R.string.verify_prev_frame),
                     selected = false,
                     onClick = actions.onFramePrev,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_PREV),
                     enabled = state.canGoPrev,
                 )
                 SmallToggle(
                     label = stringResource(R.string.verify_next_frame),
                     selected = false,
                     onClick = actions.onFrameNext,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_NEXT),
                     enabled = state.canGoNext,
                 )
             }
@@ -208,6 +216,7 @@ private fun VerificationSheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
+                    .testTag(VerifyTestTags.FRAME_PREVIEW)
                     .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
@@ -239,8 +248,22 @@ private fun VerificationSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                SmallToggle("Prev detection", false, actions.onDetectionPrev, Modifier.weight(1f))
-                SmallToggle("Next detection", false, actions.onDetectionNext, Modifier.weight(1f))
+                SmallToggle(
+                    "Prev detection",
+                    false,
+                    actions.onDetectionPrev,
+                    Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.DETECTION_PREV),
+                )
+                SmallToggle(
+                    "Next detection",
+                    false,
+                    actions.onDetectionNext,
+                    Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.DETECTION_NEXT),
+                )
             }
 
             QuestionSection(
@@ -449,7 +472,9 @@ private fun NoteField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(VerifyTestTags.NOTE_FIELD),
         placeholder = { Text(placeholder, color = AgarthaTheme.colors.textTertiary, fontSize = 13.sp) },
         minLines = 1,
         maxLines = 3,

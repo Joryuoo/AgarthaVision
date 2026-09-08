@@ -3,6 +3,7 @@
 package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -42,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -108,7 +110,8 @@ fun ManualSheet(
     }
 }
 
-private data class ManualSheetActions(
+@VisibleForTesting
+internal data class ManualSheetActions(
     val onSpeciesSelected: (EggSpecies) -> Unit,
     val onOtherSpeciesChanged: (String) -> Unit,
     val onUserNoteChanged: (String) -> Unit,
@@ -119,8 +122,9 @@ private data class ManualSheetActions(
     val onCancel: () -> Unit,
 )
 
+@VisibleForTesting
 @Composable
-private fun ManualSheetContent(
+internal fun ManualSheetContent(
     state: ManualCaptureUiState,
     actions: ManualSheetActions,
 ) {
@@ -165,14 +169,18 @@ private fun ManualSheetContent(
                     label = stringResource(R.string.verify_prev_frame),
                     selected = false,
                     onClick = actions.onFramePrev,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_PREV),
                     enabled = state.canGoPrev,
                 )
                 SmallToggle(
                     label = stringResource(R.string.verify_next_frame),
                     selected = false,
                     onClick = actions.onFrameNext,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_NEXT),
                     enabled = state.canGoNext,
                 )
             }
@@ -182,6 +190,7 @@ private fun ManualSheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
+                    .testTag(VerifyTestTags.FRAME_PREVIEW)
                     .padding(bottom = 14.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, colors.border, RoundedCornerShape(18.dp))
@@ -238,6 +247,7 @@ private fun ManualSheetContent(
                                 RoundedCornerShape(100.dp)
                             )
                             .clickable { actions.onSpeciesSelected(species) }
+                            .testTag(VerifyTestTags.speciesChip(species.name))
                             .padding(horizontal = 12.dp, vertical = 6.dp)
                     ) {
                         Text(
@@ -268,6 +278,7 @@ private fun ManualSheetContent(
                         .clickable {
                             showCustomSpeciesDialog = true
                         }
+                        .testTag(VerifyTestTags.SPECIES_CHIP_OTHER)
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
@@ -307,7 +318,9 @@ private fun ManualSheetContent(
                     },
                     singleLine = false,
                     enabled = !state.isSubmitting,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(VerifyTestTags.NOTE_FIELD),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = colors.accent,
                         unfocusedBorderColor = colors.borderStrong,
@@ -342,12 +355,16 @@ private fun ManualSheetContent(
                         actions.onDeleteFrame()
                     },
                     enabled = !state.isSubmitting,
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
                 ) {
                     Text("Discard", color = AgarthaTheme.colors.danger)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardConfirm = false }) {
+                TextButton(
+                    onClick = { showDiscardConfirm = false },
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
                     Text("Cancel")
                 }
             },
@@ -364,7 +381,8 @@ private fun ManualSheetContent(
                     value = customSpeciesText,
                     onValueChange = { customSpeciesText = it },
                     label = { Text("Species name") },
-                    singleLine = true
+                    singleLine = true,
+                    modifier = Modifier.testTag(VerifyTestTags.CUSTOM_SPECIES_FIELD),
                 )
             },
             confirmButton = {
@@ -373,13 +391,17 @@ private fun ManualSheetContent(
                         actions.onSpeciesSelected(EggSpecies.OTHER)
                         actions.onOtherSpeciesChanged(customSpeciesText)
                         showCustomSpeciesDialog = false
-                    }
+                    },
+                    modifier = Modifier.testTag(VerifyTestTags.CUSTOM_SPECIES_SAVE),
                 ) {
                     Text("Save")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showCustomSpeciesDialog = false }) {
+                TextButton(
+                    onClick = { showCustomSpeciesDialog = false },
+                    modifier = Modifier.testTag(VerifyTestTags.CUSTOM_SPECIES_DISMISS),
+                ) {
                     Text("Cancel")
                 }
             }
