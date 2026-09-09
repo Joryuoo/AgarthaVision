@@ -1,0 +1,44 @@
+#!/usr/bin/env sh
+# Enforces C9 (docs/constraints.md): [type][ClickUp-ID][Lastname]: Task title
+#
+# Replaces the hook removed alongside 172ab4d. Two changes from the original:
+# a colon after [Lastname], and a wider type list - see docs/constraints.md.
+
+commit_msg=$(head -n 1 "$1")
+
+# Ignore merge commits and reverts: git generates those messages itself.
+case "$commit_msg" in
+  "Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+types="feat|enhancements|fix|security|docs|ui|ux|uiux|refactor|test|ci|chore"
+
+# [type][ClickUp-ID][Lastname]: Task title
+pattern="^\[($types)\]\[[A-Za-z0-9_-]+\]\[[A-Za-z0-9_-]+\]: .+"
+
+if ! printf '%s' "$commit_msg" | grep -E -q "$pattern"; then
+  echo "[Husky] Invalid commit message format."
+  echo "--------------------------------------------------------"
+  echo "  Required: [type][ClickUp-ID][Lastname]: Task title"
+  echo "  Example:  [feat][86d4a6mpt][Ledon]: Add the settings screen"
+  echo ""
+  echo "  Types:"
+  echo "    feat          a new capability"
+  echo "    enhancements  an improvement to something that already ships"
+  echo "    fix           a defect repair"
+  echo "    security      a vulnerability or hardening change"
+  echo "    docs          documentation only"
+  echo "    ui            visual or layout change"
+  echo "    ux            interaction or flow change"
+  echo "    uiux          both, when the change is not cleanly one"
+  echo "    refactor      behaviour-preserving restructuring"
+  echo "    test          test coverage only"
+  echo "    ci            build, hooks, or pipeline"
+  echo "    chore         dependencies and housekeeping"
+  echo ""
+  echo "  Yours:"
+  echo "    $commit_msg"
+  echo "--------------------------------------------------------"
+  echo "  Bypass for an emergency with: git commit --no-verify"
+  exit 1
+fi

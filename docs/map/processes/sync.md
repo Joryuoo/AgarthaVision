@@ -74,7 +74,7 @@ Only then does the sync pass run. Claim-exempt sessions are never pushed
 
 - **Retries.** There are none. A `sync_failed` row waits for the next trigger; there is no
   backoff, no scheduler, and **no `Worker`** — WorkManager is a declared dependency with no
-  implementation (`app/build.gradle.kts:157`, and see `../../features.md`). The durable queue
+  implementation (`app/build.gradle.kts:164`, and see `../../features.md`). The durable queue
   is Phase 2.
 - **Recording.** Losing Supabase mid-session does not stop capture. Only losing the inference
   container does — see [`infer`](infer.md).

@@ -25,6 +25,8 @@ play-services-location = "21.3.0"
 mockito-kotlin = "5.4.0"
 turbine = "1.1.0"
 detekt = "1.23.7"
+robolectric = "4.16"
+roborazzi = "1.74.0"
 foundation-layout = "1.11.2"
 supabase = "3.0.3"
 ktor = "3.0.3"
@@ -110,6 +112,10 @@ compose-test = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 compose-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
 junit-ext = { group = "androidx.test.ext", name = "junit", version.ref = "junit-ext" }
 espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espresso" }
+robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { group = "io.github.takahirom.roborazzi", name = "roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { group = "io.github.takahirom.roborazzi", name = "roborazzi-compose", version.ref = "roborazzi" }
+roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "roborazzi-junit-rule", version.ref = "roborazzi" }
 foundation-layout = { group = "androidx.compose.foundation", name = "foundation-layout", version.ref = "foundation-layout" }
 
 [plugins]
@@ -120,3 +126,4 @@ hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 ktlint = { id = "org.jlleitschuh.gradle.ktlint", version.ref = "ktlint-plugin" }
 detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

@@ -3,6 +3,7 @@
 package com.agarthavision.ui.verify
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +40,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
@@ -112,8 +114,9 @@ fun VerificationSheet(
     }
 }
 
+@VisibleForTesting
 @Composable
-private fun VerificationSheetContent(
+internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
 ) {
@@ -165,7 +168,8 @@ private fun VerificationSheetContent(
                             },
                             shape = RoundedCornerShape(12.dp),
                         )
-                        .clickable { actions.onToggleRepeat() },
+                        .clickable { actions.onToggleRepeat() }
+                        .testTag(VerifyTestTags.REPEAT_TOGGLE),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -186,14 +190,18 @@ private fun VerificationSheetContent(
                     label = stringResource(R.string.verify_prev_frame),
                     selected = false,
                     onClick = actions.onFramePrev,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_PREV),
                     enabled = state.canGoPrev,
                 )
                 SmallToggle(
                     label = stringResource(R.string.verify_next_frame),
                     selected = false,
                     onClick = actions.onFrameNext,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.FRAME_NEXT),
                     enabled = state.canGoNext,
                 )
             }
@@ -208,6 +216,7 @@ private fun VerificationSheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(220.dp)
+                    .testTag(VerifyTestTags.FRAME_PREVIEW)
                     .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
@@ -239,12 +248,27 @@ private fun VerificationSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                SmallToggle("Prev detection", false, actions.onDetectionPrev, Modifier.weight(1f))
-                SmallToggle("Next detection", false, actions.onDetectionNext, Modifier.weight(1f))
+                SmallToggle(
+                    "Prev detection",
+                    false,
+                    actions.onDetectionPrev,
+                    Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.DETECTION_PREV),
+                )
+                SmallToggle(
+                    "Next detection",
+                    false,
+                    actions.onDetectionNext,
+                    Modifier
+                        .weight(1f)
+                        .testTag(VerifyTestTags.DETECTION_NEXT),
+                )
             }
 
             QuestionSection(
                 title = stringResource(R.string.verify_q1),
+                tag = VerifyTestTags.QUESTION_Q1,
                 options = listOf(true to "Yes", false to "No"),
                 selected = currentAnswers?.isEgg,
                 onSelect = actions.onQ1Selected,
@@ -253,6 +277,7 @@ private fun VerificationSheetContent(
             if (currentAnswers?.isEgg == true) {
                 QuestionSection(
                     title = stringResource(R.string.verify_q2),
+                    tag = VerifyTestTags.QUESTION_Q2,
                     options = listOf(true to "Yes", false to "No"),
                     selected = currentAnswers.isBoxCorrect,
                     onSelect = actions.onQ2Selected,
@@ -266,6 +291,7 @@ private fun VerificationSheetContent(
                         onOtherTextChanged = actions.onOtherSpeciesChanged,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
                             .padding(bottom = 14.dp),
                     )
                 }
@@ -273,6 +299,7 @@ private fun VerificationSheetContent(
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
+                tag = VerifyTestTags.QUESTION_Q4,
                 options = listOf(true to "Yes", false to "No"),
                 selected = state.missedEgg,
                 onSelect = actions.onQ4Selected,
@@ -292,6 +319,7 @@ private fun VerificationSheetContent(
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
+                    modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
                     checked = state.showBoundingBoxes,
                     onCheckedChange = { actions.onToggleBoundingBoxes() },
                     thumbContent = if (state.showBoundingBoxes) {
@@ -355,12 +383,16 @@ private fun VerificationSheetContent(
                         actions.onDeleteFrame()
                     },
                     enabled = !state.isSubmitting,
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
                 ) {
                     Text("Discard", color = AgarthaTheme.colors.danger)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardConfirm.value = false }) {
+                TextButton(
+                    onClick = { showDiscardConfirm.value = false },
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
                     Text("Cancel")
                 }
             },
@@ -374,6 +406,7 @@ private fun SourceBadge(source: FrameSource) {
 
     Box(
         modifier = Modifier
+            .testTag(VerifyTestTags.SOURCE_BADGE)
             .background(
                 color = if (isModelSource) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.warningTint,
                 shape = RoundedCornerShape(999.dp),
@@ -392,6 +425,7 @@ private fun SourceBadge(source: FrameSource) {
 @Composable
 private fun <T> QuestionSection(
     title: String,
+    tag: String,
     options: List<Pair<T, String>>,
     selected: T?,
     onSelect: (T) -> Unit,
@@ -426,6 +460,7 @@ private fun <T> QuestionSection(
                         RoundedCornerShape(8.dp)
                     )
                     .clickable { onSelect(value) }
+                    .testTag(VerifyTestTags.questionOption(tag, label))
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
@@ -449,7 +484,9 @@ private fun NoteField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(VerifyTestTags.NOTE_FIELD),
         placeholder = { Text(placeholder, color = AgarthaTheme.colors.textTertiary, fontSize = 13.sp) },
         minLines = 1,
         maxLines = 3,

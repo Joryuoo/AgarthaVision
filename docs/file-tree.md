@@ -34,8 +34,9 @@ app/
     │       ├── domain/        Pure Kotlin. Models, repository interfaces, use cases
     │       ├── data/          Room, Supabase, Retrofit, mappers, repository implementations
     │       └── ui/            Compose screens, ViewModels, navigation, theme
-    ├── test/                  JVM unit tests, mirroring the main package layout
-    ├── androidTest/           Instrumented tests
+    ├── test/                  JVM unit tests, mirroring the main package layout.
+    │                          ui/verify/ also holds Compose UI tests, run under Robolectric
+    ├── androidTest/           Instrumented tests. Generated stub only so far
     └── debug/                 Debug-variant manifest
 ```
 

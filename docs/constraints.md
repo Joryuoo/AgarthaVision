@@ -31,6 +31,10 @@ longer does — `FrameWithBoxes` takes domain `Prediction` values
 Nothing under `domain/` may import an Android API. The domain layer must be unit-testable on
 the JVM without Robolectric.
 
+**Scope:** this constrains `domain/` only. It is not a repo-wide ban on Robolectric — the
+Compose UI tests under `app/src/test/java/com/agarthavision/ui/verify/` use it deliberately
+so they run in `:app:testDebugUnitTest` instead of needing a device. See `commands.md`.
+
 **Enforcement:** review only. **This one actually holds** — zero files under
 `app/src/main/java/com/agarthavision/domain/` import `android.*`.
 
@@ -129,30 +133,39 @@ deletable.
 
 ## C9 — Commit and branch format
 
-Commits: `[type][ClickUp-ID][Lastname] Task title`, types
-`feat fix refactor docs style test ci chore`. Branches: cut from `staging` as
-`feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`, `test/…`. PRs target
-`staging`, never `main`.
+Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
+Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
+cut from `staging` as `feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+`test/…`. PRs target `staging`, never `main`.
 
-**Enforcement: nothing enforces this.** The `commit-msg` hook that once checked the format
-was removed (see commit `172ab4d`), and `.husky/` now contains only `pre-commit` and
-`pre-push`. `commitlint.config.js` is still committed and still extends
+**Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
+above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
+because git writes those itself; only the first line is checked, so bodies are free-form.
+A rejected commit prints the format, the type list with a gloss for each, and the subject
+that failed.
+
+**History predates the colon.** Every commit before `12509f8` uses the older
+`[type][ClickUp-ID][Lastname] Task title` shape with no colon — the hook only sees new
+commits, so the log is mixed and that is expected, not drift.
+
+**Caveat:** `commitlint.config.js` is still committed and still extends
 `@commitlint/config-conventional` with a scope enum (`commitlint.config.js:1-16`) — a
 *conventional-commit* shape that contradicts the bracket format above and is wired to no
-hook. `lint-staged.config.js` is likewise unreferenced by either hook.
+hook. `lint-staged.config.js` is likewise unreferenced by any hook. Both are dead
+configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
 Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
 gitignored (`.gitignore:3`, `.gitignore:15`). They reach the app as `BuildConfig` fields read
-at build time (`app/build.gradle.kts:18-20`, `app/build.gradle.kts:46-92`). A missing property
+at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
 
 **Enforcement:** `.gitignore` plus review. There is no secret-scanning step, because there is
 no CI at all — no `.github/` directory exists in this repository.
 
-**Drift:** `app/build.gradle.kts:66` and `:89` read `INFERENCE_API_KEY_DEV` /
+**Drift:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
 `INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
 `INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
 wins.
@@ -165,7 +178,7 @@ palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather t
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
 immersive regardless of the toggle. No second theme and no charting library: small dataviz
 is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
-(`app/build.gradle.kts:115`) supplies utility glyphs inside screens (chevrons, back arrows,
+(`app/build.gradle.kts:122`) supplies utility glyphs inside screens (chevrons, back arrows,
 filter, flag), while the bottom bar, brand marks and anything read as house identity are
 hand-authored 1.7-stroke outline drawables in `res/drawable/`. Match the neighbours: a new
 tab or brand icon is drawn, a new in-screen affordance may come from Material.
@@ -180,8 +193,9 @@ Compile, unit tests, a debug APK, and lint must pass before a commit lands, and 
 build must pass again before a push.
 
 **Enforcement:** the strongest mechanical enforcement in the repo. `.husky/pre-commit` runs
-`:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `assembleDebug`, then
-`:app:ktlintCheck :app:detekt`, aborting on any failure. `.husky/pre-push` runs
+`:app:compileDebugKotlin`, `:app:verifyRoborazziDebug`, `assembleDebug`, then
+`:app:ktlintCheck :app:detekt`, aborting on any failure. The second step is the full unit
+test suite with screenshot goldens compared, not a separate screenshot pass. `.husky/pre-push` runs
 `assembleDebug`. Both require a JDK and the Android SDK; both are bypassed by
 `git commit --no-verify`, which is the correct move for a docs-only change that touches no
 Kotlin, Gradle, or SQL.
