@@ -193,8 +193,9 @@ Compile, unit tests, a debug APK, and lint must pass before a commit lands, and 
 build must pass again before a push.
 
 **Enforcement:** the strongest mechanical enforcement in the repo. `.husky/pre-commit` runs
-`:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `assembleDebug`, then
-`:app:ktlintCheck :app:detekt`, aborting on any failure. `.husky/pre-push` runs
+`:app:compileDebugKotlin`, `:app:verifyRoborazziDebug`, `assembleDebug`, then
+`:app:ktlintCheck :app:detekt`, aborting on any failure. The second step is the full unit
+test suite with screenshot goldens compared, not a separate screenshot pass. `.husky/pre-push` runs
 `assembleDebug`. Both require a JDK and the Android SDK; both are bypassed by
 `git commit --no-verify`, which is the correct move for a docs-only change that touches no
 Kotlin, Gradle, or SQL.

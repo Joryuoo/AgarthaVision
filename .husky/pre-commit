@@ -26,10 +26,14 @@ run_gradle :app:compileDebugKotlin || {
   exit 1
 }
 
-# 2. Run unit tests
-echo "⏳ Running unit tests..."
-run_gradle :app:testDebugUnitTest || {
-  echo "❌ [Husky] Unit tests failed! Commit cancelled."
+# 2. Run unit tests, including the screenshot goldens.
+# verifyRoborazziDebug runs the whole :app:testDebugUnitTest suite with pixel comparison
+# switched on, so it supersedes a separate unit test step rather than adding a second run.
+echo "⏳ Running unit tests and screenshot verification..."
+run_gradle :app:verifyRoborazziDebug || {
+  echo "❌ [Husky] Unit tests or screenshot verification failed! Commit cancelled."
+  echo "   If a UI change was intentional, re-record the goldens and review the diff:"
+  echo "     ./gradlew :app:recordRoborazziDebug"
   exit 1
 }
 

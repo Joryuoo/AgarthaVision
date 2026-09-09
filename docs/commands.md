@@ -63,10 +63,16 @@ Installed by Husky into `.git/hooks` via `bun run prepare`.
 
 | Hook | Runs | File |
 |---|---|---|
-| `pre-commit` | `:app:compileDebugKotlin` → `:app:testDebugUnitTest` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
+| `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
 | `pre-push` | `assembleDebug` | `.husky/pre-push` |
 
 Both auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
+
+`verifyRoborazziDebug` stands in for `:app:testDebugUnitTest` in the hook rather than being an
+extra step: it runs the same suite with pixel comparison switched on, so a separate unit-test
+step would just run everything twice. A failed golden aborts the commit; when the UI change
+was intentional, re-record with `./gradlew :app:recordRoborazziDebug` and review the diff
+before committing the new image.
 
 `git commit --no-verify` bypasses `pre-commit`. That is the correct move for a change that
 touches only Markdown, since the hook gates on a full Android build that such a change cannot
