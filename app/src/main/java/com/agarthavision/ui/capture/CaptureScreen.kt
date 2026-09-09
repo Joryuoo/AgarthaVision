@@ -48,7 +48,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -65,8 +64,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
@@ -248,22 +245,6 @@ fun CaptureScreen(
         }
     }
 
-    // Auto-pause inference whenever Capture leaves the foreground (back to picker,
-    // app backgrounded, etc.) and resume on return. Sheets/overlays handle their
-    // own pause/resume — see CaptureViewModel.resumeInferenceIfNoOverlay().
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> viewModel.resumeInferenceIfNoOverlay()
-                Lifecycle.Event.ON_PAUSE -> viewModel.pauseInference()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
@@ -282,9 +263,12 @@ fun CaptureScreen(
                 if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
+                // TODO(86d4a6prb): AI-zero-eggs snackbar copy
                 val message = if (frame.source == FrameSource.MODEL) {
                     // Prefer the canonical binomial: the server emits whatever its class
-                    // list is named, which may be an alias like "Ascaris".
+                    // list is named, which may be an alias like "Ascaris". A MODEL frame
+                    // with no predictions (AI ran, found nothing) falls through to
+                    // detectionFallback until product picks copy for that case.
                     val label = frame.predictions.firstOrNull()?.classLabel
                     val species = label
                         ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
@@ -428,7 +412,7 @@ fun CaptureScreen(
                     .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
                     .background(Color.White, CircleShape)
                     .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                        viewModel.onManualCapture()
+                        viewModel.onCapture()
                     },
             )
 

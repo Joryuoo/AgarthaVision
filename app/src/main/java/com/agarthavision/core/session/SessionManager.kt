@@ -68,7 +68,7 @@ class SessionManager @Inject constructor(
         )
         sessionDao.insertSession(entity)
         val synced = pushSessionInsert(entity)
-        _state.value = SessionState.Active(synced, now, isInferenceRunning = true)
+        _state.value = SessionState.Active(synced, now)
         return synced
     }
 
@@ -83,29 +83,8 @@ class SessionManager @Inject constructor(
         _state.value = SessionState.Active(
             session = entity,
             startedAt = Instant.ofEpochMilli(entity.startedAt),
-            isInferenceRunning = true,
         )
         return entity
-    }
-
-    /**
-     * Flips [SessionState.Active.isInferenceRunning] to true. No-op when [SessionState.Idle].
-     */
-    fun resumeInference() {
-        val current = _state.value
-        if (current is SessionState.Active && !current.isInferenceRunning) {
-            _state.value = current.copy(isInferenceRunning = true)
-        }
-    }
-
-    /**
-     * Flips [SessionState.Active.isInferenceRunning] to false. No-op when [SessionState.Idle].
-     */
-    fun pauseInference() {
-        val current = _state.value
-        if (current is SessionState.Active && current.isInferenceRunning) {
-            _state.value = current.copy(isInferenceRunning = false)
-        }
     }
 
     /**

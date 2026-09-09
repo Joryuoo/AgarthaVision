@@ -11,46 +11,52 @@ Getting a frame off the microscope and into a state a human can review.
 ## Movement
 
 1. **Bind the camera.** `CaptureScreen` calls `CameraManager.bindAnalysis` with the
-   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:313`). Only `Preview` and
-   `ImageAnalysis` are bound — there is **no `ImageCapture` use case**, so there is no shutter
-   anywhere in Phase 1 (`core/camera/CameraManager.kt:63-116`). Both use cases are pinned to
-   the same 4:3 aspect-ratio strategy so they share one field of view; the analyzer asks for
-   640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which prefers a stream at or above
-   that size so the frame is only ever downscaled. Backpressure `KEEP_ONLY_LATEST`
-   (`core/camera/CameraManager.kt:84-101`).
+   `FrameSampler` as analyzer. Only `Preview` and `ImageAnalysis` are bound — there is **no
+   `ImageCapture` use case**, so there is no hardware shutter (`core/camera/CameraManager.kt`).
+   Both use cases are pinned to the same 4:3 aspect-ratio strategy so they share one field of
+   view; the analyzer asks for 640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which
+   prefers a stream at or above that size so the frame is only ever downscaled. Backpressure
+   `KEEP_ONLY_LATEST` (`core/camera/CameraManager.kt`).
 2. **Cache every frame.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG bytes and
-   stores them in `latestFrameBytes` on *every* frame, before any throttling
-   (`core/camera/FrameSampler.kt:57-62`). This cache is what manual capture snapshots. It runs
-   on a single background thread owned by `CameraManager`, not the main one — encoding every
-   frame on the UI thread was visible as preview jank.
+   stores them in `latestFrameBytes` on *every* frame (`core/camera/FrameSampler.kt`). That is
+   all it does now — there is no timer, no session gate, and no auto-dispatch to inference. It
+   runs on a single background thread owned by `CameraManager`, not the main one — encoding
+   every frame on the UI thread was visible as preview jank.
    `toJpegBytes` rotates by `imageInfo.rotationDegrees`, centre-crops to a square, then
    downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
    geometry. Cropping before scaling is what keeps the image from stretching. A device that
    cannot supply 640 is encoded at its native square size rather than upscaled.
-3. **Gate on session state.** If the session is not `Active`, or inference is paused, the frame
-   is dropped here (`core/camera/FrameSampler.kt:64`). Pausing is driven by
-   `SessionManager.pauseInference()` whenever a sheet or child screen comes forward
-   (`core/session/SessionManager.kt:104-109`, `ui/capture/CaptureViewModel.kt:161-163`).
-4. **Throttle.** One frame per 2000 ms, and **skip rather than queue** if a request is already
-   in flight (`core/camera/FrameSampler.kt:36`, `:66-68`). A slow network reduces the sampling
-   rate; it never builds a backlog.
-5. **Dispatch to inference** on an IO scope, swallowing failures with a log so capture keeps
-   running (`core/camera/FrameSampler.kt:72-79`). What happens next is
-   [`infer`](infer.md).
-6. **Persist, if flagged.** `PersistFlaggedFrameUseCase` writes the JPEG under
+3. **Wait for the tap.** Capture is medtech-triggered, one frame per field — a fecal smear is
+   read by choosing ~10 likely fields, not by sweeping the slide continuously, so the old
+   2-second timer was removed. The shutter calls `CaptureViewModel.onCapture`, which snapshots
+   `latestFrameBytes` and hands it to `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
+   `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, or no frame cached yet,
+   sets an error and returns without capturing.
+4. **Infer once, and always record.** `CaptureFieldUseCase` calls `RemoteInferenceEngine.infer`
+   a single time — what happens inside is [`infer`](infer.md). On success it builds a
+   `FrameSource.MODEL` frame carrying the JPEG, the predictions (**including an empty list** —
+   the medtech tapped this field and expects it recorded even when the model found nothing), the
+   model version and the image dimensions. On `InferenceConnectionException` it builds a
+   `FrameSource.MANUAL` frame with no predictions instead, so an unreachable container is a
+   Manual Capture rather than a silent failure (`domain/usecase/capture/CaptureFieldUseCase.kt`).
+5. **Persist.** Either way the frame goes to `FlaggedFrameStore.add`, which runs
+   `PersistFlaggedFrameUseCase`: it writes the JPEG under
    `filesDir/users/{owner}/samples/{sampleId}.jpg` and inserts a `SampleEntity` with
-   `status = flagged` (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:23-62`,
+   `status = flagged` (`data/repository/FlaggedFrameStore.kt:77-79`,
+   `domain/usecase/capture/PersistFlaggedFrameUseCase.kt:23-62`,
    `data/local/SampleImageStore.kt:15-20`). Owner is the cached identity or `null`; unowned
    frames go under a literal `local` folder
    (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:66-67`). The raw predictions are
    cached in `predictions_json`.
 
-## Manual capture — the second entrance
+## AI Capture vs Manual Capture — one entrance, two outcomes
 
-Same output, no model. `CaptureViewModel.onManualCapture` reads the cached
-`latestFrameBytes`, builds a `FlaggedFrame` with `source = MANUAL` and empty predictions, and
-pushes it through the same store (`ui/capture/CaptureViewModel.kt:129-155`). It requires an
-active session and at least one frame already seen; otherwise it sets an error and returns.
+There is no longer a separate no-model entrance. Every tap runs inference; the outcome is what
+splits an **AI Capture** (`FrameSource.MODEL`, inference returned) from a **Manual Capture**
+(`FrameSource.MANUAL`, `InferenceConnectionException`). The `InferenceConnectionException` the
+call already throws on transport failure *is* the classifier — there is no separate timeout or
+signal. `SubmitManualCaptureUseCase` remains the pattern for turning either into a verified
+sample downstream.
 
 ## Discarding
 
@@ -70,8 +76,8 @@ nothing verified is deletable (`../../constraints.md` C8).
   every flagged DAO query filters on `user_id` (`data/local/dao/SampleDao.kt:69`, `:78`). Frames
   captured with no cached identity are written to Room but never appear in the queue — a real
   gap against the offline-first intent, not a design decision.
-- Changing the sampling interval changes inference cost directly. GPU droplets bill by the
-  second.
+- Inference now runs once per shutter tap, not on a timer. A field costs exactly one
+  inference call; there is no idle sampling burning the GPU droplet between taps.
 - Changing the analysis resolution changes the coordinate space of every bounding box, since
   the server returns pixel coordinates.
 - Changing the crop, the aspect-ratio strategy, or `PreviewView.scaleType` breaks

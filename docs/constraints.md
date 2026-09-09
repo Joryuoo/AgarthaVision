@@ -62,9 +62,9 @@ returns `Result<T>` so the caller handles both branches. Never swallow an except
 
 **Enforcement:** review only, and **it is not holding.** Seventeen of the roughly thirty
 files under `domain/usecase/` never mention `Result<` — including
-`domain/usecase/capture/InferFrameUseCase.kt:29`, which throws
-`InferenceConnectionException` instead, and `domain/usecase/reports/SessionEggCountUseCase.kt:19`,
-which returns a bare data class. Treat C4 as the target shape for new code, not a description
+`domain/usecase/capture/CaptureFieldUseCase.kt`, which returns `Unit` and handles its one
+expected failure (`InferenceConnectionException`) internally, and
+`domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat C4 as the target shape for new code, not a description
 of the existing code.
 
 ## C5 — `@Singleton` is a closed list

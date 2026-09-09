@@ -19,9 +19,8 @@ import javax.inject.Singleton
  *
  * The base URL and bearer key come from [BuildConfig], which is populated from
  * `local.properties` at build time. Until DMKuZu's container is live, requests
- * will fail at runtime — which is fine, because `FrameSampler` and
- * `InferFrameUseCase` are built around the response *shape*, not against a live
- * server. See ADR-003.
+ * will fail at runtime — which is fine, because `CaptureFieldUseCase` is built
+ * around the response *shape*, not against a live server. See ADR-003.
  */
 @Module
 @InstallIn(SingletonComponent::class)

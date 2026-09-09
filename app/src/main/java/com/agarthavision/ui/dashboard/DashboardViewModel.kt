@@ -220,7 +220,10 @@ class DashboardViewModel @Inject constructor(
                         ActiveSessionState(
                             label = state.session.label ?: "Active Session",
                             startedAtAgo = "Started $minutes min ago",
-                            isRecording = state.isInferenceRunning,
+                            // No inference-running sub-state any more (Track 2.13):
+                            // this branch only runs while SessionState.Active, so an
+                            // active session means recording.
+                            isRecording = true,
                             totalFrames = totalFrames.toString(),
                             verifiedFrames = verifiedFrames.toString(),
                             totalEpg = totalEpg.toString(), // Mocked

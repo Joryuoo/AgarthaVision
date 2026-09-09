@@ -33,22 +33,26 @@ as working.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
-  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`).
-- **2-second frame sampling** with in-flight skip rather than queueing
-  (`core/camera/FrameSampler.kt:36`, `:66-68`).
+  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`). `FrameSampler` caches the
+  latest frame as JPEG bytes on every frame and no longer dispatches to inference
+  (`core/camera/FrameSampler.kt`).
+- **Manual-trigger capture, one frame per field.** The medtech taps the shutter; the cached
+  frame is snapshotted and run through inference once (`ui/capture/CaptureViewModel.kt`
+  `onCapture`, `domain/usecase/capture/CaptureFieldUseCase.kt`). There is no timer — the old
+  2-second auto-sampling was removed because a fecal smear is read by choosing ~10 likely
+  fields, not by sweeping the slide continuously.
+- **AI-vs-Manual by outcome.** A successful inference call records an **AI Capture**
+  (`FrameSource.MODEL`), keeping whatever predictions came back including an empty list; an
+  `InferenceConnectionException` records a **Manual Capture** (`FrameSource.MANUAL`) instead, so
+  a lost connection never silently drops the tap (`domain/usecase/capture/CaptureFieldUseCase.kt`).
 - **Synchronous inference** against the self-hosted FastAPI container, called through
   `RemoteInferenceEngine` behind the `InferenceEngine` interface
-  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`,
-  `domain/usecase/capture/InferFrameUseCase.kt`). Cloud is the only backend: on-device TFLite
-  was built, benchmarked at 20.8 s per frame against a 2-second capture cadence, and deferred
-  to `feat/offline-inference`.
+  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the
+  only backend: on-device TFLite was built, benchmarked at 20.8 s per frame, and deferred to
+  `feat/offline-inference`.
 - **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
   consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
   surface as `ui/capture/ConnectionLossBanner.kt`.
-- **Inference auto-pause** whenever a sheet or child screen is foregrounded
-  (`core/session/SessionManager.kt:94-109`, `ui/capture/CaptureViewModel.kt:161-172`).
-- **Manual capture** of the live frame with no AI involvement, for specimens the model missed
-  (`ui/capture/CaptureViewModel.kt:129-155`, `domain/usecase/verify/SubmitManualCaptureUseCase.kt`).
 
 ### Validation (human-in-the-loop)
 - **Per-box verdict questionnaire** producing `CONFIRMED` / `FALSE_POSITIVE` /
