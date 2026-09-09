@@ -50,5 +50,26 @@ internal object VerifyTestTags {
     const val CUSTOM_SPECIES_SAVE = "custom_species_save"
     const val CUSTOM_SPECIES_DISMISS = "custom_species_dismiss"
 
+    /**
+     * The AI sheet's three yes/no questions. All three render the same "Yes"/"No" labels,
+     * so a test that looked them up by text would match whichever came first.
+     */
+    const val QUESTION_Q1 = "q1"
+    const val QUESTION_Q2 = "q2"
+    const val QUESTION_Q4 = "q4"
+
+    /** Species picker, shown only once Q1 and Q2 are both answered yes. */
+    const val SPECIES_DROPDOWN = "species_dropdown"
+
+    /** Bounding-box visibility switch. */
+    const val BOXES_TOGGLE = "boxes_toggle"
+
+    /** AI-suggested vs Manual provenance pill. */
+    const val SOURCE_BADGE = "source_badge"
+
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
+
+    /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
+    fun questionOption(question: String, label: String): String =
+        question + "_" + label.lowercase()
 }

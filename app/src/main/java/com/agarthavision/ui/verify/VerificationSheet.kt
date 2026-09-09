@@ -268,6 +268,7 @@ internal fun VerificationSheetContent(
 
             QuestionSection(
                 title = stringResource(R.string.verify_q1),
+                tag = VerifyTestTags.QUESTION_Q1,
                 options = listOf(true to "Yes", false to "No"),
                 selected = currentAnswers?.isEgg,
                 onSelect = actions.onQ1Selected,
@@ -276,6 +277,7 @@ internal fun VerificationSheetContent(
             if (currentAnswers?.isEgg == true) {
                 QuestionSection(
                     title = stringResource(R.string.verify_q2),
+                    tag = VerifyTestTags.QUESTION_Q2,
                     options = listOf(true to "Yes", false to "No"),
                     selected = currentAnswers.isBoxCorrect,
                     onSelect = actions.onQ2Selected,
@@ -289,6 +291,7 @@ internal fun VerificationSheetContent(
                         onOtherTextChanged = actions.onOtherSpeciesChanged,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
                             .padding(bottom = 14.dp),
                     )
                 }
@@ -296,6 +299,7 @@ internal fun VerificationSheetContent(
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
+                tag = VerifyTestTags.QUESTION_Q4,
                 options = listOf(true to "Yes", false to "No"),
                 selected = state.missedEgg,
                 onSelect = actions.onQ4Selected,
@@ -315,6 +319,7 @@ internal fun VerificationSheetContent(
                     modifier = Modifier.weight(1f),
                 )
                 Switch(
+                    modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
                     checked = state.showBoundingBoxes,
                     onCheckedChange = { actions.onToggleBoundingBoxes() },
                     thumbContent = if (state.showBoundingBoxes) {
@@ -378,12 +383,16 @@ internal fun VerificationSheetContent(
                         actions.onDeleteFrame()
                     },
                     enabled = !state.isSubmitting,
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
                 ) {
                     Text("Discard", color = AgarthaTheme.colors.danger)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDiscardConfirm.value = false }) {
+                TextButton(
+                    onClick = { showDiscardConfirm.value = false },
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
                     Text("Cancel")
                 }
             },
@@ -397,6 +406,7 @@ private fun SourceBadge(source: FrameSource) {
 
     Box(
         modifier = Modifier
+            .testTag(VerifyTestTags.SOURCE_BADGE)
             .background(
                 color = if (isModelSource) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.warningTint,
                 shape = RoundedCornerShape(999.dp),
@@ -415,6 +425,7 @@ private fun SourceBadge(source: FrameSource) {
 @Composable
 private fun <T> QuestionSection(
     title: String,
+    tag: String,
     options: List<Pair<T, String>>,
     selected: T?,
     onSelect: (T) -> Unit,
@@ -449,6 +460,7 @@ private fun <T> QuestionSection(
                         RoundedCornerShape(8.dp)
                     )
                     .clickable { onSelect(value) }
+                    .testTag(VerifyTestTags.questionOption(tag, label))
                     .padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
