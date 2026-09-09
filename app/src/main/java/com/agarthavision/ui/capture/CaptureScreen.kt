@@ -68,7 +68,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
@@ -209,9 +208,8 @@ fun CaptureScreen(
     val toastState = rememberAgarthaToastState()
     val context = LocalContext.current
     val view = LocalView.current
-    val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
-    val detectionMessage = stringResource(R.string.capture_detection_message)
+    val aiCaptureMessage = stringResource(R.string.capture_ai_capture_message)
     val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
@@ -263,17 +261,11 @@ fun CaptureScreen(
                 if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
-                // TODO(86d4a6prb): AI-zero-eggs snackbar copy
+                // Source, not species: the frame is unverified, so naming a species here
+                // would assert an unconfirmed detection. MODEL = inference returned (even
+                // with zero eggs); MANUAL = the inference container was unreachable.
                 val message = if (frame.source == FrameSource.MODEL) {
-                    // Prefer the canonical binomial: the server emits whatever its class
-                    // list is named, which may be an alias like "Ascaris". A MODEL frame
-                    // with no predictions (AI ran, found nothing) falls through to
-                    // detectionFallback until product picks copy for that case.
-                    val label = frame.predictions.firstOrNull()?.classLabel
-                    val species = label
-                        ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
-                        ?: detectionFallback
-                    detectionMessage.format(species)
+                    aiCaptureMessage
                 } else {
                     manualCaptureMessage
                 }
@@ -284,6 +276,23 @@ fun CaptureScreen(
                     actionLabel = detectionView,
                     onAction = { viewModel.onDetectionToastTap(frame) },
                 )
+            }
+    }
+
+    // Surface capture errors ("No active session", "Waiting for a live frame", or an
+    // unexpected inference/persist failure) as a destructive toast, then clear the latch
+    // so the same error can fire again on the next tap.
+    LaunchedEffect(viewModel) {
+        viewModel.state
+            .map { it.errorMessage }
+            .distinctUntilChanged()
+            .collect { errorMessage ->
+                if (errorMessage == null) return@collect
+                toastState.show(
+                    message = errorMessage,
+                    variant = AgarthaToastVariant.Destructive,
+                )
+                viewModel.clearErrorMessage()
             }
     }
 
@@ -438,9 +447,10 @@ fun CaptureScreen(
             }
         }
 
-        // Detection toast, below the back button and session pill rather than over them.
-        // Same band as ConnectionLossBanner, which cannot be showing at the same time:
-        // losing the connection stops recording, so no detections arrive.
+        // Capture toast, below the back button and session pill rather than over them.
+        // NOTE: since capture is manual-trigger, a tap still records a frame (as a Manual
+        // Capture) while the connection-loss banner is latched, so both can now occupy this
+        // band at once. Repositioning to stack them cleanly is tracked as a follow-up.
         AgarthaToastHost(
             state = toastState,
             modifier = Modifier

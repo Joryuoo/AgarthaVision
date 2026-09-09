@@ -60,12 +60,11 @@ deviation and defers the fix to Phase 2 (`domain/usecase/auth/ClaimLocalDataUseC
 A use case has one public entry point (`operator fun invoke` or `suspend fun execute`) and
 returns `Result<T>` so the caller handles both branches. Never swallow an exception.
 
-**Enforcement:** review only, and **it is not holding.** Seventeen of the roughly thirty
-files under `domain/usecase/` never mention `Result<` — including
-`domain/usecase/capture/CaptureFieldUseCase.kt`, which returns `Unit` and handles its one
-expected failure (`InferenceConnectionException`) internally, and
-`domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat C4 as the target shape for new code, not a description
-of the existing code.
+**Enforcement:** review only, and **it is not holding.** Many of the roughly thirty
+files under `domain/usecase/` never mention `Result<` — for example
+`domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat
+C4 as the target shape for new code, not a description of the existing code. Newer capture code
+follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<FrameSource>`.
 
 ## C5 — `@Singleton` is a closed list
 

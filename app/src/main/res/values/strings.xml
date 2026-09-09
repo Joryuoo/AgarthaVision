@@ -112,9 +112,8 @@
     <string name="capture_records_action_desc">View records</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
-    <string name="capture_detection_fallback">egg</string>
-    <string name="capture_detection_message">%1$s detected</string>
-    <string name="capture_manual_capture_message">Frame captured</string>
+    <string name="capture_ai_capture_message">AI - Frame captured</string>
+    <string name="capture_manual_capture_message">Manual - Frame captured</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>

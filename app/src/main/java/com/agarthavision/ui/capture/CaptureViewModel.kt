@@ -139,13 +139,20 @@ class CaptureViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
-            runCatching {
-                captureFieldUseCase(sessionId, jpegBytes)
-            }.onFailure { throwable ->
-                _state.update { it.copy(errorMessage = throwable.message) }
-            }
+            captureFieldUseCase(sessionId, jpegBytes)
+                .onFailure { throwable ->
+                    _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
+                }
             _state.update { it.copy(isBusy = false) }
         }
+    }
+
+    /**
+     * Clears [CaptureState.errorMessage] once the screen has surfaced it (as a toast),
+     * so the same error can fire again on the next tap.
+     */
+    fun clearErrorMessage() {
+        _state.update { it.copy(errorMessage = null) }
     }
 
     fun resumeConnection() {
@@ -176,7 +183,8 @@ sealed interface CaptureEvent {
  *   the top app bar / REC badge area for orientation.
  * @property isBusy true while End Session or a capture is in flight; hides the
  *   action button behind a progress spinner and blocks duplicate taps.
- * @property errorMessage transient error surfaced under the action button.
+ * @property errorMessage transient error surfaced as a toast, then cleared via
+ *   [CaptureViewModel.clearErrorMessage].
  * @property flaggedFrames mirror of [FlaggedFrameStore.state].
  * @property isConnectionLost latched true when [NetworkMonitor] reports
  *   `Disconnected`. NOT auto-cleared on reconnect — only [resumeConnection]
