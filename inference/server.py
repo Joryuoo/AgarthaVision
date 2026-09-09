@@ -1,5 +1,6 @@
 import io
 import os
+import time
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -38,7 +39,10 @@ async def infer(request: Request, _: None = Depends(verify_key)) -> dict:
         raise HTTPException(status_code=400, detail="Empty request body")
 
     img = Image.open(io.BytesIO(raw)).convert("RGB")
+
+    started_at = time.perf_counter()
     results = model(img)[0]
+    inference_ms = (time.perf_counter() - started_at) * 1000
 
     predictions = []
     for box in results.boxes:
@@ -58,4 +62,7 @@ async def infer(request: Request, _: None = Depends(verify_key)) -> dict:
         "model_version": MODEL_VERSION,
         "predictions": predictions,
         "image": {"width": img.width, "height": img.height},
+        # Server compute only, excluding transport. Lets the Android benchmark compare cloud
+        # compute against on-device compute instead of against the client's network.
+        "inference_ms": round(inference_ms, 2),
     }

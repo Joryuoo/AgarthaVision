@@ -68,7 +68,7 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
         assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
         assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
-        assertEquals("/downloads/report.csv", report.csvFilePath)
+        assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
         assertEquals(ReportSyncStatus.PENDING, report.supabaseStatus)
         assertNotNull(report.generatedAt)
         assertTrue(reportFileStore.lastCsv.contains("# report_id: ${report.id}"))
@@ -184,7 +184,7 @@ private class FakeReportFileStore : ReportFileStore {
     override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
         lastReportId = reportId
         lastCsv = csv
-        return "/downloads/report.csv"
+        return "/Documents/AgarthaVision/report.csv"
     }
 }
 

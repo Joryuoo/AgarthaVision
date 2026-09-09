@@ -2,7 +2,7 @@ package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -41,7 +41,7 @@ class SubmitVerificationUseCaseTest {
         syncSampleUseCase = syncSampleUseCase,
     )
 
-    private val prediction = PredictionDto(
+    private val prediction = Prediction(
         classLabel = "Ascaris",
         confidence = 0.9f,
         x = 100f,

@@ -148,6 +148,9 @@ interface SessionDao {
         SELECT s.*,
                COUNT(DISTINCT smp.sample_id) AS totalSamples,
                SUM(CASE WHEN smp.verified_at > 0 THEN 1 ELSE 0 END) AS verifiedSamples,
+               SUM(
+                 CASE WHEN smp.status = 'flagged' AND smp.is_repeat = 0 THEN 1 ELSE 0 END
+               ) AS unverifiedSamples,
                COUNT(d.detection_id) AS totalEpg
         FROM sessions s
         LEFT JOIN samples smp ON s.session_id = smp.session_id
@@ -165,5 +168,10 @@ data class SessionWithStats(
     @Embedded val session: SessionEntity,
     @androidx.room.ColumnInfo(name = "totalSamples") val totalSamples: Int,
     @androidx.room.ColumnInfo(name = "verifiedSamples") val verifiedSamples: Int,
+    /**
+     * Frames still awaiting review, excluding repeats — the same set that blocks ending
+     * a session, so the row and the end-session dialog can never disagree.
+     */
+    @androidx.room.ColumnInfo(name = "unverifiedSamples") val unverifiedSamples: Int,
     @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int
 )

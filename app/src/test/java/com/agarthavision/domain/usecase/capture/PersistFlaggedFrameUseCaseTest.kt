@@ -4,7 +4,7 @@ import com.agarthavision.core.util.DeviceIdProvider
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.SampleStatus
@@ -47,7 +47,7 @@ class PersistFlaggedFrameUseCaseTest {
         gson = gson,
     )
 
-    private val prediction = PredictionDto(
+    private val prediction = Prediction(
         classLabel = "Ascaris",
         confidence = 0.91f,
         x = 10f,

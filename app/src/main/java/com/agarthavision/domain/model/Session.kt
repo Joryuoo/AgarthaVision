@@ -55,5 +55,7 @@ data class SessionWithStats(
     val session: Session,
     val totalSamples: Int,
     val verifiedSamples: Int,
+    /** Frames awaiting review, excluding repeats — what blocks ending the session. */
+    val unverifiedSamples: Int,
     val totalEpg: Int
 )

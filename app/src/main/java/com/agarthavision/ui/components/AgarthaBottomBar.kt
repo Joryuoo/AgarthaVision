@@ -1,6 +1,7 @@
 package com.agarthavision.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -32,9 +33,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,15 +43,16 @@ import com.agarthavision.ui.theme.AgarthaTheme
 
 sealed class Tab(
     val route: String,
-    val label: String,
+    @StringRes val labelRes: Int,
     @DrawableRes val iconRes: Int
 ) {
-    data object Home     : Tab("dashboard", "Home",     R.drawable.ic_home)
-    data object Sessions : Tab("sessions",  "Sessions", R.drawable.ic_layers)
-    data object Records  : Tab("records",   "Records",  R.drawable.ic_chart)
+    data object Home     : Tab("dashboard", R.string.nav_tab_home,     R.drawable.ic_home)
+    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, R.drawable.ic_layers)
+    data object Records  : Tab("records",   R.string.nav_tab_records,  R.drawable.ic_chart)
+    data object Settings : Tab("settings",  R.string.settings_title,   R.drawable.ic_settings)
 }
 
-val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records)
+val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records, Tab.Settings)
 
 /**
  * Screens that should show the bottom bar.
@@ -60,7 +61,8 @@ val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records)
 val bottomBarRoutes: Set<String> = setOf(
     "dashboard",
     "sessions",
-    "records"
+    "records",
+    "settings"
 )
 
 /**
@@ -71,7 +73,6 @@ val bottomBarRoutes: Set<String> = setOf(
 fun AgarthaBottomBar(
     currentRoute: String?,
     onTabSelected: (Tab) -> Unit,
-    verifyQueueCount: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val colors = AgarthaTheme.colors
@@ -103,6 +104,7 @@ fun AgarthaBottomBar(
             ) {
             tabs.forEach { tab ->
                 val selected = currentRoute == tab.route
+                val label = stringResource(tab.labelRes)
 
                 val iconColor by animateColorAsState(
                     targetValue = if (selected) colors.accent else colors.textTertiary,
@@ -124,28 +126,20 @@ fun AgarthaBottomBar(
                             role = Role.Tab,
                             onClick = { onTabSelected(tab) }
                         )
-                        .padding(vertical = 6.dp)
-                        .semantics {
-                            if (tab is Tab.Sessions && verifyQueueCount > 0) {
-                                contentDescription = "Sessions, $verifyQueueCount pending"
-                            }
-                        },
+                        .padding(vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Box {
                         Icon(
                             painter = painterResource(tab.iconRes),
-                            contentDescription = tab.label,
+                            contentDescription = label,
                             modifier = Modifier.size(22.dp),
                             tint = iconColor
                         )
-                        if (tab is Tab.Sessions && verifyQueueCount > 0) {
-                            BadgedBox(verifyQueueCount)
-                        }
                     }
                     Text(
-                        text = tab.label,
+                        text = label,
                         color = labelColor,
                         fontSize = 10.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
@@ -159,25 +153,3 @@ fun AgarthaBottomBar(
 }
 }
 
-@Composable
-private fun BadgedBox(count: Int) {
-    val colors = AgarthaTheme.colors
-    Box(
-        modifier = Modifier
-            .offset(x = 10.dp, y = (-4).dp)
-            .background(colors.danger, RoundedCornerShape(999.dp))
-            .border(2.dp, colors.surface, RoundedCornerShape(999.dp))
-            .padding(horizontal = 4.dp, vertical = 0.dp)
-            .heightIn(min = 16.dp)
-            .widthIn(min = 16.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            if (count > 99) "99+" else count.toString(),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.onAccent,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-        )
-    }
-}

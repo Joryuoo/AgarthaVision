@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -72,6 +71,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
@@ -88,7 +88,6 @@ import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 
 @Composable
 private fun PulsingDot() {
@@ -147,6 +146,53 @@ private fun IconButtonGlass(
     }
 }
 
+/**
+ * Shortcut into the verification queue, with a badge counting the frames still
+ * awaiting review. Lives in the bottom-left of the capture chrome: the toast
+ * renders top-center and used to sit on top of this button.
+ */
+@Composable
+private fun VerificationQueueButton(
+    count: Int,
+    onClick: () -> Unit,
+) {
+    Box {
+        IconButtonGlass(
+            "M9 12l2 2 4-4",
+            drawExtras = {
+                drawRoundRect(
+                    Color.White,
+                    Offset(3f, 3f),
+                    Size(18f, 18f),
+                    CornerRadius(2f, 2f),
+                    style = Stroke(1.6f),
+                )
+            },
+            onClick = onClick,
+        )
+
+        if (count > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 6.dp, y = (-6).dp)
+                    .background(AppColors.MaroonBright, CircleShape)
+                    .border(2.dp, Color(28, 18, 16, (0.85f * 255).toInt()), CircleShape)
+                    .padding(horizontal = 5.dp)
+                    .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "$count",
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
 // Top-level screen composable wired directly from AgarthaNavGraph's single Capture destination
 // (viewModel, camera deps, and 5 distinct navigation callbacks); each param is independently
 // meaningful and bundling would only wrap a single-call-site composable, not simplify anything.
@@ -169,6 +215,7 @@ fun CaptureScreen(
     val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
     val detectionMessage = stringResource(R.string.capture_detection_message)
+    val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -227,25 +274,32 @@ fun CaptureScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.state
-            .map { it.flaggedFrames.firstOrNull()?.capturedAt }
+            // Keyed on the id, not capturedAt: two frames sharing a millisecond used to
+            // look like one arrival to distinctUntilChanged, and neither got a toast.
+            .map { it.flaggedFrames.firstOrNull()?.sampleId }
             .distinctUntilChanged()
-            .collect { capturedAt ->
-                if (capturedAt != null) {
-                    // Capture the frame NOW — before the coroutine suspends on the toast
-                    val frameAtToastTime =
-                        viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-                    if (frameAtToastTime.source != FrameSource.MODEL) return@collect
-                    val eggType =
-                        frameAtToastTime.predictions.firstOrNull()?.classLabel ?: detectionFallback
-                    launch {
-                        toastState.show(
-                            message = detectionMessage.format(eggType),
-                            variant = AgarthaToastVariant.Default,
-                            actionLabel = detectionView,
-                            onAction = { viewModel.onDetectionToastTap(frameAtToastTime) },
-                        )
-                    }
+            .collect { sampleId ->
+                if (sampleId == null) return@collect
+                val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
+
+                val message = if (frame.source == FrameSource.MODEL) {
+                    // Prefer the canonical binomial: the server emits whatever its class
+                    // list is named, which may be an alias like "Ascaris".
+                    val label = frame.predictions.firstOrNull()?.classLabel
+                    val species = label
+                        ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
+                        ?: detectionFallback
+                    detectionMessage.format(species)
+                } else {
+                    manualCaptureMessage
                 }
+
+                toastState.show(
+                    message = message,
+                    variant = AgarthaToastVariant.Default,
+                    actionLabel = detectionView,
+                    onAction = { viewModel.onDetectionToastTap(frame) },
+                )
             }
     }
 
@@ -318,47 +372,18 @@ fun CaptureScreen(
                 )
             }
 
-            // Top-right: Verify Queue (kept from 77b5; records/reports shortcuts removed)
+            // Records shortcut for the active session. Reuses ic_chart's bar geometry so
+            // it reads the same as the Records tab in the bottom bar.
             Box(
                 modifier = Modifier.width(40.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Box {
-                    IconButtonGlass(
-                        "M9 12l2 2 4-4",
-                        drawExtras = {
-                            drawRoundRect(
-                                Color.White,
-                                Offset(3f, 3f),
-                                Size(18f, 18f),
-                                CornerRadius(2f, 2f),
-                                style = Stroke(1.6f),
-                            )
-                        },
-                        onClick = onVerifyQueueClick,
-                    )
-
-                    val verifyCount = state.flaggedFrames.size
-                    if (verifyCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 6.dp, y = (-6).dp)
-                                .background(AppColors.MaroonBright, CircleShape)
-                                .border(2.dp, Color(28, 18, 16, (0.85f * 255).toInt()), CircleShape)
-                                .padding(horizontal = 5.dp)
-                                .defaultMinSize(minWidth = 18.dp, minHeight = 18.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                "$verifyCount",
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
-                }
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
+                )
             }
         }
 
@@ -383,35 +408,17 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: frame count pill
+            // Left: verification queue shortcut. Its badge already counts the
+            // unverified frames, so the separate FRAMES pill that used to sit here
+            // was redundant.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                Column(
-                    modifier = Modifier
-                        .shadow(14.dp, RoundedCornerShape(16.dp), spotColor = Color.Black.copy(alpha = 0.35f))
-                        .background(Color(28, 20, 18, (0.55f * 255).toInt()), RoundedCornerShape(16.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                        .defaultMinSize(minWidth = 64.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        "FRAMES",
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White.copy(alpha = 0.55f),
-                        letterSpacing = 1.2.sp,
-                    )
-                    Text(
-                        "${state.flaggedFrames.size}",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        letterSpacing = (-0.15).sp,
-                    )
-                }
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
+                )
             }
 
             // Center: shutter
@@ -447,13 +454,16 @@ fun CaptureScreen(
             }
         }
 
-        // Detection toast (top-center so it never blocks the bottom chrome)
+        // Detection toast, below the back button and session pill rather than over them.
+        // Same band as ConnectionLossBanner, which cannot be showing at the same time:
+        // losing the connection stops recording, so no detections arrive.
         AgarthaToastHost(
             state = toastState,
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+                .padding(top = 108.dp)
+                .padding(horizontal = 20.dp),
         )
     }
 
@@ -476,7 +486,9 @@ fun CaptureScreen(
         EndSessionConfirmDialog(
             initialNotes = "",
             isBusy = state.isBusy,
-            blockedCount = state.flaggedFrames.size,
+            // Repeat frames are duplicates the medtech already accounted for, so they
+            // do not hold a session open. Only unverified, non-repeat frames block.
+            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat },
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)

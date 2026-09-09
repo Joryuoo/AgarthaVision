@@ -3,7 +3,6 @@
 package com.agarthavision.ui.records
 
 import android.content.Context
-import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -16,6 +15,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -27,16 +28,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,14 +56,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -104,14 +107,35 @@ fun SessionDetailScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     val generatedMessage = stringResource(R.string.report_generated_toast)
+    val shareActionLabel = stringResource(R.string.report_share_action)
+    var shareError by remember { mutableStateOf<Int?>(null) }
     val generationFailedTemplate = stringResource(R.string.report_generation_failed)
     val sessionDetail = mapToUiModel(state)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionDetailEvent.ReportGenerated -> snackbarHostState.showSnackbar(generatedMessage)
+                is SessionDetailEvent.ReportGenerated -> {
+                    // Offer the share sheet right here: hunting the file down in a file
+                    // manager was the whole complaint.
+                    val result = snackbarHostState.showSnackbar(
+                        message = generatedMessage,
+                        actionLabel = shareActionLabel,
+                        duration = SnackbarDuration.Long,
+                    )
+                    if (result == SnackbarResult.ActionPerformed) {
+                        shareError = shareReportCsv(context, event.csvPath)
+                    }
+                }
             }
+        }
+    }
+
+    // Surface a failed share instead of dropping it — a stale path used to be a dead tap.
+    LaunchedEffect(shareError) {
+        shareError?.let { messageRes ->
+            snackbarHostState.showSnackbar(context.getString(messageRes))
+            shareError = null
         }
     }
 
@@ -137,20 +161,21 @@ fun SessionDetailScreen(
                 } else {
                     "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
                 },
-                isGenerating = state.isGenerating,
                 onBack = onBack,
-                onGenerateReport = viewModel::generateReport,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = AgarthaTheme.colors.background,
+        // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
+        // its own. Without this the app bar draws under the status bar.
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         val contentState = SessionDetailContentState(
             session = sessionDetail,
             reports = state.reports,
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
-            onShare = { report -> shareReportCsv(context, report) },
+            onShare = { report -> shareError = shareReportCsv(context, report.csvFilePath) },
         )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
@@ -208,9 +233,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
 private fun SessionDetailAppBar(
     title: String,
     subtitle: String,
-    isGenerating: Boolean,
     onBack: () -> Unit,
-    onGenerateReport: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
     Row(
@@ -218,16 +241,13 @@ private fun SessionDetailAppBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.background)
+            .statusBarsPadding()
             .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
     ) {
-        IconButton(onClick = onBack) {
-            Icon(
-                painter = painterResource(R.drawable.ic_chevron_left),
-                contentDescription = stringResource(R.string.session_detail_back),
-                tint = colors.textSecondary,
-                modifier = Modifier.size(22.dp),
-            )
-        }
+        BackArrow(
+            onBack = onBack,
+            contentDescription = stringResource(R.string.session_detail_back),
+        )
         Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary)
             Text(
@@ -237,14 +257,6 @@ private fun SessionDetailAppBar(
                 color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        IconButton(onClick = onGenerateReport, enabled = !isGenerating) {
-            Icon(
-                painter = painterResource(R.drawable.ic_download),
-                contentDescription = stringResource(R.string.report_generate),
-                tint = if (isGenerating) colors.textTertiary else colors.textSecondary,
-                modifier = Modifier.size(22.dp),
             )
         }
     }
@@ -346,27 +358,6 @@ private fun SessionDetailEmpty(
     }
 }
 
-private fun shareReportCsv(context: Context, report: Report) {
-    val path = report.csvFilePath ?: return
-    val file = File(path)
-    if (!file.exists()) return
-
-    runCatching {
-        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-    }.onSuccess { uri ->
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, file.name)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        val chooser = Intent.createChooser(intent, file.name).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        runCatching { context.startActivity(chooser) }
-    }
-}
-
 @Composable
 internal fun EpgHeroCard(
     epg: Int,
@@ -425,37 +416,13 @@ private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
     if (confirmedEggs == 0) {
         Text("No confirmed eggs yet", fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     } else {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            MetaItem(confirmedEggs.toString(), "confirmed")
-            DotSeparator()
-            MetaItem(speciesCount.toString(), "species")
-            DotSeparator()
-            MetaItem(samplesTotal.toString(), "samples")
-        }
-    }
-}
-
-@Composable
-private fun MetaItem(value: String, label: String) {
-    Row(verticalAlignment = Alignment.Bottom) {
-        Text(
-            value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textPrimary,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+        StatRun(
+            listOf(
+                Stat(confirmedEggs.toString(), "confirmed"),
+                Stat(speciesCount.toString(), "species"),
+                Stat(samplesTotal.toString(), "samples"),
+            )
         )
-        Spacer(Modifier.width(3.dp))
-        Text(label, fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
     }
 }
 
-@Composable
-private fun DotSeparator() {
-    Text(
-        "·",
-        fontSize = 13.sp,
-        color = AgarthaTheme.colors.textTertiary,
-        modifier = Modifier.padding(horizontal = 7.dp),
-    )
-}

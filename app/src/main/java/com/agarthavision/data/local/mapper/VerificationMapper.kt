@@ -1,7 +1,7 @@
 package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.DetectionEntity
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -16,7 +16,7 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
     else -> DetectionVerdict.CONFIRMED
 }
 
-fun PredictionDto.toDetectionEntity(
+fun Prediction.toDetectionEntity(
     sampleId: String,
     answers: VerificationAnswers,
 ): DetectionEntity {

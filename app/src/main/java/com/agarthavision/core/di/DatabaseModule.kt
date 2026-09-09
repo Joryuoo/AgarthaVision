@@ -8,7 +8,7 @@ import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.repository.DetectionRepositoryImpl
-import com.agarthavision.data.repository.DownloadsReportFileStore
+import com.agarthavision.data.repository.DocumentsReportFileStore
 import com.agarthavision.data.repository.LocalReportRepository
 import com.agarthavision.data.repository.SampleRepositoryImpl
 import com.agarthavision.data.repository.SessionRepositoryImpl
@@ -95,7 +95,7 @@ abstract class RepositoryModule {
 
     @Binds
     abstract fun bindReportFileStore(
-        implementation: DownloadsReportFileStore,
+        implementation: DocumentsReportFileStore,
     ): ReportFileStore
 
     /**

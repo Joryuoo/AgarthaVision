@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitManualCaptureUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -22,6 +23,8 @@ import kotlinx.coroutines.launch
  */
 data class ManualCaptureUiState(
     val frame: FlaggedFrame? = null,
+    val frameIndexInQueue: Int = 0,
+    val queueSize: Int = 0,
     val selectedSpecies: EggSpecies? = null,
     val otherSpeciesText: String = "",
     val userNote: String = "",
@@ -35,6 +38,14 @@ data class ManualCaptureUiState(
             EggSpecies.OTHER -> otherSpeciesText.isNotBlank() && !isSubmitting
             else -> !isSubmitting
         }
+
+    /** False on the first frame of the queue, or when the position is unknown. */
+    val canGoPrev: Boolean
+        get() = frameIndexInQueue > 1
+
+    /** False on the last frame of the queue, or when the position is unknown. */
+    val canGoNext: Boolean
+        get() = frameIndexInQueue in 1 until queueSize
 }
 
 /**
@@ -47,7 +58,11 @@ sealed interface ManualCaptureEvent {
 
 /**
  * State holder for [ManualSheet].
+ *
+ * Mirrors [VerificationViewModel]'s navigation surface so the two sheets page through
+ * their queues identically — the same suppression applies for the same reason.
  */
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class ManualCaptureViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,
@@ -62,6 +77,72 @@ class ManualCaptureViewModel @Inject constructor(
 
     private var currentFrame: FlaggedFrame? = null
 
+    init {
+        viewModelScope.launch {
+            flaggedFrameStore.state.collect { frames ->
+                val cycle = frames.manualFrames()
+                val frame = currentFrame
+                _state.update { current ->
+                    current.copy(
+                        queueSize = cycle.size,
+                        frameIndexInQueue = positionOf(frame, cycle, current.frameIndexInQueue),
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * The frames this sheet cycles through: manual captures only.
+     *
+     * Model detections are reviewed in [VerificationSheet], which asks a different set
+     * of questions, so paging onto one from here would render the wrong sheet — the host
+     * picks the sheet from the frame it was opened with and never re-evaluates.
+     */
+    private fun List<FlaggedFrame>.manualFrames(): List<FlaggedFrame> =
+        filter { it.source == FrameSource.MANUAL }
+
+    /** The manual frames currently in the store, in queue order. */
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.manualFrames()
+
+    /**
+     * Position of [frame] by sample id. Matching on identity rather than equality keeps
+     * navigation working regardless of how `FlaggedFrame` defines equals.
+     */
+    private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
+        indexOfFirst { it.sampleId == frame.sampleId }
+
+    /**
+     * 1-based position of [frame] within [frames], or [fallback] when it cannot be
+     * located. Both [setFrame] and the store collector route through this so the counter
+     * and the displayed frame cannot drift apart.
+     */
+    private fun positionOf(
+        frame: FlaggedFrame?,
+        frames: List<FlaggedFrame> = cycleFrames(),
+        fallback: Int,
+    ): Int {
+        if (frame == null) return fallback
+        val index = frames.indexOfSample(frame)
+        return if (index >= 0) index + 1 else fallback
+    }
+
+    fun onFramePrev() {
+        val frames = cycleFrames()
+        val current = currentFrame ?: return
+        val idx = frames.indexOfSample(current)
+        if (idx <= 0) return
+        setFrame(frames[idx - 1])
+    }
+
+    fun onFrameNext() {
+        val frames = cycleFrames()
+        val current = currentFrame ?: return
+        val idx = frames.indexOfSample(current)
+        if (idx < 0 || idx >= frames.size - 1) return
+        setFrame(frames[idx + 1])
+    }
+
     /**
      * Seeds the sheet with the selected manual-capture frame.
      */
@@ -70,6 +151,7 @@ class ManualCaptureViewModel @Inject constructor(
         _state.update {
             it.copy(
                 frame = frame,
+                frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 selectedSpecies = null,
                 otherSpeciesText = "",
                 userNote = "",
@@ -118,11 +200,19 @@ class ManualCaptureViewModel @Inject constructor(
      * Removes the current frame from the queue.
      */
     fun onDeleteFrame() {
+        val frames = cycleFrames()
         val frame = currentFrame ?: return
+        val idx = frames.indexOfSample(frame)
+        // Pick replacement BEFORE removal: prefer the next frame, fall back to previous.
+        val nextFrame = frames.getOrNull(idx + 1) ?: frames.getOrNull(idx - 1)
         viewModelScope.launch {
             flaggedFrameStore.remove(frame)
-            currentFrame = null
-            _events.emit(ManualCaptureEvent.Dismiss)
+            if (nextFrame != null) {
+                setFrame(nextFrame)
+            } else {
+                currentFrame = null
+                _events.emit(ManualCaptureEvent.Dismiss)
+            }
         }
     }
 

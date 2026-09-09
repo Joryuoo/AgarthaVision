@@ -1,10 +1,11 @@
 package com.agarthavision.ui.verify
 
 import app.cash.turbine.test
-import com.agarthavision.data.remote.dto.PredictionDto
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.util.MainDispatcherRule
@@ -14,6 +15,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -41,7 +43,7 @@ class VerificationViewModelTest {
 
     private fun makeFrame(predictions: Int = 2): FlaggedFrame {
         val preds = List(predictions) {
-            PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
+            Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
         }
         return FlaggedFrame(
             sessionId = "session-1",
@@ -52,17 +54,30 @@ class VerificationViewModelTest {
     }
 
     private fun makeFrameWithId(id: Int, predictions: Int = 1): FlaggedFrame {
-        // Distinct capturedAt so equals/hashCode see each frame as unique
+        // Distinct sampleId so equals/hashCode see each frame as unique
         val preds = List(predictions) {
-            PredictionDto("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
+            Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)
         }
         return FlaggedFrame(
+            sampleId = "sample-$id",
             sessionId = "session-1",
             capturedAt = Instant.ofEpochMilli(id.toLong()),
             jpegBytes = ByteArray(4),
             predictions = preds,
         )
     }
+
+    private fun makeManualFrame(sampleId: String) =
+        makeIdentifiedFrame(sampleId).copy(source = FrameSource.MANUAL, predictions = emptyList())
+
+    /** A frame with an explicit sample id, for assertions that turn on queue position. */
+    private fun makeIdentifiedFrame(sampleId: String, predictions: Int = 1) = FlaggedFrame(
+        sampleId = sampleId,
+        sessionId = "session-1",
+        capturedAt = Instant.EPOCH,
+        jpegBytes = ByteArray(4),
+        predictions = List(predictions) { Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f) },
+    )
 
     @Test
     fun `setFrame initialises answers list matching prediction count`() =
@@ -285,5 +300,189 @@ class VerificationViewModelTest {
                 assertEquals(VerificationEvent.Dismiss, awaitItem())
             }
             verify(flaggedFrameStore).remove(onlyFrame)
+        }
+
+    @Test
+    fun `frameIndexInQueue advances with onFrameNext`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `frameIndexInQueue retreats with onFramePrev`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[2])
+            advanceUntilIdle()
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+
+            vm.onFramePrev()
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `canGoPrev is false on the first frame and canGoNext false on the last`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val frames = listOf("a", "b").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+            assertFalse(vm.state.value.canGoPrev)
+            assertTrue(vm.state.value.canGoNext)
+
+            vm.setFrame(frames[1])
+            advanceUntilIdle()
+            assertTrue(vm.state.value.canGoPrev)
+            assertFalse(vm.state.value.canGoNext)
+        }
+
+    @Test
+    fun `setFrame recomputes position without waiting for a store emission`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The regression: only the init collector used to write frameIndexInQueue, so
+            // paging the queue left the counter pinned to whatever the last emission saw.
+            val frames = listOf("a", "b", "c").map { makeIdentifiedFrame(it) }
+            storeState.value = frames
+            val vm = viewModel()
+            vm.setFrame(frames[0])
+            advanceUntilIdle()
+
+            // No further store emission from here on.
+            vm.setFrame(frames[2])
+            advanceUntilIdle()
+
+            assertEquals(3, vm.state.value.frameIndexInQueue)
+            assertEquals(3, vm.state.value.queueSize)
+        }
+
+    @Test
+    fun `store emission differing only in markedAsRepeat is not conflated away`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The regression: FlaggedFrame.equals compared sampleId alone, so a Room
+            // re-emission that only flipped is_repeat compared equal to the list already
+            // held. StateFlow conflated it, and the queue's Repeat filter went stale.
+            val frame = makeIdentifiedFrame("a")
+            storeState.value = listOf(frame)
+            val vm = viewModel()
+            vm.setFrame(frame)
+            advanceUntilIdle()
+
+            val toggled = frame.copy(markedAsRepeat = true)
+            assertNotEquals(frame, toggled)
+            assertNotEquals(listOf(frame), listOf(toggled))
+
+            storeState.value = listOf(toggled)
+            advanceUntilIdle()
+
+            // The emission getting through is the whole point, and now it is visible twice
+            // over: a repeat leaves the AI cycle, so the size drops to zero and the open
+            // frame reports no position. Under the old sampleId-only equality this
+            // emission was swallowed and both would have stayed at 1.
+            assertEquals(0, vm.state.value.queueSize)
+            assertEquals(0, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `frame cycling skips manual frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Manual captures belong to ManualSheet. The host picks a sheet from the frame
+            // it opened with and never re-evaluates, so paging onto a manual frame here
+            // would keep rendering the AI sheet against a frame with no detections.
+            val ai1 = makeIdentifiedFrame("ai-1")
+            val manual = makeManualFrame("manual-1")
+            val ai2 = makeIdentifiedFrame("ai-2")
+            storeState.value = listOf(ai1, manual, ai2)
+            val vm = viewModel()
+            vm.setFrame(ai1)
+            advanceUntilIdle()
+
+            // Two AI frames in the cycle, not three entries in the store.
+            assertEquals(2, vm.state.value.queueSize)
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(ai2, vm.state.value.frame)
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+            assertFalse(vm.state.value.canGoNext)
+        }
+
+    @Test
+    fun `queueSize counts only AI frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            storeState.value = listOf(
+                makeIdentifiedFrame("ai-1"),
+                makeManualFrame("manual-1"),
+                makeManualFrame("manual-2"),
+            )
+            val vm = viewModel()
+            vm.setFrame(makeIdentifiedFrame("ai-1"))
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.queueSize)
+        }
+
+    @Test
+    fun `frame cycling skips repeat frames`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val first = makeIdentifiedFrame("ai-1")
+            val repeat = makeIdentifiedFrame("ai-2").copy(markedAsRepeat = true)
+            val last = makeIdentifiedFrame("ai-3")
+            storeState.value = listOf(first, repeat, last)
+            val vm = viewModel()
+            vm.setFrame(first)
+            advanceUntilIdle()
+
+            // Two frames in the cycle, not the three in the store.
+            assertEquals(2, vm.state.value.queueSize)
+
+            vm.onFrameNext()
+            advanceUntilIdle()
+
+            assertEquals(last, vm.state.value.frame)
+            assertEquals(2, vm.state.value.frameIndexInQueue)
+        }
+
+    @Test
+    fun `marking the open frame repeat leaves it on screen but out of cycle`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val open = makeIdentifiedFrame("ai-1")
+            val other = makeIdentifiedFrame("ai-2")
+            storeState.value = listOf(open, other)
+            val vm = viewModel()
+            vm.setFrame(open)
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.frameIndexInQueue)
+            assertTrue(vm.state.value.canGoNext)
+
+            // What the store emits after onToggleRepeat writes is_repeat.
+            storeState.value = listOf(open.copy(markedAsRepeat = true), other)
+            advanceUntilIdle()
+
+            // Still showing it, so a mistap can be undone — but with no position, and
+            // both frame buttons disabled so it cannot page from here.
+            assertEquals(open, vm.state.value.frame)
+            assertEquals(0, vm.state.value.frameIndexInQueue)
+            assertFalse(vm.state.value.canGoPrev)
+            assertFalse(vm.state.value.canGoNext)
         }
 }

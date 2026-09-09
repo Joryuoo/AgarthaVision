@@ -65,7 +65,10 @@ fun VerificationSheet(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    LaunchedEffect(frame) {
+    // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
+    // like markedAsRepeat, so keying on the frame would re-seed the sheet — and wipe
+    // the in-progress answers — every time the store re-emits.
+    LaunchedEffect(frame.sampleId) {
         viewModel.setFrame(frame)
     }
 
@@ -133,7 +136,18 @@ private fun VerificationSheetContent(
     ) {
         ScreenTopBar(
             title = "Verify detection",
-            metaText = "Frame ${state.frameIndexInQueue}/${state.queueSize} · $timeLabel",
+            // A frame marked repeat leaves the cycle and has no position, so show what it
+            // is rather than "Frame 0/4".
+            metaText = if (state.frameIndexInQueue > 0) {
+                stringResource(
+                    R.string.verify_frame_meta,
+                    state.frameIndexInQueue,
+                    state.queueSize,
+                    timeLabel,
+                )
+            } else {
+                stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
+            },
             onBack = actions.onCancel,
             actions = {
                 // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)
@@ -168,8 +182,20 @@ private fun VerificationSheetContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(bottom = 12.dp),
             ) {
-                SmallToggle("Previous frame", false, actions.onFramePrev, Modifier.weight(1f))
-                SmallToggle("Next frame", false, actions.onFrameNext, Modifier.weight(1f))
+                SmallToggle(
+                    label = stringResource(R.string.verify_prev_frame),
+                    selected = false,
+                    onClick = actions.onFramePrev,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoPrev,
+                )
+                SmallToggle(
+                    label = stringResource(R.string.verify_next_frame),
+                    selected = false,
+                    onClick = actions.onFrameNext,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.canGoNext,
+                )
             }
 
             FrameWithBoxes(
@@ -410,37 +436,6 @@ private fun <T> QuestionSection(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun SmallToggle(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .background(
-                if (selected) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
-                RoundedCornerShape(10.dp)
-            )
-            .border(
-                1.dp,
-                if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
-                RoundedCornerShape(10.dp)
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = if (selected) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }
 
