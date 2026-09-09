@@ -9,27 +9,35 @@ import java.time.Instant
 import javax.inject.Inject
 
 /**
- * Orchestrates a manual shutter tap: snapshot the cached frame, run inference once,
- * and always record the result.
+ * What a single shutter tap resolved to.
  *
- * Per the confirmed manual-trigger flow (Track 2.13), a tap always produces a frame —
- * unlike the old auto-timer path, which dropped clean fields. A
- * successful call records a [FrameSource.MODEL] frame with whatever predictions came
- * back, including an empty list: the medtech tapped a specific field and expects that
- * frame recorded even when the model found nothing. An [InferenceConnectionException]
- * (the inference container is unreachable) instead records a [FrameSource.MANUAL] frame
- * with no predictions, so a lost connection never looks like a silent failure.
+ * - [AI_DETECTED] — inference returned at least one prediction; an AI Capture
+ *   ([FrameSource.MODEL]) was recorded for verification.
+ * - [AI_EMPTY] — inference ran and found nothing. **No frame is recorded**: a clean field has
+ *   nothing to verify, and recording it would leave an un-submittable row that blocks End
+ *   Session. The caller surfaces a transient "no eggs" hint instead. Aggregating clean fields
+ *   as a denominator (LPF density) is deferred to a separate ticket (86d4a6jxw).
+ * - [MANUAL] — the inference container was unreachable; a Manual Capture ([FrameSource.MANUAL])
+ *   was recorded so a lost connection never looks like a silent failure.
+ */
+enum class CaptureOutcome { AI_DETECTED, AI_EMPTY, MANUAL }
+
+/**
+ * Orchestrates a manual shutter tap: snapshot the cached frame, run inference once, and record
+ * a frame **only when there is something to verify**.
+ *
+ * A detection-bearing result is an AI Capture; an unreachable container is a Manual Capture; a
+ * clean result records nothing (see [CaptureOutcome.AI_EMPTY]). This keeps every recorded frame
+ * verifiable, so clean fields cannot pile up and block End Session.
  *
  * Runs against the cloud container through [RemoteInferenceEngine] directly: on-device
  * inference was measured and deferred, so there is one backend and a selector would be
  * ceremony. See `docs/map/processes/infer.md`.
  *
- * Returns `Result<FrameSource>` (C4): success carries the resolved source — [FrameSource.MODEL]
- * or [FrameSource.MANUAL] — so the caller can react without re-reading the store. Only an
- * *unexpected* failure propagates as [Result.failure]: a lost connection is not one (it becomes
- * a Manual Capture), but a persistence error or a non-connectivity HTTP error (a 4xx contract
- * error, which [com.agarthavision.domain.usecase.inference.NetworkErrorMapper] re-throws
- * as-is) is.
+ * Returns `Result<CaptureOutcome>` (C4): success carries the resolved outcome so the caller can
+ * react without re-reading the store. Only an *unexpected* failure propagates as
+ * [Result.failure]: a lost connection is not one (it becomes a Manual Capture), but a
+ * persistence error or a non-connectivity HTTP error is.
  */
 class CaptureFieldUseCase @Inject constructor(
     private val remoteEngine: RemoteInferenceEngine,
@@ -38,13 +46,38 @@ class CaptureFieldUseCase @Inject constructor(
     /**
      * @param sessionId the active recording session ID.
      * @param jpegBytes the snapshot of [FrameSampler.latestFrameBytes] to analyze.
-     * @return the resolved [FrameSource] on success; [Result.failure] on an unexpected error.
+     * @return the resolved [CaptureOutcome] on success; [Result.failure] on an unexpected error.
      */
     @Suppress("SwallowedException")
-    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<FrameSource> =
+    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<CaptureOutcome> =
         runCatching {
-            val frame = try {
-                val result = remoteEngine.infer(jpegBytes)
+            val result = try {
+                remoteEngine.infer(jpegBytes)
+            } catch (connectionFailure: InferenceConnectionException) {
+                // Expected outcome, not an error to propagate: an unreachable inference
+                // container falls back to a MANUAL frame instead of failing the tap. The cause
+                // is deliberately not rethrown or logged here — domain/ has no Android logging
+                // API (C2), and RemoteInferenceEngine already surfaces the underlying network
+                // failure to Retrofit's own logging interceptor.
+                flaggedFrameStore.add(
+                    FlaggedFrame(
+                        sessionId = sessionId,
+                        capturedAt = Instant.now(),
+                        jpegBytes = jpegBytes,
+                        predictions = emptyList(),
+                        source = FrameSource.MANUAL,
+                        inferenceModelVersion = null,
+                        imageWidth = null,
+                        imageHeight = null,
+                    ),
+                )
+                return@runCatching CaptureOutcome.MANUAL
+            }
+
+            // A clean field records nothing — see [CaptureOutcome.AI_EMPTY].
+            if (result.predictions.isEmpty()) return@runCatching CaptureOutcome.AI_EMPTY
+
+            flaggedFrameStore.add(
                 FlaggedFrame(
                     sessionId = sessionId,
                     capturedAt = Instant.now(),
@@ -54,26 +87,8 @@ class CaptureFieldUseCase @Inject constructor(
                     inferenceModelVersion = result.modelVersion,
                     imageWidth = result.imageWidth,
                     imageHeight = result.imageHeight,
-                )
-            } catch (connectionFailure: InferenceConnectionException) {
-                // Expected outcome, not an error to propagate: a manual capture always
-                // records a frame, so an unreachable inference container falls back to a
-                // MANUAL frame instead of failing the tap. See class KDoc. The cause is
-                // deliberately not rethrown or logged here — domain/ has no Android
-                // logging API (C2), and RemoteInferenceEngine already surfaces the
-                // underlying network failure to Retrofit's own logging interceptor.
-                FlaggedFrame(
-                    sessionId = sessionId,
-                    capturedAt = Instant.now(),
-                    jpegBytes = jpegBytes,
-                    predictions = emptyList(),
-                    source = FrameSource.MANUAL,
-                    inferenceModelVersion = null,
-                    imageWidth = null,
-                    imageHeight = null,
-                )
-            }
-            flaggedFrameStore.add(frame)
-            frame.source
+                ),
+            )
+            CaptureOutcome.AI_DETECTED
         }
 }

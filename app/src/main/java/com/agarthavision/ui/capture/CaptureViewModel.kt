@@ -9,6 +9,7 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
+import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -140,6 +141,13 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
             captureFieldUseCase(sessionId, jpegBytes)
+                .onSuccess { outcome ->
+                    // A clean field records no frame, so the flagged-frame toast never fires
+                    // for it — emit a one-shot hint so the tap is still acknowledged.
+                    if (outcome == CaptureOutcome.AI_EMPTY) {
+                        eventChannel.send(CaptureEvent.NoEggsDetected)
+                    }
+                }
                 .onFailure { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
@@ -173,6 +181,9 @@ class CaptureViewModel @Inject constructor(
  */
 sealed interface CaptureEvent {
     data object SessionEnded : CaptureEvent
+
+    /** A tap ran inference and found no eggs; no frame was recorded. */
+    data object NoEggsDetected : CaptureEvent
 }
 
 /**

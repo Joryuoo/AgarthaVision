@@ -34,12 +34,12 @@ Asking the model what is in a frame.
 4. **Apply no filter.** The server returns every box the model produced. There is no
    confidence threshold on either side; the human is the threshold
    (`../../constraints.md` C7).
-5. **Record the frame — even an empty one.** Under manual trigger a tap always produces a
-   frame, so an empty `predictions` list is *not* discarded: `CaptureFieldUseCase` still builds
-   a `FrameSource.MODEL` `FlaggedFrame` (the medtech chose this field and expects it recorded).
-   This is the deliberate difference from the old auto-timer, which dropped clean fields.
-6. **Flag.** The result builds a `FlaggedFrame` carrying the JPEG, the predictions, the model
-   version, and the image dimensions, and adds it to the store
+5. **Discard empties.** An empty `predictions` list records nothing (`CaptureOutcome.AI_EMPTY`):
+   a clean field has nothing to verify, and a zero-detection frame would block End Session, so
+   `CaptureFieldUseCase` skips the store and the screen shows a transient "No eggs detected"
+   hint instead (`domain/usecase/capture/CaptureFieldUseCase.kt`).
+6. **Flag.** A result with detections builds a `FrameSource.MODEL` `FlaggedFrame` carrying the
+   JPEG, the predictions, the model version, and the image dimensions, and adds it to the store
    (`domain/usecase/capture/CaptureFieldUseCase.kt`). The predictions are domain `Prediction`
    values by this point, not the wire DTO — `RemoteInferenceEngine` maps them
    (`data/inference/PredictionMapper.kt`), so nothing under `domain/` imports a response type.

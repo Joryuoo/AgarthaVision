@@ -4,6 +4,7 @@ package com.agarthavision.ui.capture
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
@@ -211,6 +212,7 @@ fun CaptureScreen(
     val detectionView = stringResource(R.string.capture_detection_view)
     val aiCaptureMessage = stringResource(R.string.capture_ai_capture_message)
     val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
+    val noEggsMessage = stringResource(R.string.capture_no_eggs_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -247,6 +249,10 @@ fun CaptureScreen(
         viewModel.events.collect { event ->
             when (event) {
                 CaptureEvent.SessionEnded -> onSessionEnded()
+                CaptureEvent.NoEggsDetected -> toastState.show(
+                    message = noEggsMessage,
+                    variant = AgarthaToastVariant.Default,
+                )
             }
         }
     }
@@ -296,6 +302,11 @@ fun CaptureScreen(
             }
     }
 
+    // A capture runs on viewModelScope, so leaving the screen mid-inference would cancel it
+    // and drop the frame before it is persisted. Swallow system back while a tap is in flight;
+    // the back button and shutter are already disabled via isBusy.
+    BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -335,6 +346,7 @@ fun CaptureScreen(
             IconButtonGlass(
                 pathData = "M 15 18 L 9 12 L 15 6",
                 onClick = onNavigateBack,
+                enabled = !state.isBusy,
             )
 
             // Session pill

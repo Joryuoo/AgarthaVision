@@ -114,6 +114,7 @@
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_ai_capture_message">AI - Frame captured</string>
     <string name="capture_manual_capture_message">Manual - Frame captured</string>
+    <string name="capture_no_eggs_message">No eggs detected</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
