@@ -158,14 +158,14 @@ configuration; neither describes what actually runs.
 
 Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
 gitignored (`.gitignore:3`, `.gitignore:15`). They reach the app as `BuildConfig` fields read
-at build time (`app/build.gradle.kts:18-20`, `app/build.gradle.kts:46-92`). A missing property
+at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
 
 **Enforcement:** `.gitignore` plus review. There is no secret-scanning step, because there is
 no CI at all — no `.github/` directory exists in this repository.
 
-**Drift:** `app/build.gradle.kts:66` and `:89` read `INFERENCE_API_KEY_DEV` /
+**Drift:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
 `INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
 `INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
 wins.
@@ -178,7 +178,7 @@ palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather t
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
 immersive regardless of the toggle. No second theme and no charting library: small dataviz
 is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
-(`app/build.gradle.kts:115`) supplies utility glyphs inside screens (chevrons, back arrows,
+(`app/build.gradle.kts:122`) supplies utility glyphs inside screens (chevrons, back arrows,
 filter, flag), while the bottom bar, brand marks and anything read as house identity are
 hand-authored 1.7-stroke outline drawables in `res/drawable/`. Match the neighbours: a new
 tab or brand icon is drawn, a new in-screen affordance may come from Material.

@@ -13,7 +13,7 @@ All defined in `package.json:5-19`.
 | Command | Runs | Purpose |
 |---|---|---|
 | `bun run build` | `./gradlew assembleDebug` | Build the debug APK |
-| `bun run build:release` | `./gradlew assembleRelease` | Build the release APK (unminified — `app/build.gradle.kts:70`) |
+| `bun run build:release` | `./gradlew assembleRelease` | Build the release APK (unminified — `app/build.gradle.kts:71`) |
 | `bun run compile` | `./gradlew :app:compileDebugKotlin` | Kotlin compile only; fastest sanity check |
 | `bun run test` | `./gradlew testDebugUnitTest` | JVM unit tests |
 | `bun run test:all` | `./gradlew :app:test` | Unit tests across all variants |
@@ -43,7 +43,7 @@ On Windows PowerShell use `.\gradlew.bat …` when the shell does not resolve `.
 
 `:app:testDebugUnitTest` covers both plain unit tests and the Compose UI tests for the
 verification sheets (`app/src/test/java/com/agarthavision/ui/verify/`). Those render under
-Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts:99-103`),
+Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts:100-104`),
 so screen-level behaviour is gated by the pre-commit hook without an emulator. Run one suite
 with `./gradlew :app:testDebugUnitTest --tests "com.agarthavision.ui.verify.*"`.
 

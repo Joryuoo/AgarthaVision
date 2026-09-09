@@ -71,7 +71,7 @@ session goes idle (`core/connectivity/NetworkMonitor.kt:44-49`).
   and a small alias set (`domain/model/EggSpecies.kt:7-22`). An unrecognised label is preserved
   raw in `class_label` and behaves as a `WRONG_CLASS` candidate — renaming a model class
   silently changes every verdict computation and every EPG grouping.
-- The bearer key name. `app/build.gradle.kts:66` reads `INFERENCE_API_KEY_DEV`, while
+- The bearer key name. `app/build.gradle.kts:67` reads `INFERENCE_API_KEY_DEV`, while
   `local.properties.example:26` documents `INFERENCE_API_KEY`. Following the example yields an
   empty token and a 401 on every frame (`../../constraints.md` C10).
 

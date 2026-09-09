@@ -91,7 +91,7 @@ sensitive code in the repo.
 Push order is FK-safe and not incidental: sessions → samples → reports.
 
 **The non-obvious break:** there are **no retries and no `Worker`**. WorkManager is a declared
-dependency with no implementation (`app/build.gradle.kts:157`). A `sync_failed` row waits for a
+dependency with no implementation (`app/build.gradle.kts:164`). A `sync_failed` row waits for a
 foreground trigger — login, app start while authenticated, or connectivity returning. Also,
 claim runs *before* sync and is what lets a nullable local `user_id` satisfy a NOT NULL remote
 column.

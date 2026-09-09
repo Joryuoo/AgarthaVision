@@ -1,7 +1,7 @@
 # Changelog
 
 Reconstructed from `git log`. **This project has never cut a release** — there are no tags,
-no `versionName` bump beyond the initial `0.1.0-mvp` (`app/build.gradle.kts:36`), and no
+no `versionName` bump beyond the initial `0.1.0-mvp` (`app/build.gradle.kts:37`), and no
 release branch. What follows is grouped by the work that actually landed, dated from the
 commits themselves. Nothing here is invented.
 
