@@ -34,10 +34,23 @@ All defined in `package.json:5-19`.
 | `./gradlew :app:compileDebugKotlin` | Compile Kotlin |
 | `./gradlew :app:testDebugUnitTest` | Debug unit tests |
 | `./gradlew :app:ktlintCheck :app:detekt` | Lint the app module — the exact pair the pre-commit hook runs |
-| `./gradlew :app:connectedAndroidTest` | Instrumented tests. Needs a device or emulator |
+| `./gradlew :app:connectedAndroidTest` | Instrumented tests. Needs a device or emulator. `androidTest/` currently holds only the generated stub |
 | `./gradlew tasks` | Enumerate what is actually available in this build |
 
 On Windows PowerShell use `.\gradlew.bat …` when the shell does not resolve `./gradlew`.
+
+### Compose UI tests run on the JVM, not a device
+
+`:app:testDebugUnitTest` covers both plain unit tests and the Compose UI tests for the
+verification sheets (`app/src/test/java/com/agarthavision/ui/verify/`). Those render under
+Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts:99-103`),
+so screen-level behaviour is gated by the pre-commit hook without an emulator. Run one suite
+with `./gradlew :app:testDebugUnitTest --tests "com.agarthavision.ui.verify.*"`.
+
+Two interactions cannot be tested this way and need `connectedAndroidTest` instead: the
+custom-species dialog in `ManualSheet` and the species dropdown in `VerificationSheet`. Both
+put a text field inside a popup window, which never reaches idle under Robolectric — a lookup
+after either opens spins until the Espresso timeout. Each suite documents this in its header.
 
 `ktlint` and `detekt` are applied at both the root project (`build.gradle.kts:7-8`) and `:app`
 (`app/build.gradle.kts:9-10`), so the unqualified `ktlintCheck` / `detekt` used by

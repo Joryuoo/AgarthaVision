@@ -25,14 +25,14 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | Area | Library | Version | Line |
 |---|---|---|---|
 | UI | Compose BOM | 2026.02.01 | `libs.versions.toml:4` |
-| UI | `foundation-layout` (pinned outside the BOM) | 1.11.2 | `libs.versions.toml:28` |
+| UI | `foundation-layout` (pinned outside the BOM) | 1.11.2 | `libs.versions.toml:29` |
 | DI | Hilt | 2.59.2 | `libs.versions.toml:5` |
 | Local DB | Room | 2.7.0 | `libs.versions.toml:6` |
 | Camera | CameraX | 1.6.1 | `libs.versions.toml:9` |
 | HTTP | Retrofit | 2.11.0 | `libs.versions.toml:7` |
 | HTTP | OkHttp | 4.12.0 | `libs.versions.toml:8` |
-| Cloud | supabase-kt BOM (auth, postgrest, storage) | 3.0.3 | `libs.versions.toml:29` |
-| Cloud | Ktor client (OkHttp engine) | 3.0.3 | `libs.versions.toml:30` |
+| Cloud | supabase-kt BOM (auth, postgrest, storage) | 3.0.3 | `libs.versions.toml:30` |
+| Cloud | Ktor client (OkHttp engine) | 3.0.3 | `libs.versions.toml:31` |
 | Async | Coroutines | 1.9.0 | `libs.versions.toml:12` |
 | Async | kotlinx-datetime (`strictly`) | 0.6.1 | `libs.versions.toml:13` |
 | Nav | Navigation Compose | 2.8.5 | `libs.versions.toml:14` |
@@ -57,14 +57,19 @@ Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrof
 |---|---|---|
 | ktlint Gradle plugin | 12.1.2 | `libs.versions.toml:23` |
 | detekt | 1.23.7 | `libs.versions.toml:27` |
-| JUnit 4 | 4.13.2 | `libs.versions.toml:105` |
+| JUnit 4 | 4.13.2 | `libs.versions.toml:106` |
 | mockito-kotlin | 5.4.0 | `libs.versions.toml:25` |
 | Turbine | 1.1.0 | `libs.versions.toml:26` |
 | Espresso | 3.7.0 | `libs.versions.toml:20` |
+| Robolectric | 4.16 | `libs.versions.toml:28` |
 
 Detekt config: `detekt.yml`, applied at both the root and `:app`
 (`build.gradle.kts:11-14`, `app/build.gradle.kts:13-16`) with `buildUponDefaultConfig = true`.
 It configures complexity, exceptions, naming, and style only — no architecture rules.
+
+Robolectric backs the Compose UI tests under `app/src/test/`, so screen-level tests run on
+the JVM in `:app:testDebugUnitTest` rather than needing a device. It is not used by, and not
+permitted in, `domain/` — see `constraints.md` C2.
 
 Gradle behaviour flags worth knowing: configuration cache and build cache are both on, KSP2 is
 on (`gradle.properties:10-11`, `:20`).

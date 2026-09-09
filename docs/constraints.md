@@ -31,6 +31,10 @@ longer does — `FrameWithBoxes` takes domain `Prediction` values
 Nothing under `domain/` may import an Android API. The domain layer must be unit-testable on
 the JVM without Robolectric.
 
+**Scope:** this constrains `domain/` only. It is not a repo-wide ban on Robolectric — the
+Compose UI tests under `app/src/test/java/com/agarthavision/ui/verify/` use it deliberately
+so they run in `:app:testDebugUnitTest` instead of needing a device. See `commands.md`.
+
 **Enforcement:** review only. **This one actually holds** — zero files under
 `app/src/main/java/com/agarthavision/domain/` import `android.*`.
 
