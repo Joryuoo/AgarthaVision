@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.ktlint)
     alias(libs.plugins.detekt)
+    alias(libs.plugins.roborazzi)
 }
 
 detekt {
@@ -192,6 +193,10 @@ dependencies {
     testImplementation(composeBom)
     testImplementation(libs.compose.test)
     testImplementation(libs.robolectric)
+    // Screenshot tests: the only thing that can guard a purely visual regression.
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
     androidTestImplementation(composeBom)
     androidTestImplementation(libs.junit.ext)
     androidTestImplementation(libs.espresso.core)
