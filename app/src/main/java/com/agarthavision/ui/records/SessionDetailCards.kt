@@ -20,6 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,8 +53,8 @@ import java.time.format.DateTimeFormatter
 internal fun ReportsSection(
     reports: List<Report>,
     isGenerating: Boolean,
-    onGenerate: () -> Unit,
-    onShare: (Report) -> Unit,
+    onGenerate: (ExportFormat) -> Unit,
+    onOpenReport: (Report) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -90,18 +94,18 @@ internal fun ReportsSection(
         }
 
         reports.take(3).forEach { report ->
-            ReportRow(report = report, onShare = { onShare(report) })
+            ReportRow(report = report, onOpen = { onOpenReport(report) })
         }
     }
 }
 
 @Composable
-private fun ReportRow(report: Report, onShare: () -> Unit) {
+private fun ReportRow(report: Report, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = report.pdfFilePath != null, onClick = onShare)
+            .clickable(enabled = report.pdfFilePath != null, onClick = onOpen)
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -148,25 +152,33 @@ private fun ReportStatusPill(status: ReportSyncStatus) {
 }
 
 @Composable
-private fun GenerateReportButton(isGenerating: Boolean, onClick: () -> Unit) {
+private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) -> Unit) {
     val colors = AgarthaTheme.colors
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .background(
-                if (isGenerating) colors.borderStrong else colors.accent,
-                RoundedCornerShape(999.dp),
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(
+                    if (isGenerating) colors.borderStrong else colors.accent,
+                    RoundedCornerShape(999.dp),
+                )
+                .clickable(enabled = !isGenerating, onClick = { menuExpanded = true }),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_download),
+                contentDescription = stringResource(
+                    if (isGenerating) R.string.report_generating else R.string.report_export
+                ),
+                tint = colors.onAccent,
+                modifier = Modifier.size(17.dp),
             )
-            .clickable(enabled = !isGenerating, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_download),
-            contentDescription = stringResource(
-                if (isGenerating) R.string.report_generating else R.string.report_generate
-            ),
-            tint = colors.onAccent,
-            modifier = Modifier.size(17.dp),
+        }
+        ExportFormatMenu(
+            expanded = menuExpanded,
+            onDismiss = { menuExpanded = false },
+            onSelect = onClick,
         )
     }
 }

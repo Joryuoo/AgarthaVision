@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.content.ContextCompat
 import com.agarthavision.R
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
@@ -45,13 +46,14 @@ class AndroidReportPdfRenderer @Inject constructor(
     }
 
     private fun drawPage(canvas: Canvas, document: ReportPdfDocument) {
+        val titleX = drawLogo(canvas)
         canvas.drawText(
             context.getString(R.string.report_pdf_document_title),
-            MARGIN,
+            titleX,
             MARGIN + TITLE_BASELINE_OFFSET,
             paintFor(PdfTextStyle.TITLE),
         )
-        var cursorY = MARGIN + TITLE_HEIGHT
+        var cursorY = MARGIN + maxOf(LOGO_SIZE, TITLE_HEIGHT)
         cursorY = drawHeaderBlock(canvas, document.header, cursorY)
         cursorY += SECTION_GAP
         cursorY = drawSummaryBlock(canvas, document.header, cursorY)
@@ -132,6 +134,20 @@ class AndroidReportPdfRenderer @Inject constructor(
         canvas.drawText(context.getString(R.string.report_pdf_epg_unit_note), MARGIN, y, paintFor(PdfTextStyle.NOTE))
     }
 
+    /**
+     * Draws the AgarthaVision brand mark at the left margin, vertically centered against the
+     * title's baseline band, and returns the X the title should start at. The vector keeps its
+     * own colors — it's a brand drawable, not something to tint — so a missing drawable is the
+     * only failure mode, and it's handled by simply leaving the title at [MARGIN].
+     */
+    private fun drawLogo(canvas: Canvas): Float {
+        val logo = ContextCompat.getDrawable(context, R.drawable.ic_logo) ?: return MARGIN
+        val top = (MARGIN + TITLE_BASELINE_OFFSET - LOGO_SIZE / 2f).toInt()
+        logo.setBounds(MARGIN.toInt(), top, (MARGIN + LOGO_SIZE).toInt(), top + LOGO_SIZE.toInt())
+        logo.draw(canvas)
+        return MARGIN + LOGO_SIZE + LOGO_TITLE_GAP
+    }
+
     private fun drawFooter(canvas: Canvas) {
         val footerText = context.getString(R.string.report_pdf_footer, PAGE_NUMBER)
         canvas.drawText(footerText, MARGIN, PAGE_HEIGHT - MARGIN / 2f, paintFor(PdfTextStyle.NOTE))
@@ -187,6 +203,8 @@ class AndroidReportPdfRenderer @Inject constructor(
         private const val NOTE_TEXT_SIZE = 10f
         private const val TITLE_HEIGHT = 30f
         private const val TITLE_BASELINE_OFFSET = 6f
+        private const val LOGO_SIZE = 36f
+        private const val LOGO_TITLE_GAP = 10f
 
         private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
     }

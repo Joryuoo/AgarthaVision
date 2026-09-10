@@ -124,7 +124,10 @@ fun SessionDetailScreen(
                         duration = SnackbarDuration.Long,
                     )
                     if (result == SnackbarResult.ActionPerformed) {
-                        shareError = shareReportPdf(context, event.pdfPath)
+                        shareError = when (event.format) {
+                            ExportFormat.PDF -> shareReportPdf(context, event.pdfPath)
+                            ExportFormat.CSV -> shareReportCsv(context, event.csvPath)
+                        }
                     }
                 }
             }
@@ -175,7 +178,7 @@ fun SessionDetailScreen(
             reports = state.reports,
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
-            onShare = { report -> shareError = shareReportPdf(context, report.pdfFilePath) },
+            onOpenReport = { report -> shareError = viewReportPdf(context, report.pdfFilePath) },
         )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
@@ -270,8 +273,8 @@ internal data class SessionDetailContentState(
     val session: SessionDetailUi,
     val reports: List<Report>,
     val isGenerating: Boolean,
-    val onGenerate: () -> Unit,
-    val onShare: (Report) -> Unit,
+    val onGenerate: (ExportFormat) -> Unit,
+    val onOpenReport: (Report) -> Unit,
 )
 
 @Composable
@@ -312,7 +315,7 @@ private fun SessionDetailPopulated(
                     reports = state.reports,
                     isGenerating = state.isGenerating,
                     onGenerate = state.onGenerate,
-                    onShare = state.onShare,
+                    onOpenReport = state.onOpenReport,
                 )
                 Spacer(Modifier.height(Spacing.lg))
                 SectionHeader(
@@ -351,7 +354,7 @@ private fun SessionDetailEmpty(
             reports = state.reports,
             isGenerating = state.isGenerating,
             onGenerate = state.onGenerate,
-            onShare = state.onShare,
+            onOpenReport = state.onOpenReport,
         )
         Spacer(Modifier.height(60.dp))
         EmptyStateGraphic()

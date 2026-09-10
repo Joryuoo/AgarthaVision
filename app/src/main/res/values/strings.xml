@@ -139,8 +139,10 @@
     <string name="session_detail_title">Session Detail</string>
     <string name="session_detail_empty">No verified samples in this session</string>
     <string name="report_section_title">Reports</string>
-    <string name="report_generate">Generate Report</string>
     <string name="report_generating">Generating…</string>
+    <string name="report_export">Export report</string>
+    <string name="report_export_as_pdf">Export as PDF</string>
+    <string name="report_export_as_csv">Export as CSV</string>
     <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
@@ -151,6 +153,7 @@
     <string name="report_share_missing_path">This report has no saved file.</string>
     <string name="report_share_file_gone">The report file is no longer on this device.</string>
     <string name="report_share_no_app">No app available to share the report.</string>
+    <string name="report_open_no_app">No app available to open the report.</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
     <string name="report_pdf_document_title">AgarthaVision Session Report</string>
     <string name="report_pdf_session_label">Session</string>

@@ -49,13 +49,16 @@ data class EggCountSummary(
  */
 sealed interface SessionDetailEvent {
     /**
-     * A report was successfully generated; its patient-facing PDF was saved at [pdfPath].
-     *
-     * The PDF is what the snackbar offers to share (see `shareReportPdf`): it's the
-     * artifact a medtech actually hands to someone, while the CSV stays a device-local
-     * data export.
+     * A report was successfully generated. Both [pdfPath] and [csvPath] are the files the use
+     * case wrote for it (either may be null if that file failed to write); [format] is the
+     * export the medtech chose from the generate menu, so the snackbar's Share action shares
+     * the file that matches what they asked for rather than always the PDF.
      */
-    data class ReportGenerated(val pdfPath: String) : SessionDetailEvent
+    data class ReportGenerated(
+        val pdfPath: String?,
+        val csvPath: String?,
+        val format: ExportFormat,
+    ) : SessionDetailEvent
 }
 
 /**
@@ -99,16 +102,23 @@ class SessionDetailViewModel @Inject constructor(
         )
 
     /**
-     * Generates a fresh report for this session. Emits [SessionDetailEvent.ReportGenerated]
-     * on success so the screen can offer the medtech a share action.
+     * Generates a fresh report for this session (the use case always writes both a CSV and a
+     * PDF). Emits [SessionDetailEvent.ReportGenerated] on success so the screen can offer the
+     * medtech a share action for the [format] they asked for.
      */
-    fun generateReport() {
+    fun generateReport(format: ExportFormat) {
         viewModelScope.launch {
             generationState.update { it.copy(isGenerating = true, error = null) }
             generateSessionReportUseCase(sessionId).fold(
                 onSuccess = { report ->
                     generationState.update { GenerationState() }
-                    report.pdfFilePath?.let { _events.emit(SessionDetailEvent.ReportGenerated(it)) }
+                    _events.emit(
+                        SessionDetailEvent.ReportGenerated(
+                            pdfPath = report.pdfFilePath,
+                            csvPath = report.csvFilePath,
+                            format = format,
+                        ),
+                    )
                 },
                 onFailure = { error ->
                     generationState.update {

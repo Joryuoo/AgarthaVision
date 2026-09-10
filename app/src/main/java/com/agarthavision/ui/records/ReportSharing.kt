@@ -42,6 +42,33 @@ internal fun shareReportCsv(context: Context, csvFilePath: String?): Int? =
 internal fun shareReportPdf(context: Context, pdfFilePath: String?): Int? =
     shareReportFile(context, pdfFilePath, PDF_MIME_TYPE)
 
+/**
+ * Opens a report's PDF in a viewer (the device's PDF app) via [Intent.ACTION_VIEW] — the natural
+ * result of tapping a report in the history list, as opposed to exporting/sharing it.
+ *
+ * @return null on success, or a string resource explaining why it could not open.
+ */
+@StringRes
+internal fun viewReportPdf(context: Context, pdfFilePath: String?): Int? {
+    val uri = pdfFilePath?.let { resolveReportUri(context, it) }
+    return when {
+        pdfFilePath == null -> R.string.report_share_missing_path
+        uri == null -> R.string.report_share_file_gone
+        else -> startViewer(context, uri)
+    }
+}
+
+@StringRes
+private fun startViewer(context: Context, uri: Uri): Int? {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, PDF_MIME_TYPE)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    return runCatching { context.startActivity(intent) }
+        .fold(onSuccess = { null }, onFailure = { R.string.report_open_no_app })
+}
+
 @StringRes
 private fun shareReportFile(context: Context, filePath: String?, mimeType: String): Int? {
     val uri = filePath?.let { resolveReportUri(context, it) }
