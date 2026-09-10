@@ -9,6 +9,7 @@ import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.ReportFileStore
+import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -18,11 +19,11 @@ import java.util.UUID
 import javax.inject.Inject
 
 /**
- * Generates a persisted session report and writes the CSV to device storage.
+ * Generates a persisted session report and writes the CSV + PDF to device storage.
  */
-// Composition-root use case wiring 8 distinct, non-overlapping DI dependencies (repositories,
-// file store, CSV builder, sync use case); each is independently meaningful and bundling would
-// not simplify the real dependency graph.
+// Composition-root use case wiring 10 distinct, non-overlapping DI dependencies (repositories,
+// file store, CSV/PDF builders + renderer, sync use case); each is independently meaningful and
+// bundling would not simplify the real dependency graph.
 @Suppress("LongParameterList")
 class GenerateSessionReportUseCase @Inject constructor(
     private val authRepository: AuthRepository,
@@ -32,6 +33,8 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val reportRepository: ReportRepository,
     private val reportFileStore: ReportFileStore,
     private val reportCsvBuilder: ReportCsvBuilder,
+    private val reportPdfBuilder: ReportPdfBuilder,
+    private val reportPdfRenderer: ReportPdfRenderer,
     private val syncReportUseCase: SyncReportUseCase,
 ) {
     suspend operator fun invoke(sessionId: String): Result<Report> = runCatching {
@@ -54,6 +57,9 @@ class GenerateSessionReportUseCase @Inject constructor(
         val normalizedCounts = eggCounts.groupBy { it.canonicalSpecies() }.mapValues { entry ->
             entry.value.sumOf { it.count }
         }
+        // TEMPORARY (86d4a6jxw): epgPerSpecies is the reported per-species number for both the
+        // CSV and PDF. It will be replaced by LPF (Low Power Field) density once that ticket's
+        // pipeline lands; until then every consumer of this map must keep labeling it "EPG".
         val epgPerSpecies = normalizedCounts.mapValues { EpgCalculator.epg(it.value) }
         val positiveSpecies = epgPerSpecies.filterValues { it > 0 }.keys.sorted()
         val totalEggsConfirmed = normalizedCounts.values.sum()
@@ -78,6 +84,14 @@ class GenerateSessionReportUseCase @Inject constructor(
         )
         val csvFilePath = reportFileStore.writeCsv(reportId, sessionId, csv)
 
+        val pdfDocument = reportPdfBuilder.build(
+            metadata = metadata,
+            samples = samples,
+            detectionsBySample = detectionsBySample,
+        )
+        val pdfBytes = reportPdfRenderer.render(pdfDocument)
+        val pdfFilePath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
+
         val report = Report(
             id = reportId,
             sessionId = sessionId,
@@ -89,6 +103,7 @@ class GenerateSessionReportUseCase @Inject constructor(
             positiveSpecies = positiveSpecies,
             epgPerSpecies = epgPerSpecies,
             csvFilePath = csvFilePath,
+            pdfFilePath = pdfFilePath,
             supabaseStatus = ReportSyncStatus.PENDING,
         )
         reportRepository.insert(report)

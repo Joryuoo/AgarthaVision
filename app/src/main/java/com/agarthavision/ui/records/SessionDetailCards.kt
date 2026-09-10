@@ -101,7 +101,7 @@ private fun ReportRow(report: Report, onShare: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = report.csvFilePath != null, onClick = onShare)
+            .clickable(enabled = report.pdfFilePath != null, onClick = onShare)
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,

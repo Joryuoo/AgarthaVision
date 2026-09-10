@@ -10,6 +10,7 @@ import com.agarthavision.R
 import java.io.File
 
 private const val CSV_MIME_TYPE = "text/csv"
+private const val PDF_MIME_TYPE = "application/pdf"
 private const val CONTENT_URI_PREFIX = "content://"
 
 /**
@@ -27,12 +28,27 @@ private const val CONTENT_URI_PREFIX = "content://"
  *   file had been cleared away was simply a tap that did nothing.
  */
 @StringRes
-internal fun shareReportCsv(context: Context, csvFilePath: String?): Int? {
-    val uri = csvFilePath?.let { resolveReportUri(context, it) }
+internal fun shareReportCsv(context: Context, csvFilePath: String?): Int? =
+    shareReportFile(context, csvFilePath, CSV_MIME_TYPE)
+
+/**
+ * Opens the system share sheet for a report's PDF — the patient-facing artifact, and the
+ * primary share target from the generation snackbar and the Reports list. Same two path shapes
+ * as [shareReportCsv]; see its doc for why both are handled.
+ *
+ * @return null on success, or a string resource explaining why the share could not start.
+ */
+@StringRes
+internal fun shareReportPdf(context: Context, pdfFilePath: String?): Int? =
+    shareReportFile(context, pdfFilePath, PDF_MIME_TYPE)
+
+@StringRes
+private fun shareReportFile(context: Context, filePath: String?, mimeType: String): Int? {
+    val uri = filePath?.let { resolveReportUri(context, it) }
     return when {
-        csvFilePath == null -> R.string.report_share_missing_path
+        filePath == null -> R.string.report_share_missing_path
         uri == null -> R.string.report_share_file_gone
-        else -> startShareChooser(context, uri, csvFilePath.substringAfterLast('/'))
+        else -> startShareChooser(context, uri, filePath.substringAfterLast('/'), mimeType)
     }
 }
 
@@ -54,9 +70,9 @@ private fun resolveReportUri(context: Context, path: String): Uri? =
     }
 
 @StringRes
-private fun startShareChooser(context: Context, uri: Uri, label: String): Int? {
+private fun startShareChooser(context: Context, uri: Uri, label: String, mimeType: String): Int? {
     val intent = Intent(Intent.ACTION_SEND).apply {
-        type = CSV_MIME_TYPE
+        type = mimeType
         putExtra(Intent.EXTRA_STREAM, uri)
         putExtra(Intent.EXTRA_SUBJECT, label)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

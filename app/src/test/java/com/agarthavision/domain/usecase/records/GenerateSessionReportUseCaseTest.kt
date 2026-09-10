@@ -13,7 +13,9 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.repository.ReportFileStore
+import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -51,6 +53,8 @@ class GenerateSessionReportUseCaseTest {
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
         )
 
@@ -69,9 +73,13 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
         assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
         assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
+        assertEquals("/Documents/AgarthaVision/report.pdf", report.pdfFilePath)
         assertEquals(ReportSyncStatus.PENDING, report.supabaseStatus)
         assertNotNull(report.generatedAt)
         assertTrue(reportFileStore.lastCsv.contains("# report_id: ${report.id}"))
+        assertEquals(report.id, reportFileStore.lastPdfReportId)
+        assertTrue(reportFileStore.lastPdfBytes.isNotEmpty())
+        assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
     }
 
     @Test
@@ -84,6 +92,8 @@ class GenerateSessionReportUseCaseTest {
             reportRepository = FakeReportRepository(),
             reportFileStore = FakeReportFileStore(),
             reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
         )
 
@@ -91,6 +101,13 @@ class GenerateSessionReportUseCaseTest {
 
         assertTrue(result.isFailure)
     }
+}
+
+/** Non-empty marker bytes so tests can assert the renderer's output actually reached the file store. */
+private val FAKE_PDF_BYTES = byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), 'D'.code.toByte(), 'F'.code.toByte())
+
+private class FakeReportPdfRenderer : ReportPdfRenderer {
+    override suspend fun render(document: ReportPdfDocument): ByteArray = FAKE_PDF_BYTES
 }
 
 private class ReportAuthRepository(private val userId: String?) : AuthRepository {
@@ -180,11 +197,19 @@ private class FakeReportRepository : ReportRepository {
 private class FakeReportFileStore : ReportFileStore {
     var lastReportId: String? = null
     var lastCsv: String = ""
+    var lastPdfReportId: String? = null
+    var lastPdfBytes: ByteArray = ByteArray(0)
 
     override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
         lastReportId = reportId
         lastCsv = csv
         return "/Documents/AgarthaVision/report.csv"
+    }
+
+    override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String {
+        lastPdfReportId = reportId
+        lastPdfBytes = pdf
+        return "/Documents/AgarthaVision/report.pdf"
     }
 }
 

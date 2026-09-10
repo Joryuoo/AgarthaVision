@@ -49,9 +49,13 @@ data class EggCountSummary(
  */
 sealed interface SessionDetailEvent {
     /**
-     * A report was successfully generated and saved at [csvPath].
+     * A report was successfully generated; its patient-facing PDF was saved at [pdfPath].
+     *
+     * The PDF is what the snackbar offers to share (see `shareReportPdf`): it's the
+     * artifact a medtech actually hands to someone, while the CSV stays a device-local
+     * data export.
      */
-    data class ReportGenerated(val csvPath: String) : SessionDetailEvent
+    data class ReportGenerated(val pdfPath: String) : SessionDetailEvent
 }
 
 /**
@@ -104,7 +108,7 @@ class SessionDetailViewModel @Inject constructor(
             generateSessionReportUseCase(sessionId).fold(
                 onSuccess = { report ->
                     generationState.update { GenerationState() }
-                    report.csvFilePath?.let { _events.emit(SessionDetailEvent.ReportGenerated(it)) }
+                    report.pdfFilePath?.let { _events.emit(SessionDetailEvent.ReportGenerated(it)) }
                 },
                 onFailure = { error ->
                     generationState.update {

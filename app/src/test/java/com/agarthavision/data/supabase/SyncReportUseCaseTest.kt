@@ -67,6 +67,7 @@ private fun entity(id: String, status: String = ReportSyncStatus.PENDING.value):
         positiveSpeciesJson = "[]",
         epgPerSpeciesJson = "{}",
         csvFilePath = "/downloads/report.csv",
+        pdfFilePath = "/downloads/report.pdf",
         supabaseStatus = status,
         createdAt = 1_000L,
     )

@@ -124,7 +124,7 @@ fun SessionDetailScreen(
                         duration = SnackbarDuration.Long,
                     )
                     if (result == SnackbarResult.ActionPerformed) {
-                        shareError = shareReportCsv(context, event.csvPath)
+                        shareError = shareReportPdf(context, event.pdfPath)
                     }
                 }
             }
@@ -175,7 +175,7 @@ fun SessionDetailScreen(
             reports = state.reports,
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
-            onShare = { report -> shareError = shareReportCsv(context, report.csvFilePath) },
+            onShare = { report -> shareError = shareReportPdf(context, report.pdfFilePath) },
         )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
