@@ -51,10 +51,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun ReportsSection(
-    reports: List<Report>,
-    isGenerating: Boolean,
-    onGenerate: (ExportFormat) -> Unit,
-    onOpenReport: (Report) -> Unit,
+    state: SessionDetailContentState,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -78,10 +75,10 @@ internal fun ReportsSection(
                     color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
-                    text = if (reports.isEmpty()) {
+                    text = if (state.totalReports == 0) {
                         stringResource(R.string.report_empty)
                     } else {
-                        "${reports.size} generated"
+                        stringResource(R.string.report_generated_count, state.totalReports)
                     },
                     fontSize = 12.sp,
                     color = AgarthaTheme.colors.textSecondary,
@@ -90,11 +87,21 @@ internal fun ReportsSection(
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(isGenerating = isGenerating, onClick = onGenerate)
+            GenerateReportButton(isGenerating = state.isGenerating, onClick = state.onGenerate)
         }
 
-        reports.take(3).forEach { report ->
-            ReportRow(report = report, onOpen = { onOpenReport(report) })
+        state.reports.forEach { report ->
+            ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+        }
+
+        // Only paginate once reports spill past a single page.
+        if (state.totalReports > REPORTS_PER_PAGE) {
+            ReportsPager(
+                currentPage = state.currentPage,
+                totalReports = state.totalReports,
+                onPrev = state.onPrevPage,
+                onNext = state.onNextPage,
+            )
         }
     }
 }
@@ -105,7 +112,10 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = report.pdfFilePath != null, onClick = onOpen)
+            .clickable(
+                enabled = report.pdfFilePath != null || report.csvFilePath != null,
+                onClick = onOpen,
+            )
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -124,6 +134,15 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
                 fontSize = 12.sp,
                 color = AgarthaTheme.colors.textSecondary,
             )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (report.pdfFilePath != null) {
+                    FormatChip(stringResource(R.string.report_format_pdf))
+                }
+                if (report.csvFilePath != null) {
+                    FormatChip(stringResource(R.string.report_format_csv))
+                }
+            }
         }
         ReportStatusPill(status = report.supabaseStatus)
     }

@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.core.util.EpgCalculator
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -37,7 +38,7 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val reportPdfRenderer: ReportPdfRenderer,
     private val syncReportUseCase: SyncReportUseCase,
 ) {
-    suspend operator fun invoke(sessionId: String): Result<Report> = runCatching {
+    suspend operator fun invoke(sessionId: String, format: ReportFormat): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.getCurrentUserId()) {
             "A logged-in medtech is required to generate a report."
         }
@@ -77,20 +78,30 @@ class GenerateSessionReportUseCase @Inject constructor(
             positiveSpecies = positiveSpecies,
             epgPerSpecies = epgPerSpecies,
         )
-        val csv = reportCsvBuilder.build(
-            metadata = metadata,
-            samples = samples,
-            detectionsBySample = detectionsBySample,
-        )
-        val csvFilePath = reportFileStore.writeCsv(reportId, sessionId, csv)
+        // Generate only the format the medtech asked for, so the report carries a single file
+        // and its format is unambiguous everywhere it's shown, opened, or shared.
+        var csvFilePath: String? = null
+        var pdfFilePath: String? = null
+        when (format) {
+            ReportFormat.CSV -> {
+                val csv = reportCsvBuilder.build(
+                    metadata = metadata,
+                    samples = samples,
+                    detectionsBySample = detectionsBySample,
+                )
+                csvFilePath = reportFileStore.writeCsv(reportId, sessionId, csv)
+            }
 
-        val pdfDocument = reportPdfBuilder.build(
-            metadata = metadata,
-            samples = samples,
-            detectionsBySample = detectionsBySample,
-        )
-        val pdfBytes = reportPdfRenderer.render(pdfDocument)
-        val pdfFilePath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
+            ReportFormat.PDF -> {
+                val pdfDocument = reportPdfBuilder.build(
+                    metadata = metadata,
+                    samples = samples,
+                    detectionsBySample = detectionsBySample,
+                )
+                val pdfBytes = reportPdfRenderer.render(pdfDocument)
+                pdfFilePath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
+            }
+        }
 
         val report = Report(
             id = reportId,

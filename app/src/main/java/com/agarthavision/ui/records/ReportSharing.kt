@@ -49,19 +49,31 @@ internal fun shareReportPdf(context: Context, pdfFilePath: String?): Int? =
  * @return null on success, or a string resource explaining why it could not open.
  */
 @StringRes
-internal fun viewReportPdf(context: Context, pdfFilePath: String?): Int? {
-    val uri = pdfFilePath?.let { resolveReportUri(context, it) }
+internal fun viewReportPdf(context: Context, pdfFilePath: String?): Int? =
+    viewReportFile(context, pdfFilePath, PDF_MIME_TYPE)
+
+/**
+ * Opens a report's CSV in a viewer via [Intent.ACTION_VIEW] with the `text/csv` type, so the
+ * "open with" chooser offers apps that read spreadsheets/CSV rather than PDF viewers.
+ */
+@StringRes
+internal fun viewReportCsv(context: Context, csvFilePath: String?): Int? =
+    viewReportFile(context, csvFilePath, CSV_MIME_TYPE)
+
+@StringRes
+private fun viewReportFile(context: Context, filePath: String?, mimeType: String): Int? {
+    val uri = filePath?.let { resolveReportUri(context, it) }
     return when {
-        pdfFilePath == null -> R.string.report_share_missing_path
+        filePath == null -> R.string.report_share_missing_path
         uri == null -> R.string.report_share_file_gone
-        else -> startViewer(context, uri)
+        else -> startViewer(context, uri, mimeType)
     }
 }
 
 @StringRes
-private fun startViewer(context: Context, uri: Uri): Int? {
+private fun startViewer(context: Context, uri: Uri, mimeType: String): Int? {
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(uri, PDF_MIME_TYPE)
+        setDataAndType(uri, mimeType)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }

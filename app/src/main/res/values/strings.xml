@@ -143,6 +143,12 @@
     <string name="report_export">Export report</string>
     <string name="report_export_as_pdf">Export as PDF</string>
     <string name="report_export_as_csv">Export as CSV</string>
+    <string name="report_format_pdf">PDF</string>
+    <string name="report_format_csv">CSV</string>
+    <string name="report_generated_count">%1$d generated</string>
+    <string name="report_pager_page">Page %1$d of %2$d</string>
+    <string name="report_pager_previous">Previous page</string>
+    <string name="report_pager_next">Next page</string>
     <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>

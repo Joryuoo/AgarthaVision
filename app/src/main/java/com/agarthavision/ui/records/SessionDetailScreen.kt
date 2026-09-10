@@ -176,9 +176,19 @@ fun SessionDetailScreen(
         val contentState = SessionDetailContentState(
             session = sessionDetail,
             reports = state.reports,
+            totalReports = state.totalReports,
+            currentPage = state.currentPage,
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
-            onOpenReport = { report -> shareError = viewReportPdf(context, report.pdfFilePath) },
+            onOpenReport = { report ->
+                shareError = when {
+                    report.pdfFilePath != null -> viewReportPdf(context, report.pdfFilePath)
+                    report.csvFilePath != null -> viewReportCsv(context, report.csvFilePath)
+                    else -> R.string.report_share_missing_path
+                }
+            },
+            onPrevPage = viewModel::goToPreviousReportPage,
+            onNextPage = viewModel::goToNextReportPage,
         )
         if (sessionDetail.verifiedSamples.isEmpty()) {
             SessionDetailEmpty(
@@ -272,9 +282,13 @@ private fun SessionDetailAppBar(
 internal data class SessionDetailContentState(
     val session: SessionDetailUi,
     val reports: List<Report>,
+    val totalReports: Int,
+    val currentPage: Int,
     val isGenerating: Boolean,
     val onGenerate: (ExportFormat) -> Unit,
     val onOpenReport: (Report) -> Unit,
+    val onPrevPage: () -> Unit,
+    val onNextPage: () -> Unit,
 )
 
 @Composable
@@ -311,12 +325,7 @@ private fun SessionDetailPopulated(
                     },
                 )
                 Spacer(Modifier.height(Spacing.md))
-                ReportsSection(
-                    reports = state.reports,
-                    isGenerating = state.isGenerating,
-                    onGenerate = state.onGenerate,
-                    onOpenReport = state.onOpenReport,
-                )
+                ReportsSection(state = state)
                 Spacer(Modifier.height(Spacing.lg))
                 SectionHeader(
                     title = "Verified samples",
@@ -350,12 +359,7 @@ private fun SessionDetailEmpty(
             samplesTotal = session.samplesTotal,
         )
         Spacer(Modifier.height(Spacing.md))
-        ReportsSection(
-            reports = state.reports,
-            isGenerating = state.isGenerating,
-            onGenerate = state.onGenerate,
-            onOpenReport = state.onOpenReport,
-        )
+        ReportsSection(state = state)
         Spacer(Modifier.height(60.dp))
         EmptyStateGraphic()
     }
