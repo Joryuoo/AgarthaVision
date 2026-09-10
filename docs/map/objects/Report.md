@@ -68,8 +68,8 @@ PK column is `report_id`. Differences:
 ## If you change this
 
 **Hits**
-- `GenerateSessionReportUseCase` — it computes every aggregate and writes both files before the
-  row (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
+- `GenerateSessionReportUseCase` — it computes every aggregate and writes the chosen format's
+  single file before the row (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 - `ReportInsertRow`, or your column never reaches Postgres
   (`data/supabase/ReportRemoteDataSource.kt`).
 - The two Gson serialisation points, if you touch either collection column.

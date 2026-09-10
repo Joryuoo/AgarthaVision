@@ -92,8 +92,9 @@ as working.
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
   `ui/records/ReportSharing.kt:30-37`).
-- **PDF export** — the patient-facing artifact, generated alongside the CSV and offered first
-  from the generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,
+- **PDF export** — the patient-facing artifact. A report is generated in the single format the
+  medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
+  generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,
   `domain/repository/ReportPdfRenderer.kt`, `data/repository/AndroidReportPdfRenderer.kt`,
   `ui/records/ReportSharing.kt:shareReportPdf`).
 

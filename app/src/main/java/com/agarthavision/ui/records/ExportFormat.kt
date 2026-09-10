@@ -8,9 +8,9 @@ import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 
 /**
- * The file format a medtech can export a [com.agarthavision.domain.model.Report] as. Both are
- * always written when a report is generated (see `GenerateSessionReportUseCase`); this only
- * picks which one gets shared.
+ * The file format a medtech chooses to export a [com.agarthavision.domain.model.Report] as.
+ * The choice is passed to `GenerateSessionReportUseCase`, which writes only that format's file,
+ * so a report carries either a PDF or a CSV, never both.
  */
 enum class ExportFormat { PDF, CSV }
 

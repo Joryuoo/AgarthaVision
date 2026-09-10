@@ -123,9 +123,9 @@ class SessionDetailViewModel @Inject constructor(
         )
 
     /**
-     * Generates a fresh report for this session (the use case always writes both a CSV and a
-     * PDF). Emits [SessionDetailEvent.ReportGenerated] on success so the screen can offer the
-     * medtech a share action for the [format] they asked for.
+     * Generates a fresh report for this session in the chosen [format] (the use case writes only
+     * that format's file). Emits [SessionDetailEvent.ReportGenerated] on success so the screen can
+     * offer the medtech a share action for the format they asked for.
      */
     fun generateReport(format: ExportFormat) {
         viewModelScope.launch {
