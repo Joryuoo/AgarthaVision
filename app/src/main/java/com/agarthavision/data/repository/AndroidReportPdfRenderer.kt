@@ -1,8 +1,10 @@
 package com.agarthavision.data.repository
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -47,13 +49,18 @@ class AndroidReportPdfRenderer @Inject constructor(
 
     private fun drawPage(canvas: Canvas, document: ReportPdfDocument) {
         val titleX = drawLogo(canvas)
+        val titlePaint = paintFor(PdfTextStyle.TITLE)
+        // Center the wordmark on the logo's vertical midline via font metrics, so the two read
+        // as one letterhead band rather than the title floating off the logo's baseline.
+        val metrics = titlePaint.fontMetrics
+        val titleBaseline = MARGIN + LOGO_SIZE / 2f - (metrics.ascent + metrics.descent) / 2f
         canvas.drawText(
             context.getString(R.string.report_pdf_document_title),
             titleX,
-            MARGIN + TITLE_BASELINE_OFFSET,
-            paintFor(PdfTextStyle.TITLE),
+            titleBaseline,
+            titlePaint,
         )
-        var cursorY = MARGIN + maxOf(LOGO_SIZE, TITLE_HEIGHT)
+        var cursorY = MARGIN + LOGO_SIZE + SECTION_GAP
         cursorY = drawHeaderBlock(canvas, document.header, cursorY)
         cursorY += SECTION_GAP
         cursorY = drawSummaryBlock(canvas, document.header, cursorY)
@@ -142,9 +149,17 @@ class AndroidReportPdfRenderer @Inject constructor(
      */
     private fun drawLogo(canvas: Canvas): Float {
         val logo = ContextCompat.getDrawable(context, R.drawable.ic_logo) ?: return MARGIN
-        val top = (MARGIN + TITLE_BASELINE_OFFSET - LOGO_SIZE / 2f).toInt()
-        logo.setBounds(MARGIN.toInt(), top, (MARGIN + LOGO_SIZE).toInt(), top + LOGO_SIZE.toInt())
-        logo.draw(canvas)
+        // Rasterize the vector supersampled, then draw it down into the 36pt box. Drawing a
+        // VectorDrawable straight onto the page canvas bakes it at ~72 dpi and looks rough; a
+        // LOGO_SUPERSAMPLE× bitmap embeds a crisp mark that holds up zoomed and printed.
+        val sizePx = (LOGO_SIZE * LOGO_SUPERSAMPLE).toInt()
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        logo.setBounds(0, 0, sizePx, sizePx)
+        logo.draw(Canvas(bitmap))
+        val destination = RectF(MARGIN, MARGIN, MARGIN + LOGO_SIZE, MARGIN + LOGO_SIZE)
+        val logoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { isFilterBitmap = true }
+        canvas.drawBitmap(bitmap, null, destination, logoPaint)
+        bitmap.recycle()
         return MARGIN + LOGO_SIZE + LOGO_TITLE_GAP
     }
 
@@ -201,10 +216,9 @@ class AndroidReportPdfRenderer @Inject constructor(
         private const val SECTION_TEXT_SIZE = 14f
         private const val BODY_TEXT_SIZE = 12f
         private const val NOTE_TEXT_SIZE = 10f
-        private const val TITLE_HEIGHT = 30f
-        private const val TITLE_BASELINE_OFFSET = 6f
         private const val LOGO_SIZE = 36f
         private const val LOGO_TITLE_GAP = 10f
+        private const val LOGO_SUPERSAMPLE = 8
 
         private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
     }
