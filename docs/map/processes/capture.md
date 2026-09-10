@@ -32,17 +32,15 @@ Getting a frame off the microscope and into a state a human can review.
    `latestFrameBytes` and hands it to `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
    `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, or no frame cached yet,
    sets an error and returns without capturing.
-4. **Infer once, then record only what can be verified.** `CaptureFieldUseCase` calls
-   `RemoteInferenceEngine.infer` a single time — what happens inside is [`infer`](infer.md). A
-   result **with detections** builds a `FrameSource.MODEL` frame (JPEG, predictions, model
-   version, image dimensions). A **clean result records nothing**: a field with no eggs has
-   nothing to verify, and a zero-detection frame would be un-submittable and would block End
-   Session, so the screen shows a transient "No eggs detected" hint instead. An
-   `InferenceConnectionException` (container unreachable) builds a `FrameSource.MANUAL` frame
-   with no predictions, so a lost connection is a Manual Capture rather than a silent failure.
-   The three outcomes are `CaptureOutcome.AI_DETECTED` / `AI_EMPTY` / `MANUAL`
-   (`domain/usecase/capture/CaptureFieldUseCase.kt`). Aggregating clean fields as an LPF-density
-   denominator is deferred to 86d4a6jxw.
+4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls
+   `RemoteInferenceEngine.infer` a single time — what happens inside is [`infer`](infer.md).
+   Capture source is decided by whether the server was *consulted*, not by what it found: any
+   response — **including zero detections** — builds a `FrameSource.MODEL` frame (JPEG,
+   predictions, model version, image dimensions). A clean field is a normal negative result and
+   must be recorded, not discarded. An `InferenceConnectionException` (container unreachable)
+   builds a `FrameSource.MANUAL` frame with no predictions, so a lost connection is a Manual
+   Capture rather than a silent failure.
+   (`domain/usecase/capture/CaptureFieldUseCase.kt`).
 5. **Persist.** A recorded frame (AI Capture or Manual Capture) goes to `FlaggedFrameStore.add`, which runs
    `PersistFlaggedFrameUseCase`: it writes the JPEG under
    `filesDir/users/{owner}/samples/{sampleId}.jpg` and inserts a `SampleEntity` with
@@ -53,16 +51,17 @@ Getting a frame off the microscope and into a state a human can review.
    (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:66-67`). The raw predictions are
    cached in `predictions_json`.
 
-## One entrance, three outcomes
+## One entrance, two outcomes
 
-There is no longer a separate no-model entrance. Every tap runs inference, and the result
-decides what is recorded: a detection-bearing result is an **AI Capture** (`FrameSource.MODEL`),
-an `InferenceConnectionException` is a **Manual Capture** (`FrameSource.MANUAL`), and a clean
-result records **nothing** (`CaptureOutcome.AI_EMPTY`) so empty fields cannot pile up and block
-End Session. The `InferenceConnectionException` the call already throws on transport failure
-*is* the AI-vs-Manual classifier — there is no separate timeout or signal.
+There is no longer a separate no-model entrance. Every tap runs inference, and whether the
+server was reached decides what is recorded: any server response — zero detections included —
+is an **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` is a **Manual
+Capture** (`FrameSource.MANUAL`). A clean field is recorded like any other AI Capture, since a
+negative result is still a result. The `InferenceConnectionException` the call already throws on
+transport failure *is* the AI-vs-Manual classifier — there is no separate timeout or signal.
 `SubmitManualCaptureUseCase` remains the pattern for turning a recorded frame into a verified
-sample downstream.
+sample downstream. Aggregating clean fields as an LPF-density denominator is a separate concern
+(86d4a6jxw).
 
 ## Discarding
 

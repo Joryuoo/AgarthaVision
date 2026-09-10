@@ -9,33 +9,21 @@ import java.time.Instant
 import javax.inject.Inject
 
 /**
- * What a single shutter tap resolved to.
- *
- * - [AI_DETECTED] — inference returned at least one prediction; an AI Capture
- *   ([FrameSource.MODEL]) was recorded for verification.
- * - [AI_EMPTY] — inference ran and found nothing. **No frame is recorded**: a clean field has
- *   nothing to verify, and recording it would leave an un-submittable row that blocks End
- *   Session. The caller surfaces a transient "no eggs" hint instead. Aggregating clean fields
- *   as a denominator (LPF density) is deferred to a separate ticket (86d4a6jxw).
- * - [MANUAL] — the inference container was unreachable; a Manual Capture ([FrameSource.MANUAL])
- *   was recorded so a lost connection never looks like a silent failure.
- */
-enum class CaptureOutcome { AI_DETECTED, AI_EMPTY, MANUAL }
-
-/**
  * Orchestrates a manual shutter tap: snapshot the cached frame, run inference once, and record
- * a frame **only when there is something to verify**.
+ * a frame for whatever the tap resolved to.
  *
- * A detection-bearing result is an AI Capture; an unreachable container is a Manual Capture; a
- * clean result records nothing (see [CaptureOutcome.AI_EMPTY]). This keeps every recorded frame
- * verifiable, so clean fields cannot pile up and block End Session.
+ * Capture source is decided by whether the inference server was *consulted*, not by what it
+ * found. Any server response — including a zero-detection result — is an AI Capture
+ * ([FrameSource.MODEL]): a clean field is a normal negative result and must be recorded, not
+ * discarded. Only an unreachable container falls back to a Manual Capture ([FrameSource.MANUAL]),
+ * so a lost connection never looks like a silent failure.
  *
  * Runs against the cloud container through [RemoteInferenceEngine] directly: on-device
  * inference was measured and deferred, so there is one backend and a selector would be
  * ceremony. See `docs/map/processes/infer.md`.
  *
- * Returns `Result<CaptureOutcome>` (C4): success carries the resolved outcome so the caller can
- * react without re-reading the store. Only an *unexpected* failure propagates as
+ * Returns `Result<FrameSource>` (C4): success carries the persisted frame's source so the caller
+ * can react without re-reading the store. Only an *unexpected* failure propagates as
  * [Result.failure]: a lost connection is not one (it becomes a Manual Capture), but a
  * persistence error or a non-connectivity HTTP error is.
  */
@@ -46,10 +34,11 @@ class CaptureFieldUseCase @Inject constructor(
     /**
      * @param sessionId the active recording session ID.
      * @param jpegBytes the snapshot of [FrameSampler.latestFrameBytes] to analyze.
-     * @return the resolved [CaptureOutcome] on success; [Result.failure] on an unexpected error.
+     * @return the persisted frame's [FrameSource] on success; [Result.failure] on an unexpected
+     *   error.
      */
     @Suppress("SwallowedException")
-    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<CaptureOutcome> =
+    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<FrameSource> =
         runCatching {
             val result = try {
                 remoteEngine.infer(jpegBytes)
@@ -71,12 +60,11 @@ class CaptureFieldUseCase @Inject constructor(
                         imageHeight = null,
                     ),
                 )
-                return@runCatching CaptureOutcome.MANUAL
+                return@runCatching FrameSource.MANUAL
             }
 
-            // A clean field records nothing — see [CaptureOutcome.AI_EMPTY].
-            if (result.predictions.isEmpty()) return@runCatching CaptureOutcome.AI_EMPTY
-
+            // Every server response is recorded, zero detections included: a clean field is a
+            // normal negative result, not a reason to skip persisting.
             flaggedFrameStore.add(
                 FlaggedFrame(
                     sessionId = sessionId,
@@ -89,6 +77,6 @@ class CaptureFieldUseCase @Inject constructor(
                     imageHeight = result.imageHeight,
                 ),
             )
-            CaptureOutcome.AI_DETECTED
+            FrameSource.MODEL
         }
 }

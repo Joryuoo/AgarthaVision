@@ -41,10 +41,10 @@ as working.
   `onCapture`, `domain/usecase/capture/CaptureFieldUseCase.kt`). There is no timer — the old
   2-second auto-sampling was removed because a fecal smear is read by choosing ~10 likely
   fields, not by sweeping the slide continuously.
-- **AI-vs-Manual by outcome.** A detection-bearing inference result records an **AI Capture**
-  (`FrameSource.MODEL`); a clean result records nothing and shows a transient "No eggs detected"
-  hint; an `InferenceConnectionException` records a **Manual Capture** (`FrameSource.MANUAL`), so
-  a lost connection never silently drops the tap (`domain/usecase/capture/CaptureFieldUseCase.kt`).
+- **AI-vs-Manual by outcome.** Any inference response — zero detections included — records an
+  **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` records a **Manual
+  Capture** (`FrameSource.MANUAL`), so a lost connection never silently drops the tap
+  (`domain/usecase/capture/CaptureFieldUseCase.kt`).
 - **Synchronous inference** against the self-hosted FastAPI container, called through
   `RemoteInferenceEngine` behind the `InferenceEngine` interface
   (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the

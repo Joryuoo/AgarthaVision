@@ -9,7 +9,6 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
-import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -120,9 +119,9 @@ class CaptureViewModel @Inject constructor(
     }
 
     /**
-     * Snapshots the cached frame and runs inference once. Success records a
+     * Snapshots the cached frame and runs inference once. A server response records a
      * [com.agarthavision.domain.model.FrameSource.MODEL] frame (predictions may be
-     * empty — a clean field is still recorded); an
+     * empty — a clean field is a normal negative result and is still recorded); an
      * [com.agarthavision.domain.usecase.inference.InferenceConnectionException]
      * records a [com.agarthavision.domain.model.FrameSource.MANUAL] frame instead.
      * See [CaptureFieldUseCase].
@@ -141,13 +140,6 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
             captureFieldUseCase(sessionId, jpegBytes)
-                .onSuccess { outcome ->
-                    // A clean field records no frame, so the flagged-frame toast never fires
-                    // for it — emit a one-shot hint so the tap is still acknowledged.
-                    if (outcome == CaptureOutcome.AI_EMPTY) {
-                        eventChannel.send(CaptureEvent.NoEggsDetected)
-                    }
-                }
                 .onFailure { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
@@ -181,9 +173,6 @@ class CaptureViewModel @Inject constructor(
  */
 sealed interface CaptureEvent {
     data object SessionEnded : CaptureEvent
-
-    /** A tap ran inference and found no eggs; no frame was recorded. */
-    data object NoEggsDetected : CaptureEvent
 }
 
 /**

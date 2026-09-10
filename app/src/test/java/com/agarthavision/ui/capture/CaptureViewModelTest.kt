@@ -8,11 +8,10 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
-import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -214,7 +213,7 @@ class CaptureViewModelTest {
             val bytes = ByteArray(4)
             latestFrameBytes.value = bytes
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome.AI_DETECTED))
+                .thenReturn(Result.success(FrameSource.MODEL))
             advanceUntilIdle()
 
             vm.onCapture()
@@ -223,27 +222,5 @@ class CaptureViewModelTest {
             verify(captureFieldUseCase).invoke("session-1", bytes)
             assertNull(vm.state.value.errorMessage)
             assertEquals(false, vm.state.value.isBusy)
-        }
-
-    @Test
-    fun `onCapture emits NoEggsDetected for a clean field and records nothing`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            sessionState.value = makeActiveState()
-            val bytes = ByteArray(4)
-            latestFrameBytes.value = bytes
-            whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome.AI_EMPTY))
-            advanceUntilIdle()
-
-            val events = mutableListOf<CaptureEvent>()
-            val job = launch { vm.events.collect { events.add(it) } }
-
-            vm.onCapture()
-            advanceUntilIdle()
-            job.cancel()
-
-            assertTrue(events.contains(CaptureEvent.NoEggsDetected))
-            assertNull(vm.state.value.errorMessage)
         }
 }

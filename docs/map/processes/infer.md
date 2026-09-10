@@ -34,15 +34,15 @@ Asking the model what is in a frame.
 4. **Apply no filter.** The server returns every box the model produced. There is no
    confidence threshold on either side; the human is the threshold
    (`../../constraints.md` C7).
-5. **Discard empties.** An empty `predictions` list records nothing (`CaptureOutcome.AI_EMPTY`):
-   a clean field has nothing to verify, and a zero-detection frame would block End Session, so
-   `CaptureFieldUseCase` skips the store and the screen shows a transient "No eggs detected"
-   hint instead (`domain/usecase/capture/CaptureFieldUseCase.kt`).
-6. **Flag.** A result with detections builds a `FrameSource.MODEL` `FlaggedFrame` carrying the
-   JPEG, the predictions, the model version, and the image dimensions, and adds it to the store
-   (`domain/usecase/capture/CaptureFieldUseCase.kt`). The predictions are domain `Prediction`
-   values by this point, not the wire DTO — `RemoteInferenceEngine` maps them
-   (`data/inference/PredictionMapper.kt`), so nothing under `domain/` imports a response type.
+5. **Record empties too.** An empty `predictions` list is still a result the server returned, so
+   it is recorded like any other: a clean field is a normal negative result, not a reason to
+   skip the store (`domain/usecase/capture/CaptureFieldUseCase.kt`).
+6. **Flag.** Any response — detections or none — builds a `FrameSource.MODEL` `FlaggedFrame`
+   carrying the JPEG, the predictions (possibly empty), the model version, and the image
+   dimensions, and adds it to the store (`domain/usecase/capture/CaptureFieldUseCase.kt`). The
+   predictions are domain `Prediction` values by this point, not the wire DTO —
+   `RemoteInferenceEngine` maps them (`data/inference/PredictionMapper.kt`), so nothing under
+   `domain/` imports a response type.
 
 ## The contract
 

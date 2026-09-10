@@ -210,9 +210,7 @@ fun CaptureScreen(
     val context = LocalContext.current
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
-    val aiCaptureMessage = stringResource(R.string.capture_ai_capture_message)
-    val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
-    val noEggsMessage = stringResource(R.string.capture_no_eggs_message)
+    val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -249,10 +247,6 @@ fun CaptureScreen(
         viewModel.events.collect { event ->
             when (event) {
                 CaptureEvent.SessionEnded -> onSessionEnded()
-                CaptureEvent.NoEggsDetected -> toastState.show(
-                    message = noEggsMessage,
-                    variant = AgarthaToastVariant.Default,
-                )
             }
         }
     }
@@ -267,17 +261,8 @@ fun CaptureScreen(
                 if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
-                // Source, not species: the frame is unverified, so naming a species here
-                // would assert an unconfirmed detection. MODEL = inference returned (even
-                // with zero eggs); MANUAL = the inference container was unreachable.
-                val message = if (frame.source == FrameSource.MODEL) {
-                    aiCaptureMessage
-                } else {
-                    manualCaptureMessage
-                }
-
                 toastState.show(
-                    message = message,
+                    message = frameCapturedMessage,
                     variant = AgarthaToastVariant.Default,
                     actionLabel = detectionView,
                     onAction = { viewModel.onDetectionToastTap(frame) },
@@ -492,9 +477,12 @@ fun CaptureScreen(
         EndSessionConfirmDialog(
             initialNotes = "",
             isBusy = state.isBusy,
-            // Repeat frames are duplicates the medtech already accounted for, so they
-            // do not hold a session open. Only unverified, non-repeat frames block.
-            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat },
+            // Repeat frames are duplicates the medtech already accounted for, and
+            // zero-detection frames (clean fields, and Manual frames from an outage) have
+            // nothing to verify — neither should hold a session open. Interim gate until
+            // 86d4ab4vm reworks the queue; do not reach into the verification sheets here
+            // (86d4ab4tq's territory).
+            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat && it.predictions.isNotEmpty() },
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)
