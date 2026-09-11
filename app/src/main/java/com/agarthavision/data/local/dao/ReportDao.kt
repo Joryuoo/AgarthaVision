@@ -20,9 +20,22 @@ interface ReportDao {
         SELECT * FROM reports
         WHERE session_id = :sessionId AND user_id = :userId
         ORDER BY generated_at DESC
+        LIMIT :limit OFFSET :offset
         """,
     )
-    fun observeReportsForSession(sessionId: String, userId: String): Flow<List<ReportEntity>>
+    fun observeReportsForSession(
+        sessionId: String,
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>>
+
+    /**
+     * Live count of all reports for [sessionId] / [userId], independent of any page limit —
+     * lets the UI show "showing N of total" and offer larger page sizes.
+     */
+    @Query("SELECT COUNT(*) FROM reports WHERE session_id = :sessionId AND user_id = :userId")
+    fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int>
 
     @Query("SELECT * FROM reports WHERE report_id = :reportId LIMIT 1")
     suspend fun getReportById(reportId: String): ReportEntity?

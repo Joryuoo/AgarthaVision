@@ -9,7 +9,8 @@ import androidx.room.PrimaryKey
 /**
  * Room entity for a persisted session report.
  *
- * Mirrors the Supabase `reports` table from migration `0008_reports.sql`.
+ * Mirrors the Supabase `reports` table from migration `0008_reports.sql`, with
+ * `pdf_file_path` added by `0011_reports_pdf_and_lpf.sql`.
  * Row-only sync — the CSV file itself stays local; only the metadata +
  * aggregate stats round-trip to Supabase.
  *
@@ -69,6 +70,10 @@ data class ReportEntity(
 
     @ColumnInfo(name = "csv_file_path")
     val csvFilePath: String?,
+
+    /** Local path (or `content://` URI) to the patient-facing PDF, mirroring [csvFilePath]. */
+    @ColumnInfo(name = "pdf_file_path")
+    val pdfFilePath: String?,
 
     @ColumnInfo(name = "supabase_status", defaultValue = "'pending'")
     val supabaseStatus: String = "pending",

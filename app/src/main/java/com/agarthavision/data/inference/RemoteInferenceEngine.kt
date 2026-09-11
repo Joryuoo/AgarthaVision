@@ -15,10 +15,10 @@ import javax.inject.Singleton
 /**
  * The cloud backend: the self-hosted FastAPI container reached over HTTP.
  *
- * This is the behaviour that used to live inline in `InferFrameUseCase`, moved behind
- * [InferenceEngine] so the on-device path can stand beside it. The only functional change is
- * that transport errors now route through [NetworkErrorMapper] instead of being wrapped by
- * hand, which is what that class was written for.
+ * The single cloud call path, behind [InferenceEngine] so the on-device path can stand
+ * beside it. Transport errors route through [NetworkErrorMapper] rather than being wrapped
+ * by hand, which is what that class was written for. `CaptureFieldUseCase` calls this on
+ * each manual shutter tap.
  */
 @Singleton
 class RemoteInferenceEngine @Inject constructor(

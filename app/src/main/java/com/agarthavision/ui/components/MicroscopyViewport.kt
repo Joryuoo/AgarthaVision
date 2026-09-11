@@ -23,8 +23,8 @@ import com.agarthavision.ui.theme.AppColors
  * Camera preview surface for the capture flow.
  *
  * Binds [CameraManager.bindAnalysis] to the lifecycle and routes frames into the
- * supplied [analyzer] (typically the `FrameSampler` injected into the
- * `CaptureViewModel`). See CONTEXT.md.
+ * supplied [analyzer] (typically the `FrameSampler` that caches the latest frame
+ * for the `CaptureViewModel`'s shutter tap). See CONTEXT.md.
  *
  * The preview uses `FIT_CENTER`, not `FILL_CENTER`: the analysed stream is wider
  * than a phone screen, so filling would push part of what the model sees off the

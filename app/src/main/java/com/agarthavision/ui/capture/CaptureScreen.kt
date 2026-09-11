@@ -4,6 +4,7 @@ package com.agarthavision.ui.capture
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
@@ -48,7 +49,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -65,13 +65,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
@@ -212,10 +209,8 @@ fun CaptureScreen(
     val toastState = rememberAgarthaToastState()
     val context = LocalContext.current
     val view = LocalView.current
-    val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
-    val detectionMessage = stringResource(R.string.capture_detection_message)
-    val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
+    val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
     var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
@@ -248,22 +243,6 @@ fun CaptureScreen(
         }
     }
 
-    // Auto-pause inference whenever Capture leaves the foreground (back to picker,
-    // app backgrounded, etc.) and resume on return. Sheets/overlays handle their
-    // own pause/resume — see CaptureViewModel.resumeInferenceIfNoOverlay().
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> viewModel.resumeInferenceIfNoOverlay()
-                Lifecycle.Event.ON_PAUSE -> viewModel.pauseInference()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
@@ -282,26 +261,36 @@ fun CaptureScreen(
                 if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
-                val message = if (frame.source == FrameSource.MODEL) {
-                    // Prefer the canonical binomial: the server emits whatever its class
-                    // list is named, which may be an alias like "Ascaris".
-                    val label = frame.predictions.firstOrNull()?.classLabel
-                    val species = label
-                        ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
-                        ?: detectionFallback
-                    detectionMessage.format(species)
-                } else {
-                    manualCaptureMessage
-                }
-
                 toastState.show(
-                    message = message,
+                    message = frameCapturedMessage,
                     variant = AgarthaToastVariant.Default,
                     actionLabel = detectionView,
                     onAction = { viewModel.onDetectionToastTap(frame) },
                 )
             }
     }
+
+    // Surface capture errors ("No active session", "Waiting for a live frame", or an
+    // unexpected inference/persist failure) as a destructive toast, then clear the latch
+    // so the same error can fire again on the next tap.
+    LaunchedEffect(viewModel) {
+        viewModel.state
+            .map { it.errorMessage }
+            .distinctUntilChanged()
+            .collect { errorMessage ->
+                if (errorMessage == null) return@collect
+                toastState.show(
+                    message = errorMessage,
+                    variant = AgarthaToastVariant.Destructive,
+                )
+                viewModel.clearErrorMessage()
+            }
+    }
+
+    // A capture runs on viewModelScope, so leaving the screen mid-inference would cancel it
+    // and drop the frame before it is persisted. Swallow system back while a tap is in flight;
+    // the back button and shutter are already disabled via isBusy.
+    BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
 
     Box(
         modifier = Modifier
@@ -342,6 +331,7 @@ fun CaptureScreen(
             IconButtonGlass(
                 pathData = "M 15 18 L 9 12 L 15 6",
                 onClick = onNavigateBack,
+                enabled = !state.isBusy,
             )
 
             // Session pill
@@ -428,7 +418,7 @@ fun CaptureScreen(
                     .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
                     .background(Color.White, CircleShape)
                     .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                        viewModel.onManualCapture()
+                        viewModel.onCapture()
                     },
             )
 
@@ -454,9 +444,10 @@ fun CaptureScreen(
             }
         }
 
-        // Detection toast, below the back button and session pill rather than over them.
-        // Same band as ConnectionLossBanner, which cannot be showing at the same time:
-        // losing the connection stops recording, so no detections arrive.
+        // Capture toast, below the back button and session pill rather than over them.
+        // NOTE: since capture is manual-trigger, a tap still records a frame (as a Manual
+        // Capture) while the connection-loss banner is latched, so both can now occupy this
+        // band at once. Repositioning to stack them cleanly is tracked as a follow-up.
         AgarthaToastHost(
             state = toastState,
             modifier = Modifier
@@ -486,9 +477,12 @@ fun CaptureScreen(
         EndSessionConfirmDialog(
             initialNotes = "",
             isBusy = state.isBusy,
-            // Repeat frames are duplicates the medtech already accounted for, so they
-            // do not hold a session open. Only unverified, non-repeat frames block.
-            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat },
+            // Repeat frames are duplicates the medtech already accounted for, and
+            // zero-detection frames (clean fields, and Manual frames from an outage) have
+            // nothing to verify — neither should hold a session open. Interim gate until
+            // 86d4ab4vm reworks the queue; do not reach into the verification sheets here
+            // (86d4ab4tq's territory).
+            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat && it.predictions.isNotEmpty() },
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)

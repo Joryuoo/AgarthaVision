@@ -14,7 +14,7 @@ import javax.inject.Singleton
  * - [HttpException] with status < 500 → re-thrown as-is (API contract error, not connectivity)
  * - Any other [Throwable] → re-thrown as-is
  *
- * Usage in [InferFrameUseCase]:
+ * Usage (see [com.agarthavision.data.inference.RemoteInferenceEngine.infer]):
  * ```kotlin
  * val result = mapper.execute { api.infer(body) }
  * ```

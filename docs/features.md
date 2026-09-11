@@ -43,22 +43,26 @@ as working.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
-  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`).
-- **2-second frame sampling** with in-flight skip rather than queueing
-  (`core/camera/FrameSampler.kt:36`, `:66-68`).
+  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`). `FrameSampler` caches the
+  latest frame as JPEG bytes on every frame and no longer dispatches to inference
+  (`core/camera/FrameSampler.kt`).
+- **Manual-trigger capture, one frame per field.** The medtech taps the shutter; the cached
+  frame is snapshotted and run through inference once (`ui/capture/CaptureViewModel.kt`
+  `onCapture`, `domain/usecase/capture/CaptureFieldUseCase.kt`). There is no timer — the old
+  2-second auto-sampling was removed because a fecal smear is read by choosing ~10 likely
+  fields, not by sweeping the slide continuously.
+- **AI-vs-Manual by outcome.** Any inference response — zero detections included — records an
+  **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` records a **Manual
+  Capture** (`FrameSource.MANUAL`), so a lost connection never silently drops the tap
+  (`domain/usecase/capture/CaptureFieldUseCase.kt`).
 - **Synchronous inference** against the self-hosted FastAPI container, called through
   `RemoteInferenceEngine` behind the `InferenceEngine` interface
-  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`,
-  `domain/usecase/capture/InferFrameUseCase.kt`). Cloud is the only backend: on-device TFLite
-  was built, benchmarked at 20.8 s per frame against a 2-second capture cadence, and deferred
-  to `feat/offline-inference`.
+  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the
+  only backend: on-device TFLite was built, benchmarked at 20.8 s per frame, and deferred to
+  `feat/offline-inference`.
 - **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
   consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
   surface as `ui/capture/ConnectionLossBanner.kt`.
-- **Inference auto-pause** whenever a sheet or child screen is foregrounded
-  (`core/session/SessionManager.kt:101-116`, `ui/capture/CaptureViewModel.kt:161-172`).
-- **Manual capture** of the live frame with no AI involvement, for specimens the model missed
-  (`ui/capture/CaptureViewModel.kt:129-155`, `domain/usecase/verify/SubmitManualCaptureUseCase.kt`).
 
 ### Validation (human-in-the-loop)
 - **Per-box verdict questionnaire** producing `CONFIRMED` / `FALSE_POSITIVE` /
@@ -90,9 +94,11 @@ as working.
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
 - **EPG** = confirmed egg count × 24 (Kato-Katz multiplier), repeats excluded
-  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`).
+  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`). Pending
+  replacement by LPF (Low Power Field) density under ticket 86d4a6jxw — every report
+  surface below still reports EPG until that lands.
 - **Persisted session reports** in Room and Supabase, multiple per session, newest first.
-  Row-only sync — the CSV file itself stays on the device
+  Row-only sync — the CSV and PDF files themselves stay on the device
   (`domain/usecase/records/GenerateSessionReportUseCase.kt:37-97`,
   `data/supabase/SyncReportUseCase.kt:25-35`).
 - **CSV export** to `Documents/AgarthaVision/` with a comment-prefixed header block, then
@@ -100,6 +106,11 @@ as working.
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
   `ui/records/ReportSharing.kt:30-37`).
+- **PDF export** — the patient-facing artifact. A report is generated in the single format the
+  medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
+  generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,
+  `domain/repository/ReportPdfRenderer.kt`, `data/repository/AndroidReportPdfRenderer.kt`,
+  `ui/records/ReportSharing.kt:shareReportPdf`).
 
 ### Shell and appearance
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session
@@ -138,7 +149,10 @@ as working.
 ## Phase 2 — deferred by decision, not oversight
 
 Self-hosted FastAPI + PostgreSQL + MinIO on owned hardware; a DOH-validated `prep_methods`
-table replacing the hardcoded EPG multiplier; DOH-formatted PDF reports; a durable offline
-sync queue with backoff; a per-account persistent flagged-frame queue; capture moving off the
-phone camera onto dedicated hardware over USB OTG, with the phone becoming a verification and
-reporting client only.
+table replacing the hardcoded EPG multiplier; a durable offline sync queue with backoff; a
+per-account persistent flagged-frame queue; capture moving off the phone camera onto dedicated
+hardware over USB OTG, with the phone becoming a verification and reporting client only.
+
+PDF report export is no longer deferred (ticket 86d4a6jyy) — see "Records and reports" above.
+Its per-species number still reports EPG rather than a DOH-validated density; that swap is
+ticket 86d4a6jxw's separate work.

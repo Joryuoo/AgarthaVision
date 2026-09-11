@@ -20,6 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,10 +51,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun ReportsSection(
-    reports: List<Report>,
-    isGenerating: Boolean,
-    onGenerate: () -> Unit,
-    onShare: (Report) -> Unit,
+    state: SessionDetailContentState,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -74,10 +75,10 @@ internal fun ReportsSection(
                     color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
-                    text = if (reports.isEmpty()) {
+                    text = if (state.totalReports == 0) {
                         stringResource(R.string.report_empty)
                     } else {
-                        "${reports.size} generated"
+                        stringResource(R.string.report_generated_count, state.totalReports)
                     },
                     fontSize = 12.sp,
                     color = AgarthaTheme.colors.textSecondary,
@@ -86,22 +87,35 @@ internal fun ReportsSection(
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(isGenerating = isGenerating, onClick = onGenerate)
+            GenerateReportButton(isGenerating = state.isGenerating, onClick = state.onGenerate)
         }
 
-        reports.take(3).forEach { report ->
-            ReportRow(report = report, onShare = { onShare(report) })
+        state.reports.forEach { report ->
+            ReportRow(report = report, onOpen = { state.onOpenReport(report) })
+        }
+
+        // Only paginate once reports spill past a single page.
+        if (state.totalReports > REPORTS_PER_PAGE) {
+            ReportsPager(
+                currentPage = state.currentPage,
+                totalReports = state.totalReports,
+                onPrev = state.onPrevPage,
+                onNext = state.onNextPage,
+            )
         }
     }
 }
 
 @Composable
-private fun ReportRow(report: Report, onShare: () -> Unit) {
+private fun ReportRow(report: Report, onOpen: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
-            .clickable(enabled = report.csvFilePath != null, onClick = onShare)
+            .clickable(
+                enabled = report.pdfFilePath != null || report.csvFilePath != null,
+                onClick = onOpen,
+            )
             .padding(vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
@@ -120,6 +134,15 @@ private fun ReportRow(report: Report, onShare: () -> Unit) {
                 fontSize = 12.sp,
                 color = AgarthaTheme.colors.textSecondary,
             )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (report.pdfFilePath != null) {
+                    FormatChip(stringResource(R.string.report_format_pdf))
+                }
+                if (report.csvFilePath != null) {
+                    FormatChip(stringResource(R.string.report_format_csv))
+                }
+            }
         }
         ReportStatusPill(status = report.supabaseStatus)
     }
@@ -148,25 +171,33 @@ private fun ReportStatusPill(status: ReportSyncStatus) {
 }
 
 @Composable
-private fun GenerateReportButton(isGenerating: Boolean, onClick: () -> Unit) {
+private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) -> Unit) {
     val colors = AgarthaTheme.colors
-    Box(
-        modifier = Modifier
-            .size(34.dp)
-            .background(
-                if (isGenerating) colors.borderStrong else colors.accent,
-                RoundedCornerShape(999.dp),
+    var menuExpanded by remember { mutableStateOf(false) }
+    Box {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .background(
+                    if (isGenerating) colors.borderStrong else colors.accent,
+                    RoundedCornerShape(999.dp),
+                )
+                .clickable(enabled = !isGenerating, onClick = { menuExpanded = true }),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_download),
+                contentDescription = stringResource(
+                    if (isGenerating) R.string.report_generating else R.string.report_export
+                ),
+                tint = colors.onAccent,
+                modifier = Modifier.size(17.dp),
             )
-            .clickable(enabled = !isGenerating, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_download),
-            contentDescription = stringResource(
-                if (isGenerating) R.string.report_generating else R.string.report_generate
-            ),
-            tint = colors.onAccent,
-            modifier = Modifier.size(17.dp),
+        }
+        ExportFormatMenu(
+            expanded = menuExpanded,
+            onDismiss = { menuExpanded = false },
+            onSelect = onClick,
         )
     }
 }
