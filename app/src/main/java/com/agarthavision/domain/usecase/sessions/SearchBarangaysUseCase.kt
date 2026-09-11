@@ -9,7 +9,7 @@ import javax.inject.Inject
  * Searches the offline PSGC dataset for the session barangay picker.
  *
  * Returns an empty list rather than an error for a query shorter than
- * [MIN_QUERY_LENGTH] — a single character matches thousands of the 42,001 barangays, so
+ * [MIN_QUERY_LENGTH] — a single character matches thousands of the 42,010 barangays, so
  * there is nothing useful to show and no reason to scan for it.
  */
 class SearchBarangaysUseCase @Inject constructor(

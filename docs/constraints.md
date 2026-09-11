@@ -89,7 +89,7 @@ foreign keys, CHECKs, and RLS. Do not change schema behaviour without updating b
 migration SQL **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in
 the Supabase dashboard SQL editor — never applied programmatically
 (`supabase/migrations/0001_init.sql:2`). Room is a separate mirror: a Room-shape change means
-bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:44`).
+bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:46`).
 
 **Enforcement:** review only. There is no migration runner, no schema-diff test, and no CI.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).

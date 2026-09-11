@@ -34,13 +34,20 @@ rather than samples, and withholds figures below a minimum cell size: a barangay
 smear is effectively an identified patient. PostGIS stays off; with PSGC as the key the
 choropleth is a `GROUP BY`.
 
-**The dataset ships in the APK** (42,001 barangays, 340 KB gzipped) and is Room-seeded on
-first run, because medtechs collect where there is no signal. Pinned to **PSGC 4Q 2023**, not
-for freshness but because the boundary GeoJSON the admin map renders is generated from those
-same shapefiles — the vintages have to match or the join fails silently. Newer lists in
-circulation use the legacy 9-digit PSGC, which is a different code system and does not join
-at all. Changing the vintage is a dataset swap plus one constant: the seeder re-seeds when
-`PsgcDataset.VINTAGE` changes.
+**The dataset ships in the APK** (42,010 barangays, 342 KB gzipped) and is Room-seeded on
+first run, because medtechs collect where there is no signal. Pinned to **PSGC 2Q 2026**,
+PSA's current release, and the pin is load-bearing: the boundary GeoJSON the admin map will
+render has to join on the same vintage or it fails silently for the units that moved.
+
+**The first cut of this was built at 4Q 2023 and was wrong by 1,763 barangays** — 4.2% of the
+country. Its upstream stopped publishing in September 2024 and missed two reorganisations:
+the Negros Island Region (RA 12000, 2Q 2024) took Negros Occidental, Negros Oriental,
+Siquijor and Bacolod out of Regions VI and VII into region `18`, and Sulu left BARMM for
+Region IX after the Supreme Court ruling. Both roll up to the *region* a surveillance map
+aggregates on, and `sessions.psgc_barangay_code` is written once with nothing to backfill it.
+Two popular alternatives, `psgc.gitlab.io` and `psgc.cloud`, are 9-digit and also pre-NIR;
+9-digit is a different code system and does not join at all. Changing the vintage is a
+dataset swap plus four constants: the seeder re-seeds when `PsgcDataset.VINTAGE` changes.
 
 **Two things the real data forced.** Searching the dataset showed that matching the query as
 one string returns nothing for "cebu city" — PSA spells it "City of Cebu" — so search matches

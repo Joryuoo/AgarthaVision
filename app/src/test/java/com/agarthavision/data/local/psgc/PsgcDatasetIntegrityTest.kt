@@ -17,10 +17,10 @@ import java.util.zip.GZIPInputStream
  *
  * [PsgcSeederTest] proves the seeding path works and spot-checks three known barangays. That
  * would not notice a regenerated asset that silently truncated a region, duplicated a code or
- * shifted a column on the other 41,998 rows — and a wrong `city_muni_code` is invisible in the
+ * shifted a column on the rest — and a wrong `city_muni_code` is invisible in the
  * picker but breaks the Admin Website's rollup. These assertions cover the whole file.
  *
- * Parsed once for the class: 42,001 rows through the real parser is not free.
+ * Parsed once for the class: 42,010 rows through the real parser is not free.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -76,10 +76,10 @@ class PsgcDatasetIntegrityTest {
     }
 
     @Test
-    fun `all seventeen regions of the vintage are represented`() {
-        // 4Q 2023, so seventeen — the Negros Island Region was created in 2Q 2024 and is
-        // deliberately absent. See docs/map/objects/PsgcBarangay.md on the vintage pin.
-        assertEquals(17, rows.map { it.regionName }.distinct().size)
+    fun `every region of the vintage is represented`() {
+        // Eighteen as of 2Q 2026: the Negros Island Region joined the seventeen in 2Q 2024.
+        // Driven off the constant so bumping the vintage is a deliberate edit in one place.
+        assertEquals(PsgcDataset.REGION_COUNT, rows.map { it.regionName }.distinct().size)
     }
 
     @Test

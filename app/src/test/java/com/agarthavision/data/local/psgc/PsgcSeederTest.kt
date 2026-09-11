@@ -89,6 +89,27 @@ class PsgcSeederTest {
     }
 
     @Test
+    fun `carries the reorganisations that the 4Q 2023 vintage got wrong`() = runTest {
+        seeder().seedIfNeeded()
+
+        // These two are why the vintage moved. Under 4Q 2023 Bacolod sat in Region VI and
+        // Sulu in BARMM; PSA has since moved 1,763 barangays between regions, and a
+        // surveillance map aggregating by region would have filed every one of them wrong.
+        val bacolod = dao().getByCode("1830200001")
+        assertNotNull(bacolod)
+        assertEquals("City of Bacolod", bacolod!!.cityMuniName)
+        assertEquals("Negros Island Region (NIR)", bacolod.regionName)
+
+        val sulu = dao().getByCode("0906601001")
+        assertNotNull(sulu)
+        assertEquals("Sulu", sulu!!.provinceName)
+        assertEquals("Region IX (Zamboanga Peninsula)", sulu.regionName)
+
+        // The codes those two replaced are retired and must not resolve.
+        assertNull(dao().getByCode("0630200001"))
+    }
+
+    @Test
     fun `finds barangays the way a medtech would type them`() = runTest {
         seeder().seedIfNeeded()
 
@@ -170,7 +191,7 @@ class PsgcSeederTest {
 
     private companion object {
         /** The asset that ships today — see `tools/psgc/README.md`. */
-        private const val BUNDLED_BARANGAYS = 42_001
+        private const val BUNDLED_BARANGAYS = PsgcDataset.BARANGAY_COUNT
 
         private const val RESULT_LIMIT = 50
 

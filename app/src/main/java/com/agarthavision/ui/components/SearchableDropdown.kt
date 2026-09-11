@@ -91,7 +91,7 @@ data class SearchableDropdownActions(
 
 /**
  * A type-to-filter selector for lists far too long to scroll — the PSGC barangay dataset is
- * 42,001 entries.
+ * 42,010 entries.
  *
  * Results render in a height-bounded [LazyColumn], so only the visible rows compose. This is
  * why the component does not use `ExposedDropdownMenu`: that lays its children out in a

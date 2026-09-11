@@ -34,7 +34,7 @@ as working.
   surveillance map aggregates on; the capture-time GPS fix stays audit provenance and is
   still read by nothing. `ui/sessions/SessionsViewModel.kt:191-196`,
   `supabase/migrations/0010_session_psgc_barangay.sql`.
-- **Offline barangay picker** over all 42,001 barangays, type-to-filter with results in a
+- **Offline barangay picker** over all 42,010 barangays, type-to-filter with results in a
   lazily-rendered list. The PSGC dataset ships in the APK (340 KB gzipped) and is Room-seeded
   on first run, so it works with the radio off — there is no network path on this route.
   `ui/components/SearchableDropdown.kt`, `data/local/psgc/PsgcSeeder.kt`,

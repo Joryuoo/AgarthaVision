@@ -40,7 +40,7 @@ against.
 `sessions_psgc_barangay_idx` (`:41-43`).
 
 **Room** (`app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt:25-68`),
-schema v9 (`core/database/AgarthaDatabase.kt:44`)
+schema v10 (`core/database/AgarthaDatabase.kt:46`)
 
 | Field | Constraint |
 |---|---|
@@ -58,63 +58,65 @@ No index, deliberately. Every query is a primary-key lookup or the infix `LIKE` 
 
 | | |
 |---|---|
-| Vintage | **PSGC 4Q 2023** (31 December 2023) |
-| Source | `altcoder/philippines-psgc-shapefiles`, `dist/PH_Adm{1,2,3,4}*.csv` |
-| Pinned commit | `a44a73091f19e4950dbdc0d7cb77a5e17b101a0a` |
+| Vintage | **PSGC 2Q 2026** (released 13 July 2026) |
+| Source | `yng-me/psgc`, `R/sysdata.rda` — PSA's releases bundled verbatim |
+| Pinned commit | `83f506a7f5c89b7fd2f84fbebb9a0bfd275f0bc0` |
 | Code system | Current **10-digit** PSGC, zero-padded |
-| Barangays | 42,001 |
-| Asset | `app/src/main/assets/psgc/psgc-barangays-4q2023.csvgz`, 340 KB |
+| Barangays | 42,010 |
+| Regions | 18 |
+| Asset | `app/src/main/assets/psgc/psgc-barangays-q2_2026.csvgz`, 342 KB |
 
-Codes are revised as barangays are created, split, merged and renamed. **If the bundled code
-list and the boundary GeoJSON come from different releases, the choropleth silently fails to
-join for the affected units — a bug that looks like missing data rather than a version
-mismatch.** That is the whole reason this vintage is pinned rather than chosen for freshness:
-`faeldon/philippines-json-maps` `2023/`, the boundary set the Admin Website renders, is
-generated from these exact shapefiles.
+Codes are revised as barangays are created, split, merged and renamed, and as whole provinces
+are moved between regions. **If the bundled code list and the boundary GeoJSON come from
+different releases, the choropleth silently fails to join for the affected units — a bug that
+looks like missing data rather than a version mismatch.** That is why the vintage is pinned
+and why it is written down here rather than left implicit in a filename.
 
-**Newer is not automatically better here** — but the cost is larger than it first looked.
-Re-checked 2026-09-11:
+### Why this moved off 4Q 2023
 
-- **The boundary lineage stops at 4Q 2023.** `altcoder/philippines-psgc-shapefiles` has no
-  tags and its newest commit on `main` is still the pinned `a44a7309` (17 September 2024);
-  `faeldon/philippines-json-maps` derives its GeoJSON from those shapefiles and tops out at
-  `2023/`; HDX's COD-AB for the Philippines is likewise 10-digit "as of 2023". There is no
-  newer release to move *both* halves to, and moving only the code list reintroduces exactly
-  the silent join failure this pin exists to prevent.
-- **PSA itself is well ahead.** The current release is 2Q 2026 (13 July 2026).
+The dataset was originally built at 4Q 2023 from
+`altcoder/philippines-psgc-shapefiles`. That repository stopped publishing after September
+2024, and PSA did not stop: by 2Q 2026 **1,763 barangays — 4.2% of the country — carried codes
+that the bundled list no longer had.**
 
-**Known cost, and it is bigger than "a few missing barangays":**
+| Reorganisation | Effect | Barangays |
+|---|---|---|
+| **Negros Island Region** created, RA 12000 (2Q 2024) | Negros Occidental, Negros Oriental, Siquijor and the City of Bacolod left Regions VI and VII for region `18` | **1,353** |
+| **Sulu leaves BARMM**, following the Supreme Court ruling on the Bangsamoro Organic Law | moved to Region IX | **410** |
+| Barangays created since 4Q 2023 | absent from the picker entirely | 9 |
+| Barangays merged or retired | still offered by the picker | 1 |
 
-| | |
-|---|---|
-| Barangays created since 4Q 2023 and therefore absent | 4 (three in Marawi, one in Tupi) |
-| Barangays merged away but still offered by the picker | 1 (San Rafael, retired into Dacanlao, 1Q 2026) |
-| Barangays transferred between municipalities | 1 (Guintolan, Payao → Imelda) |
-| **Barangays whose region code this dataset now gets wrong** | **1,353** |
+PSA kept the lower digits in both reorganisations and changed only the leading region prefix
+— Negros Occidental went `0604500000` → `1804500000` — so this was never a code-system change,
+just a stale list.
 
-That last row is the one that matters. The **Negros Island Region** was created in 2Q 2024
-(RA 12000). PSA kept every existing geographic code and changed only the region prefix, so
-Negros Occidental moved from `0604500000` to `1804500000` and Negros Oriental, Siquijor and
-the City of Bacolod moved with it. In this dataset those 1,353 barangays still carry `06` and
-`07` prefixes that PSA retired in July 2024.
+Why it mattered rather than being cosmetic: those units rolled up to the **wrong region** on a
+choropleth that compares prevalence against WHO thresholds, and `sessions.psgc_barangay_code`
+is written once with nothing to backfill it, so a smear read in Bacolod or Sulu would have
+carried a retired code permanently. `PsgcSeederTest` now pins both cases.
 
-For a surveillance map keyed on PSGC that is not cosmetic: those units roll up to Region VI
-and Region VII on a choropleth that compares prevalence against WHO thresholds, and
-`sessions.psgc_barangay_code` is written once with nothing to backfill it — so a smear read in
-Bacolod today is stored under a retired code permanently.
+**Two widely-used alternatives were checked and rejected.** `psgc.gitlab.io` and `psgc.cloud`
+both serve **9-digit** codes against this dataset's 10-digit form, and both were still
+pre-NIR at 17 regions. A 9-digit list is a different code system, not a newer vintage: the
+two join at essentially nothing and zero-padding does not reconcile them.
 
-**This is a decision to take deliberately, not a constant to bump.** Moving the vintage means
-moving the boundary GeoJSON in the same change, and no published set exists at a newer one.
-The remap itself is mechanical — PSA retained the codes, so it is a `06`/`07` → `18` prefix
-change on those four units plus four new barangays and one retirement — which makes
-regenerating boundaries from the current PSA masterlist tractable, but it is work in the Admin
-Website's court as much as this repo's (task `86d43e3vu`).
+### The boundary half is still outstanding
 
-**Changing the vintage** is otherwise a dataset swap plus two constants, with no migration:
-see `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
-(`data/local/psgc/PsgcSeeder.kt:63-66`), `PsgcDataset.ASSET_SHA256` and `BARANGAY_COUNT` move
-with it, and `PsgcDatasetIntegrityTest` asserts the region count so a vintage that adds NIR
-fails until the expectation is updated on purpose.
+The Admin Website's choropleth joins on these codes, so its boundary GeoJSON has to come from
+the same vintage — and as of 2026-09-11 **no published boundary set exists newer than 4Q
+2023**: `faeldon/philippines-json-maps` derives from the retired `altcoder` shapefiles, and
+HDX's COD-AB is likewise 2023.
+
+That is a constraint on task `86d43e3vu`, not on this repo, and it is not blocking: **the map
+has not been built yet**, so there is no existing choropleth for this move to break. Moving
+the code list now is the cheap moment. Whoever builds the map has to source or derive 2026
+boundaries; because PSA retained the lower digits, remapping the 2023 set is a leading-prefix
+change on the four affected units rather than a re-survey.
+
+**Changing the vintage again** is a dataset swap plus four constants, with no migration: see
+`tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
+(`data/local/psgc/PsgcSeeder.kt:63-66`); `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT`
+move with it, and `PsgcAssetPackagingTest` and `PsgcDatasetIntegrityTest` fail until they do.
 
 ### Aggregate before display — the privacy rule
 
@@ -156,10 +158,11 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
   hit" below.
 - `PsgcCsvParser`, which is strict on purpose: a malformed row aborts rather than seeding a
   barangay with no city (`data/local/psgc/PsgcCsvParser.kt:57-67`).
-- The asset generator and its three upstream shapes (`tools/psgc/build-psgc-asset.mjs`):
-  numerically-stored codes, Manila's sub-municipalities, and unnamed sliver polygons.
+- The asset generator and the upstream shapes it handles (`tools/psgc/build-psgc-asset.py`):
+  units with no `geographic_level`, Manila's sub-municipalities, and chartered cities with no
+  province. Its dependencies are pinned in `tools/psgc/requirements.txt`.
 - `search_text`, built in the parser. Case is folded **in Kotlin**, not by SQL `lower()`,
-  which is ASCII-only — 439 barangay names contain `ñ`.
+  which is ASCII-only — 438 barangay names in this vintage carry non-ASCII characters.
 - Search matches **each whitespace-separated term** (`data/local/dao/PsgcBarangayDao.kt:50-53`).
   PSA spells the city "City of Cebu", so a contiguous match on "cebu city" — what a medtech
   types — finds nothing.

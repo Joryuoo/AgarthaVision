@@ -67,7 +67,7 @@ class PsgcSeeder @Inject constructor(
 
     /**
      * Replaces the table in one transaction, inserting in chunks so neither the parse nor
-     * the insert holds all 42,001 rows at once. One transaction keeps a failure from
+     * the insert holds all 42,010 rows at once. One transaction keeps a failure from
      * leaving a partially-seeded table behind.
      */
     private suspend fun replaceAll(): Int {

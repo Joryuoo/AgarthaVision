@@ -215,12 +215,14 @@ export interface Session {
  * table.** Seeded from an APK asset on first run so the picker works with no
  * cellular signal.
  *
- * Pinned to PSGC 4Q 2023 (42,001 barangays) to share one vintage and one code
- * system with the Admin Website's boundary GeoJSON; see
- * `docs/map/objects/PsgcBarangay.md` and `tools/psgc/README.md`.
+ * Pinned to PSGC 2Q 2026 (42,010 barangays, 18 regions). The Admin Website's
+ * boundary GeoJSON must join on this same vintage — see
+ * `docs/map/objects/PsgcBarangay.md` and `tools/psgc/README.md`, which record why
+ * the earlier 4Q 2023 pin misfiled 1,763 barangays across the Negros Island
+ * Region and Sulu reorganisations.
  *
  * Room mirror:
- * - `PsgcBarangayEntity.kt`, Room schema v9.
+ * - `PsgcBarangayEntity.kt`, Room schema v10.
  */
 export interface PsgcBarangay {
   code: string;

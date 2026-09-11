@@ -83,7 +83,7 @@ columns. They are not — the migration creates `captured_at`, `gps_latitude`, `
 - The EPG aggregate, which joins samples and excludes `is_repeat = 1`
   (`data/local/dao/DetectionDao.kt:33-52`).
 - The CSV row shape (`domain/usecase/records/ReportCsvBuilder.kt`).
-- The Room database version (`core/database/AgarthaDatabase.kt:44`) — and remember the
+- The Room database version (`core/database/AgarthaDatabase.kt:46`) — and remember the
   destructive-migration fallback wipes the device.
 
 **Does not hit**

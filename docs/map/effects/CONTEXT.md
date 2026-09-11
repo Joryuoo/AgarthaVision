@@ -17,7 +17,7 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
    `samples.status`, `sessions.claim_exempt`, `reports.supabase_status`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
-3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:44`.
+3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:46`.
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.

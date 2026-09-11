@@ -11,7 +11,7 @@ import com.agarthavision.domain.model.PsgcBarangay
 interface PsgcRepository {
     /**
      * Barangays matching [query] anywhere in their name, city/municipality or province,
-     * prefix matches first. Capped at [limit] because there are 42,001 barangays and a
+     * prefix matches first. Capped at [limit] because there are 42,010 barangays and a
      * short query matches thousands.
      */
     suspend fun searchBarangays(query: String, limit: Int): List<PsgcBarangay>
