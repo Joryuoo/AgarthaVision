@@ -49,7 +49,7 @@ interface PsgcBarangayDao {
      */
     suspend fun search(terms: List<String>, limit: Int): List<PsgcBarangayEntity> {
         if (terms.isEmpty()) return emptyList()
-        return searchRaw(searchQuery(terms = terms, limit = limit))
+        return searchRaw(psgcSearchQuery(terms = terms, limit = limit))
     }
 
     /**
@@ -58,25 +58,35 @@ interface PsgcBarangayDao {
      */
     @RawQuery
     suspend fun searchRaw(query: SupportSQLiteQuery): List<PsgcBarangayEntity>
+}
 
-    private fun searchQuery(terms: List<String>, limit: Int): SupportSQLiteQuery {
-        val where = terms.joinToString(separator = " AND ") { TERM_PREDICATE }
-        return SimpleSQLiteQuery(
-            """
-            SELECT * FROM psgc_barangays
-            WHERE $where
-            ORDER BY
-                CASE WHEN search_text LIKE ? || '%' ESCAPE '\' THEN 0 ELSE 1 END,
-                name
-            LIMIT ?
-            """.trimIndent(),
-            // Binds in statement order: one per term, then the first term again for the
-            // prefix ranking, then the cap.
-            (terms + terms.first() + limit).toTypedArray(),
-        )
-    }
+private const val TERM_PREDICATE = """search_text LIKE '%' || ? || '%' ESCAPE '\'"""
 
-    private companion object {
-        private const val TERM_PREDICATE = "search_text LIKE '%' || ? || '%' ESCAPE '\\'"
+/**
+ * Builds the statement for [PsgcBarangayDao.search]: one `LIKE` per term, ANDed, ranked by
+ * whether the row also *starts* with the first term.
+ *
+ * A file-private function rather than a DAO member because Room only processes annotated
+ * methods, and an interface cannot hold a private companion.
+ */
+private fun psgcSearchQuery(terms: List<String>, limit: Int): SupportSQLiteQuery {
+    val where = terms.joinToString(separator = " AND ") { TERM_PREDICATE }
+    // Binds in statement order: one per term, then the first term again for the prefix
+    // ranking, then the cap.
+    val args = buildList<Any> {
+        addAll(terms)
+        add(terms.first())
+        add(limit)
     }
+    return SimpleSQLiteQuery(
+        """
+        SELECT * FROM psgc_barangays
+        WHERE $where
+        ORDER BY
+            CASE WHEN search_text LIKE ? || '%' ESCAPE '\' THEN 0 ELSE 1 END,
+            name
+        LIMIT ?
+        """.trimIndent(),
+        args.toTypedArray(),
+    )
 }

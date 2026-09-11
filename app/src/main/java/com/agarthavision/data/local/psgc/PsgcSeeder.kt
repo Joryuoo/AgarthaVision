@@ -44,8 +44,8 @@ class PsgcSeeder @Inject constructor(
      * and verification do not depend on the picker. An unseeded table shows an empty
      * barangay list, and the next launch retries.
      */
-    suspend fun seedIfNeeded(): Int =
-        runCatching {
+    suspend fun seedIfNeeded(): Int {
+        return runCatching {
             if (!needsSeed()) return 0
             val inserted = replaceAll()
             settings.edit { it[SEEDED_VINTAGE] = PsgcDataset.VINTAGE }
@@ -54,6 +54,7 @@ class PsgcSeeder @Inject constructor(
             Log.w(TAG, "PSGC seeding failed; the barangay picker will be empty.", throwable)
             0
         }
+    }
 
     private suspend fun needsSeed(): Boolean {
         val seededVintage = settings.data.first()[SEEDED_VINTAGE]
