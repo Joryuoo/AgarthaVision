@@ -4,26 +4,34 @@ import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -46,12 +54,18 @@ class SessionPickerViewModelTest {
     private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase = mock()
     private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock()
 
+    // The real use case over a mocked repository, so the minimum-query-length rule is
+    // exercised here rather than stubbed away.
+    private val psgcRepository: PsgcRepository = mock()
+    private val searchBarangaysUseCase = SearchBarangaysUseCase(psgcRepository)
+
     private fun viewModel() = SessionsViewModel(
         sessionRepository = sessionRepository,
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
         setSessionClaimExemptUseCase = setSessionClaimExemptUseCase,
         claimLocalDataUseCase = claimLocalDataUseCase,
+        searchBarangaysUseCase = searchBarangaysUseCase,
     )
 
     @Test
@@ -74,7 +88,9 @@ class SessionPickerViewModelTest {
     @Test
     fun `onCreateSession emits navigate event`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
         val vm = viewModel()
-        whenever(sessionManager.startSession(any(), anyOrNull())).thenReturn(makeSessionEntity("session-1"))
+        whenever(sessionManager.startSession(any(), anyOrNull(), anyOrNull()))
+            .thenReturn(makeSessionEntity("session-1"))
+        selectBarangay(vm)
 
         vm.events.test {
             vm.onCreateSession("Smear 1", null)
@@ -82,6 +98,100 @@ class SessionPickerViewModelTest {
             val event = awaitItem() as SessionsEvent.NavigateToCapture
             assertEquals("session-1", event.sessionId)
         }
+    }
+
+    @Test
+    fun `onCreateSession passes the selected barangay through`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            whenever(sessionManager.startSession(any(), anyOrNull(), anyOrNull()))
+                .thenReturn(makeSessionEntity("session-1"))
+            selectBarangay(vm)
+
+            vm.onCreateSession("Smear 1", null)
+            advanceUntilIdle()
+
+            verify(sessionManager).startSession(
+                label = eq("Smear 1"),
+                psgcBarangayCode = eq(LAHUG.code),
+                notes = anyOrNull(),
+            )
+        }
+
+    @Test
+    fun `onCreateSession refuses a session with no barangay`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.state.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                vm.onCreateSession("Smear 1", null)
+                val withError = awaitItem()
+                assertTrue(withError.errorMessage?.contains("Barangay") == true)
+                cancelAndIgnoreRemainingEvents()
+            }
+            verify(sessionManager, never()).startSession(any(), anyOrNull(), anyOrNull())
+        }
+
+    @Test
+    fun `barangay query debounces into one search`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
+            val vm = viewModel()
+
+            // A burst of keystrokes, as typing produces.
+            vm.onBarangayQueryChanged("l")
+            vm.onBarangayQueryChanged("la")
+            vm.onBarangayQueryChanged("lah")
+            vm.onBarangayQueryChanged("lahu")
+            advanceUntilIdle()
+
+            verify(psgcRepository).searchBarangays(query = eq("lahu"), limit = any())
+        }
+
+    @Test
+    fun `selecting a barangay clears the query and results`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
+            val vm = viewModel()
+            selectBarangay(vm)
+
+            vm.state.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading || snapshot.selectedBarangay == null) {
+                    snapshot = awaitItem()
+                }
+                assertEquals(LAHUG, snapshot.selectedBarangay)
+                assertEquals("", snapshot.barangayQuery)
+                assertTrue(snapshot.barangayResults.isEmpty())
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `clearing the barangay drops the selection`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
+            val vm = viewModel()
+            selectBarangay(vm)
+
+            vm.onBarangayCleared()
+            advanceUntilIdle()
+
+            vm.state.test {
+                assertNull(awaitItem().selectedBarangay)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    /** Drives the picker the way the sheet does: type, wait for results, tap one. */
+    private suspend fun TestScope.selectBarangay(vm: SessionsViewModel) {
+        whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
+        vm.onBarangayQueryChanged("lahug")
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG.code)
     }
 
     @Test
@@ -97,6 +207,16 @@ class SessionPickerViewModelTest {
             assertTrue(withError.errorMessage?.contains("Label") == true)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    private companion object {
+        private val LAHUG = PsgcBarangay(
+            code = "0730600051",
+            name = "Lahug",
+            cityMuniName = "City of Cebu",
+            provinceName = null,
+            regionName = "Region VII (Central Visayas)",
+        )
     }
 
     private fun makeSessionStats(id: String): SessionWithStats =
