@@ -23,6 +23,15 @@ node tools/psgc/build-psgc-asset.mjs
 | Size | 4.14 MB raw, **340 KB** gzipped |
 | SHA-256 | `18c324248b977da67b7aeba6d0a9ef13deb524bd1071fafcbfd08dd32c06308a` |
 
+The SHA-256 and the 42,001 row count are also `PsgcDataset.ASSET_SHA256` and
+`PsgcDataset.BARANGAY_COUNT`, asserted by `PsgcAssetPackagingTest` and
+`PsgcDatasetIntegrityTest`. Regenerating the asset means updating both constants in the same
+change, or the suite fails — which is the point.
+
+**Before bumping the vintage, read the cost table in `docs/map/objects/PsgcBarangay.md`.** It
+is not a one-line change: the boundary GeoJSON has to move to the same release, and as of
+2026-09-11 no published set exists newer than 4Q 2023.
+
 Why this vintage rather than the newest PSA release: the boundary GeoJSON the Admin Website
 renders ([`faeldon/philippines-json-maps`](https://github.com/faeldon/philippines-json-maps)
 `2023/`) is generated from these exact shapefiles, so the code list and the boundaries share

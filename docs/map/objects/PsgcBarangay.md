@@ -72,23 +72,49 @@ mismatch.** That is the whole reason this vintage is pinned rather than chosen f
 `faeldon/philippines-json-maps` `2023/`, the boundary set the Admin Website renders, is
 generated from these exact shapefiles.
 
-**Newer is not automatically better here.** Two things were checked and rejected:
+**Newer is not automatically better here** — but the cost is larger than it first looked.
+Re-checked 2026-09-11:
 
-- The boundary lineage stops at 4Q 2023. `altcoder`'s `main` and `master` are byte-identical
-  and no later branch or tag exists, so there is no newer release to move *both* halves to.
-- The newer code lists in circulation are on the **legacy 9-digit PSGC** (Adams `012801001`,
-  Cebu City `072217`) against this dataset's 10-digit form (`0102801001`). That is a different
-  code system, not a newer vintage: the two join at essentially nothing, and zero-padding does
-  not reconcile them — PSA's published crosswalk would be required.
+- **The boundary lineage stops at 4Q 2023.** `altcoder/philippines-psgc-shapefiles` has no
+  tags and its newest commit on `main` is still the pinned `a44a7309` (17 September 2024);
+  `faeldon/philippines-json-maps` derives its GeoJSON from those shapefiles and tops out at
+  `2023/`; HDX's COD-AB for the Philippines is likewise 10-digit "as of 2023". There is no
+  newer release to move *both* halves to, and moving only the code list reintroduces exactly
+  the silent join failure this pin exists to prevent.
+- **PSA itself is well ahead.** The current release is 2Q 2026 (13 July 2026).
 
-**Known cost, accepted:** barangays created or renamed after 2023 are absent from the picker
-*and* from the map, consistently. A session in such a barangay cannot be recorded at its true
-code.
+**Known cost, and it is bigger than "a few missing barangays":**
 
-**Changing the vintage** is a dataset swap plus one constant, with no migration: see
-`tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
-(`data/local/psgc/PsgcSeeder.kt:63-66`), and the Admin Website's boundary GeoJSON has to move
-to the matching release in the same change.
+| | |
+|---|---|
+| Barangays created since 4Q 2023 and therefore absent | 4 (three in Marawi, one in Tupi) |
+| Barangays merged away but still offered by the picker | 1 (San Rafael, retired into Dacanlao, 1Q 2026) |
+| Barangays transferred between municipalities | 1 (Guintolan, Payao → Imelda) |
+| **Barangays whose region code this dataset now gets wrong** | **1,353** |
+
+That last row is the one that matters. The **Negros Island Region** was created in 2Q 2024
+(RA 12000). PSA kept every existing geographic code and changed only the region prefix, so
+Negros Occidental moved from `0604500000` to `1804500000` and Negros Oriental, Siquijor and
+the City of Bacolod moved with it. In this dataset those 1,353 barangays still carry `06` and
+`07` prefixes that PSA retired in July 2024.
+
+For a surveillance map keyed on PSGC that is not cosmetic: those units roll up to Region VI
+and Region VII on a choropleth that compares prevalence against WHO thresholds, and
+`sessions.psgc_barangay_code` is written once with nothing to backfill it — so a smear read in
+Bacolod today is stored under a retired code permanently.
+
+**This is a decision to take deliberately, not a constant to bump.** Moving the vintage means
+moving the boundary GeoJSON in the same change, and no published set exists at a newer one.
+The remap itself is mechanical — PSA retained the codes, so it is a `06`/`07` → `18` prefix
+change on those four units plus four new barangays and one retirement — which makes
+regenerating boundaries from the current PSA masterlist tractable, but it is work in the Admin
+Website's court as much as this repo's (task `86d43e3vu`).
+
+**Changing the vintage** is otherwise a dataset swap plus two constants, with no migration:
+see `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
+(`data/local/psgc/PsgcSeeder.kt:63-66`), `PsgcDataset.ASSET_SHA256` and `BARANGAY_COUNT` move
+with it, and `PsgcDatasetIntegrityTest` asserts the region count so a vintage that adds NIR
+fails until the expectation is updated on purpose.
 
 ### Aggregate before display — the privacy rule
 
