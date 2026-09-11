@@ -51,8 +51,16 @@ live session (`data/supabase/SampleRemoteDataSource.kt:35`). Change either and e
 (`data/repository/FlaggedFrameStore.kt:58-74`), and it is filtered by `user_id`, so it is
 invisible on a device that has never signed in. Also: there is no `ImageCapture` use case —
 manual capture reads a cached JPEG from the analysis stream
-(`ui/capture/CaptureViewModel.kt:135`), so anything that stops populating `latestFrameBytes`
+(`ui/capture/CaptureViewModel.kt`), so anything that stops populating `FrameSampler.latestFrame`
 breaks manual capture without touching manual-capture code.
+
+**The other one:** that cache is process-scoped and is **never reset**, so it routinely holds a
+frame from a previous session or a previous camera binding. What keeps it safe is the freshness
+stamp on `CachedFrame` and the age check in `CaptureViewModel.onCapture` — slow the analyzer
+down, drop the stamp, or widen `MAX_FRAME_AGE_MS` and you reopen a clinical-data-integrity
+fault, not a UI glitch: one patient's image filed under another's session, permanent once
+verified (C8). `FrameSampler` must not gain session knowledge to compensate; the fix lives at
+the read end on purpose (86d4au2n1).
 
 ## Changing the inference contract
 

@@ -1,9 +1,11 @@
 package com.agarthavision.ui.capture
 
 import com.agarthavision.core.connectivity.NetworkMonitor
+import com.agarthavision.core.camera.CachedFrame
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.core.util.ElapsedClock
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
@@ -43,14 +45,27 @@ class CaptureViewModelTest {
     private val flaggedFrameStore: FlaggedFrameStore = mock<FlaggedFrameStore>().also {
         whenever(it.state).thenReturn(framesState)
     }
-    private val latestFrameBytes = MutableStateFlow<ByteArray?>(null)
+    private val latestFrame = MutableStateFlow<CachedFrame?>(null)
     private val frameSampler: FrameSampler = mock<FrameSampler>().also {
-        whenever(it.latestFrameBytes).thenReturn(latestFrameBytes)
+        whenever(it.latestFrame).thenReturn(latestFrame)
     }
+
+    /**
+     * Settable stand-in for `SystemClock.elapsedRealtime()`. Moving [now] by hand is what
+     * lets the staleness tests below run on the plain JVM instead of on Robolectric.
+     */
+    private var now = 0L
+    private val clock = ElapsedClock { now }
     private val networkMonitor: NetworkMonitor = mock<NetworkMonitor>().also {
         whenever(it.status).thenReturn(networkStatus)
     }
     private val captureFieldUseCase: CaptureFieldUseCase = mock()
+
+    /** Publishes a frame stamped at the current [now]. */
+    private fun publishFrame(bytes: ByteArray = ByteArray(4)): ByteArray {
+        latestFrame.value = CachedFrame(bytes, now)
+        return bytes
+    }
 
     private fun viewModel() = CaptureViewModel(
         sessionManager,
@@ -58,6 +73,7 @@ class CaptureViewModelTest {
         frameSampler,
         networkMonitor,
         captureFieldUseCase,
+        clock,
     )
 
     private fun makeActiveState(): SessionState.Active {
@@ -182,7 +198,7 @@ class CaptureViewModelTest {
     fun `onCapture with no active session sets an error and does not call the use case`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            latestFrameBytes.value = ByteArray(4)
+            publishFrame()
 
             vm.onCapture()
             advanceUntilIdle()
@@ -210,8 +226,7 @@ class CaptureViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
-            val bytes = ByteArray(4)
-            latestFrameBytes.value = bytes
+            val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
                 .thenReturn(Result.success(FrameSource.MODEL))
             advanceUntilIdle()
@@ -223,4 +238,59 @@ class CaptureViewModelTest {
             assertNull(vm.state.value.errorMessage)
             assertEquals(false, vm.state.value.isBusy)
         }
+
+    /**
+     * The regression this guard exists for. `FrameSampler` is process-scoped, so the last
+     * frame of the previous session is still sitting in the cache when the next one starts.
+     * A tap landing before the analyzer delivers a frame for the new binding must be
+     * refused — recording it would file one patient's image under another's session, and
+     * C8 makes that permanent once it is verified.
+     */
+    @Test
+    fun `onCapture rejects a frame older than the freshness window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            publishFrame()
+            advanceUntilIdle()
+
+            now += STALE_FRAME_AGE_MS
+
+            vm.onCapture()
+            advanceUntilIdle()
+
+            assertNotNull(vm.state.value.errorMessage)
+            verify(captureFieldUseCase, never()).invoke(org.mockito.kotlin.any(), org.mockito.kotlin.any())
+        }
+
+    /**
+     * Pins the comparison to `>` rather than `>=`: a frame sitting exactly on the boundary
+     * is still live. Without this, tightening the operator would pass silently.
+     */
+    @Test
+    fun `onCapture accepts a frame exactly at the freshness boundary`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", bytes))
+                .thenReturn(Result.success(FrameSource.MODEL))
+            advanceUntilIdle()
+
+            now += MAX_FRAME_AGE_MS
+
+            vm.onCapture()
+            advanceUntilIdle()
+
+            verify(captureFieldUseCase).invoke("session-1", bytes)
+            assertNull(vm.state.value.errorMessage)
+        }
+
+    private companion object {
+        /** Mirrors `CaptureViewModel.MAX_FRAME_AGE_MS`, which is private to that class. */
+        private const val MAX_FRAME_AGE_MS = 1_000L
+
+        /** Comfortably past the window — the gap a real session change leaves. */
+        private const val STALE_FRAME_AGE_MS = 5_000L
+    }
 }
