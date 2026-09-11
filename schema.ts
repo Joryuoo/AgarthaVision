@@ -165,6 +165,8 @@ export interface Profile {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0005_session_label.sql`: adds nullable `label` and
  *   `sessions_user_started_idx`.
+ * - `0010_session_psgc_barangay.sql`: adds nullable `psgc_barangay_code`, a
+ *   partial index on it, and the admin-only `barangay_prevalence()` RPC.
  *
  * Room mirror:
  * - `SessionEntity.kt`
@@ -191,6 +193,62 @@ export interface Session {
 
   label: string | null;
   // Nullable human-friendly smear/session label added by migration `0005`.
+
+  psgc_barangay_code: string | null;
+  // Nullable. The patient's barangay as a canonical zero-padded 10-digit PSGC
+  // code ('0102801001'), added by migration `0010`. CHECK `^[0-9]{10}$`.
+  //
+  // Barangay level only: the code resolves upward to city/municipality, province
+  // and region on its own, so there are deliberately no denormalised parent
+  // columns. This is the key the surveillance choropleth aggregates on. The
+  // per-sample GPS fix (`samples.gps_*`) stays capture provenance and is not a
+  // mapping key — it records where the smear was read, not where the infection
+  // came from.
+  //
+  // Reference data for the picker lives on-device only, in Room's
+  // `psgc_barangays` (see `PsgcBarangay` below). There is no Supabase table of
+  // barangays: the map joins this code against PSGC boundary GeoJSON.
+}
+
+/**
+ * Bundled PSGC barangay reference data. **Room-only — there is no Supabase
+ * table.** Seeded from an APK asset on first run so the picker works with no
+ * cellular signal.
+ *
+ * Pinned to PSGC 4Q 2023 (42,001 barangays) to share one vintage and one code
+ * system with the Admin Website's boundary GeoJSON; see
+ * `docs/map/objects/PsgcBarangay.md` and `tools/psgc/README.md`.
+ *
+ * Room mirror:
+ * - `PsgcBarangayEntity.kt`, Room schema v9.
+ */
+export interface PsgcBarangay {
+  code: string;
+  // PK. Canonical zero-padded 10-digit PSGC.
+
+  name: string;
+  // NOT NULL barangay name.
+
+  city_muni_code: string;
+  city_muni_name: string;
+  // NOT NULL. For Manila's 897 barangays this is the chartered city, not the
+  // sub-municipality that is their direct PSGC parent.
+
+  province_code: string | null;
+  province_name: string | null;
+  // Null for the 3,083 barangays in highly urbanised and independent cities:
+  // those cities occupy the province slot themselves, so PSGC gives them no
+  // province. Not missing data.
+
+  region_code: string;
+  region_name: string;
+  // NOT NULL.
+
+  search_text: string;
+  // NOT NULL pre-lowercased search haystack: barangay, city/municipality and
+  // province names plus Manila's sub-municipality. Region names are excluded as
+  // boilerplate. Folded in Kotlin, not SQL — `lower()` is ASCII-only and 439
+  // names contain 'n' with a tilde.
 }
 
 /**
@@ -582,5 +640,11 @@ export type RelationshipMatrix = [
  *   schema is v8; no Supabase migration was added.
  * - Reports are implemented for session reports only; admin/cross-session
  *   report types require a future migration.
+ * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled
+ *   reference data for the barangay picker; the surveillance map joins
+ *   `sessions.psgc_barangay_code` against PSGC boundary GeoJSON instead. Room
+ *   schema is v9.
+ * - PostGIS is deliberately not enabled. The map keys on PSGC, so the
+ *   choropleth is a GROUP BY rather than a spatial query.
  */
 export type GroundTruthNotes = never;

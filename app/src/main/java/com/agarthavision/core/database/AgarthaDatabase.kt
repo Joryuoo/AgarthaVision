@@ -21,8 +21,8 @@ import com.agarthavision.data.local.entity.SessionEntity
  *
  * Version 7 adds persisted reports. Version 8 (offline access, ADR-007) adds
  * `sessions.supabase_status` + `sessions.claim_exempt` and relaxes `samples.user_id`
- * to nullable. Version 9 adds the bundled `psgc_barangays` reference table behind the
- * session barangay picker.
+ * to nullable. Version 9 adds `sessions.psgc_barangay_code` and the bundled
+ * `psgc_barangays` reference table behind the session barangay picker.
  *
  * `psgc_barangays` is the one table here with no Supabase mirror: it is reference data
  * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the

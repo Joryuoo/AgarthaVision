@@ -49,10 +49,16 @@ class SessionManager @Inject constructor(
      * on a missing auth session or a failed remote push.
      *
      * @param label The fecal-smear name the medtech entered in the picker.
+     * @param psgcBarangayCode The patient's barangay as a zero-padded 10-digit PSGC code.
+     *   Null only for callers that predate the picker; the Sessions UI always supplies it.
      * @param notes Optional in-session observations (slide condition, prep quality, etc.).
      * @return The locally persisted session row.
      */
-    suspend fun startSession(label: String, notes: String? = null): SessionEntity {
+    suspend fun startSession(
+        label: String,
+        psgcBarangayCode: String? = null,
+        notes: String? = null,
+    ): SessionEntity {
         val now = Instant.now()
         val ownerId = authRepository.currentLocalUserId()
         val entity = SessionEntity(
@@ -63,6 +69,7 @@ class SessionManager @Inject constructor(
             endedAt = null,
             notes = notes,
             label = label,
+            psgcBarangayCode = psgcBarangayCode,
             supabaseStatus = SessionSyncStatus.PENDING.value,
             claimExempt = false,
         )
