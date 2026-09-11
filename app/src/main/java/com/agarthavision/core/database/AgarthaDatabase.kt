@@ -3,10 +3,12 @@ package com.agarthavision.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.PsgcBarangayEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
@@ -19,7 +21,14 @@ import com.agarthavision.data.local.entity.SessionEntity
  *
  * Version 7 adds persisted reports. Version 8 (offline access, ADR-007) adds
  * `sessions.supabase_status` + `sessions.claim_exempt` and relaxes `samples.user_id`
- * to nullable. No hand-written `Migration` is supplied: per [DatabaseModule] the app
+ * to nullable. Version 9 adds the bundled `psgc_barangays` reference table behind the
+ * session barangay picker.
+ *
+ * `psgc_barangays` is the one table here with no Supabase mirror: it is reference data
+ * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the
+ * surveillance map joins on the code a session stores rather than on this table.
+ *
+ * No hand-written `Migration` is supplied: per [DatabaseModule] the app
  * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
  * these entities. Acceptable in Phase 1 (no production data). Local schema history is
  * exported under `app/schemas/`.
@@ -30,8 +39,9 @@ import com.agarthavision.data.local.entity.SessionEntity
         SessionEntity::class,
         DetectionEntity::class,
         ReportEntity::class,
+        PsgcBarangayEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
@@ -39,4 +49,5 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sessionDao(): SessionDao
     abstract fun detectionDao(): DetectionDao
     abstract fun reportDao(): ReportDao
+    abstract fun psgcBarangayDao(): PsgcBarangayDao
 }
