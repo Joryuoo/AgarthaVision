@@ -7,6 +7,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import com.agarthavision.ui.components.SearchableDropdown
+import com.agarthavision.ui.components.SearchableDropdownActions
+import com.agarthavision.ui.components.SearchableDropdownConfig
+import com.agarthavision.ui.components.SearchableOption
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -68,8 +72,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -179,7 +185,22 @@ fun SessionsScreen(
 
     if (showCreateDialog) {
         NewSessionSheet(
-            onDismiss = { showCreateDialog = false },
+            barangay = BarangayPickerState(
+                selected = state.selectedBarangay,
+                query = state.barangayQuery,
+                results = state.barangayResults,
+                actions = SearchableDropdownActions(
+                    onQueryChange = viewModel::onBarangayQueryChanged,
+                    onSelect = { option -> viewModel.onBarangaySelected(option.key) },
+                    onClear = viewModel::onBarangayCleared,
+                ),
+            ),
+            onDismiss = {
+                // Leaving the sheet abandons the whole draft, so the picker resets too —
+                // label and note are local `remember` state and reset with it.
+                viewModel.onBarangayCleared()
+                showCreateDialog = false
+            },
             onSubmit = { label, note ->
                 viewModel.onCreateSession(label, note)
                 showCreateDialog = false
@@ -359,9 +380,21 @@ fun LiveDot() {
 }
 
 
+/** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
+private data class BarangayPickerState(
+    val selected: PsgcBarangay?,
+    val query: String,
+    val results: List<PsgcBarangay>,
+    val actions: SearchableDropdownActions,
+)
+
+private fun PsgcBarangay.toOption(): SearchableOption =
+    SearchableOption(key = code, title = name, subtitle = parentPath)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
+    barangay: BarangayPickerState,
     onDismiss: () -> Unit,
     onSubmit: (label: String, note: String) -> Unit
 ) {
@@ -409,7 +442,7 @@ private fun NewSessionSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        "Set the label and a note before scanning",
+                        "Set the label, barangay and a note before scanning",
                         fontSize = 12.sp,
                         color = colors.textSecondary,
                         fontWeight = FontWeight.Medium
@@ -442,6 +475,37 @@ private fun NewSessionSheet(
                     )
                 )
                 Spacer(modifier = Modifier.height(14.dp))
+                SearchableDropdown(
+                    selected = barangay.selected?.toOption(),
+                    query = barangay.query,
+                    options = barangay.results.map { it.toOption() },
+                    config = SearchableDropdownConfig(
+                        label = stringResource(R.string.session_new_barangay_label),
+                        placeholder = stringResource(R.string.session_new_barangay_placeholder),
+                        hint = stringResource(
+                            R.string.session_new_barangay_hint,
+                            SearchBarangaysUseCase.MIN_QUERY_LENGTH,
+                        ),
+                        noMatches = stringResource(R.string.session_new_barangay_no_matches),
+                        clearLabel = stringResource(R.string.session_new_barangay_clear),
+                        minQueryLength = SearchBarangaysUseCase.MIN_QUERY_LENGTH,
+                        badge = stringResource(R.string.session_new_required_badge),
+                        isError = showError && barangay.selected == null,
+                    ),
+                    actions = SearchableDropdownActions(
+                        onQueryChange = {
+                            showError = false
+                            barangay.actions.onQueryChange(it)
+                        },
+                        onSelect = {
+                            showError = false
+                            barangay.actions.onSelect(it)
+                        },
+                        onClear = barangay.actions.onClear,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(modifier = Modifier.height(14.dp))
                 SheetInput(
                     value = note,
                     onValueChange = { note = it; showError = false },
@@ -456,7 +520,9 @@ private fun NewSessionSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (showError && label.isBlank()) {
+                val missingLabel = showError && label.isBlank()
+                val missingBarangay = showError && barangay.selected == null
+                if (missingLabel || missingBarangay) {
                     val bannerDanger = colors.danger
                     Row(
                         modifier = Modifier
@@ -481,7 +547,11 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "Please fill in the label field to continue.",
+                            if (label.isBlank()) {
+                                "Please fill in the label field to continue."
+                            } else {
+                                stringResource(R.string.session_new_barangay_required)
+                            },
                             fontSize = 12.sp,
                             color = colors.dangerText,
                             fontWeight = FontWeight.Medium,
@@ -541,7 +611,7 @@ private fun NewSessionSheet(
                 }
                 Button(
                     onClick = {
-                        if (label.isBlank()) {
+                        if (label.isBlank() || barangay.selected == null) {
                             showError = true
                         } else {
                             onSubmit(label, note)
