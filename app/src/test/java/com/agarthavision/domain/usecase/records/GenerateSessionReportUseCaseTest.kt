@@ -4,6 +4,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -75,6 +76,52 @@ class GenerateSessionReportUseCaseTest {
         assertEquals("", reportFileStore.lastCsv)
         assertEquals(report.id, reportFileStore.lastPdfReportId)
         assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
+    }
+
+    @Test
+    fun `carries species and stage from verification into the generated csv without re-entry`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(
+                samples = listOf(
+                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1", isRepeat = false),
+                ),
+            ),
+            detectionRepository = ReportDetectionRepository(
+                detectionsBySample = mapOf(
+                    "sample-1" to listOf(
+                        reportDetection(
+                            sampleId = "sample-1",
+                            classLabel = "Ascaris",
+                            confidence = 0.91f,
+                            expertClass = "Ascaris lumbricoides",
+                            stage = EggStage.UNFERTILIZED,
+                        ),
+                    ),
+                ),
+                eggCounts = listOf(EggCount("Ascaris lumbricoides", 2)),
+            ),
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
+            syncReportUseCase = noOpSyncReportUseCase(),
+        )
+
+        val result = useCase("session-1", ReportFormat.CSV)
+
+        assertTrue(result.isSuccess)
+        val dataRow = reportFileStore.lastCsv
+            .lines()
+            .firstOrNull { it.startsWith("sample-1,") }
+        assertNotNull(dataRow)
+        val fields = dataRow!!.split(",")
+        assertEquals("Ascaris lumbricoides", fields[5])
+        assertEquals("unfertilized", fields[7])
     }
 
     @Test
@@ -272,7 +319,13 @@ private fun reportSample(id: String, sessionId: String, userId: String, isRepeat
         status = SampleStatus.SYNCED,
     )
 
-private fun reportDetection(sampleId: String, classLabel: String, confidence: Float): Detection =
+private fun reportDetection(
+    sampleId: String,
+    classLabel: String,
+    confidence: Float,
+    expertClass: String? = null,
+    stage: EggStage? = null,
+): Detection =
     Detection(
         id = "detection-$sampleId",
         sampleId = sampleId,
@@ -283,7 +336,8 @@ private fun reportDetection(sampleId: String, classLabel: String, confidence: Fl
         bboxW = 0.3f,
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
-        expertClass = null,
+        expertClass = expertClass,
+        stage = stage,
         verifiedByUser = true,
     )
 

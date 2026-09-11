@@ -88,6 +88,42 @@ for offline annotation.
 - **The image bytes.** Verification never rewrites the JPEG. Resizing happens later, in
   [`sync`](sync.md).
 
+## Free-text audit (C13)
+
+Every text-entry field reachable from verification/manual capture and the records screens,
+audited for whether it is sanctioned free text, a dropdown-gated fallback, or not free text at
+all.
+
+- **Sanctioned free text (keep).** The per-detection sample note: `NoteField` in
+  `ui/verify/VerificationSheet.kt:348-353` (call site) and `:482-497` (definition), and the
+  equivalent `OutlinedTextField` in `ui/verify/ManualSheet.kt:313-329`. Both write to
+  `state.userNote` / `samples.user_note` and land unchanged in the CSV `user_note` column
+  (`domain/usecase/records/ReportCsvBuilder.kt:82`, `:108`). Also sanctioned: the session label
+  entered at session creation (`ui/sessions/SessionsScreen.kt:436-441`), an administrative
+  specimen identifier rather than a clinical observation, which flows into the CSV
+  `session_label` header (`ReportCsvBuilder.kt:47`) and the PDF header
+  (`domain/usecase/records/ReportPdfBuilder.kt:31`).
+- **Dropdown-gated fallback (legitimate, but a *species* field, not remarks).** The "Other
+  species" text field in `ui/verify/SpeciesDropdown.kt:113-122`, rendered only when
+  `EggSpecies.OTHER` is selected. Its value becomes `expert_class`
+  (`data/local/mapper/VerificationMapper.kt:24-39`), not a note — it names the organism, it
+  doesn't annotate it.
+- **Not actually free text.** The species dropdown's own `query` state
+  (`ui/verify/SpeciesDropdown.kt:46`, `:61-63`, `:70-93`) is a live filter over the `EggSpecies`
+  enum; the committed value only ever comes from a `DropdownMenuItem` tap
+  (`SpeciesDropdown.kt:101-109`), never from the typed text itself.
+- **No editable/free-text fields** exist on `ui/records/SampleDetailScreen.kt` or
+  `ui/records/SessionDetailScreen.kt` — both are read-only presentations of already-committed
+  data.
+
+**Governing rule status.** The only clinical free-text field in the app is the dropdown-gated
+"Other species" fallback above — there is no manual LPF/count field yet (blocked on
+`86d4a6jxw`), so the "only LPF is typed" rule has nothing to satisfy or violate today.
+
+**Deferred (explicitly out of scope here).** Per-species LPF count carry-through and the PDF
+per-detection breakdown are blocked on `86d4ab4tq` (polyparasitism findings table) and
+`86d4a6jxw` (LPF unit) respectively.
+
 ## The inconsistency worth knowing
 
 Two aggregate queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession`
