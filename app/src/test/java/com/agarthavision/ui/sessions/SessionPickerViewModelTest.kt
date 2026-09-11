@@ -129,7 +129,13 @@ class SessionPickerViewModelTest {
                 }
                 vm.onCreateSession("Smear 1", null)
                 val withError = awaitItem()
-                assertTrue(withError.errorMessage?.contains("Barangay") == true)
+                // Asserted word for word, not with `contains`: this copy has to stay
+                // identical to R.string.session_new_barangay_required, and a substring
+                // match would let the two drift into two messages for one rule.
+                assertEquals(
+                    "Please select the patient's barangay to continue.",
+                    withError.errorMessage,
+                )
                 cancelAndIgnoreRemainingEvents()
             }
             verify(sessionManager, never()).startSession(any(), anyOrNull(), anyOrNull())

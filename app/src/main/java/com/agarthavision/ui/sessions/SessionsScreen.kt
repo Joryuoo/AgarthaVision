@@ -10,6 +10,7 @@ import androidx.compose.animation.core.tween
 import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
+import com.agarthavision.ui.components.SearchableDropdownState
 import com.agarthavision.ui.components.SearchableOption
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
@@ -442,7 +443,7 @@ private fun NewSessionSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        "Set the label, barangay and a note before scanning",
+                        stringResource(R.string.session_new_sheet_subtitle),
                         fontSize = 12.sp,
                         color = colors.textSecondary,
                         fontWeight = FontWeight.Medium
@@ -476,9 +477,11 @@ private fun NewSessionSheet(
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 SearchableDropdown(
-                    selected = barangay.selected?.toOption(),
-                    query = barangay.query,
-                    options = barangay.results.map { it.toOption() },
+                    state = SearchableDropdownState(
+                        selected = barangay.selected?.toOption(),
+                        query = barangay.query,
+                        options = barangay.results.map { it.toOption() },
+                    ),
                     config = SearchableDropdownConfig(
                         label = stringResource(R.string.session_new_barangay_label),
                         placeholder = stringResource(R.string.session_new_barangay_placeholder),
@@ -548,7 +551,7 @@ private fun NewSessionSheet(
                         )
                         Text(
                             if (label.isBlank()) {
-                                "Please fill in the label field to continue."
+                                stringResource(R.string.session_new_label_required)
                             } else {
                                 stringResource(R.string.session_new_barangay_required)
                             },

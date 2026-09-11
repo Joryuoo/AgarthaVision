@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.sessions
 
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.repository.PsgcRepository
+import kotlinx.coroutines.CancellationException
 import javax.inject.Inject
 
 /**
@@ -22,6 +23,11 @@ class SearchBarangaysUseCase @Inject constructor(
             } else {
                 psgcRepository.searchBarangays(query = trimmed, limit = RESULT_LIMIT)
             }
+        }.onFailure { throwable ->
+            // The caller runs this under `mapLatest`, so every keystroke cancels the search
+            // before it. `runCatching` catches Throwable, which would quietly turn each of
+            // those cancellations into a Result.failure and leave the coroutine looking alive.
+            if (throwable is CancellationException) throw throwable
         }
 
     companion object {

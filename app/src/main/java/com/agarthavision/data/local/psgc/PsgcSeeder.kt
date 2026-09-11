@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.withTransaction
+import kotlinx.coroutines.CancellationException
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +52,9 @@ class PsgcSeeder @Inject constructor(
             settings.edit { it[SEEDED_VINTAGE] = PsgcDataset.VINTAGE }
             inserted
         }.getOrElse { throwable ->
+            // Seeding runs in the application scope; if that scope is cancelled the work
+            // should stop, not be logged as a seeding failure and swallowed.
+            if (throwable is CancellationException) throw throwable
             Log.w(TAG, "PSGC seeding failed; the barangay picker will be empty.", throwable)
             0
         }

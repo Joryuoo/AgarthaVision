@@ -54,6 +54,19 @@ data class SearchableOption(
     val subtitle: String,
 )
 
+/**
+ * What [SearchableDropdown] is currently showing: the committed choice, the text being typed,
+ * and the matches for it.
+ *
+ * Bundled for the same reason [SearchableDropdownConfig] and [SearchableDropdownActions] are —
+ * the six loose parameters this replaces tripped detekt's `LongParameterList`.
+ */
+data class SearchableDropdownState(
+    val selected: SearchableOption?,
+    val query: String,
+    val options: List<SearchableOption>,
+)
+
 /** Static, already-resolved text for [SearchableDropdown]. Strings come from `strings.xml`. */
 data class SearchableDropdownConfig(
     val label: String,
@@ -91,23 +104,22 @@ data class SearchableDropdownActions(
  */
 @Composable
 fun SearchableDropdown(
-    selected: SearchableOption?,
-    query: String,
-    options: List<SearchableOption>,
+    state: SearchableDropdownState,
     config: SearchableDropdownConfig,
     actions: SearchableDropdownActions,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         FieldLabel(label = config.label, badge = config.badge)
+        val selected = state.selected
         if (selected != null) {
             SelectionRow(selected = selected, clearLabel = config.clearLabel, onClear = actions.onClear)
         } else {
-            SearchField(query = query, config = config, onQueryChange = actions.onQueryChange)
-            if (query.isNotBlank()) {
+            SearchField(query = state.query, config = config, onQueryChange = actions.onQueryChange)
+            if (state.query.isNotBlank()) {
                 ResultsPanel(
-                    query = query,
-                    options = options,
+                    query = state.query,
+                    options = state.options,
                     config = config,
                     onSelect = actions.onSelect,
                 )

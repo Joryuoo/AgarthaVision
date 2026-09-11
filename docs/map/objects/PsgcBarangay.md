@@ -63,7 +63,7 @@ No index, deliberately. Every query is a primary-key lookup or the infix `LIKE` 
 | Pinned commit | `a44a73091f19e4950dbdc0d7cb77a5e17b101a0a` |
 | Code system | Current **10-digit** PSGC, zero-padded |
 | Barangays | 42,001 |
-| Asset | `app/src/main/assets/psgc/psgc-barangays-4q2023.csv.gz`, 340 KB |
+| Asset | `app/src/main/assets/psgc/psgc-barangays-4q2023.csvgz`, 340 KB |
 
 Codes are revised as barangays are created, split, merged and renamed. **If the bundled code
 list and the boundary GeoJSON come from different releases, the choropleth silently fails to
@@ -87,7 +87,7 @@ code.
 
 **Changing the vintage** is a dataset swap plus one constant, with no migration: see
 `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
-(`data/local/psgc/PsgcSeeder.kt:58-61`), and the Admin Website's boundary GeoJSON has to move
+(`data/local/psgc/PsgcSeeder.kt:63-66`), and the Admin Website's boundary GeoJSON has to move
 to the matching release in the same change.
 
 ### Aggregate before display — the privacy rule
@@ -126,7 +126,7 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 
 **Hits**
 - `PsgcSeeder`. The seed gate is `count() == 0 || storedVintage != VINTAGE`
-  (`data/local/psgc/PsgcSeeder.kt:58-61`). **Both halves are load-bearing** — see "Does not
+  (`data/local/psgc/PsgcSeeder.kt:63-66`). **Both halves are load-bearing** — see "Does not
   hit" below.
 - `PsgcCsvParser`, which is strict on purpose: a malformed row aborts rather than seeding a
   barangay with no city (`data/local/psgc/PsgcCsvParser.kt:57-67`).

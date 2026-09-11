@@ -20,7 +20,10 @@ const UPSTREAM = "altcoder/philippines-psgc-shapefiles";
 const UPSTREAM_SHA = "a44a73091f19e4950dbdc0d7cb77a5e17b101a0a";
 const BASE = `https://raw.githubusercontent.com/${UPSTREAM}/${UPSTREAM_SHA}/dist`;
 
-const OUT = join("app", "src", "main", "assets", "psgc", `psgc-barangays-${VINTAGE}.csv.gz`);
+// `.csvgz`, not `.csv.gz`: AGP gunzips any asset ending in `.gz` while packaging and
+// strips the extension, which leaves the app opening a path that does not exist.
+// See the KDoc on PsgcDataset.
+const OUT = join("app", "src", "main", "assets", "psgc", `psgc-barangays-${VINTAGE}.csvgz`);
 const HEADER = [
   "code",
   "name",

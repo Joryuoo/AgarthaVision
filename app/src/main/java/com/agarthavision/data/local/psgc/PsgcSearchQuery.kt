@@ -23,7 +23,7 @@ object PsgcSearchQuery {
     fun terms(raw: String): List<String> =
         raw
             .lowercase()
-            .split(' ', '\t', '\n')
+            .split(' ', '\t', '\n', '\r')
             .filter { it.isNotBlank() }
             .map { term ->
                 term

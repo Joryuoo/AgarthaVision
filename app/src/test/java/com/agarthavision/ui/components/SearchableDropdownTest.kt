@@ -1,7 +1,6 @@
 package com.agarthavision.ui.components
 
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -36,7 +35,7 @@ class SearchableDropdownTest {
     fun `typing reports the query back to the caller`() {
         var typed: String? = null
         composeRule.setContent {
-            Host(query = "", onQueryChange = { typed = it })
+            Host(query = "", actions = SearchableDropdownActions({ typed = it }, {}, {}))
         }
 
         composeRule.onNodeWithText(PLACEHOLDER).performTextInput("lahug")
@@ -70,7 +69,7 @@ class SearchableDropdownTest {
     fun `tapping a result selects it`() {
         var selected: SearchableOption? = null
         composeRule.setContent {
-            Host(query = "lahug", onSelect = { selected = it })
+            Host(query = "lahug", actions = SearchableDropdownActions({}, { selected = it }, {}))
         }
 
         composeRule.onNodeWithText("Lahug").performClick()
@@ -80,7 +79,7 @@ class SearchableDropdownTest {
 
     @Test
     fun `a selection replaces the search field`() {
-        composeRule.setContent { Host(selected = LAHUG, query = "") }
+        composeRule.setContent { Host(query = "", selected = LAHUG) }
 
         composeRule.onNodeWithText("Lahug").assertIsDisplayed()
         composeRule.onNodeWithText(PLACEHOLDER).assertDoesNotExist()
@@ -90,7 +89,7 @@ class SearchableDropdownTest {
     fun `clearing a selection reports back to the caller`() {
         var cleared = false
         composeRule.setContent {
-            Host(selected = LAHUG, query = "", onClear = { cleared = true })
+            Host(query = "", selected = LAHUG, actions = SearchableDropdownActions({}, {}, { cleared = true }))
         }
 
         composeRule.onNodeWithContentDescription(CLEAR_LABEL).performClick()
@@ -100,18 +99,18 @@ class SearchableDropdownTest {
 
     @Composable
     private fun Host(
-        selected: SearchableOption? = null,
         query: String,
+        selected: SearchableOption? = null,
         options: List<SearchableOption> = listOf(LAHUG),
-        onQueryChange: (String) -> Unit = {},
-        onSelect: (SearchableOption) -> Unit = {},
-        onClear: () -> Unit = {},
+        actions: SearchableDropdownActions = SearchableDropdownActions({}, {}, {}),
     ) {
         AgarthaVisionTheme {
             SearchableDropdown(
-                selected = selected,
-                query = query,
-                options = options,
+                state = SearchableDropdownState(
+                    selected = selected,
+                    query = query,
+                    options = options,
+                ),
                 config = SearchableDropdownConfig(
                     label = "Patient barangay",
                     placeholder = PLACEHOLDER,
@@ -120,11 +119,7 @@ class SearchableDropdownTest {
                     clearLabel = CLEAR_LABEL,
                     minQueryLength = 2,
                 ),
-                actions = SearchableDropdownActions(
-                    onQueryChange = onQueryChange,
-                    onSelect = onSelect,
-                    onClear = onClear,
-                ),
+                actions = actions,
             )
         }
     }

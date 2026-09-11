@@ -1,5 +1,6 @@
 package com.agarthavision.ui.sessions
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
@@ -149,7 +150,15 @@ class SessionsViewModel @Inject constructor(
             barangayQueries
                 .debounce(SEARCH_DEBOUNCE_MS)
                 .distinctUntilChanged()
-                .mapLatest { query -> searchBarangaysUseCase(query).getOrDefault(emptyList()) }
+                .mapLatest { query ->
+                    searchBarangaysUseCase(query).getOrElse { throwable ->
+                        // Without this the picker renders its "no barangay matches" state for a
+                        // broken table exactly as it does for a typo, and nothing anywhere says
+                        // the dataset failed to seed.
+                        Log.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
+                        emptyList()
+                    }
+                }
                 .collect { results -> internalState.update { it.copy(barangayResults = results) } }
         }
     }
@@ -184,18 +193,18 @@ class SessionsViewModel @Inject constructor(
     }
 
     fun onCreateSession(label: String, notes: String?) {
-        if (label.isBlank()) {
-            internalState.update { it.copy(errorMessage = "Label is required.") }
-            return
-        }
+        if (internalState.value.isCreating) return
         // The barangay is what makes a smear mappable, so a new session has to carry one.
         // Sessions predating the picker keep a null code; nothing backfills them.
         val barangay = internalState.value.selectedBarangay
-        if (barangay == null) {
-            internalState.update { it.copy(errorMessage = "Barangay is required.") }
+        if (label.isBlank() || barangay == null) {
+            // Both guards are defence in depth — SessionsScreen blocks submit before it gets
+            // here. The barangay wording is kept identical to `session_new_barangay_required`
+            // so the two paths cannot drift into two different messages for one rule.
+            val reason = if (label.isBlank()) LABEL_REQUIRED else BARANGAY_REQUIRED
+            internalState.update { it.copy(errorMessage = reason) }
             return
         }
-        if (internalState.value.isCreating) return
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
             runCatching {
@@ -209,6 +218,9 @@ class SessionsViewModel @Inject constructor(
                 onBarangayCleared()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
+                // The sheet has already closed and its label/note state has gone with it, so
+                // leaving the selection behind would reopen a half-filled sheet.
+                onBarangayCleared()
                 internalState.update {
                     it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
                 }
@@ -278,9 +290,19 @@ class SessionsViewModel @Inject constructor(
     }
 
     private companion object {
+        private const val TAG = "SessionsViewModel"
+
         private const val RECENT_WINDOW_DAYS = 30L
 
         /** Long enough to coalesce a burst of keystrokes, short enough to feel immediate. */
         private const val SEARCH_DEBOUNCE_MS = 150L
+
+        // Copy lives here rather than in strings.xml to match the other ViewModels in this
+        // module (see CaptureViewModel). Lifting all of it into resources needs an error-type
+        // seam across every screen state, which is a wider change than this ticket.
+        private const val LABEL_REQUIRED = "Label is required."
+
+        /** Must stay word-for-word identical to `R.string.session_new_barangay_required`. */
+        private const val BARANGAY_REQUIRED = "Please select the patient's barangay to continue."
     }
 }
