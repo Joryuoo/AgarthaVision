@@ -49,7 +49,7 @@ and mappers convert between them.
 
 **Enforcement:** the Hilt binding module is the only mechanical check, and it only proves the
 bindings exist, not that the boundary is respected
-(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:77-120`).
+(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:79-127`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
 eleven `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
@@ -77,7 +77,7 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
 
 **Enforcement:** review only. The scoped set is visible at
-`core/di/DatabaseModule.kt:41-53`, `core/di/InferenceModule.kt:33-76`,
+`core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
 `core/di/SupabaseModule.kt:23-33`, and on the classes themselves
 (`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
 `data/repository/FlaggedFrameStore.kt:40`).
@@ -96,7 +96,7 @@ bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:46`).
 
 **Known drift, code wins:** `schema.ts` names `samples.timestamp`, `samples.image_path`,
 `samples.created_at`, `samples.gps_lat/gps_lng/gps_accuracy_m`, and `detections.created_at`
-(`schema.ts:282-340`, `schema.ts:319`). None of those columns exist in Postgres. The
+(`schema.ts:284-342`, `schema.ts:321`). None of those columns exist in Postgres. The
 migration creates `captured_at`, `gps_latitude`, `gps_longitude`, `gps_accuracy` and no
 `created_at` (`supabase/migrations/0001_init.sql:43-55`), and the insert row confirms it
 (`data/supabase/SampleRemoteDataSource.kt:100-127`). Those `schema.ts` names describe the

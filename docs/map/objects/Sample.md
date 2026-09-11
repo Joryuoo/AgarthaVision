@@ -54,7 +54,7 @@ The insert row is the definitive list of what actually crosses the wire —
 `data/supabase/SampleRemoteDataSource.kt:100-127`. `image_path`, `status`, `is_repeat`,
 `device_id`, and the prediction cache are all absent from it.
 
-**`schema.ts` is wrong here and the code wins.** `schema.ts:282-340` names `timestamp`,
+**`schema.ts` is wrong here and the code wins.** `schema.ts:284-342` names `timestamp`,
 `image_path`, `created_at`, `gps_lat`, `gps_lng`, and `gps_accuracy_m` as if they were Postgres
 columns. They are not — the migration creates `captured_at`, `gps_latitude`, `gps_longitude`,
 `gps_accuracy`, and no `created_at`. Those `schema.ts` names describe the Room entity.
@@ -106,4 +106,4 @@ Detail, the EPG aggregate, and the CSV builder.
 
 `supabase/migrations/0001_init.sql:43-55`,
 `app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt`,
-`data/supabase/SampleRemoteDataSource.kt:100-127`, `schema.ts:272-340`.
+`data/supabase/SampleRemoteDataSource.kt:100-127`, `schema.ts:274-342`.

@@ -20,7 +20,7 @@ to record, in clinic or on field collection.
 
 **One column, not four.** A barangay code resolves upward to city/municipality, province and
 region through the code itself, so `sessions` carries only the barangay code
-(`supabase/migrations/0010_session_psgc_barangay.sql:37-39`). The parent names in this table
+(`supabase/migrations/0010_session_psgc_barangay.sql:46-48`). The parent names in this table
 exist so the picker can be read and searched, not so the session can denormalise them.
 
 **Bundled, not fetched.** Medtechs collect in far-flung areas with no cellular signal — the
@@ -35,9 +35,9 @@ against.
 ## Shape
 
 **Postgres** — none. The only remote trace is `sessions.psgc_barangay_code`
-(`supabase/migrations/0010_session_psgc_barangay.sql:37-39`), nullable, with
+(`supabase/migrations/0010_session_psgc_barangay.sql:46-48`), nullable, with
 `CHECK (psgc_barangay_code ~ '^[0-9]{10}$')`, plus the partial index
-`sessions_psgc_barangay_idx` (`:41-43`).
+`sessions_psgc_barangay_idx` (`:50-52`).
 
 **Room** (`app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt:25-68`),
 schema v10 (`core/database/AgarthaDatabase.kt:46`)
@@ -126,7 +126,7 @@ permission the medtech holds:
 1. **The admin map shows per-unit prevalence, never rows.** A barangay with one or two smears
    is effectively an identified patient, so `public.barangay_prevalence()` withholds figures
    below a minimum cell size and returns the row with `suppressed = true`
-   (`supabase/migrations/0010_session_psgc_barangay.sql:58-62`, `:110-116`). That lets the map
+   (`supabase/migrations/0010_session_psgc_barangay.sql:85-86`, `:119-124`). That lets the map
    distinguish "too few to report" from "no data" without disclosing the count. The threshold
    is deliberately **not** a parameter — a caller must not be able to lower it.
 2. **The map stays an admin surveillance view.** The patient-facing report stays clinical,
@@ -135,7 +135,7 @@ permission the medtech holds:
 Access is an RPC rather than a view because it has to be decided per row-owner, and `GRANT`
 cannot tell an admin from a medtech — both hold the `authenticated` role. The function is
 `security definer` behind an `is_admin()` guard
-(`supabase/migrations/0010_session_psgc_barangay.sql:79-81`).
+(`supabase/migrations/0010_session_psgc_barangay.sql:88-90`).
 
 ## Connected to
 
@@ -171,7 +171,7 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 - Supabase, if you are changing this table's shape. There is no remote counterpart; only
   `sessions.psgc_barangay_code` crosses the wire.
 - The vintage record, if you only bump the Room version. `fallbackToDestructiveMigration(dropAllTables = true)`
-  (`core/di/DatabaseModule.kt:52`) wipes this table, and the recorded vintage would then
+  (`core/di/DatabaseModule.kt:54`) wipes this table, and the recorded vintage would then
   wrongly report the device as seeded. This is why the gate also checks the row count.
 - Capture, verification or reports. Nothing in those flows reads a barangay.
 - Existing sessions. The column is nullable and nothing backfills it; sessions created before

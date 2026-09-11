@@ -22,7 +22,7 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
 
-**The non-obvious break:** `core/di/DatabaseModule.kt:52` uses
+**The non-obvious break:** `core/di/DatabaseModule.kt:54` uses
 `fallbackToDestructiveMigration(dropAllTables = true)`. A Room version bump **wipes every
 device**, it does not migrate. Fine in Phase 1; a data-loss incident the day there is real
 data.

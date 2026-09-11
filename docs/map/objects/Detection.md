@@ -52,7 +52,7 @@ width, height in pixels (`inference/server.py:47-55`), and the mapper stores tho
 unchanged (`data/local/mapper/VerificationMapper.kt:36-39`). Treat the "normalized" comments as
 stale.
 
-Documented shape: `schema.ts:356-393`.
+Documented shape: `schema.ts:358-395`.
 
 ## Connected to
 
@@ -99,4 +99,4 @@ the CSV builder. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
 `supabase/migrations/0002_verification_fields.sql`,
 `supabase/migrations/0007_detection_bbox_nullable.sql`,
 `app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt`,
-`data/local/mapper/VerificationMapper.kt`, `schema.ts:356-393`.
+`data/local/mapper/VerificationMapper.kt`, `schema.ts:358-395`.

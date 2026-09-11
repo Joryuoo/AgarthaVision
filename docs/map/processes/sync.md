@@ -52,7 +52,7 @@ first: unowned non-exempt sessions, cascading to their samples and reports, all 
 because only `user_id IS NULL` rows are touched
 (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`, `data/local/dao/SampleDao.kt:151-158`).
 Only then does the sync pass run. Claim-exempt sessions are never pushed
-(`core/session/SessionManager.kt:154-156`).
+(`core/session/SessionManager.kt:133-135`).
 
 ## Hits
 

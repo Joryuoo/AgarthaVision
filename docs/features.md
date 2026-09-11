@@ -25,17 +25,17 @@ as working.
 
 ### Sessions
 - **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
-  Session writes `ended_at`. `core/session/SessionManager.kt:57-80`, `:117-140`.
+  Session writes `ended_at`. `core/session/SessionManager.kt:57-80`, `:103-126`.
 - **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:86-96`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
   `data/local/entity/SessionEntity.kt:58-64`.
 - **Patient barangay, required at session start.** A PSGC-coded barangay is the unit the
   surveillance map aggregates on; the capture-time GPS fix stays audit provenance and is
-  still read by nothing. `ui/sessions/SessionsViewModel.kt:191-196`,
+  still read by nothing. `ui/sessions/SessionsViewModel.kt:195-207`,
   `supabase/migrations/0010_session_psgc_barangay.sql`.
 - **Offline barangay picker** over all 42,010 barangays, type-to-filter with results in a
-  lazily-rendered list. The PSGC dataset ships in the APK (340 KB gzipped) and is Room-seeded
+  lazily-rendered list. The PSGC dataset ships in the APK (342 KB gzipped) and is Room-seeded
   on first run, so it works with the radio off — there is no network path on this route.
   `ui/components/SearchableDropdown.kt`, `data/local/psgc/PsgcSeeder.kt`,
   `domain/usecase/sessions/SearchBarangaysUseCase.kt`. Vintage pin and privacy rule:
@@ -136,11 +136,11 @@ as working.
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:461-485`, `schema.ts:603-620` | **Not implemented.** No migration through `0011` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
+| `validation_records` table | `schema.ts:463-487`, `schema.ts:605-622` | **Not implemented.** No migration through `0011` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
 | WorkManager sync queue | `app/build.gradle.kts:164` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
 | `administrative` report type | `supabase/migrations/0008_reports.sql:9` | Reserved in a comment; the CHECK allows only `session` (`0008_reports.sql:17`) |
-| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:268-270`) |
-| `reports.supabase_status` in Postgres | `schema.ts:446-447` | Room-only column |
+| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:270-272`) |
+| `reports.supabase_status` in Postgres | `schema.ts:448-449` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | The `admin` role and `is_admin()` exist in SQL (`0001_init.sql:13`, `0004_fix_profiles_rls_recursion.sql:4-16`); no admin UI exists in the app |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path. Superseded by the self-hosted container; the response shape is kept compatible only |
 | In-app bounding-box editing | Verification design | Deferred to offline annotation tooling. `BOX_INCORRECT` records the problem; nothing fixes the box in-app |

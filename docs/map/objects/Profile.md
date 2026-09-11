@@ -39,8 +39,8 @@ Documented shape: `schema.ts:146-158`.
 ## Connected to
 
 - **Owns** → [`Session`](Session.md), [`Sample`](Sample.md), [`Report`](Report.md) via
-  `user_id` (`schema.ts:556-572`).
-- **Owned by** `auth.users`, 1 → 0..1 (`schema.ts:549-554`).
+  `user_id` (`schema.ts:558-574`).
+- **Owned by** `auth.users`, 1 → 0..1 (`schema.ts:551-556`).
 - **Scopes** [`StorageObject`](StorageObject.md) — Storage RLS keys off `auth.uid()`, not off
   `profiles`.
 - **Looks like but is not** `LocalIdentity`. That is a DataStore cache of the last signed-in
