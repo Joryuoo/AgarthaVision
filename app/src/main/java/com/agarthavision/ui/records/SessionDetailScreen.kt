@@ -4,10 +4,11 @@ package com.agarthavision.ui.records
 
 import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -80,6 +81,8 @@ internal data class SessionDetailUi(
     val samplesTotal: Int,
     val infectivityLevel: InfectivityLevel?,
     val infectivitySpeciesLabel: String?,
+    /** Every distinct species confirmed this session, custom "Other" names included. */
+    val detectedSpecies: List<String>,
     val verifiedSamples: List<SampleUi>,
 )
 
@@ -243,6 +246,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         samplesTotal = sessionData.samples.size,
         infectivityLevel = state.infectivityLevel,
         infectivitySpeciesLabel = state.infectivitySpeciesLabel,
+        detectedSpecies = state.eggCounts.map { it.species },
         verifiedSamples = samples,
     )
 }
@@ -374,12 +378,14 @@ internal fun EpgHeroCard(
     val infectivityLevel = session.infectivityLevel
     val infectivitySpeciesLabel = session.infectivitySpeciesLabel
     val themeColors = AgarthaTheme.colors
-    val heroGlow = themeColors.accentTint
+    // The hero card is the maroon brand surface; all text reads in onAccent tints.
+    val onCard = themeColors.onAccent
+    val onCardMuted = onCard.copy(alpha = 0.72f)
+    val onCardFaint = onCard.copy(alpha = 0.6f)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(themeColors.surfaceVariant, RoundedCornerShape(12.dp))
-            .border(1.dp, themeColors.border, RoundedCornerShape(12.dp))
+            .background(themeColors.accent, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(
@@ -388,7 +394,7 @@ internal fun EpgHeroCard(
                 .drawBehind {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(heroGlow.copy(alpha = 0.6f), Color.Transparent),
+                            colors = listOf(onCard.copy(alpha = 0.10f), Color.Transparent),
                             center = Offset(size.width, 0f),
                             radius = 220.dp.toPx(),
                         ),
@@ -396,42 +402,103 @@ internal fun EpgHeroCard(
                 },
         )
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                "EGGS PER GRAM",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AgarthaTheme.colors.textSecondary,
-                letterSpacing = 1.sp,
-            )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text(
+                    "EGGS PER GRAM",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCardMuted,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.weight(1f).padding(top = 2.dp),
+                )
+                // Red area: the infectivity severity indicator sits in the top-right corner.
+                if (infectivityLevel != null) {
+                    InfectivityTierBadge(level = infectivityLevel)
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 epg.toString(),
                 fontSize = 56.sp,
                 lineHeight = 56.sp,
                 fontWeight = FontWeight.Bold,
-                color = AgarthaTheme.colors.textPrimary,
+                color = onCard,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             )
             Spacer(Modifier.height(12.dp))
-            EpgMeta(confirmedEggs, speciesCount, samplesTotal)
-            // Zero eggs found is a neutral/absent state, not "Low" — infectivityLevel is
-            // already null in that case, so no badge/alert/disclaimer renders at all.
-            if (infectivityLevel != null) {
+            EpgMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
+            // Blue area: the species detected this session, custom "Other" names included.
+            if (session.detectedSpecies.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                when (infectivityLevel) {
-                    InfectivityLevel.EXTREME -> ExtremeParasitismAlert(
-                        speciesLabel = infectivitySpeciesLabel ?: "",
-                    )
-                    else -> InfectivityTierBadge(
-                        level = infectivityLevel,
-                        speciesLabel = infectivitySpeciesLabel,
+                DetectedSpecies(species = session.detectedSpecies, labelColor = onCardMuted)
+            }
+            // Zero eggs found is a neutral/absent state, not "Low" — infectivityLevel is
+            // already null then, so no consult message or disclaimer renders.
+            if (infectivityLevel != null) {
+                if (infectivityLevel == InfectivityLevel.EXTREME) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.session_detail_infectivity_extreme_body,
+                            infectivitySpeciesLabel ?: "",
+                        ),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onCard,
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.session_detail_infectivity_disclaimer),
-                    fontSize = 10.sp,
-                    color = AgarthaTheme.colors.textTertiary,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(onCard.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.session_detail_infectivity_disclaimer),
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        color = onCardFaint,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Blue area of the hero card: the distinct species confirmed this session (custom "Other"
+ * names included), each in a gold pill. Shows at most four, then a "+N more" pill so a
+ * polyparasitism-heavy field does not overflow the card.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetectedSpecies(species: List<String>, labelColor: Color) {
+    val colors = AgarthaTheme.colors
+    val maxShown = 4
+    val shown = species.take(maxShown)
+    val remaining = species.size - shown.size
+    Column {
+        Text(
+            text = stringResource(R.string.session_detail_species_detected),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = labelColor,
+            letterSpacing = 1.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            shown.forEach { name ->
+                SpeciesPill(text = name, background = colors.goldTint, textColor = colors.goldText)
+            }
+            if (remaining > 0) {
+                SpeciesPill(
+                    text = stringResource(R.string.session_detail_species_more, remaining),
+                    background = labelColor.copy(alpha = 0.18f),
+                    textColor = labelColor,
                 )
             }
         }
@@ -439,16 +506,38 @@ internal fun EpgHeroCard(
 }
 
 @Composable
-private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
+private fun SpeciesPill(text: String, background: Color, textColor: Color) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        color = textColor,
+        modifier = Modifier
+            .background(background, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun EpgMeta(
+    confirmedEggs: Int,
+    speciesCount: Int,
+    samplesTotal: Int,
+    contentColor: Color,
+) {
+    val labelColor = contentColor.copy(alpha = 0.72f)
     if (confirmedEggs == 0) {
-        Text("No confirmed eggs yet", fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
+        Text("No confirmed eggs yet", fontSize = 13.sp, color = labelColor)
     } else {
         StatRun(
             listOf(
                 Stat(confirmedEggs.toString(), "confirmed"),
                 Stat(speciesCount.toString(), "species"),
                 Stat(samplesTotal.toString(), "samples"),
-            )
+            ),
+            valueColor = contentColor,
+            labelColor = labelColor,
+            separatorColor = contentColor.copy(alpha = 0.6f),
         )
     }
 }
