@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.InfectivityLevel
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -77,6 +78,8 @@ internal data class SessionDetailUi(
     val confirmedEggs: Int,
     val speciesCount: Int,
     val samplesTotal: Int,
+    val infectivityLevel: InfectivityLevel?,
+    val infectivitySpeciesLabel: String?,
     val verifiedSamples: List<SampleUi>,
 )
 
@@ -238,6 +241,8 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         confirmedEggs = state.totalEggCount,
         speciesCount = state.eggCounts.size,
         samplesTotal = sessionData.samples.size,
+        infectivityLevel = state.infectivityLevel,
+        infectivitySpeciesLabel = state.infectivitySpeciesLabel,
         verifiedSamples = samples,
     )
 }
@@ -313,10 +318,7 @@ private fun SessionDetailPopulated(
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
                 EpgHeroCard(
-                    epg = session.epg,
-                    confirmedEggs = session.confirmedEggs,
-                    speciesCount = session.speciesCount,
-                    samplesTotal = session.samplesTotal,
+                    session = session,
                     modifier = Modifier.semantics(mergeDescendants = true) {
                         contentDescription = "Eggs per gram: ${session.epg}, " +
                             "${session.confirmedEggs} confirmed, " +
@@ -352,12 +354,7 @@ private fun SessionDetailEmpty(
             .padding(top = Spacing.xs)
             .verticalScroll(rememberScrollState()),
     ) {
-        EpgHeroCard(
-            epg = session.epg,
-            confirmedEggs = session.confirmedEggs,
-            speciesCount = session.speciesCount,
-            samplesTotal = session.samplesTotal,
-        )
+        EpgHeroCard(session = session)
         Spacer(Modifier.height(Spacing.md))
         ReportsSection(state = state)
         Spacer(Modifier.height(60.dp))
@@ -367,12 +364,15 @@ private fun SessionDetailEmpty(
 
 @Composable
 internal fun EpgHeroCard(
-    epg: Int,
-    confirmedEggs: Int,
-    speciesCount: Int,
-    samplesTotal: Int,
+    session: SessionDetailUi,
     modifier: Modifier = Modifier,
 ) {
+    val epg = session.epg
+    val confirmedEggs = session.confirmedEggs
+    val speciesCount = session.speciesCount
+    val samplesTotal = session.samplesTotal
+    val infectivityLevel = session.infectivityLevel
+    val infectivitySpeciesLabel = session.infectivitySpeciesLabel
     val themeColors = AgarthaTheme.colors
     val heroGlow = themeColors.accentTint
     Box(
@@ -414,6 +414,26 @@ internal fun EpgHeroCard(
             )
             Spacer(Modifier.height(12.dp))
             EpgMeta(confirmedEggs, speciesCount, samplesTotal)
+            // Zero eggs found is a neutral/absent state, not "Low" — infectivityLevel is
+            // already null in that case, so no badge/alert/disclaimer renders at all.
+            if (infectivityLevel != null) {
+                Spacer(Modifier.height(12.dp))
+                when (infectivityLevel) {
+                    InfectivityLevel.EXTREME -> ExtremeParasitismAlert(
+                        speciesLabel = infectivitySpeciesLabel ?: "",
+                    )
+                    else -> InfectivityTierBadge(
+                        level = infectivityLevel,
+                        speciesLabel = infectivitySpeciesLabel,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.session_detail_infectivity_disclaimer),
+                    fontSize = 10.sp,
+                    color = AgarthaTheme.colors.textTertiary,
+                )
+            }
         }
     }
 }

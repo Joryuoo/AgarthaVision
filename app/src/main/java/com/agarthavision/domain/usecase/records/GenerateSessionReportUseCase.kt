@@ -1,7 +1,6 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.core.util.EpgCalculator
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportMetadata
@@ -120,10 +119,5 @@ class GenerateSessionReportUseCase @Inject constructor(
         reportRepository.insert(report)
         syncReportUseCase(reportId)
         report
-    }
-
-    private fun com.agarthavision.domain.model.EggCount.canonicalSpecies(): String {
-        val resolved = EggSpecies.fromClassLabel(species)?.canonicalClass
-        return resolved ?: species
     }
 }

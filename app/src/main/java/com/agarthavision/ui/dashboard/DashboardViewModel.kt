@@ -135,7 +135,10 @@ class DashboardViewModel @Inject constructor(
                     sessionsCount = totalSessions.toString(),
                     samplesCount = totalSamples.toString(),
                     verifiedRatio = verifiedRatio,
-                    epgAvgStatus = if (totalSamples > 100) "Heavy" else "Light"
+                    // Non-diagnostic wording only — "Heavy"/"Light" read as WHO clinical
+                    // intensity tiers, which this sample-count heuristic is not. This does not
+                    // touch the separate totalEpg=0 mock bug in activeSessionStateFlow below.
+                    epgAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
                 )
             }
         }

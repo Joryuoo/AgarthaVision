@@ -84,6 +84,16 @@ as working.
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
   `domain/usecase/records/GetRecordsUseCase.kt`).
 - **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:63-79`).
+- **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
+  an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
+  `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against
+  WHO Kato-Katz per-species EPG cutoffs — population-surveillance cutoffs, **pending clinical
+  sign-off (Dr. Bayron)**, not yet a validated diagnostic threshold. `EggSpecies.OTHER`/
+  unrecognized species are excluded from the tier (no WHO table exists for them); zero confirmed
+  eggs shows no badge at all (a true negative, not "Low"). The mandatory disclaimer
+  (`session_detail_infectivity_disclaimer`) renders alongside every tier, never just Extreme.
+  UI: `ui/records/InfectivityBadge.kt`, wired into `EpgHeroCard`
+  (`ui/records/SessionDetailScreen.kt`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
