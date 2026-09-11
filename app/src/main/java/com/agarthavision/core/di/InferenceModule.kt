@@ -1,8 +1,11 @@
 package com.agarthavision.core.di
 
 import com.agarthavision.BuildConfig
+import com.agarthavision.data.inference.RemoteInferenceEngine
 import com.agarthavision.data.remote.InferenceApi
+import com.agarthavision.domain.inference.InferenceEngine
 import com.google.gson.Gson
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -73,4 +76,15 @@ object InferenceModule {
     @Singleton
     fun provideInferenceApi(retrofit: Retrofit): InferenceApi =
         retrofit.create(InferenceApi::class.java)
+}
+
+/**
+ * Binds [InferenceEngine] to the cloud backend.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class InferenceBindingModule {
+    @Binds
+    @Singleton
+    abstract fun bindInferenceEngine(impl: RemoteInferenceEngine): InferenceEngine
 }

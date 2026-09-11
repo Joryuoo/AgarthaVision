@@ -1,7 +1,7 @@
 package com.agarthavision.domain.usecase.capture
 
-import com.agarthavision.data.inference.RemoteInferenceEngine
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.inference.InferenceEngine
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.inference.InferenceConnectionException
@@ -18,7 +18,7 @@ import javax.inject.Inject
  * discarded. Only an unreachable container falls back to a Manual Capture ([FrameSource.MANUAL]),
  * so a lost connection never looks like a silent failure.
  *
- * Runs against the cloud container through [RemoteInferenceEngine] directly: on-device
+ * Runs against the cloud container through the [InferenceEngine] interface: on-device
  * inference was measured and deferred, so there is one backend and a selector would be
  * ceremony. See `docs/map/processes/infer.md`.
  *
@@ -28,7 +28,7 @@ import javax.inject.Inject
  * persistence error or a non-connectivity HTTP error is.
  */
 class CaptureFieldUseCase @Inject constructor(
-    private val remoteEngine: RemoteInferenceEngine,
+    private val inferenceEngine: InferenceEngine,
     private val flaggedFrameStore: FlaggedFrameStore,
 ) {
     /**
@@ -41,7 +41,7 @@ class CaptureFieldUseCase @Inject constructor(
     suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<FrameSource> =
         runCatching {
             val result = try {
-                remoteEngine.infer(jpegBytes)
+                inferenceEngine.infer(jpegBytes)
             } catch (connectionFailure: InferenceConnectionException) {
                 // Expected outcome, not an error to propagate: an unreachable inference
                 // container falls back to a MANUAL frame instead of failing the tap. The cause

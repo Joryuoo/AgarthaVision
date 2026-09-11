@@ -32,8 +32,9 @@ Getting a frame off the microscope and into a state a human can review.
    `latestFrameBytes` and hands it to `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
    `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, or no frame cached yet,
    sets an error and returns without capturing.
-4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls
-   `RemoteInferenceEngine.infer` a single time — what happens inside is [`infer`](infer.md).
+4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls the
+   injected `InferenceEngine` (bound to the cloud `RemoteInferenceEngine`) a single time — what
+   happens inside is [`infer`](infer.md).
    Capture source is decided by whether the server was *consulted*, not by what it found: any
    response — **including zero detections** — builds a `FrameSource.MODEL` frame (JPEG,
    predictions, model version, image dimensions). A clean field is a normal negative result and
