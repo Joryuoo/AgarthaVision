@@ -636,8 +636,8 @@ export type RelationshipMatrix = [
  *   remote `samples.user_id` stays NOT NULL, enforced by claim-before-sync. Room
  *   `sessions` gains two Room-only columns — `supabase_status`
  *   (pending/synced/sync_failed, `SessionSyncStatus`) and `claim_exempt` (the
- *   per-session "don't link to account" opt-out) — neither exists in Supabase. Room
- *   schema is v8; no Supabase migration was added.
+ *   per-session "don't link to account" opt-out) — neither exists in Supabase.
+ *   Introduced at Room schema v8; no Supabase migration was added.
  * - Reports are implemented for session reports only; admin/cross-session
  *   report types require a future migration.
  * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled

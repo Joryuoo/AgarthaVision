@@ -49,7 +49,7 @@ and mappers convert between them.
 
 **Enforcement:** the Hilt binding module is the only mechanical check, and it only proves the
 bindings exist, not that the boundary is respected
-(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:70-107`).
+(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:77-120`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
 eleven `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
@@ -78,7 +78,7 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
 
 **Enforcement:** review only. The scoped set is visible at
-`core/di/DatabaseModule.kt:38-50`, `core/di/InferenceModule.kt:33-76`,
+`core/di/DatabaseModule.kt:41-53`, `core/di/InferenceModule.kt:33-76`,
 `core/di/SupabaseModule.kt:23-33`, and on the classes themselves
 (`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
 `data/repository/FlaggedFrameStore.kt:40`).
@@ -90,14 +90,14 @@ foreign keys, CHECKs, and RLS. Do not change schema behaviour without updating b
 migration SQL **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in
 the Supabase dashboard SQL editor — never applied programmatically
 (`supabase/migrations/0001_init.sql:2`). Room is a separate mirror: a Room-shape change means
-bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:34`).
+bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:44`).
 
 **Enforcement:** review only. There is no migration runner, no schema-diff test, and no CI.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).
 
 **Known drift, code wins:** `schema.ts` names `samples.timestamp`, `samples.image_path`,
 `samples.created_at`, `samples.gps_lat/gps_lng/gps_accuracy_m`, and `detections.created_at`
-(`schema.ts:224-282`, `schema.ts:330`). None of those columns exist in Postgres. The
+(`schema.ts:282-340`, `schema.ts:319`). None of those columns exist in Postgres. The
 migration creates `captured_at`, `gps_latitude`, `gps_longitude`, `gps_accuracy` and no
 `created_at` (`supabase/migrations/0001_init.sql:43-55`), and the insert row confirms it
 (`data/supabase/SampleRemoteDataSource.kt:100-127`). Those `schema.ts` names describe the

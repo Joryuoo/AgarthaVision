@@ -25,11 +25,21 @@ as working.
 
 ### Sessions
 - **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
-  Session writes `ended_at`. `core/session/SessionManager.kt:55-73`, `:117-140`.
-- **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:79-89`).
+  Session writes `ended_at`. `core/session/SessionManager.kt:57-80`, `:117-140`.
+- **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:86-96`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
-  `data/local/entity/SessionEntity.kt:46-52`.
+  `data/local/entity/SessionEntity.kt:58-64`.
+- **Patient barangay, required at session start.** A PSGC-coded barangay is the unit the
+  surveillance map aggregates on; the capture-time GPS fix stays audit provenance and is
+  still read by nothing. `ui/sessions/SessionsViewModel.kt:191-196`,
+  `supabase/migrations/0010_session_psgc_barangay.sql`.
+- **Offline barangay picker** over all 42,001 barangays, type-to-filter with results in a
+  lazily-rendered list. The PSGC dataset ships in the APK (340 KB gzipped) and is Room-seeded
+  on first run, so it works with the radio off — there is no network path on this route.
+  `ui/components/SearchableDropdown.kt`, `data/local/psgc/PsgcSeeder.kt`,
+  `domain/usecase/sessions/SearchBarangaysUseCase.kt`. Vintage pin and privacy rule:
+  `docs/map/objects/PsgcBarangay.md`.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
@@ -46,7 +56,7 @@ as working.
   consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
   surface as `ui/capture/ConnectionLossBanner.kt`.
 - **Inference auto-pause** whenever a sheet or child screen is foregrounded
-  (`core/session/SessionManager.kt:94-109`, `ui/capture/CaptureViewModel.kt:161-172`).
+  (`core/session/SessionManager.kt:101-116`, `ui/capture/CaptureViewModel.kt:161-172`).
 - **Manual capture** of the live frame with no AI involvement, for specimens the model missed
   (`ui/capture/CaptureViewModel.kt:129-155`, `domain/usecase/verify/SubmitManualCaptureUseCase.kt`).
 
@@ -114,11 +124,11 @@ as working.
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:397-421`, `schema.ts:538-553` | **Not implemented.** No migration through `0008` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
+| `validation_records` table | `schema.ts:455-479`, `schema.ts:596-611` | **Not implemented.** No migration through `0008` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
 | WorkManager sync queue | `app/build.gradle.kts:164` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
 | `administrative` report type | `supabase/migrations/0008_reports.sql:9` | Reserved in a comment; the CHECK allows only `session` (`0008_reports.sql:17`) |
-| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:210-212`) |
-| `reports.supabase_status` in Postgres | `schema.ts:382-383` | Room-only column |
+| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:268-270`) |
+| `reports.supabase_status` in Postgres | `schema.ts:440-441` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | The `admin` role and `is_admin()` exist in SQL (`0001_init.sql:13`, `0004_fix_profiles_rls_recursion.sql:4-16`); no admin UI exists in the app |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path. Superseded by the self-hosted container; the response shape is kept compatible only |
 | In-app bounding-box editing | Verification design | Deferred to offline annotation tooling. `BOX_INCORRECT` records the problem; nothing fixes the box in-app |

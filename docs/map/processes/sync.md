@@ -52,14 +52,14 @@ first: unowned non-exempt sessions, cascading to their samples and reports, all 
 because only `user_id IS NULL` rows are touched
 (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`, `data/local/dao/SampleDao.kt:151-158`).
 Only then does the sync pass run. Claim-exempt sessions are never pushed
-(`core/session/SessionManager.kt:147-149`).
+(`core/session/SessionManager.kt:154-156`).
 
 ## Hits
 
 - **The insert row is the contract.** A new column that is not added to `SampleInsertRow`,
   `SessionInsertRow`, or `ReportInsertRow` never reaches Postgres, with no error
   (`data/supabase/SampleRemoteDataSource.kt:100-152`,
-  `data/supabase/SessionRemoteDataSource.kt:74-90`,
+  `data/supabase/SessionRemoteDataSource.kt:76-93`,
   `data/supabase/ReportRemoteDataSource.kt:61-83`).
 - **RLS.** Every insert must satisfy `auth.uid() = user_id`
   (`supabase/migrations/0001_init.sql:99-117`), and detections are checked through the parent

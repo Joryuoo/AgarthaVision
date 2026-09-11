@@ -48,7 +48,7 @@ PK column is `report_id`. Differences:
 - `generated_at` and `created_at` are epoch millis locally, ISO strings remotely
   (`data/supabase/ReportRemoteDataSource.kt:49`).
 
-`schema.ts:362-363` claims `total_samples` defaults to 0. The migration gives it no default —
+`schema.ts:420-421` claims `total_samples` defaults to 0. The migration gives it no default —
 `0008_reports.sql:19`. The migration wins.
 
 ## Connected to
@@ -96,4 +96,4 @@ offline. Generating a report while signed out fails.
 
 `supabase/migrations/0008_reports.sql`,
 `app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`,
-`domain/usecase/records/GenerateSessionReportUseCase.kt`, `schema.ts:346-384`.
+`domain/usecase/records/GenerateSessionReportUseCase.kt`, `schema.ts:404-442`.

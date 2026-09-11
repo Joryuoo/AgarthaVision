@@ -17,7 +17,7 @@ physical table; this repo owns only the policies on it.
 ## Shape
 
 **Not created here.** No project migration creates `storage.objects`
-(`schema.ts:426-428`). What this repo defines is the four policy decisions in
+(`schema.ts:484-486`). What this repo defines is the four policy decisions in
 `supabase/migrations/0003_storage_rls.sql`:
 
 | Policy | Rule | Line |
@@ -31,7 +31,7 @@ The bucket is private and must exist before these policies run
 (`supabase/migrations/0003_storage_rls.sql:2`, `:6-7`).
 
 Supabase-managed columns worth knowing — `id`, `bucket_id`, `name`, `owner` / `owner_id`,
-`metadata`, `path_tokens`, `version` — are catalogued at `schema.ts:439-475`. Do not write any
+`metadata`, `path_tokens`, `version` — are catalogued at `schema.ts:497-533`. Do not write any
 of them directly.
 
 **Client side**, the object is touched in exactly two places, both in one file:
@@ -87,4 +87,4 @@ includes them.
 
 `supabase/migrations/0003_storage_rls.sql`,
 `app/src/main/java/com/agarthavision/data/supabase/SampleRemoteDataSource.kt:28-55`,
-`data/supabase/SyncSampleUseCase.kt:51-83`, `schema.ts:424-475`.
+`data/supabase/SyncSampleUseCase.kt:51-83`, `schema.ts:482-533`.

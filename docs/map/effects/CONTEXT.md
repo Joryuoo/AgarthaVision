@@ -17,15 +17,35 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
    `samples.status`, `sessions.claim_exempt`, `reports.supabase_status`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
-3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:34`.
+3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:44`.
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
 
-**The non-obvious break:** `core/di/DatabaseModule.kt:49` uses
+**The non-obvious break:** `core/di/DatabaseModule.kt:52` uses
 `fallbackToDestructiveMigration(dropAllTables = true)`. A Room version bump **wipes every
 device**, it does not migrate. Fine in Phase 1; a data-loss incident the day there is real
 data.
+
+**The second non-obvious break:** that same wipe takes `psgc_barangays` with it. Reference
+data has to be re-seedable, not just seeded — which is why `PsgcSeeder` gates on the row
+count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt:58-61`). A gate on
+the vintage alone leaves the picker permanently empty after any future version bump.
+
+## Changing the surveillance map or the barangay picker
+
+**Open:** `../objects/PsgcBarangay.md` · `../objects/Session.md` ·
+`supabase/migrations/0010_session_psgc_barangay.sql` · `tools/psgc/README.md`.
+
+**The non-obvious break:** the PSGC vintage is pinned, and the code list and the Admin
+Website's boundary GeoJSON must come from the **same release**. Move one without the other
+and the choropleth silently fails to join for every unit that changed — it looks like
+missing data, not a version mismatch. Newer code lists on the legacy 9-digit PSGC do not
+join this dataset's 10-digit codes at all.
+
+**Also easy to miss:** the barangay code is patient-locating data. The admin aggregation
+suppresses figures below a minimum cell size, and that threshold is deliberately not a
+parameter. Do not add a barangay to the patient-facing report.
 
 ## Changing RLS, auth, or ownership
 

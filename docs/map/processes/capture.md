@@ -30,7 +30,7 @@ Getting a frame off the microscope and into a state a human can review.
 3. **Gate on session state.** If the session is not `Active`, or inference is paused, the frame
    is dropped here (`core/camera/FrameSampler.kt:64`). Pausing is driven by
    `SessionManager.pauseInference()` whenever a sheet or child screen comes forward
-   (`core/session/SessionManager.kt:104-109`, `ui/capture/CaptureViewModel.kt:161-163`).
+   (`core/session/SessionManager.kt:111-116`, `ui/capture/CaptureViewModel.kt:161-163`).
 4. **Throttle.** One frame per 2000 ms, and **skip rather than queue** if a request is already
    in flight (`core/camera/FrameSampler.kt:36`, `:66-68`). A slow network reduces the sampling
    rate; it never builds a backlog.
