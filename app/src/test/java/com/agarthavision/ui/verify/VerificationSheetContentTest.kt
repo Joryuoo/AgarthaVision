@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -69,6 +70,7 @@ class VerificationSheetContentTest {
         val q2 = mutableListOf<Boolean>()
         val q4 = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
+        val stages = mutableListOf<EggStage>()
         val notes = mutableListOf<String>()
         var detectionPrev = 0
         var detectionNext = 0
@@ -86,6 +88,7 @@ class VerificationSheetContentTest {
         onQ2Selected = { r.q2 += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = {},
+        onStageSelected = { r.stages += it },
         onQ4Selected = { r.q4 += it },
         onDetectionPrev = { r.detectionPrev++ },
         onDetectionNext = { r.detectionNext++ },
@@ -154,7 +157,8 @@ class VerificationSheetContentTest {
         isBoxCorrect: Boolean? = null,
         species: EggSpecies? = null,
         otherSpeciesText: String = "",
-    ) = VerificationAnswers(isEgg, isBoxCorrect, species, otherSpeciesText)
+        stage: EggStage? = null,
+    ) = VerificationAnswers(isEgg, isBoxCorrect, species, otherSpeciesText, stage)
 
     // The question chain: which sections are visible
 
@@ -199,6 +203,67 @@ class VerificationSheetContentTest {
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
 
         sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the stage picker appears once a species with defined stages is selected`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.STAGE_DROPDOWN).assertIsDisplayed()
+    }
+
+    @Test
+    fun `the stage picker is hidden for a species with no defined stages`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.OTHER),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.STAGE_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `the stage picker is hidden before a species is selected`() {
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        composeRule.onNodeWithTag(VerifyTestTags.STAGE_DROPDOWN).assertDoesNotExist()
+    }
+
+    /**
+     * The species field is a filterable combobox: typing a query must never persist unless a
+     * result is tapped. Filtering and then moving focus away without picking a result has to
+     * revert the field to whatever species is still the committed answer - anything else lets
+     * the operator see one species while a different one gets submitted.
+     */
+    @Test
+    fun `filtering species then losing focus without picking a result reverts to the committed species`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                ),
+            ),
+        )
+
+        typeInto(
+            composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).performScrollTo(),
+            "Tri",
+        )
+        composeRule.mainClock.autoAdvance = true
+        sheetNode(VerifyTestTags.NOTE_FIELD).performClick()
+
+        composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).assertIsDisplayed()
+        composeRule.onNodeWithText("Ascaris lumbricoidesTri").assertDoesNotExist()
+        assertEquals(emptyList<EggSpecies>(), r.species)
     }
 
     // The question chain: what unlocks submit

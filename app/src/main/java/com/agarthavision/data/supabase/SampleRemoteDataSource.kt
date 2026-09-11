@@ -3,6 +3,7 @@ package com.agarthavision.data.supabase
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.EggStage
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -93,6 +94,7 @@ class SampleRemoteDataSource @Inject constructor(
             bboxH = bboxH,
             verdict = resolvedVerdict.remoteValue,
             expertClass = expertClass,
+            stage = stage?.let { EggStage.fromValue(it)?.remoteValue },
         )
     }
 
@@ -149,6 +151,8 @@ class SampleRemoteDataSource @Inject constructor(
         val verdict: String,
         @SerialName("expert_class")
         val expertClass: String?,
+        @SerialName("stage")
+        val stage: String?,
     )
 
     private companion object {

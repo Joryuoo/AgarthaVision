@@ -38,6 +38,7 @@
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
     <string name="verify_q2">Is the bounding box correctly placed?</string>
     <string name="verify_q3">What species?</string>
+    <string name="verify_q3b">What stage?</string>
     <string name="verify_q4">Did the model miss any eggs in this frame?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>

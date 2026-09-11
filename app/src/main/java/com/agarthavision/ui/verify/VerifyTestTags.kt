@@ -61,6 +61,12 @@ internal object VerifyTestTags {
     /** Species picker, shown only once Q1 and Q2 are both answered yes. */
     const val SPECIES_DROPDOWN = "species_dropdown"
 
+    /**
+     * Stage picker, shown only once a species with a non-empty
+     * [com.agarthavision.domain.model.EggStage.validFor] set is selected.
+     */
+    const val STAGE_DROPDOWN = "stage_dropdown"
+
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 

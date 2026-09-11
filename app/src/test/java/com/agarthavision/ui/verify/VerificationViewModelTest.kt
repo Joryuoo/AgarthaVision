@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -484,5 +485,56 @@ class VerificationViewModelTest {
             assertEquals(0, vm.state.value.frameIndexInQueue)
             assertFalse(vm.state.value.canGoPrev)
             assertFalse(vm.state.value.canGoNext)
+        }
+
+    @Test
+    fun `onStageSelected updates the current answer's stage`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onStageSelected(EggStage.UNFERTILIZED)
+            advanceUntilIdle()
+
+            assertEquals(EggStage.UNFERTILIZED, vm.state.value.answers[0].stage)
+        }
+
+    @Test
+    fun `onSpeciesSelected resets stage to null`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onStageSelected(EggStage.UNFERTILIZED)
+
+            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
+            advanceUntilIdle()
+
+            assertEquals(null, vm.state.value.answers[0].stage)
+        }
+
+    @Test
+    fun `onQ1Selected resets stage to null`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onStageSelected(EggStage.UNFERTILIZED)
+
+            vm.onQ1Selected(true)
+            advanceUntilIdle()
+
+            assertEquals(null, vm.state.value.answers[0].stage)
+        }
+
+    @Test
+    fun `onQ2Selected resets stage to null`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onStageSelected(EggStage.UNFERTILIZED)
+
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+
+            assertEquals(null, vm.state.value.answers[0].stage)
         }
 }

@@ -28,6 +28,7 @@ trail for every human decision.
 | `bbox_x/y/w/h` | real, **nullable since** `supabase/migrations/0007_detection_bbox_nullable.sql:10-14` |
 | `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) — `supabase/migrations/0002_verification_fields.sql:30-32` |
 | `expert_class` | nullable — the corrected species, set when the verdict is `WRONG_CLASS` (`0002_verification_fields.sql:38-39`) |
+| `stage` | nullable, CHECK in (`UNFERTILIZED`, `UNEMBRYONATED`, `EMBRYONATED`, `LARVATED`) — optional egg/parasite stage (`supabase/migrations/0010_verification_stage.sql`). Ascaris morphology values `CORTICATED`/`DECORTICATED`/`FERTILIZED` are deliberately excluded for now. |
 
 Index on `verdict` for retraining queries (`0002_verification_fields.sql:47`).
 `verified_by_user` was **dropped** from Postgres by `0002_verification_fields.sql:42-43`.
@@ -43,6 +44,10 @@ PK column is `detection_id`. Two things to know:
   pick the right case for the store they are querying.
 - `verified_by_user` **still exists in Room** (`DetectionEntity.kt:66-67`) even though Postgres
   dropped it, and is not in the insert row.
+
+| Field | Constraint |
+|---|---|
+| `stage` | nullable `TEXT`, added at Room version 10 (`core/database/AgarthaDatabase.kt`). Mirrors the Postgres `stage` column and is mapped via `EggStage.fromValue`/`.value` (`data/local/mapper/DetectionMapper.kt`). |
 
 **Contradiction in the source, unresolved:** the entity's class KDoc says bounding boxes are
 "normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says
@@ -78,7 +83,8 @@ Documented shape: `schema.ts:298-335`.
   (`0002_verification_fields.sql:32`), the enum (`domain/model/DetectionVerdict.kt:13-16`), and
   every raw query string that names a verdict (`data/local/dao/DetectionDao.kt:43`, `:66`,
   `:87`).
-- The CSV, which emits `model_class`, `expert_class`, and `verdict` as separate columns.
+- The CSV, which emits `model_class`, `expert_class`, `verdict`, and now `stage` as separate
+  columns (`domain/usecase/records/ReportCsvBuilder.kt`).
 
 **Does not hit**
 - The overlay geometry. `FrameWithBoxes` renders from the live
