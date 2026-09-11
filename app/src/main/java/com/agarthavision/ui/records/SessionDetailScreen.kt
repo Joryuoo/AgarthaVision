@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,7 +27,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -61,6 +61,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -149,9 +150,7 @@ fun SessionDetailScreen(
     }
 
     if (sessionDetail == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = AgarthaTheme.colors.accent)
-        }
+        SessionDetailSkeleton(onBack = onBack)
         return
     }
 
@@ -240,6 +239,70 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         samplesTotal = sessionData.samples.size,
         verifiedSamples = samples,
     )
+}
+
+@Composable
+private fun SessionDetailSkeleton(onBack: () -> Unit) {
+    val colors = AgarthaTheme.colors
+    Scaffold(
+        topBar = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.background)
+                    .statusBarsPadding()
+                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+            ) {
+                BackArrow(
+                    onBack = onBack,
+                    contentDescription = stringResource(R.string.session_detail_back),
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = Spacing.xs),
+                ) {
+                    SkeletonBox(modifier = Modifier.width(160.dp).height(22.dp))
+                    Spacer(Modifier.height(4.dp))
+                    SkeletonBox(modifier = Modifier.width(200.dp).height(14.dp))
+                }
+            }
+        },
+        containerColor = colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { inner ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner)
+                .padding(horizontal = Spacing.xl)
+                .padding(top = Spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
+        ) {
+            // EPG hero placeholder
+            SkeletonBox(
+                modifier = Modifier.fillMaxWidth().height(150.dp),
+                shape = RoundedCornerShape(12.dp),
+            )
+            // Reports row placeholder
+            SkeletonBox(
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+                shape = RoundedCornerShape(8.dp),
+            )
+            // 3-column grid of 6 sample-tile placeholders (2 rows × 3)
+            repeat(2) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    SkeletonBox(modifier = Modifier.weight(1f).aspectRatio(1f), shape = RoundedCornerShape(8.dp))
+                    SkeletonBox(modifier = Modifier.weight(1f).aspectRatio(1f), shape = RoundedCornerShape(8.dp))
+                    SkeletonBox(modifier = Modifier.weight(1f).aspectRatio(1f), shape = RoundedCornerShape(8.dp))
+                }
+            }
+        }
+    }
 }
 
 @Composable
