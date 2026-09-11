@@ -17,12 +17,14 @@
 -- coordinates, the choropleth is a GROUP BY, not a spatial query. PostGIS earns its place
 -- only if provenance questions like "samples within 5 km" are wanted later.
 --
--- APPLY ORDER. This file is numbered 0010, but 0011_reports_pdf_and_lpf.sql reached
--- staging first and will already have been run. The slot was reserved while this branch
--- was out; the number is kept so the 0010 citations in schema.ts, docs/map/objects/Session.md
--- and docs/map/objects/PsgcBarangay.md stay true. Running it after 0011 is safe — this
--- migration touches only public.sessions and adds one function, while 0011 adds a column to
--- public.reports. There is no dependency in either direction.
+-- APPLY ORDER. This file is numbered 0010, but 0011_reports_pdf_and_lpf.sql reached staging
+-- first, so on any project that tracked staging 0011 is already applied. The slot was
+-- reserved while this branch was out; the number is kept so the 0010 citations in schema.ts,
+-- docs/map/objects/Session.md and docs/map/objects/PsgcBarangay.md stay true. Either order is
+-- safe — this migration touches only public.sessions and adds one function, while 0011 adds a
+-- column to public.reports. There is no dependency in either direction.
+--
+-- Applied to dev on 2026-09-11, together with 0011. Prod has had neither.
 --
 -- Apply via: Supabase dashboard → SQL Editor → paste → Run.
 -- Prerequisites:
