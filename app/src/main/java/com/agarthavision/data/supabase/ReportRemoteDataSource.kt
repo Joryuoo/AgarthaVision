@@ -24,7 +24,7 @@ open class ReportRemoteDataSource @Inject constructor(
     private val gson: Gson,
 ) {
     /**
-     * Inserts the report row matching `0008_reports.sql`.
+     * Inserts the report row matching `0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`.
      *
      * @throws IllegalStateException when no Supabase user session is available.
      */
@@ -52,6 +52,7 @@ open class ReportRemoteDataSource @Inject constructor(
             positiveSpecies = positives,
             epgPerSpecies = epg.toJsonObject(),
             csvFilePath = csvFilePath,
+            pdfFilePath = pdfFilePath,
         )
     }
 
@@ -80,6 +81,8 @@ open class ReportRemoteDataSource @Inject constructor(
         val epgPerSpecies: JsonObject,
         @SerialName("csv_file_path")
         val csvFilePath: String?,
+        @SerialName("pdf_file_path")
+        val pdfFilePath: String?,
     )
 
     private companion object {

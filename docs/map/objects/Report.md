@@ -31,6 +31,7 @@ besides sample images.
 | `positive_species` | `text[]` NOT NULL default `'{}'` |
 | `epg_per_species` | `jsonb` NOT NULL default `'{}'` |
 | `csv_file_path` | nullable text — a **device-local** path, meaningless to any other client |
+| `pdf_file_path` | nullable text — mirrors `csv_file_path`; added by `0011_reports_pdf_and_lpf.sql` |
 | `created_at` | NOT NULL, default `now()` |
 
 Indexes on `(session_id, generated_at desc)` and `(user_id, generated_at desc)` —
@@ -56,28 +57,33 @@ PK column is `report_id`. Differences:
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
-- **Looks like but is not** the CSV file. The file lives in `Documents/AgarthaVision/` under a
-  name built from the session and report ids (`data/repository/DocumentsReportFileStore.kt:31-38`)
-  and is shared from `ui/records/ReportSharing.kt`. `csv_file_path` is a pointer to it that no
-  other device can resolve — and its shape depends on the API level the report was written on: a
-  MediaStore `content://` URI on 29+, an absolute path on 26-28.
+- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/` under a
+  name built from the session and report ids (`data/repository/DocumentsReportFileStore.kt`)
+  and are shared from `ui/records/ReportSharing.kt`. `csv_file_path` / `pdf_file_path` are
+  pointers that no other device can resolve — and their shape depends on the API level the
+  report was written on: a MediaStore `content://` URI on 29+, an absolute path on 26-28.
+  The PDF is the patient-facing artifact and the one the generation snackbar offers to share
+  (`ui/records/SessionDetailViewModel.kt`); the CSV stays a device-local data export.
 
 ## If you change this
 
 **Hits**
-- `GenerateSessionReportUseCase` — it computes every aggregate and writes the file before the
-  row (`domain/usecase/records/GenerateSessionReportUseCase.kt:48-95`).
+- `GenerateSessionReportUseCase` — it computes every aggregate and writes the chosen format's
+  single file before the row (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 - `ReportInsertRow`, or your column never reaches Postgres
-  (`data/supabase/ReportRemoteDataSource.kt:61-83`).
+  (`data/supabase/ReportRemoteDataSource.kt`).
 - The two Gson serialisation points, if you touch either collection column.
 - The Settings pending/failed counts, which read `supabase_status`
   (`data/local/dao/ReportDao.kt:46`, `:53`).
+- `ReportPdfBuilder` / `ReportPdfRenderer`, if you touch anything the PDF renders — the header
+  block, the per-species table, or the units it reports.
 
 **Does not hit**
-- Already-generated CSV files. Files are written once and never rewritten; changing the row
-  leaves stale files on disk under their old names.
+- Already-generated CSV or PDF files. Files are written once and never rewritten; changing the
+  row leaves stale files on disk under their old names.
 - EPG itself. The multiplier lives in `core/util/EpgCalculator.kt:12` and the counting rule in
   `data/local/dao/DetectionDao.kt:33-52`. A report stores the answer; it does not define it.
+  (Pending replacement by LPF density under ticket 86d4a6jxw.)
 - The `administrative` report type. It is named in a comment (`0008_reports.sql:9`) but the
   CHECK rejects it — see the ghost list in `../../features.md`.
 
@@ -94,6 +100,8 @@ offline. Generating a report while signed out fails.
 
 ## See
 
-`supabase/migrations/0008_reports.sql`,
+`supabase/migrations/0008_reports.sql`, `supabase/migrations/0011_reports_pdf_and_lpf.sql`,
 `app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`,
-`domain/usecase/records/GenerateSessionReportUseCase.kt`, `schema.ts:346-384`.
+`domain/usecase/records/GenerateSessionReportUseCase.kt`,
+`domain/usecase/records/ReportPdfBuilder.kt`, `domain/repository/ReportPdfRenderer.kt`,
+`schema.ts:346-384`.

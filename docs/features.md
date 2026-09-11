@@ -80,9 +80,11 @@ as working.
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
 - **EPG** = confirmed egg count × 24 (Kato-Katz multiplier), repeats excluded
-  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`).
+  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`). Pending
+  replacement by LPF (Low Power Field) density under ticket 86d4a6jxw — every report
+  surface below still reports EPG until that lands.
 - **Persisted session reports** in Room and Supabase, multiple per session, newest first.
-  Row-only sync — the CSV file itself stays on the device
+  Row-only sync — the CSV and PDF files themselves stay on the device
   (`domain/usecase/records/GenerateSessionReportUseCase.kt:37-97`,
   `data/supabase/SyncReportUseCase.kt:25-35`).
 - **CSV export** to `Documents/AgarthaVision/` with a comment-prefixed header block, then
@@ -90,6 +92,11 @@ as working.
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
   `ui/records/ReportSharing.kt:30-37`).
+- **PDF export** — the patient-facing artifact. A report is generated in the single format the
+  medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
+  generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,
+  `domain/repository/ReportPdfRenderer.kt`, `data/repository/AndroidReportPdfRenderer.kt`,
+  `ui/records/ReportSharing.kt:shareReportPdf`).
 
 ### Shell and appearance
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session
@@ -128,7 +135,10 @@ as working.
 ## Phase 2 — deferred by decision, not oversight
 
 Self-hosted FastAPI + PostgreSQL + MinIO on owned hardware; a DOH-validated `prep_methods`
-table replacing the hardcoded EPG multiplier; DOH-formatted PDF reports; a durable offline
-sync queue with backoff; a per-account persistent flagged-frame queue; capture moving off the
-phone camera onto dedicated hardware over USB OTG, with the phone becoming a verification and
-reporting client only.
+table replacing the hardcoded EPG multiplier; a durable offline sync queue with backoff; a
+per-account persistent flagged-frame queue; capture moving off the phone camera onto dedicated
+hardware over USB OTG, with the phone becoming a verification and reporting client only.
+
+PDF report export is no longer deferred (ticket 86d4a6jyy) — see "Records and reports" above.
+Its per-species number still reports EPG rather than a DOH-validated density; that swap is
+ticket 86d4a6jxw's separate work.

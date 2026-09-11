@@ -23,10 +23,18 @@ class LocalReportRepository @Inject constructor(
         reportDao.insertReport(report.toEntity(gson))
     }
 
-    override fun observeForSession(sessionId: String, userId: String): Flow<List<Report>> =
-        reportDao.observeReportsForSession(sessionId, userId).map { rows ->
+    override fun observeForSession(
+        sessionId: String,
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<Report>> =
+        reportDao.observeReportsForSession(sessionId, userId, limit, offset).map { rows ->
             rows.map { it.toDomain(gson) }
         }
+
+    override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> =
+        reportDao.observeReportCountForSession(sessionId, userId)
 
     override suspend fun getById(reportId: String): Report? =
         reportDao.getReportById(reportId)?.toDomain(gson)

@@ -12,7 +12,7 @@ import java.io.IOException
 import javax.inject.Inject
 
 /**
- * Writes session report CSVs to `Documents/AgarthaVision/`, keyed by `reportId` so
+ * Writes session report CSVs and PDFs to `Documents/AgarthaVision/`, keyed by `reportId` so
  * multiple reports for the same session don't collide.
  *
  * Two paths, because scoped storage changed how this works:
@@ -30,19 +30,27 @@ class DocumentsReportFileStore @Inject constructor(
 
     override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
         val fileName = "agarthavision-session-${sessionId.sanitize()}-${reportId.sanitize()}.csv"
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            writeViaMediaStore(fileName, csv)
-        } else {
-            writeLegacyFile(fileName, csv)
-        }
+        return writeBytes(fileName, CSV_MIME_TYPE, csv.toByteArray())
     }
 
-    private fun writeViaMediaStore(fileName: String, csv: String): String {
+    override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String {
+        val fileName = "agarthavision-session-${sessionId.sanitize()}-${reportId.sanitize()}.pdf"
+        return writeBytes(fileName, PDF_MIME_TYPE, pdf)
+    }
+
+    private fun writeBytes(fileName: String, mimeType: String, bytes: ByteArray): String =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            writeViaMediaStore(fileName, mimeType, bytes)
+        } else {
+            writeLegacyFile(fileName, bytes)
+        }
+
+    private fun writeViaMediaStore(fileName: String, mimeType: String, bytes: ByteArray): String {
         val resolver = context.contentResolver
         val collection = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(MediaStore.MediaColumns.MIME_TYPE, CSV_MIME_TYPE)
+            put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             put(MediaStore.MediaColumns.RELATIVE_PATH, REPORT_RELATIVE_PATH)
         }
 
@@ -51,7 +59,7 @@ class DocumentsReportFileStore @Inject constructor(
 
         runCatching {
             checkNotNull(resolver.openOutputStream(uri)) { "Could not open $uri for writing" }
-                .use { it.write(csv.toByteArray()) }
+                .use { it.write(bytes) }
         }.onFailure { cause ->
             // Leave no empty placeholder row behind for a write that never landed.
             runCatching { resolver.delete(uri, null, null) }
@@ -61,7 +69,7 @@ class DocumentsReportFileStore @Inject constructor(
         return uri.toString()
     }
 
-    private fun writeLegacyFile(fileName: String, csv: String): String {
+    private fun writeLegacyFile(fileName: String, bytes: ByteArray): String {
         @Suppress("DEPRECATION")
         val documentsDir = Environment
             .getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS)
@@ -71,7 +79,7 @@ class DocumentsReportFileStore @Inject constructor(
             ?: context.filesDir
 
         val file = File(reportDir, fileName)
-        file.writeText(csv)
+        file.writeBytes(bytes)
         return file.absolutePath
     }
 
@@ -80,6 +88,7 @@ class DocumentsReportFileStore @Inject constructor(
     private companion object {
         private const val REPORT_FOLDER_NAME = "AgarthaVision"
         private const val CSV_MIME_TYPE = "text/csv"
+        private const val PDF_MIME_TYPE = "application/pdf"
         private val REPORT_RELATIVE_PATH =
             "${Environment.DIRECTORY_DOCUMENTS}/$REPORT_FOLDER_NAME"
     }

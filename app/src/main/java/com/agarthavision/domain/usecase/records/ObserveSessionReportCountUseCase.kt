@@ -1,6 +1,5 @@
 package com.agarthavision.domain.usecase.records
 
-import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.ReportRepository
 import javax.inject.Inject
@@ -10,19 +9,20 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 
 /**
- * Observes the persisted reports for one session belonging to the current user.
- * Emits an empty list when no user is authenticated.
+ * Observes the total number of persisted reports for one session belonging to the current user,
+ * ignoring any page limit. Emits 0 when no user is authenticated. Lets the session detail screen
+ * show "showing N of total" alongside the paged report list from [ObserveSessionReportsUseCase].
  */
-class ObserveSessionReportsUseCase @Inject constructor(
+class ObserveSessionReportCountUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val reportRepository: ReportRepository,
 ) {
-    operator fun invoke(sessionId: String, limit: Int, offset: Int): Flow<List<Report>> = flow {
+    operator fun invoke(sessionId: String): Flow<Int> = flow {
         val userId = authRepository.getCurrentUserId()
         if (userId == null) {
-            emitAll(flowOf(emptyList()))
+            emitAll(flowOf(0))
             return@flow
         }
-        emitAll(reportRepository.observeForSession(sessionId, userId, limit, offset))
+        emitAll(reportRepository.observeCountForSession(sessionId, userId))
     }
 }

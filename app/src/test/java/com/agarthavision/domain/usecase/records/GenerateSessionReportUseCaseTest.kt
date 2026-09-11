@@ -4,6 +4,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.Sample
@@ -13,7 +14,9 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.repository.ReportFileStore
+import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -22,15 +25,83 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GenerateSessionReportUseCaseTest {
     @Test
-    fun `generates report, writes csv, and persists metadata`() = runTest {
+    fun `generates a csv report, writes only the csv, and persists metadata`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
+        val useCase = standardUseCase(reportRepository, reportFileStore)
+
+        val result = useCase("session-1", ReportFormat.CSV)
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals(report.id, reportFileStore.lastReportId)
+        assertEquals(report.id, reportRepository.lastInserted?.id)
+        assertEquals("session-1", report.sessionId)
+        assertEquals("user-1", report.userId)
+        assertEquals(ReportType.SESSION, report.reportType)
+        assertEquals(1, report.totalSamples)
+        assertEquals(3, report.totalEggsConfirmed)
+        assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
+        assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
+        assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
+        assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
+        // CSV-format report carries no PDF, and the PDF renderer was never invoked.
+        assertNull(report.pdfFilePath)
+        assertNull(reportFileStore.lastPdfReportId)
+        assertEquals(ReportSyncStatus.PENDING, report.supabaseStatus)
+        assertNotNull(report.generatedAt)
+        assertTrue(reportFileStore.lastCsv.contains("# report_id: ${report.id}"))
+    }
+
+    @Test
+    fun `generates a pdf report and writes only the pdf`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val useCase = standardUseCase(reportRepository, reportFileStore)
+
+        val result = useCase("session-1", ReportFormat.PDF)
+
+        assertTrue(result.isSuccess)
+        val report = result.getOrThrow()
+        assertEquals("/Documents/AgarthaVision/report.pdf", report.pdfFilePath)
+        // PDF-format report carries no CSV, and the CSV builder never wrote anything.
+        assertNull(report.csvFilePath)
+        assertEquals("", reportFileStore.lastCsv)
+        assertEquals(report.id, reportFileStore.lastPdfReportId)
+        assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
+    }
+
+    @Test
+    fun `fails when no user is authenticated`() = runTest {
         val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = null),
+            sessionRepository = ReportSessionRepository(session = null),
+            sampleRepository = ReportSampleRepository(samples = emptyList()),
+            detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
+            reportRepository = FakeReportRepository(),
+            reportFileStore = FakeReportFileStore(),
+            reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
+            syncReportUseCase = noOpSyncReportUseCase(),
+        )
+
+        val result = useCase("session-1", ReportFormat.PDF)
+
+        assertTrue(result.isFailure)
+    }
+
+    private fun standardUseCase(
+        reportRepository: FakeReportRepository,
+        reportFileStore: FakeReportFileStore,
+    ): GenerateSessionReportUseCase =
+        GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
@@ -51,46 +122,17 @@ class GenerateSessionReportUseCaseTest {
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
         )
+}
 
-        val result = useCase("session-1")
+/** Non-empty marker bytes so tests can assert the renderer's output actually reached the file store. */
+private val FAKE_PDF_BYTES = byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), 'D'.code.toByte(), 'F'.code.toByte())
 
-        assertTrue(result.isSuccess)
-        val report = result.getOrThrow()
-        assertEquals(report.id, reportFileStore.lastReportId)
-        assertEquals(report.id, reportRepository.lastInserted?.id)
-        assertEquals("session-1", report.sessionId)
-        assertEquals("user-1", report.userId)
-        assertEquals(ReportType.SESSION, report.reportType)
-        assertEquals(1, report.totalSamples)
-        assertEquals(3, report.totalEggsConfirmed)
-        assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
-        assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
-        assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
-        assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
-        assertEquals(ReportSyncStatus.PENDING, report.supabaseStatus)
-        assertNotNull(report.generatedAt)
-        assertTrue(reportFileStore.lastCsv.contains("# report_id: ${report.id}"))
-    }
-
-    @Test
-    fun `fails when no user is authenticated`() = runTest {
-        val useCase = GenerateSessionReportUseCase(
-            authRepository = ReportAuthRepository(userId = null),
-            sessionRepository = ReportSessionRepository(session = null),
-            sampleRepository = ReportSampleRepository(samples = emptyList()),
-            detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
-            reportRepository = FakeReportRepository(),
-            reportFileStore = FakeReportFileStore(),
-            reportCsvBuilder = ReportCsvBuilder(),
-            syncReportUseCase = noOpSyncReportUseCase(),
-        )
-
-        val result = useCase("session-1")
-
-        assertTrue(result.isFailure)
-    }
+private class FakeReportPdfRenderer : ReportPdfRenderer {
+    override suspend fun render(document: ReportPdfDocument): ByteArray = FAKE_PDF_BYTES
 }
 
 private class ReportAuthRepository(private val userId: String?) : AuthRepository {
@@ -163,7 +205,11 @@ private class FakeReportRepository : ReportRepository {
     override fun observeForSession(
         sessionId: String,
         userId: String,
+        limit: Int,
+        offset: Int,
     ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
 
     override suspend fun getById(reportId: String): com.agarthavision.domain.model.Report? = null
 
@@ -180,11 +226,19 @@ private class FakeReportRepository : ReportRepository {
 private class FakeReportFileStore : ReportFileStore {
     var lastReportId: String? = null
     var lastCsv: String = ""
+    var lastPdfReportId: String? = null
+    var lastPdfBytes: ByteArray = ByteArray(0)
 
     override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
         lastReportId = reportId
         lastCsv = csv
         return "/Documents/AgarthaVision/report.csv"
+    }
+
+    override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String {
+        lastPdfReportId = reportId
+        lastPdfBytes = pdf
+        return "/Documents/AgarthaVision/report.pdf"
     }
 }
 
@@ -244,7 +298,10 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override fun observeReportsForSession(
         sessionId: String,
         userId: String,
+        limit: Int,
+        offset: Int,
     ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
+    override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
     override suspend fun getReportsPendingSync(
         userId: String,

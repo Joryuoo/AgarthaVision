@@ -339,6 +339,8 @@ export interface Detection {
  *
  * Supabase migrations:
  * - `0008_reports.sql`: creates `reports`, indexes, and owner/admin RLS.
+ * - `0011_reports_pdf_and_lpf.sql`: adds `pdf_file_path` (this file's change only; any
+ *   LPF columns in that same numbered slot belong to ticket 86d4a6jxw's separate work).
  *
  * Room mirror:
  * - `ReportEntity.kt`
@@ -375,6 +377,10 @@ export interface Report {
 
   csv_file_path: string | null;
   // Nullable local/export path to generated CSV.
+
+  pdf_file_path: string | null;
+  // Nullable local/export path to generated PDF. Added by `0011_reports_pdf_and_lpf.sql`.
+  // Mirrors csv_file_path: device-local, meaningless to any other client.
 
   created_at: TimestampTZ;
   // Supabase NOT NULL. Default `now()`.
