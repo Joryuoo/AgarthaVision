@@ -1,6 +1,6 @@
 # PSGC barangay asset
 
-Generator for `app/src/main/assets/psgc/psgc-barangays-<vintage>.csv.gz`, the bundled
+Generator for `app/src/main/assets/psgc/psgc-barangays-<vintage>.csvgz`, the bundled
 reference dataset behind the session barangay picker.
 
 The output is **committed**. A normal build never runs this, and the app never fetches
@@ -21,6 +21,7 @@ node tools/psgc/build-psgc-asset.mjs
 | Code system | Current **10-digit** PSGC, zero-padded |
 | Barangays | 42,001 |
 | Size | 4.14 MB raw, **340 KB** gzipped |
+| SHA-256 | `18c324248b977da67b7aeba6d0a9ef13deb524bd1071fafcbfd08dd32c06308a` |
 
 Why this vintage rather than the newest PSA release: the boundary GeoJSON the Admin Website
 renders ([`faeldon/philippines-json-maps`](https://github.com/faeldon/philippines-json-maps)
@@ -39,7 +40,7 @@ why the newer 9-digit PSGC lists are not usable here, is in
    `app/src/main/java/com/agarthavision/data/local/psgc/PsgcDataset.kt` to match the new
    filename. The seeder re-seeds when that string changes, so devices pick the new data up
    on next launch without a migration.
-4. Delete the superseded `.csv.gz`, and update the table above plus the object card.
+4. Delete the superseded `.csvgz`, and update the table above plus the object card.
 5. Re-point the Admin Website's boundary GeoJSON at the matching release.
 
 ## Output format
@@ -68,3 +69,19 @@ Gzipped CSV, one header row, RFC 4180 quoting (133 barangay names contain commas
   the code you would get by truncating the barangay code — that yields the sub-municipality.
 - **Unnamed sliver polygons.** Two rows in NCR's first district carry geometry but no name.
   They are dropped; the generator reports the count.
+
+## Verifying the committed asset
+
+Nothing in the build ties `app/src/main/assets/psgc/psgc-barangays-4q2023.csvgz` to the
+script that produced it, and `tools/` carries no lockfile, so a regenerated asset is only
+*probably* byte-identical. The SHA-256 above is what is committed today. Check it before
+trusting a locally rebuilt file:
+
+```powershell
+Get-FileHash app/src/main/assets/psgc/psgc-barangays-4q2023.csvgz -Algorithm SHA256
+```
+
+A different hash is not automatically wrong — a newer Node or zlib can change the gzip
+container without changing a single row — but it does mean the asset is no longer the one
+this repository was reviewed against, and the row assertions in `PsgcSeederTest` are the
+thing to trust over the hash.

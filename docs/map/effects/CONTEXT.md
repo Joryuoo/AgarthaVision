@@ -29,7 +29,7 @@ data.
 
 **The second non-obvious break:** that same wipe takes `psgc_barangays` with it. Reference
 data has to be re-seedable, not just seeded — which is why `PsgcSeeder` gates on the row
-count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt:58-61`). A gate on
+count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt:63-66`). A gate on
 the vintage alone leaves the picker permanently empty after any future version bump.
 
 ## Changing the surveillance map or the barangay picker

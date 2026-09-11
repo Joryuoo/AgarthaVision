@@ -127,7 +127,8 @@ as working.
   (`ui/settings/SettingsViewModel.kt:59-136`).
 
 ### Backend and inference service
-- Eight applied Postgres migrations, `0001`–`0008`, with owner-scoped RLS throughout.
+- Eleven numbered Postgres migrations, `0001`–`0011`, with owner-scoped RLS throughout.
+  `0010_session_psgc_barangay.sql` is the one not yet applied — see its header on apply order.
 - FastAPI container with `GET /health` and `POST /infer`, bearer-token auth, weights baked in
   (`inference/server.py:29`, `:34`, `inference/Dockerfile`).
 
@@ -135,11 +136,11 @@ as working.
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:455-479`, `schema.ts:596-611` | **Not implemented.** No migration through `0008` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
+| `validation_records` table | `schema.ts:461-485`, `schema.ts:603-620` | **Not implemented.** No migration through `0011` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
 | WorkManager sync queue | `app/build.gradle.kts:164` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
 | `administrative` report type | `supabase/migrations/0008_reports.sql:9` | Reserved in a comment; the CHECK allows only `session` (`0008_reports.sql:17`) |
 | `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:268-270`) |
-| `reports.supabase_status` in Postgres | `schema.ts:440-441` | Room-only column |
+| `reports.supabase_status` in Postgres | `schema.ts:446-447` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | The `admin` role and `is_admin()` exist in SQL (`0001_init.sql:13`, `0004_fix_profiles_rls_recursion.sql:4-16`); no admin UI exists in the app |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path. Superseded by the self-hosted container; the response shape is kept compatible only |
 | In-app bounding-box editing | Verification design | Deferred to offline annotation tooling. `BOX_INCORRECT` records the problem; nothing fixes the box in-app |
