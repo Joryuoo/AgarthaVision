@@ -134,8 +134,14 @@ deletable.
 
 Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
 Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
-cut from `staging` as `feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+cut from `staging` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
 `test/…`. PRs target `staging`, never `main`.
+
+**A branch name carries no ClickUp ID.** It describes the work, not the ticket — good:
+`feat/verified-findings-reporting`; bad: `feat/86d4a6jwy-verification-logging`. One branch
+can carry commits for several tickets, so an ID baked into the name is wrong the moment a
+second ticket lands on it, and the ID is already captured per commit by the subject format
+above. Nothing enforces this at push time; it is a review check.
 
 **Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
 above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
