@@ -8,13 +8,14 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -49,8 +50,15 @@ class CaptureViewModelTest {
     private val networkMonitor: NetworkMonitor = mock<NetworkMonitor>().also {
         whenever(it.status).thenReturn(networkStatus)
     }
+    private val captureFieldUseCase: CaptureFieldUseCase = mock()
 
-    private fun viewModel() = CaptureViewModel(sessionManager, flaggedFrameStore, frameSampler, networkMonitor)
+    private fun viewModel() = CaptureViewModel(
+        sessionManager,
+        flaggedFrameStore,
+        frameSampler,
+        networkMonitor,
+        captureFieldUseCase,
+    )
 
     private fun makeActiveState(): SessionState.Active {
         val entity = SessionEntity(
@@ -65,7 +73,6 @@ class CaptureViewModelTest {
         return SessionState.Active(
             session = entity,
             startedAt = Instant.EPOCH,
-            isInferenceRunning = true,
         )
     }
 
@@ -77,7 +84,7 @@ class CaptureViewModelTest {
     )
 
     @Test
-    fun `Disconnected status pauses inference and latches connection-lost banner`() =
+    fun `Disconnected status latches connection-lost banner`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
@@ -87,7 +94,6 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertTrue(vm.state.value.isConnectionLost)
-            verify(sessionManager).pauseInference()
             verify(sessionManager, never()).stopSession()
         }
 
@@ -108,7 +114,7 @@ class CaptureViewModelTest {
         }
 
     @Test
-    fun `onDetectionToastTap pauses inference and sets verificationTarget`() =
+    fun `onDetectionToastTap sets verificationTarget`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
@@ -119,12 +125,11 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertEquals(frame, vm.state.value.verificationTarget)
-            verify(sessionManager).pauseInference()
             verify(sessionManager, never()).stopSession()
         }
 
     @Test
-    fun `resumeConnection on successful probe clears banner and resumes inference`() =
+    fun `resumeConnection on successful probe clears banner`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(networkMonitor.probe()).thenReturn(true)
             val vm = viewModel()
@@ -137,9 +142,8 @@ class CaptureViewModelTest {
             vm.resumeConnection()
             advanceUntilIdle()
 
-            assertFalse(vm.state.value.isConnectionLost)
-            assertFalse(vm.state.value.isProbingConnection)
-            verify(sessionManager).resumeInference()
+            assertEquals(false, vm.state.value.isConnectionLost)
+            assertEquals(false, vm.state.value.isProbingConnection)
             verify(sessionManager, never()).stopSession()
         }
 
@@ -157,13 +161,11 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertTrue(vm.state.value.isConnectionLost)
-            assertFalse(vm.state.value.isProbingConnection)
-            // pauseInference was called on disconnect; resumeInference must NOT fire on failed probe.
-            verify(sessionManager, never()).resumeInference()
+            assertEquals(false, vm.state.value.isProbingConnection)
         }
 
     @Test
-    fun `onVerificationDismissed clears verificationTarget and resumes inference`() =
+    fun `onVerificationDismissed clears verificationTarget`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.onDetectionToastTap(makeFrame())
@@ -174,7 +176,51 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertNull(vm.state.value.verificationTarget)
-            verify(sessionManager).resumeInference()
         }
 
+    @Test
+    fun `onCapture with no active session sets an error and does not call the use case`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            latestFrameBytes.value = ByteArray(4)
+
+            vm.onCapture()
+            advanceUntilIdle()
+
+            assertNotNull(vm.state.value.errorMessage)
+            verify(captureFieldUseCase, never()).invoke(org.mockito.kotlin.any(), org.mockito.kotlin.any())
+        }
+
+    @Test
+    fun `onCapture with no cached frame sets an error and does not call the use case`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            advanceUntilIdle()
+
+            vm.onCapture()
+            advanceUntilIdle()
+
+            assertNotNull(vm.state.value.errorMessage)
+            verify(captureFieldUseCase, never()).invoke(org.mockito.kotlin.any(), org.mockito.kotlin.any())
+        }
+
+    @Test
+    fun `onCapture snapshots the cached frame and routes it through the use case`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = ByteArray(4)
+            latestFrameBytes.value = bytes
+            whenever(captureFieldUseCase.invoke("session-1", bytes))
+                .thenReturn(Result.success(FrameSource.MODEL))
+            advanceUntilIdle()
+
+            vm.onCapture()
+            advanceUntilIdle()
+
+            verify(captureFieldUseCase).invoke("session-1", bytes)
+            assertNull(vm.state.value.errorMessage)
+            assertEquals(false, vm.state.value.isBusy)
+        }
 }

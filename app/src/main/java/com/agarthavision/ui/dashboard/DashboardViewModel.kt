@@ -62,7 +62,6 @@ data class DashboardUiState(
 data class ActiveSessionState(
     val label: String,
     val startedAtAgo: String,
-    val isRecording: Boolean,
     val totalFrames: String,
     val verifiedFrames: String,
     val totalEpg: String,
@@ -220,7 +219,6 @@ class DashboardViewModel @Inject constructor(
                         ActiveSessionState(
                             label = state.session.label ?: "Active Session",
                             startedAtAgo = "Started $minutes min ago",
-                            isRecording = state.isInferenceRunning,
                             totalFrames = totalFrames.toString(),
                             verifiedFrames = verifiedFrames.toString(),
                             totalEpg = totalEpg.toString(), // Mocked
