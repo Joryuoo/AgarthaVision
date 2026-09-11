@@ -291,6 +291,8 @@ export interface Sample {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0007_detection_bbox_nullable.sql`: makes `bbox_x`, `bbox_y`, `bbox_w`,
  *   and `bbox_h` nullable for manual detections.
+ * - `0010_verification_stage.sql`: adds optional `stage` (this file's change only;
+ *   sibling tickets 86d4ab4tq and 86d4akgmf append their own columns to the same file).
  *
  * Room mirror:
  * - `DetectionEntity.kt`
@@ -332,6 +334,12 @@ export interface Detection {
 
   verified_by_user: boolean;
   // Room-only after migration `0002` dropped the Supabase column.
+
+  stage: string | null;
+  // Nullable after migration `0010_verification_stage.sql`. Optional egg/parasite
+  // stage; CHECK constrains values to 'UNFERTILIZED' | 'UNEMBRYONATED' |
+  // 'EMBRYONATED' | 'LARVATED'. The Ascaris morphology values 'CORTICATED',
+  // 'DECORTICATED', and 'FERTILIZED' are deliberately excluded for now.
 }
 
 /**

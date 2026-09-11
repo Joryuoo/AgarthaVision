@@ -13,4 +13,5 @@ data class Detection(
     val verdict: DetectionVerdict,
     val expertClass: String?,
     val verifiedByUser: Boolean,
+    val stage: EggStage? = null,
 )

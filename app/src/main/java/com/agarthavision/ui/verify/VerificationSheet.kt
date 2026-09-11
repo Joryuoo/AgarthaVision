@@ -98,6 +98,7 @@ fun VerificationSheet(
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
+                onStageSelected = viewModel::onStageSelected,
                 onQ4Selected = viewModel::onQ4Selected,
                 onDetectionPrev = viewModel::onDetectionPrev,
                 onDetectionNext = viewModel::onDetectionNext,
@@ -289,10 +290,13 @@ internal fun VerificationSheetContent(
                         otherText = currentAnswers.otherSpeciesText,
                         onSpeciesSelected = actions.onSpeciesSelected,
                         onOtherTextChanged = actions.onOtherSpeciesChanged,
+                        selectedStage = currentAnswers.stage,
+                        onStageSelected = actions.onStageSelected,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag(VerifyTestTags.SPECIES_DROPDOWN)
                             .padding(bottom = 14.dp),
+                        stageModifier = Modifier.testTag(VerifyTestTags.STAGE_DROPDOWN),
                     )
                 }
             }

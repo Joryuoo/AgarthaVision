@@ -66,6 +66,10 @@ as working.
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
+- **Optional stage dropdown** — once a species with a defined stage set is picked, a second
+  searchable dropdown offers that species' valid egg/parasite stages; stored on
+  `detections.stage` (`domain/model/EggStage.kt`, `ui/verify/SpeciesDropdown.kt`,
+  `data/local/entity/DetectionEntity.kt`).
 
 ### Sync
 - **Verify-time sync**: resize the JPEG to 640×640 at quality 80, upload to Storage, insert
@@ -95,7 +99,8 @@ as working.
   shared from the generation snackbar or a report row
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
-  `ui/records/ReportSharing.kt:30-37`).
+  `ui/records/ReportSharing.kt:30-37`). The row also emits a `stage` column
+  (`domain/usecase/records/ReportCsvBuilder.kt`).
 - **PDF export** — the patient-facing artifact. A report is generated in the single format the
   medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
   generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,

@@ -21,9 +21,11 @@ The human-in-the-loop gate. Nothing counts until this runs.
    host picks a sheet from the frame it opened with and never re-evaluates, so crossing
    between the two would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
-   which species (`domain/usecase/verify/VerificationAnswers.kt:5-20`). A "no" at any step
-   short-circuits the rest — `isComplete` encodes exactly which questions still matter
-   (`VerificationAnswers.kt:11-20`).
+   which species, and — optionally, once a species with a defined stage set is picked — which
+   egg/parasite stage (`domain/usecase/verify/VerificationAnswers.kt`,
+   `domain/model/EggStage.kt`). A "no" at any step short-circuits the rest — `isComplete`
+   encodes exactly which questions still matter, and deliberately does not gate on stage since
+   it is optional (`VerificationAnswers.kt`).
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
    `needs_reannotation` (`ui/verify/VerificationViewModel.kt:217`).
 4. **Compute the verdict.** One function, first-match-wins:
@@ -44,7 +46,9 @@ The human-in-the-loop gate. Nothing counts until this runs.
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:46-49`). The model's label is
    canonicalised into `class_label`, and the expert's correction goes to `expert_class`
    (`data/local/mapper/VerificationMapper.kt:24-39`). **Both halves persist** — a rejection is a
-   row, never a deletion (`../../constraints.md` C8).
+   row, never a deletion (`../../constraints.md` C8). The optional stage answer, when set,
+   carries through to `detections.stage` (`data/local/mapper/VerificationMapper.kt`,
+   `supabase/migrations/0010_verification_stage.sql`).
 8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline — see [`sync`](sync.md)
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`).
 

@@ -20,6 +20,8 @@ import com.agarthavision.data.local.entity.SessionEntity
  * Version 7 adds persisted reports. Version 8 (offline access, ADR-007) adds
  * `sessions.supabase_status` + `sessions.claim_exempt` and relaxes `samples.user_id`
  * to nullable. Version 9 adds `reports.pdf_file_path` (`0011_reports_pdf_and_lpf.sql`).
+ * Version 10 adds the optional `detections.stage` column for egg/parasite stage
+ * classification (`0010_verification_stage.sql`).
  * No hand-written `Migration` is supplied: per [DatabaseModule] the app
  * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
  * these entities. Acceptable in Phase 1 (no production data). Local schema history is
@@ -32,7 +34,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         DetectionEntity::class,
         ReportEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
