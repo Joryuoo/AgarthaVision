@@ -8,6 +8,7 @@ import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
+import com.agarthavision.core.util.sanitizeDateRange
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -166,8 +167,10 @@ class SessionsViewModel @Inject constructor(
      * Applies an inclusive session-start date range. Resets pagination.
      */
     fun onDateRangeSelected(start: LocalDate?, end: LocalDate?) {
-        startDate.value = start
-        endDate.value = end
+        // Sessions cannot have started in the future; clamp before the range hits SQL.
+        val (safeStart, safeEnd) = sanitizeDateRange(start, end)
+        startDate.value = safeStart
+        endDate.value = safeEnd
         limit.value = INITIAL_PAGE
     }
 

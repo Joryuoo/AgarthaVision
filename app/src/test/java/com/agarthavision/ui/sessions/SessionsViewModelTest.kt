@@ -200,6 +200,36 @@ class SessionsViewModelTest {
             }
         }
 
+    @Test
+    fun `onDateRangeSelected clamps a future range to today before querying`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val today = LocalDate.now()
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                advanceUntilIdle()
+                val baseCount = recording.capturedArgs.size
+
+                vm.onDateRangeSelected(today.plusDays(1), today.plusDays(30))
+                advanceUntilIdle()
+
+                val settled = expectMostRecentItem()
+                assertEquals("future start must clamp to today", today, settled.startDate)
+                assertEquals("future end must clamp to today", today, settled.endDate)
+
+                val zone = ZoneId.systemDefault()
+                val last = recording.capturedArgs.drop(baseCount).last()
+                assertEquals(today.atStartOfDay(zone).toInstant().toEpochMilli(), last.startMillis)
+                assertEquals(
+                    today.plusDays(1).atStartOfDay(zone).toInstant().minusMillis(1).toEpochMilli(),
+                    last.endMillis,
+                )
+
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
     // ---------------------------------------------------------------------------
     // onSearchQueryChanged: state.searchQuery is synchronous, limit resets, debounce
     // ---------------------------------------------------------------------------

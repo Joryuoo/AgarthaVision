@@ -230,6 +230,25 @@ class RecordsViewModelTest {
         }
 
     @Test
+    fun `onDateRangeSelected clamps a future range to today`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val today = LocalDate.now()
+            val vm = viewModelWith(userId = "u1", rowsByLimit = { emptyList() })
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onDateRangeSelected(today.plusDays(1), today.plusDays(30))
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals("future start must clamp to today", today, settled.startDate)
+                assertEquals("future end must clamp to today", today, settled.endDate)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun `onSearchChanged resets limit to PAGE_SIZE`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val rows = (1..(PAGE_SIZE + 10)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }

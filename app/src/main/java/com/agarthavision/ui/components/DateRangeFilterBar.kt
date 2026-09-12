@@ -15,6 +15,7 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -163,6 +164,7 @@ private fun SingleDatePickerDialog(
 ) {
     val pickerState = rememberDatePickerState(
         initialSelectedDateMillis = initialDate?.toUtcMillis(),
+        selectableDates = remember { PastOrTodayDates(LocalDate.now()) },
     )
     // Material3 defaults dialogs to shapes.extraLarge, which is this app's
     // 999.dp pill token - the picker renders as an ellipse without this.
@@ -185,6 +187,17 @@ private fun SingleDatePickerDialog(
     ) {
         DatePicker(state = pickerState)
     }
+}
+
+/**
+ * Greys out every day after [today] in the calendar grid so a future date cannot be
+ * picked at all. The ViewModels clamp as well, so this is belt-and-braces.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+private class PastOrTodayDates(private val today: LocalDate) : SelectableDates {
+    private val todayUtcMillis = today.toUtcMillis()
+    override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis <= todayUtcMillis
+    override fun isSelectableYear(year: Int): Boolean = year <= today.year
 }
 
 private val ChipDateFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMM")
