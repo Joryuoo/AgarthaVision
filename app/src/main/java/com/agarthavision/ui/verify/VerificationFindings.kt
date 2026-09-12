@@ -25,9 +25,109 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.toFindingRows
 import com.agarthavision.ui.theme.AgarthaTheme
+
+/**
+ * What the model said about this frame, or a plain statement that it said nothing.
+ *
+ * **Never silently hidden.** The three states below mean different things to a reviewer and to
+ * the training corpus, and the last two are deliberately not collapsed into one "no model
+ * output" line: "no signal was ever collected" and "the model looked and asserted nothing was
+ * there" are different facts, and the second is itself a labelled datapoint.
+ *
+ * Derived from [FlaggedFrame.source] and the prediction list on every recomposition. There is
+ * deliberately no `hasModelOutput` flag stored beside the source — that would be a second
+ * source of truth for the same fact, and it would drift.
+ */
+@Composable
+internal fun ModelOutputPanel(
+    frame: FlaggedFrame,
+    modifier: Modifier = Modifier,
+) {
+    val message = when {
+        frame.source == FrameSource.MANUAL -> stringResource(R.string.verify_model_none_manual)
+        frame.predictions.isEmpty() ->
+            stringResource(
+                R.string.verify_model_clean_field,
+                frame.inferenceModelVersion.orEmpty(),
+            )
+        else -> return
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(VerifyTestTags.MODEL_OUTPUT_PANEL)
+            .padding(bottom = 14.dp),
+    ) {
+        SectionLabel(stringResource(R.string.verify_model_output))
+        Text(
+            text = message,
+            color = AgarthaTheme.colors.textSecondary,
+            fontSize = 13.sp,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(12.dp))
+                .padding(12.dp),
+        )
+    }
+}
+
+/**
+ * The question chain for one row: is it an egg, is the box right, and what is it.
+ *
+ * The first two are questions *about a box*. A row with no [prediction] — a manual capture, or
+ * a species the medtech added — has none, so they do not render and are never answered on the
+ * medtech's behalf. Such a row goes straight to the species picker.
+ */
+@Composable
+internal fun BoxReview(
+    prediction: Prediction?,
+    answers: VerificationAnswers?,
+    actions: VerificationSheetActions,
+) {
+    if (prediction != null) {
+        QuestionSection(
+            title = stringResource(R.string.verify_q1),
+            tag = VerifyTestTags.QUESTION_Q1,
+            options = listOf(true to "Yes", false to "No"),
+            selected = answers?.isEgg,
+            onSelect = actions.onQ1Selected,
+        )
+        if (answers?.isEgg != true) return
+        QuestionSection(
+            title = stringResource(R.string.verify_q2),
+            tag = VerifyTestTags.QUESTION_Q2,
+            options = listOf(true to "Yes", false to "No"),
+            selected = answers.isBoxCorrect,
+            onSelect = actions.onQ2Selected,
+        )
+        // Shown whether or not the box is correctly placed. A misplaced box still contains a
+        // countable egg, and stopping here dropped it from the low-power-field count. The
+        // verdict for the box still records BOX_INCORRECT.
+        if (answers.isBoxCorrect == null) return
+    }
+
+    SpeciesDropdown(
+        selected = answers?.species,
+        otherText = answers?.otherSpeciesText.orEmpty(),
+        onSpeciesSelected = actions.onSpeciesSelected,
+        onOtherTextChanged = actions.onOtherSpeciesChanged,
+        selectedStage = answers?.stage,
+        onStageSelected = actions.onStageSelected,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
+            .padding(bottom = 14.dp),
+        stageModifier = Modifier.testTag(VerifyTestTags.STAGE_DROPDOWN),
+    )
+}
 
 /**
  * The species the medtech added on top of whatever the model boxed.

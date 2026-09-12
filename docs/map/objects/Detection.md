@@ -112,9 +112,9 @@ Documented shape: `schema.ts:298-335`.
 
 ## Surfaces
 
-Written only at verification: `SubmitVerificationUseCase.kt:46-49` for AI frames,
-`SubmitManualCaptureUseCase.kt:58-72` for manual ones (one row, `confidence = 1.0f`, all four
-box columns null). Read by Sample Detail, the EPG aggregate, the Dashboard trend queries, and
+Written only at verification, by `SubmitVerificationUseCase` — one path for both sources since
+86d4ab4tq. A finding with no prediction (a manual capture, or a species the medtech added to an
+AI frame) becomes one row with `confidence = 1.0f` and all four box columns null. Read by Sample Detail, the EPG aggregate, the Dashboard trend queries, and
 the CSV builder. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
 
 ## See

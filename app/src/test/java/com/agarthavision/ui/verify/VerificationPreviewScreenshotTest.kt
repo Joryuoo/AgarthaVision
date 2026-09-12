@@ -9,6 +9,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -21,13 +24,18 @@ import java.io.ByteArrayOutputStream
 import java.time.Instant
 
 /**
- * Screenshot coverage for the manual capture preview.
+ * Screenshot coverage for the frame preview on the verification screen.
  *
  * This exists for one defect the semantics-based suites structurally cannot catch: the
  * preview once used `ContentScale.Crop`, which overflowed a square frame in a landscape
  * container and let the parent clip cut the top and bottom off, so a medtech was labelling
- * a specimen they could only partly see (`ManualSheet.kt`). Scale changes no semantics
- * node, so only a pixel comparison can guard it.
+ * a specimen they could only partly see. Scale changes no semantics node, so only a pixel
+ * comparison can guard it.
+ *
+ * It now points at [VerificationSheetContent] with a manual frame — the state `ManualSheet`
+ * used to render before the two screens merged. `FrameWithBoxes.kt:37` is `ContentScale.Fit`
+ * on the surviving path, so the defect is structurally fixed; the pixel guard stays because
+ * `Fit` is exactly the kind of one-word change no semantics assertion can catch.
  *
  * Only the preview node is captured, not the whole sheet. The sheet's type is Inter loaded
  * through a Google Fonts provider that does not resolve under Robolectric, so a full-sheet
@@ -43,7 +51,7 @@ import java.time.Instant
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
-class ManualSheetPreviewScreenshotTest {
+class VerificationPreviewScreenshotTest {
 
     @get:Rule
     val composeRule = createComposeRule()
@@ -77,29 +85,47 @@ class ManualSheetPreviewScreenshotTest {
         capturedAt = Instant.EPOCH,
         jpegBytes = squareFrameJpeg(),
         predictions = emptyList(),
+        source = FrameSource.MANUAL,
     )
 
-    private fun noopActions() = ManualSheetActions(
+    private fun noopActions() = VerificationSheetActions(
+        onQ1Selected = {},
+        onQ2Selected = {},
         onSpeciesSelected = {},
         onOtherSpeciesChanged = {},
-        onUserNoteChanged = {},
+        onStageSelected = {},
+        onQ4Selected = {},
+        onDetectionPrev = {},
+        onDetectionNext = {},
         onFramePrev = {},
         onFrameNext = {},
         onDeleteFrame = {},
+        onToggleBoundingBoxes = {},
         onSubmit = {},
         onCancel = {},
+        onToggleRepeat = {},
+        onUserNoteChanged = {},
+        onAddFinding = {},
+        onRemoveFinding = {},
+        onEggCountChanged = { _, _ -> },
+        onAddedSpeciesSelected = { _, _ -> },
+        onAddedOtherSpeciesChanged = { _, _ -> },
+        onAddedStageSelected = { _, _ -> },
     )
 
     @Test
-    fun `the manual capture preview shows the whole frame`() {
+    fun `the frame preview shows the whole frame`() {
+        val frame = frame()
         composeRule.setContent {
             AgarthaVisionTheme {
-                ManualSheetContent(
-                    state = ManualCaptureUiState(
-                        frame = frame(),
+                VerificationSheetContent(
+                    state = VerificationUiState(
+                        frame = frame,
                         frameIndexInQueue = 1,
                         queueSize = 1,
-                        selectedSpecies = EggSpecies.ASCARIS,
+                        findings = listOf(
+                            Finding(answers = VerificationAnswers(species = EggSpecies.ASCARIS)),
+                        ),
                     ),
                     actions = noopActions(),
                 )
@@ -108,6 +134,6 @@ class ManualSheetPreviewScreenshotTest {
 
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW)
             .performScrollTo()
-            .captureRoboImage("src/test/roborazzi/manual_capture_preview.png")
+            .captureRoboImage("src/test/roborazzi/verification_preview_manual.png")
     }
 }

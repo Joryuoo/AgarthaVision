@@ -43,7 +43,7 @@ import java.time.Instant
  * picker only once Q2 is also yes, and submit unlocks only when every detection is complete.
  * That branching is what makes the sheet easy to break from a small edit.
  *
- * Two gaps are deliberate, both matching [ManualSheetContentTest]:
+ * Two gaps are deliberate:
  * - **How it looks.** Scale, colour, and placement produce no semantics difference.
  * - **Inside the species dropdown.** Opening [SpeciesDropdown] raises a menu window holding
  *   a text field, the shape that never reaches idle under Robolectric. The tests assert

@@ -9,17 +9,17 @@ The human-in-the-loop gate. Nothing counts until this runs.
 **consumes** [`Sample`](../objects/Sample.md) (status `flagged`)
 **produces** [`Detection`](../objects/Detection.md), [`Sample`](../objects/Sample.md) (status `verified`)
 
-## Movement — AI frames
+## Movement
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). Each sheet pages only through
-   its own source: the AI sheet cycles `FrameSource.MODEL` frames **that are not marked
-   repeat**, the manual sheet cycles `FrameSource.MANUAL`, and `Frame n/N` counts that subset
-   rather than the whole queue. Marking the open frame repeat drops it from the cycle: it stays
-   on screen so the mark can be undone, but reports no position and both frame buttons dim. The
-   host picks a sheet from the frame it opened with and never re-evaluates, so crossing
-   between the two would render the wrong questions.
+   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). **One screen handles both
+   sources**, so the cycle is the whole queue and `Frame n/N` counts all of it. Frames marked
+   repeat are the one exclusion: marking the open frame repeat drops it from the cycle, and it
+   stays on screen so the mark can be undone but reports no position and both frame buttons
+   dim. Until 86d4ab4tq there were two sheets asking different questions, and the host picked
+   one from the frame it opened with and never re-evaluated — so each sheet had to page only
+   through its own source or it would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
    which species, and — optionally, once a species with a defined stage set is picked — which
    egg/parasite stage (`domain/usecase/verify/VerificationAnswers.kt`,
@@ -52,16 +52,22 @@ The human-in-the-loop gate. Nothing counts until this runs.
 8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline — see [`sync`](sync.md)
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`).
 
-## Movement — manual captures
+## Manual captures take the same path
 
-Same destination, shorter path, and since this pass the manual sheet pages its queue the same
-way the AI sheet does. `SubmitManualCaptureUseCase` requires a species, resolves the
-label (canonical name, or free text for `OTHER`), and writes **one** detection with
-`confidence = 1.0f`, all four box columns null, `verdict = CONFIRMED`, and `expert_class` set to
-the same label (`domain/usecase/verify/SubmitManualCaptureUseCase.kt:34-72`). It sets
-`needs_reannotation = true` unconditionally
-(`domain/usecase/verify/SubmitManualCaptureUseCase.kt:50`), so every manual capture is queued
-for offline annotation.
+There is no second use case and no second screen. A manual capture is a frame with no model
+output, so it opens with exactly one finding whose `prediction` is null: the isEgg and
+isBoxCorrect questions do not render, and the medtech names a species and a count directly.
+`Finding.toDetectionEntity` writes that as **one** detection with `confidence = 1.0f`, all four
+box columns null and `verdict = CONFIRMED` — the same row `SubmitManualCaptureUseCase` used to
+write before it was absorbed (`data/local/mapper/VerificationMapper.kt`).
+
+**One behaviour did change in the merge.** The old manual path set `needs_reannotation = true`
+unconditionally, so every manual capture was queued for offline annotation whether or not the
+medtech thought anything was missing. On the shared path it follows the missed-egg answer like
+any other frame. The question is asked on a manual capture — it is not gated on having a box —
+so the flag now records what the medtech actually said rather than an assumption made on their
+behalf. Fewer frames land in the annotation queue, and the ones that do are there for a
+reason.
 
 ## Hits
 

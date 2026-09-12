@@ -19,10 +19,11 @@ complexity, naming, and magic numbers — there is no import-boundary rule in it
 (`detekt.yml:1-49`).
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
-`retrofit2`, or `io.github.jan.*`. The spirit is bent in four ViewModels that inject the
+`retrofit2`, or `io.github.jan.*`. The spirit is bent in three ViewModels that inject the
 data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:9`,
-`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`,
-`ui/verify/ManualCaptureViewModel.kt:5`). The composable that once rendered a wire DTO no
+`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`). It was
+four until `ManualCaptureViewModel` was deleted by the one-verification-screen merge
+(86d4ab4tq). The composable that once rendered a wire DTO no
 longer does — `FrameWithBoxes` takes domain `Prediction` values
 (`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
 

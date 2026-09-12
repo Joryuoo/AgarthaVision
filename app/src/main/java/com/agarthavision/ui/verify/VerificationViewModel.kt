@@ -129,7 +129,7 @@ class VerificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
-                val cycle = frames.aiFrames()
+                val cycle = frames.cycle()
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
@@ -142,20 +142,20 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * The frames this sheet cycles through: model detections that still need review.
+     * The frames this sheet cycles through.
      *
-     * Manual captures are reviewed in [ManualSheet], which asks a different set of
-     * questions, so paging onto one from here would render the wrong sheet — the host
-     * picks the sheet from the frame it was opened with and never re-evaluates.
+     * Every frame in the queue, both sources. There used to be two sheets asking different
+     * questions, so paging onto a manual capture from here would have rendered the wrong one —
+     * the host picked a sheet from the frame it was opened with and never re-evaluated. There
+     * is one screen now, so there is nothing to page wrongly onto.
      *
-     * Frames marked repeat are excluded too: they are duplicates the medtech has already
+     * Frames marked repeat are still excluded: they are duplicates the medtech has already
      * accounted for, and paging onto one invites verifying it by accident.
      */
-    private fun List<FlaggedFrame>.aiFrames(): List<FlaggedFrame> =
-        filter { it.source == FrameSource.MODEL && !it.markedAsRepeat }
+    private fun List<FlaggedFrame>.cycle(): List<FlaggedFrame> = filter { !it.markedAsRepeat }
 
-    /** The AI frames currently in the store, in queue order. */
-    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.aiFrames()
+    /** The frames currently in the store, in queue order. */
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.cycle()
 
     /**
      * 1-based position of [frame] within [frames], or [OUT_OF_CYCLE] when the frame is
@@ -187,7 +187,7 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = frame.predictions.map { it.toPreFilledFinding() },
+                findings = frame.initialFindings(),
                 missedEgg = null,
                 isSubmitting = false,
                 errorMessage = null,
@@ -274,6 +274,21 @@ class VerificationViewModel @Inject constructor(
 
     fun onStageSelected(stage: EggStage) {
         updateCurrentAnswer { it.copy(stage = stage) }
+    }
+
+    /**
+     * What the screen opens with, for each of the three shapes a frame can take.
+     *
+     * A manual capture gets exactly one finding with no prediction: there is no box, so the
+     * isEgg and isBoxCorrect questions never render, and the medtech names a species and a
+     * count directly. An AI frame with boxes gets one pre-filled finding per box. An AI frame
+     * with none gets an empty list — a clean field, which is a real result and is submittable
+     * on the missed-egg answer alone.
+     */
+    private fun FlaggedFrame.initialFindings(): List<Finding> = when {
+        predictions.isNotEmpty() -> predictions.map { it.toPreFilledFinding() }
+        source == FrameSource.MANUAL -> listOf(Finding())
+        else -> emptyList()
     }
 
     /**

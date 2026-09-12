@@ -82,7 +82,7 @@ fun ScreenTopBar(
 
 /**
  * Snapshot [SheetActionRow] renders from — bundled since this primary/secondary action pair
- * always travels together at both its call sites ([VerificationSheet], [ManualSheet]).
+ * always travels together wherever it is used.
  */
 data class SheetActionRowState(
     val primaryLabel: String,

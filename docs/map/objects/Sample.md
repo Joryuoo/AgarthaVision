@@ -118,7 +118,7 @@ columns. They are not — the migration creates `captured_at`, `gps_latitude`, `
 ## Surfaces
 
 Written by `PersistFlaggedFrameUseCase` (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:38-60`),
-updated by `SubmitVerificationUseCase` / `SubmitManualCaptureUseCase`, and by
+updated by `SubmitVerificationUseCase`, and by
 `SyncSampleUseCase` on upload. Read by the verification queue, Records, Session Detail, Sample
 Detail, the EPG aggregate, and the CSV builder.
 

@@ -73,6 +73,9 @@ internal object VerifyTestTags {
     /** AI-suggested vs Manual provenance pill. */
     const val SOURCE_BADGE = "source_badge"
 
+    /** The model-output panel. Present for every frame; its text differs by source. */
+    const val MODEL_OUTPUT_PANEL = "model_output_panel"
+
     /** "Add species" button beneath the added-findings list. */
     const val ADD_SPECIES = "add_species"
 

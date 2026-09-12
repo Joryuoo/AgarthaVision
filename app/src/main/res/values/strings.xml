@@ -56,6 +56,13 @@
     <string name="verify_egg_count_label">Eggs in this field</string>
     <string name="verify_egg_count_addendum">In addition to the %1$d the model boxed</string>
     <string name="verify_will_be_saved">WILL BE SAVED</string>
+    <string name="verify_model_output">MODEL OUTPUT</string>
+    <!--
+      Kept distinct on purpose: "no signal was collected" and "the model looked and found
+      nothing" are different facts, and the second is itself a labelled datapoint.
+    -->
+    <string name="verify_model_none_manual">No model output — captured manually.</string>
+    <string name="verify_model_clean_field">Model output: 0 detections (%1$s).</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>

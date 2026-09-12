@@ -63,7 +63,7 @@ data class SampleEntity(
     val status: String,
 
     /**
-     * Free-form medtech notes captured in the VerificationSheet / ManualSheet
+     * Free-form medtech notes captured in the verification sheet's
      * input row. The Supabase `samples.user_note` column has existed since
      * `0001_init.sql` but was never wired client-side; per ADR-005 Sprint 2
      * lights it up. No Supabase migration needed.

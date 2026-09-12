@@ -274,42 +274,13 @@ internal fun VerificationSheetContent(
                 )
             }
 
-            QuestionSection(
-                title = stringResource(R.string.verify_q1),
-                tag = VerifyTestTags.QUESTION_Q1,
-                options = listOf(true to "Yes", false to "No"),
-                selected = currentAnswers?.isEgg,
-                onSelect = actions.onQ1Selected,
+            ModelOutputPanel(frame = frame)
+
+            BoxReview(
+                prediction = currentPrediction,
+                answers = currentAnswers,
+                actions = actions,
             )
-
-            if (currentAnswers?.isEgg == true) {
-                QuestionSection(
-                    title = stringResource(R.string.verify_q2),
-                    tag = VerifyTestTags.QUESTION_Q2,
-                    options = listOf(true to "Yes", false to "No"),
-                    selected = currentAnswers.isBoxCorrect,
-                    onSelect = actions.onQ2Selected,
-                )
-
-                // Asked whether or not the box is correctly placed. A misplaced box still
-                // contains a countable egg, and short-circuiting here dropped it from the
-                // low-power-field count. The verdict still records BOX_INCORRECT.
-                if (currentAnswers.isBoxCorrect != null) {
-                    SpeciesDropdown(
-                        selected = currentAnswers.species,
-                        otherText = currentAnswers.otherSpeciesText,
-                        onSpeciesSelected = actions.onSpeciesSelected,
-                        onOtherTextChanged = actions.onOtherSpeciesChanged,
-                        selectedStage = currentAnswers.stage,
-                        onStageSelected = actions.onStageSelected,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
-                            .padding(bottom = 14.dp),
-                        stageModifier = Modifier.testTag(VerifyTestTags.STAGE_DROPDOWN),
-                    )
-                }
-            }
 
             AddedFindings(
                 findings = state.findings,
@@ -340,9 +311,13 @@ internal fun VerificationSheetContent(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
+                // Nothing to toggle without model output. FrameWithBoxes already paints
+                // nothing on an empty prediction list, so this is about not offering a
+                // control that does nothing rather than about the drawing.
                 Switch(
                     modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
-                    checked = state.showBoundingBoxes,
+                    enabled = frame.predictions.isNotEmpty(),
+                    checked = state.showBoundingBoxes && frame.predictions.isNotEmpty(),
                     onCheckedChange = { actions.onToggleBoundingBoxes() },
                     thumbContent = if (state.showBoundingBoxes) {
                         {
@@ -445,7 +420,7 @@ private fun SourceBadge(source: FrameSource) {
 }
 
 @Composable
-private fun <T> QuestionSection(
+internal fun <T> QuestionSection(
     title: String,
     tag: String,
     options: List<Pair<T, String>>,

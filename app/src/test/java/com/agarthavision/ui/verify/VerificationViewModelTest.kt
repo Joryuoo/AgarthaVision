@@ -404,11 +404,12 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `frame cycling skips manual frames`() =
+    fun `frame cycling pages onto manual frames too`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Manual captures belong to ManualSheet. The host picks a sheet from the frame
-            // it opened with and never re-evaluates, so paging onto a manual frame here
-            // would keep rendering the AI sheet against a frame with no detections.
+            // This used to skip them, because manual captures had their own sheet and the host
+            // picked a sheet from the frame it opened with and never re-evaluated - so paging
+            // onto one rendered the wrong screen. There is one screen now, so the cycle is the
+            // whole queue and a manual frame is simply a frame with no model output.
             val ai1 = makeIdentifiedFrame("ai-1")
             val manual = makeManualFrame("manual-1")
             val ai2 = makeIdentifiedFrame("ai-2")
@@ -417,20 +418,33 @@ class VerificationViewModelTest {
             vm.setFrame(ai1)
             advanceUntilIdle()
 
-            // Two AI frames in the cycle, not three entries in the store.
-            assertEquals(2, vm.state.value.queueSize)
+            assertEquals(3, vm.state.value.queueSize)
             assertEquals(1, vm.state.value.frameIndexInQueue)
 
             vm.onFrameNext()
             advanceUntilIdle()
 
-            assertEquals(ai2, vm.state.value.frame)
+            assertEquals(manual, vm.state.value.frame)
             assertEquals(2, vm.state.value.frameIndexInQueue)
-            assertFalse(vm.state.value.canGoNext)
+            assertTrue(vm.state.value.canGoNext)
         }
 
     @Test
-    fun `queueSize counts only AI frames`() =
+    fun `a manual frame opens with one finding and no box`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // No prediction means the isEgg / isBoxCorrect questions never render, and the
+            // medtech names a species and a count directly - the old ManualSheet flow.
+            val vm = viewModel()
+            vm.setFrame(makeManualFrame("manual-1"))
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(1, findings.size)
+            assertNull(findings[0].prediction)
+        }
+
+    @Test
+    fun `queueSize counts both sources`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             storeState.value = listOf(
                 makeIdentifiedFrame("ai-1"),
@@ -441,7 +455,7 @@ class VerificationViewModelTest {
             vm.setFrame(makeIdentifiedFrame("ai-1"))
             advanceUntilIdle()
 
-            assertEquals(1, vm.state.value.queueSize)
+            assertEquals(3, vm.state.value.queueSize)
         }
 
     @Test

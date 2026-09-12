@@ -208,17 +208,12 @@ fun VerificationQueueScreen(
 
     val target = state.verificationTarget
     if (target != null) {
-        if (target.source == FrameSource.MANUAL) {
-            ManualSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        } else {
-            VerificationSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        }
+        // One screen for both sources. What makes a sample "AI" is simply that it has model
+        // output, which the sheet reads off the frame itself.
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
+        )
     }
 }
 

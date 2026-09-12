@@ -47,10 +47,12 @@ Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.g
 so screen-level behaviour is gated by the pre-commit hook without an emulator. Run one suite
 with `./gradlew :app:testDebugUnitTest --tests "com.agarthavision.ui.verify.*"`.
 
-Two interactions cannot be tested this way and need `connectedAndroidTest` instead: the
-custom-species dialog in `ManualSheet` and the species dropdown in `VerificationSheet`. Both
-put a text field inside a popup window, which never reaches idle under Robolectric — a lookup
-after either opens spins until the Espresso timeout. Each suite documents this in its header.
+One interaction cannot be tested this way and needs `connectedAndroidTest` instead: the inside
+of the species dropdown in `VerificationSheet`. It puts a text field inside a popup window,
+which never reaches idle under Robolectric — a lookup after it opens spins until the Espresso
+timeout. The suite documents this in its header. (There were two until 86d4ab4tq deleted
+`ManualSheet` and its bespoke custom-species dialog; the merged screen uses the dropdown for
+both sources.)
 
 `ktlint` and `detekt` are applied at both the root project (`build.gradle.kts:7-8`) and `:app`
 (`app/build.gradle.kts:9-10`), so the unqualified `ktlintCheck` / `detekt` used by

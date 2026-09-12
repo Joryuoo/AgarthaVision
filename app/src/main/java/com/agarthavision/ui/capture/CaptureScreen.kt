@@ -81,7 +81,6 @@ import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -460,17 +459,12 @@ fun CaptureScreen(
 
     val target = state.verificationTarget
     if (target != null) {
-        if (target.source == FrameSource.MANUAL) {
-            ManualSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        } else {
-            VerificationSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        }
+        // One screen for both sources. What makes a sample "AI" is simply that it has model
+        // output, which the sheet reads off the frame itself.
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
+        )
     }
 
     if (showEndConfirm) {
