@@ -11,6 +11,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -33,11 +34,21 @@ class SessionManagerTest {
     private val authRepository: AuthRepository = mock()
     private val deviceIdProvider: DeviceIdProvider = mock()
 
+    /** In-memory stand-in for the DataStore-backed pointer. */
+    private val activeSessionIdStore = object : ActiveSessionIdStore {
+        var stored: String? = null
+        override suspend fun read(): String? = stored
+        override suspend fun write(sessionId: String?) {
+            stored = sessionId
+        }
+    }
+
     private val manager = SessionManager(
         sessionDao = sessionDao,
         remoteDataSource = remoteDataSource,
         authRepository = authRepository,
         deviceIdProvider = deviceIdProvider,
+        activeSessionIdStore = activeSessionIdStore,
     )
 
     @Test
@@ -84,23 +95,72 @@ class SessionManagerTest {
         }
 
     @Test
-    fun `stopSession ends the session locally even when the remote close fails`() =
+    fun `clearActive detaches from the session without ending it`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(deviceIdProvider.id).thenReturn("device-1")
             whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-            manager.startSession(label = "Smear D")
-            @Suppress("TooGenericExceptionThrown")
-            whenever(remoteDataSource.closeSession(any(), any(), anyOrNull()))
-                .thenAnswer { throw RuntimeException("offline") }
+            val started = manager.startSession(label = "Smear D")
+            assertEquals(started.sessionId, activeSessionIdStore.stored)
 
-            manager.stopSession()
+            manager.clearActive()
 
-            // Local row was updated with an ended timestamp, and status fell back to pending.
-            val captor = argumentCaptor<SessionEntity>()
-            verify(sessionDao, org.mockito.kotlin.atLeastOnce()).updateSession(captor.capture())
-            assertEquals("Smear D", captor.lastValue.label)
-            assert(captor.lastValue.endedAt != null)
-            verify(sessionDao).updateSupabaseStatus(any(), eq(SessionSyncStatus.PENDING.value))
-            assertEquals(SessionState.Idle, manager.state.value)
+            // Idle, pointer cleared - and crucially the row is untouched, because detaching is
+            // not ending. Nothing in the app writes ended_at any more.
+            assertTrue(manager.state.value is SessionState.Idle)
+            assertNull(activeSessionIdStore.stored)
+            verify(remoteDataSource, never()).closeSession(any(), any(), anyOrNull())
         }
+
+    @Test
+    fun `restoreActiveSession re-attaches to the stored open session`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The reason this exists: a session outlives the process that created it now, and
+            // coming back idle would render the queue empty while the smear is still open.
+            val open = sessionEntity(sessionId = "session-1", endedAt = null)
+            whenever(sessionDao.getSessionById("session-1")).thenReturn(open)
+            activeSessionIdStore.stored = "session-1"
+
+            val restored = manager.restoreActiveSession()
+
+            assertEquals("session-1", restored?.sessionId)
+            assertTrue(manager.state.value is SessionState.Active)
+        }
+
+    @Test
+    fun `restoreActiveSession clears a pointer it cannot resolve`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // A stale pointer must never stop the app launching.
+            whenever(sessionDao.getSessionById("gone")).thenReturn(null)
+            activeSessionIdStore.stored = "gone"
+
+            assertNull(manager.restoreActiveSession())
+            assertNull(activeSessionIdStore.stored)
+            assertTrue(manager.state.value is SessionState.Idle)
+        }
+
+    @Test
+    fun `restoreActiveSession refuses a session that was ended before sessions stopped ending`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // ended_at rows are history. resumeSession still rejects them, and the pointer is
+            // dropped rather than the app reopening a closed smear.
+            val ended = sessionEntity(sessionId = "old", endedAt = 2_000L)
+            whenever(sessionDao.getSessionById("old")).thenReturn(ended)
+            activeSessionIdStore.stored = "old"
+
+            assertNull(manager.restoreActiveSession())
+            assertNull(activeSessionIdStore.stored)
+        }
+
+    private fun sessionEntity(sessionId: String, endedAt: Long?) = SessionEntity(
+        sessionId = sessionId,
+        userId = "user-1",
+        deviceId = "device-1",
+        startedAt = 1_000L,
+        endedAt = endedAt,
+        notes = null,
+        label = "Smear",
+        supabaseStatus = SessionSyncStatus.SYNCED.value,
+        claimExempt = false,
+    )
+
 }

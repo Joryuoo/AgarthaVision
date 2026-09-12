@@ -49,7 +49,7 @@ app/
 | `database/` | `AgarthaDatabase` — the Room database declaration and its version number |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
 | `location/` | `FusedLocationProvider` — GPS behind a domain interface, returns null rather than throwing |
-| `session/` | `SessionManager` + `SessionState`. The app-scoped record of which smear is open |
+| `session/` | `SessionManager` + `SessionState` + `ActiveSessionIdStore`. The app-scoped record of which smear is open, and the pointer that survives process death |
 | `util/` | `EpgCalculator` (the multiplier), `DeviceIdProvider`, image conversion helpers |
 
 ### `domain/` — pure Kotlin

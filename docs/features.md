@@ -24,8 +24,16 @@ as working.
   (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`).
 
 ### Sessions
-- **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
-  Session writes `ended_at`. `core/session/SessionManager.kt:55-73`, `:117-140`.
+- **Session = one fecal smear, and it does not end.** Start with a label and optional notes;
+  it then stays open, because the medtech keeps coming back to the smear - correcting a sample,
+  generating a report from whatever is verified so far (86d4ab4vm).
+  `core/session/SessionManager.kt`.
+- **`ended_at` is legacy.** Nothing writes it any more. The column stays nullable and
+  `SessionRemoteDataSource.closeSession` stays with it, because sessions closed before this
+  change are real history; `resumeSession` still refuses to reopen one.
+- **Sign-out detaches rather than ends** (`SessionManager.clearActive`), and the open session is
+  restored at the next launch (`SessionManager.restoreActiveSession`) - without which a process
+  restart would render the verification queue empty while the smear was still open.
 - **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:79-89`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
@@ -50,9 +58,11 @@ as working.
   (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the
   only backend: on-device TFLite was built, benchmarked at 20.8 s per frame, and deferred to
   `feat/offline-inference`.
-- **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
-  consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
-  surface as `ui/capture/ConnectionLossBanner.kt`.
+- **Connection-loss detection.** `GET /health` every 10 s **while a capture screen is
+  mounted**; two consecutive failures flip to disconnected
+  (`core/connectivity/NetworkMonitor.kt`) and surface as `ui/capture/ConnectionLossBanner.kt`.
+  Gated on the screen rather than the session since 86d4ab4vm: a session that never ends would
+  otherwise poll forever, to drive a banner nobody is looking at.
 
 ### Validation (human-in-the-loop)
 - **Per-box verdict questionnaire** producing `CONFIRMED` / `FALSE_POSITIVE` /

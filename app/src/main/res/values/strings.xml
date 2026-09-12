@@ -67,6 +67,11 @@
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
 
+    <plurals name="sessions_subtitle">
+        <item quantity="one">%1$d session · %2$d unverified</item>
+        <item quantity="other">%1$d sessions · %2$d unverified</item>
+    </plurals>
+
     <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
     <string name="connection_lost_resume">Resume Recording</string>
     <string name="connection_lost_probing">Checking connection…</string>

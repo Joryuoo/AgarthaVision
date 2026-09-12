@@ -188,12 +188,6 @@ fun AgarthaNavHost(
                 onRecordsClick = { navController.navigate(Screen.Records.route) },
                 onReportsClick = { sessionId -> navController.navigate(Screen.SessionDetail.createRoute(sessionId)) },
                 onVerifyQueueClick = { navController.navigate(Screen.VerificationQueue.route) },
-                onSessionEnded = {
-                    navController.navigate(Screen.Sessions.route) {
-                        popUpTo(Screen.Sessions.route) { inclusive = false }
-                        launchSingleTop = true
-                    }
-                },
                 onNavigateBack = { navController.popBackStack() }
             )
         }

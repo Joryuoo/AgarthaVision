@@ -110,7 +110,6 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertTrue(vm.state.value.isConnectionLost)
-            verify(sessionManager, never()).stopSession()
         }
 
     @Test
@@ -141,7 +140,6 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             assertEquals(frame, vm.state.value.verificationTarget)
-            verify(sessionManager, never()).stopSession()
         }
 
     @Test
@@ -160,7 +158,6 @@ class CaptureViewModelTest {
 
             assertEquals(false, vm.state.value.isConnectionLost)
             assertEquals(false, vm.state.value.isProbingConnection)
-            verify(sessionManager, never()).stopSession()
         }
 
     @Test

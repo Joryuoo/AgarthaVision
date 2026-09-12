@@ -1,31 +1,30 @@
 package com.agarthavision.domain.usecase.auth
 
 import com.agarthavision.core.session.SessionManager
-import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.repository.AuthRepository
 import javax.inject.Inject
 
 /**
  * Signs the current medtech out per ADR-008.
  *
- * Blocked while a capture session is [SessionState.Active] — the medtech must end the
- * session first, since offline sign-out during an active smear would strand its remaining
- * captures under an identity that's about to be cleared. Any not-yet-submitted flagged
- * frames for the (now-ended) session are already cleared by
- * [com.agarthavision.data.repository.FlaggedFrameStore.clear], consistent with the
- * documented "flagged frames are lost on logout" behavior (CONTEXT.md, sample lifecycle).
+ * This used to be blocked while a capture session was active, on the reasoning that the medtech
+ * should end the smear first. Sessions do not end any more (86d4ab4vm), so that guard became a
+ * permanent block on signing out. Sign-out now **detaches** from the session instead:
+ * [SessionManager.clearActive] leaves it open and unfinished, exactly as it was.
+ *
+ * Nothing is stranded by that. A sample keeps the owner it was captured under — cached identity
+ * or null — and is claimed at the next login (ADR-007), and capture stops when the screen does.
+ *
+ * The old doc here also claimed flagged frames were cleared on the way out by
+ * `FlaggedFrameStore.clear`. That was already untrue: `clear()` has no callers.
  */
 class SignOutUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager,
 ) {
-    /**
-     * Signs out, or fails with [IllegalStateException] when a capture session is active.
-     */
+    /** Signs out, detaching from any active session first. */
     suspend operator fun invoke(): Result<Unit> = runCatching {
-        check(sessionManager.state.value !is SessionState.Active) {
-            "End the active session before signing out."
-        }
+        sessionManager.clearActive()
         authRepository.signOut()
     }
 }

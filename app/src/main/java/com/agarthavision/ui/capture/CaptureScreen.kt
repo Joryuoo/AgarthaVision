@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -201,7 +202,6 @@ fun CaptureScreen(
     onRecordsClick: () -> Unit,
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
-    onSessionEnded: () -> Unit,
     onNavigateBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -210,7 +210,6 @@ fun CaptureScreen(
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
     val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
-    var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -239,14 +238,6 @@ fun CaptureScreen(
         }
         onDispose {
             controller?.show(WindowInsetsCompat.Type.navigationBars())
-        }
-    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                CaptureEvent.SessionEnded -> onSessionEnded()
-            }
         }
     }
 
@@ -421,26 +412,10 @@ fun CaptureScreen(
                     },
             )
 
-            // Right: end session
-            Box(
-                modifier = Modifier.weight(1f),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .offset(x = (-30).dp)
-                        .shadow(
-                            14.dp,
-                            RoundedCornerShape(12.dp),
-                            spotColor = Color(0xFFDC2626).copy(alpha = 0.4f),
-                        )
-                        .background(Color(0xFFDC2626), RoundedCornerShape(12.dp))
-                        .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                            showEndConfirm = true
-                        },
-                )
-            }
+            // Right: reserved. The End Session control stood here until sessions stopped
+            // ending (86d4ab4vm); the verification queue button moves in when the capture
+            // chrome is rebuilt.
+            Spacer(modifier = Modifier.weight(1f))
         }
 
         // Capture toast, below the back button and session pill rather than over them.
@@ -466,114 +441,8 @@ fun CaptureScreen(
             onDismiss = viewModel::onVerificationDismissed,
         )
     }
-
-    if (showEndConfirm) {
-        EndSessionConfirmDialog(
-            initialNotes = "",
-            isBusy = state.isBusy,
-            // Repeat frames are duplicates the medtech already accounted for, and
-            // zero-detection frames (clean fields, and Manual frames from an outage) have
-            // nothing to verify — neither should hold a session open. Interim gate until
-            // 86d4ab4vm reworks the queue; do not reach into the verification sheets here
-            // (86d4ab4tq's territory).
-            blockedCount = state.flaggedFrames.count { it.predictions.isNotEmpty() },
-            onConfirm = { notes ->
-                showEndConfirm = false
-                viewModel.endSession(notes)
-            },
-            onDismiss = { showEndConfirm = false },
-        )
-    }
 }
 
-@Composable
-private fun EndSessionConfirmDialog(
-    initialNotes: String,
-    isBusy: Boolean,
-    blockedCount: Int,
-    onConfirm: (notes: String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var notes by rememberSaveable { mutableStateOf(initialNotes) }
-    val isBlocked = blockedCount > 0
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = DialogShape,
-        confirmButton = {
-            AgarthaButton(
-                onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
-                variant = AgarthaButtonVariant.Destructive,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy && !isBlocked,
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = AppColors.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(stringResource(R.string.capture_end_session_confirm))
-                }
-            }
-        },
-        dismissButton = {
-            AgarthaButton(
-                onClick = onDismiss,
-                variant = AgarthaButtonVariant.Ghost,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy,
-            ) {
-                Text(stringResource(R.string.verify_cancel))
-            }
-        },
-        title = { Text(stringResource(R.string.capture_end_session_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.sm)) {
-                if (isBlocked) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.capture_end_blocked_body,
-                            blockedCount,
-                            blockedCount,
-                        ),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.capture_end_session_body),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.capture_end_session_notes_label),
-                        color = AppColors.Gray900,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        placeholder = {
-                            Text(stringResource(R.string.capture_end_session_notes_placeholder))
-                        },
-                        singleLine = false,
-                        enabled = !isBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AgarthaTheme.colors.accent,
-                            unfocusedBorderColor = AppColors.Gray200,
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                }
-            }
-        },
-        containerColor = AppColors.White,
-        titleContentColor = AppColors.Gray900,
-        textContentColor = AppColors.Gray900,
-    )
-}
 
 @Composable
 private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {

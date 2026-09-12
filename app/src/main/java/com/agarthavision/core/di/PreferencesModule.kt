@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import com.agarthavision.core.session.ActiveSessionIdStore
+import com.agarthavision.core.session.DataStoreActiveSessionIdStore
 import com.agarthavision.data.repository.ThemePreferenceRepositoryImpl
 import com.agarthavision.domain.repository.ThemePreferenceRepository
 import dagger.Binds
@@ -41,4 +43,9 @@ abstract class PreferencesRepositoryModule {
     abstract fun bindThemePreferenceRepository(
         implementation: ThemePreferenceRepositoryImpl,
     ): ThemePreferenceRepository
+
+    @Binds
+    abstract fun bindActiveSessionIdStore(
+        implementation: DataStoreActiveSessionIdStore,
+    ): ActiveSessionIdStore
 }

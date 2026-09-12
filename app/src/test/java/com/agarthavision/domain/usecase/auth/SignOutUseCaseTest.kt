@@ -1,17 +1,13 @@
 package com.agarthavision.domain.usecase.auth
 
 import com.agarthavision.core.session.SessionManager
-import com.agarthavision.core.session.SessionState
-import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.repository.AuthRepository
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
-import org.mockito.kotlin.whenever
 
 class SignOutUseCaseTest {
     private val authRepository: AuthRepository = mock()
@@ -23,26 +19,27 @@ class SignOutUseCaseTest {
     )
 
     @Test
-    fun `signs out when no capture session is active`() = runTest {
-        whenever(sessionManager.state).thenReturn(MutableStateFlow(SessionState.Idle))
-
+    fun `signs out and detaches from the session`() = runTest {
+        // This used to fail while a session was active, on the reasoning that the medtech
+        // should end the smear first. Sessions do not end any more (86d4ab4vm), so that guard
+        // was a permanent block on signing out. Detaching replaces it: the session stays open
+        // and unfinished, and the medtech can come back to it.
         val result = useCase()
 
         assertTrue(result.isSuccess)
+        verify(sessionManager).clearActive()
         verify(authRepository).signOut()
     }
 
     @Test
-    fun `fails without signing out while a capture session is active`() = runTest {
-        val active = SessionState.Active(
-            session = mock<SessionEntity>(),
-            startedAt = java.time.Instant.now(),
-        )
-        whenever(sessionManager.state).thenReturn(MutableStateFlow(active))
+    fun `detaches before clearing the identity`() = runTest {
+        // Order matters. Clearing the identity first would leave the session pointer aimed at
+        // a smear the next launch may no longer be able to read.
+        useCase()
 
-        val result = useCase()
-
-        assertTrue(result.isFailure)
-        verify(authRepository, never()).signOut()
+        inOrder(sessionManager, authRepository) {
+            verify(sessionManager).clearActive()
+            verify(authRepository).signOut()
+        }
     }
 }

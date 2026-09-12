@@ -54,13 +54,16 @@ The `id` ↔ `session_id` translation happens in exactly one place:
   (`supabase/migrations/0008_reports.sql:15`). Multiple reports per session are intended.
 - **Looks like but is not** `SessionState` (`core/session/SessionState.kt`). That is the
   in-memory Active/Idle flag driving the capture UI; it holds a `SessionEntity` but is not
-  persisted and does not survive process death.
+  persisted and does not survive process death. What *is* persisted is a pointer to the active
+  session id (`core/session/ActiveSessionIdStore.kt`), restored at launch - necessary only
+  because sessions stopped ending and can now outlive the process.
 
 ## If you change this
 
 **Hits**
-- `SessionManager` — start, resume, pause/resume inference, and end all read and write this
-  row (`core/session/SessionManager.kt:55-156`).
+- `SessionManager` — start, resume, restore and detach all read and write this row
+  (`core/session/SessionManager.kt`). There is no end: nothing writes `ended_at` since
+  86d4ab4vm, though the column and its remote close path stay for rows that already have one.
 - The claim path. `claimUnownedSessions` and `getClaimableSessions` filter on `user_id IS NULL`
   and `claim_exempt` (`data/local/dao/SessionDao.kt:83`, `:104`); the sample and report claims
   cascade off the session ids (`domain/usecase/auth/ClaimLocalDataUseCase.kt:44-50`).

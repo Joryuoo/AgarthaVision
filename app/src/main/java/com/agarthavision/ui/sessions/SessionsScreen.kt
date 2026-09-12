@@ -119,8 +119,10 @@ fun SessionsScreen(
                     .align(Alignment.TopCenter)
             ) {
                 // App Bar
-                val activeCount = state.sessions.count { it.session.endedAt == null }
-                AppBar(activeCount = activeCount, totalCount = state.sessions.size)
+                // Sessions do not end, so counting the open ones counts all of them and says
+                // nothing. The unverified frame count is a number the medtech can act on.
+                val unverifiedCount = state.sessions.sumOf { it.unverifiedSamples }
+                AppBar(unverifiedCount = unverifiedCount, totalCount = state.sessions.size)
 
                 // Sessions List
                 LazyColumn(
@@ -191,7 +193,7 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun AppBar(activeCount: Int, totalCount: Int) {
+private fun AppBar(unverifiedCount: Int, totalCount: Int) {
     val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
@@ -210,7 +212,12 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "$totalCount sessions · $activeCount active",
+                text = pluralStringResource(
+                    R.plurals.sessions_subtitle,
+                    totalCount,
+                    totalCount,
+                    unverifiedCount,
+                ),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = colors.textSecondary

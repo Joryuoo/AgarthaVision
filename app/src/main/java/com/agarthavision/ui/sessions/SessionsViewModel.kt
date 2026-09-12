@@ -143,21 +143,6 @@ class SessionsViewModel @Inject constructor(
         }
     }
 
-    fun onEndSession(sessionId: String) {
-        viewModelScope.launch {
-            runCatching {
-                val entity = sessionRepository.getSessionById(sessionId) ?: return@runCatching
-                if (entity.endedAt != null) return@runCatching
-                sessionManager.resumeSession(sessionId)
-                sessionManager.stopSession()
-            }.onFailure { error ->
-                internalState.update {
-                    it.copy(errorMessage = error.message ?: "Could not end session.")
-                }
-            }
-        }
-    }
-
     fun onRenameSession(sessionId: String, newLabel: String) {
         if (newLabel.isBlank()) return
         viewModelScope.launch {

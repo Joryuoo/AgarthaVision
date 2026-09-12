@@ -169,8 +169,8 @@ data class SessionWithStats(
     @androidx.room.ColumnInfo(name = "totalSamples") val totalSamples: Int,
     @androidx.room.ColumnInfo(name = "verifiedSamples") val verifiedSamples: Int,
     /**
-     * Frames still awaiting review, excluding repeats — the same set that blocks ending
-     * a session, so the row and the end-session dialog can never disagree.
+     * Frames still awaiting review. Drives the Sessions header, which used to count open
+     * sessions — a number that stopped meaning anything when sessions stopped ending.
      */
     @androidx.room.ColumnInfo(name = "unverifiedSamples") val unverifiedSamples: Int,
     @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int
