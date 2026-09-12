@@ -34,14 +34,20 @@ data class VerificationAnswers(
      */
     val speciesTouched: Boolean = false,
 ) {
-    /** True when the species question — and the stage question it implies — is answered. */
+    /**
+     * True when the species question is answered.
+     *
+     * **[stage] deliberately does not gate this.** It is offered wherever the species defines
+     * one and it persists when given, but a medtech who does not record it is not blocked from
+     * submitting — the same rule ticket 86d4a6jwy set when the dropdown was introduced. The
+     * developmental stage is not the reading the surveillance output turns on; the infectivity
+     * level is, and that is tracked separately (86d3fzd28).
+     */
     val speciesIsComplete: Boolean
-        get() = when {
-            species == null -> false
-            species == EggSpecies.OTHER -> otherSpeciesText.isNotBlank()
-            // A species with no defined stage set asks no stage question.
-            EggStage.validFor(species).isEmpty() -> true
-            else -> stage != null
+        get() = when (species) {
+            null -> false
+            EggSpecies.OTHER -> otherSpeciesText.isNotBlank()
+            else -> true
         }
 
     /**

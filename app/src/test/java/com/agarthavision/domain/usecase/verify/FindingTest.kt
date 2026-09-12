@@ -53,20 +53,23 @@ class FindingTest {
     }
 
     @Test
-    fun `a species with stages is incomplete until a stage is chosen`() {
+    fun `a stage is optional and never blocks submit`() {
+        // Offered wherever the species defines one, persisted when given, but not a gate -
+        // the rule 86d4a6jwy set when the dropdown was introduced. The reading that matters
+        // for surveillance is the infectivity level, tracked separately (86d3fzd28).
         val noStage = VerificationAnswers(
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.TRICHURIS,
         )
-        assertFalse(Finding(prediction(), noStage).isComplete)
+        assertTrue(Finding(prediction(), noStage).isComplete)
         assertTrue(
             Finding(prediction(), noStage.copy(stage = EggStage.EMBRYONATED)).isComplete,
         )
     }
 
     @Test
-    fun `OTHER needs its free text but asks for no stage`() {
+    fun `OTHER needs its free text`() {
         // EggStage.validFor(OTHER) is empty, so there is no stage question to answer.
         val blank = VerificationAnswers(
             isEgg = true,
@@ -79,10 +82,7 @@ class FindingTest {
 
     @Test
     fun `an added finding needs a species and a positive count, and asks no box questions`() {
-        val speciesOnly = VerificationAnswers(
-            species = EggSpecies.ASCARIS,
-            stage = EggStage.UNFERTILIZED,
-        )
+        val speciesOnly = VerificationAnswers(species = EggSpecies.ASCARIS)
         assertFalse("No count yet.", Finding(answers = speciesOnly).isComplete)
         assertFalse("Zero is not a count.", Finding(answers = speciesOnly.copy(eggCount = 0)).isComplete)
         // isEgg / isBoxCorrect are never asked of a row with no box, and their absence must

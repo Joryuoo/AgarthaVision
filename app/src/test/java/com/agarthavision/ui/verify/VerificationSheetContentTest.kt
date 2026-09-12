@@ -337,12 +337,7 @@ class VerificationSheetContentTest {
         setContent(
             state(
                 answers = listOf(
-                    answered(
-                        isEgg = true,
-                        isBoxCorrect = false,
-                        species = EggSpecies.ASCARIS,
-                        stage = EggStage.UNFERTILIZED,
-                    ),
+                    answered(isEgg = true, isBoxCorrect = false, species = EggSpecies.ASCARIS),
                 ),
             ),
         )
@@ -359,25 +354,6 @@ class VerificationSheetContentTest {
 
     @Test
     fun `a fully answered detection unlocks submit`() {
-        // Ascaris defines a stage set, so the stage is part of "fully answered" now.
-        setContent(
-            state(
-                answers = listOf(
-                    answered(
-                        isEgg = true,
-                        isBoxCorrect = true,
-                        species = EggSpecies.ASCARIS,
-                        stage = EggStage.UNFERTILIZED,
-                    ),
-                ),
-            ),
-        )
-
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
-    }
-
-    @Test
-    fun `a species with no stage selected blocks submit`() {
         setContent(
             state(
                 answers = listOf(
@@ -386,7 +362,22 @@ class VerificationSheetContentTest {
             ),
         )
 
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
+    }
+
+    @Test
+    fun `leaving the stage unanswered does not block submit`() {
+        // Ascaris defines a stage set, and the picker is shown - but it is not a gate.
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.STAGE_DROPDOWN).assertIsDisplayed()
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
 
     @Test
