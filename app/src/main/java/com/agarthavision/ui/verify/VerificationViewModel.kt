@@ -7,6 +7,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -33,12 +34,15 @@ import javax.inject.Inject
  * @property frame the frame currently being verified.
  * @property currentDetectionIndex which detection within [frame] is highlighted.
  * @property showBoundingBoxes toggle for the box overlay on the frame image.
- * @property answers per-detection answers (one entry per box in `frame.predictions`).
+ * @property findings what the medtech is asserting about this frame. The first
+ *   `frame.predictions.size` entries are the model's boxes, in order; anything after them
+ *   is a species the medtech added. An empty list on an AI frame is a clean field.
  * @property missedEgg frame-level Q4 answer — sets `samples.needs_reannotation`.
  * @property isSubmitting true while [SubmitVerificationUseCase] is in flight.
  * @property errorMessage submission failure message; surfaced inline.
- * @property canSubmit derived — true when every per-detection answer is complete
- *   and we're not already submitting.
+ * @property canSubmit derived — true when every finding is complete and we're not already
+ *   submitting. A clean field is the exception: it has no findings to complete, so the
+ *   missed-egg answer carries the review on its own.
  */
 data class VerificationUiState(
     val isVisible: Boolean = false,
@@ -47,15 +51,30 @@ data class VerificationUiState(
     val frame: FlaggedFrame? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
-    val answers: List<VerificationAnswers> = emptyList(),
+    val findings: List<Finding> = emptyList(),
     val missedEgg: Boolean? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
     val isRepeat: Boolean = false,
 ) {
+    /**
+     * A clean field — an AI capture the model returned no detections for — has no findings to
+     * complete, and the old `answers.isNotEmpty()` gate made it permanently un-submittable.
+     * It is a normal negative result and has to be recordable. But the missed-egg answer is
+     * then the entire content of the review, so it must be given rather than defaulting
+     * through as null.
+     */
+    val isCleanField: Boolean
+        get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
+
     val canSubmit: Boolean
-        get() = answers.isNotEmpty() && answers.all { it.isComplete } && !isSubmitting
+        get() = when {
+            isSubmitting -> false
+            frame == null -> false
+            isCleanField -> missedEgg != null && findings.all { it.isComplete }
+            else -> findings.isNotEmpty() && findings.all { it.isComplete }
+        }
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -167,7 +186,7 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                answers = List(frame.predictions.size) { VerificationAnswers() },
+                findings = frame.predictions.map { Finding(prediction = it) },
                 missedEgg = null,
                 isSubmitting = false,
                 errorMessage = null,
@@ -201,18 +220,41 @@ class VerificationViewModel @Inject constructor(
 
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            it.copy(isEgg = isEgg, isBoxCorrect = null, species = null, otherSpeciesText = "", stage = null)
+            it.copy(
+                isEgg = isEgg,
+                isBoxCorrect = null,
+                species = null,
+                otherSpeciesText = "",
+                stage = null,
+                speciesTouched = false,
+            )
         }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            it.copy(isBoxCorrect = isBoxCorrect, species = null, otherSpeciesText = "", stage = null)
+            it.copy(
+                isBoxCorrect = isBoxCorrect,
+                species = null,
+                otherSpeciesText = "",
+                stage = null,
+                speciesTouched = false,
+            )
         }
     }
 
+    /**
+     * Records a deliberate species choice.
+     *
+     * [VerificationAnswers.speciesTouched] is set unconditionally, **including when the medtech
+     * re-picks the value already showing**. Once the field is pre-filled from the model output
+     * that re-pick is the only signal distinguishing "I agree" from "I never looked", and the
+     * distinction matters because `detections` doubles as the retraining corpus.
+     */
     fun onSpeciesSelected(species: EggSpecies) {
-        updateCurrentAnswer { it.copy(species = species, otherSpeciesText = "", stage = null) }
+        updateCurrentAnswer {
+            it.copy(species = species, otherSpeciesText = "", stage = null, speciesTouched = true)
+        }
     }
 
     fun onOtherSpeciesChanged(text: String) {
@@ -286,7 +328,7 @@ class VerificationViewModel @Inject constructor(
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                answers = snapshot.answers,
+                findings = snapshot.findings,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
                 isRepeat = snapshot.isRepeat,
@@ -322,11 +364,16 @@ class VerificationViewModel @Inject constructor(
     }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {
-        val index = _state.value.currentDetectionIndex
+        updateAnswerAt(_state.value.currentDetectionIndex, transform)
+    }
+
+    private fun updateAnswerAt(index: Int, transform: (VerificationAnswers) -> VerificationAnswers) {
         _state.update { current ->
-            val updated = current.answers.toMutableList()
-            if (index in updated.indices) updated[index] = transform(updated[index])
-            current.copy(answers = updated)
+            val updated = current.findings.toMutableList()
+            if (index in updated.indices) {
+                updated[index] = updated[index].copy(answers = transform(updated[index].answers))
+            }
+            current.copy(findings = updated)
         }
     }
 }

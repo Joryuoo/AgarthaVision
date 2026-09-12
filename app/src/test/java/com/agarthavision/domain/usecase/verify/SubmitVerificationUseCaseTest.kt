@@ -1,6 +1,7 @@
 package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.SyncSampleUseCase
@@ -34,9 +35,12 @@ class SubmitVerificationUseCaseTest {
     private val locationProvider: LocationProvider = mock()
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
+    private val findingDao: SampleSpeciesFindingDao = mock()
+
     private val useCase = SubmitVerificationUseCase(
         sampleDao = sampleDao,
         detectionDao = detectionDao,
+        findingDao = findingDao,
         locationProvider = locationProvider,
         syncSampleUseCase = syncSampleUseCase,
     )
@@ -65,10 +69,17 @@ class SubmitVerificationUseCaseTest {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
-            val answers = listOf(
-                VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS)
+            val findings = listOf(
+                Finding(
+                    prediction,
+                    VerificationAnswers(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        species = EggSpecies.ASCARIS,
+                    ),
+                ),
             )
-            val result = useCase(frame, answers, missedEgg = null)
+            val result = useCase(frame, findings, missedEgg = null)
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)
@@ -92,8 +103,8 @@ class SubmitVerificationUseCaseTest {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
-            val answers = listOf(VerificationAnswers(isEgg = false))
-            val result = useCase(frame, answers, missedEgg = null)
+            val findings = listOf(Finding(prediction, VerificationAnswers(isEgg = false)))
+            val result = useCase(frame, findings, missedEgg = null)
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)
@@ -116,10 +127,17 @@ class SubmitVerificationUseCaseTest {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
-            val answers = listOf(
-                VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS)
+            val findings = listOf(
+                Finding(
+                    prediction,
+                    VerificationAnswers(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        species = EggSpecies.ASCARIS,
+                    ),
+                ),
             )
-            useCase(frame, answers, missedEgg = true)
+            useCase(frame, findings, missedEgg = true)
             advanceUntilIdle()
 
             verify(sampleDao).updateSampleOnVerify(
@@ -141,8 +159,8 @@ class SubmitVerificationUseCaseTest {
             whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
-            val answers = listOf(VerificationAnswers(isEgg = false))
-            val result = useCase(frame, answers, missedEgg = null)
+            val findings = listOf(Finding(prediction, VerificationAnswers(isEgg = false)))
+            val result = useCase(frame, findings, missedEgg = null)
             advanceUntilIdle()
 
             assertTrue(result.isSuccess)

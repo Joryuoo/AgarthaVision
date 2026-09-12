@@ -20,6 +20,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
@@ -112,7 +113,11 @@ class VerificationSheetContentTest {
         frame = frame,
         frameIndexInQueue = frameIndexInQueue,
         queueSize = queueSize,
-        answers = answers,
+        // The sheet renders findings; these tests describe them by their answers, and the
+        // prediction each one hangs off comes from the frame in the same position.
+        findings = answers.mapIndexed { index, answer ->
+            Finding(prediction = frame.predictions.getOrNull(index), answers = answer)
+        },
     )
 
     /**
@@ -290,8 +295,29 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `an egg with a misplaced box completes without a species`() {
+    fun `an egg with a misplaced box still needs a species`() {
+        // This used to complete on the box answer alone. Under a counting model that silently
+        // dropped a real egg from the low-power-field count, so the species question now
+        // stands regardless of where the box landed. The verdict still records BOX_INCORRECT.
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false))))
+
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `an egg with a misplaced box completes once its species is named`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(
+                        isEgg = true,
+                        isBoxCorrect = false,
+                        species = EggSpecies.ASCARIS,
+                        stage = EggStage.UNFERTILIZED,
+                    ),
+                ),
+            ),
+        )
 
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
@@ -305,6 +331,25 @@ class VerificationSheetContentTest {
 
     @Test
     fun `a fully answered detection unlocks submit`() {
+        // Ascaris defines a stage set, so the stage is part of "fully answered" now.
+        setContent(
+            state(
+                answers = listOf(
+                    answered(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        species = EggSpecies.ASCARIS,
+                        stage = EggStage.UNFERTILIZED,
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
+    }
+
+    @Test
+    fun `a species with no stage selected blocks submit`() {
         setContent(
             state(
                 answers = listOf(
@@ -313,7 +358,7 @@ class VerificationSheetContentTest {
             ),
         )
 
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
     }
 
     @Test
@@ -329,10 +374,24 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `a frame with no detections cannot be submitted`() {
+    fun `a clean field blocks submit until the missed-egg question is answered`() {
+        // With no findings, that question is the entire content of the review, so it must not
+        // default through as null.
         setContent(state(answers = emptyList(), frame = frame(predictions = 0)))
 
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `a clean field submits on the missed-egg answer alone`() {
+        // An AI capture the model returned nothing for is a normal negative result and has to
+        // be recordable. The old "answers must be non-empty" gate made it permanently
+        // un-submittable, which is the bug this flips.
+        setContent(
+            state(answers = emptyList(), frame = frame(predictions = 0)).copy(missedEgg = false),
+        )
+
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
 
     // Answer reporting

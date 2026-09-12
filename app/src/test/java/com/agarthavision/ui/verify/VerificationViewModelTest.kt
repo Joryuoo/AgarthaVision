@@ -87,7 +87,7 @@ class VerificationViewModelTest {
             val frame = makeFrame(predictions = 3)
             vm.setFrame(frame)
             advanceUntilIdle()
-            assertEquals(3, vm.state.value.answers.size)
+            assertEquals(3, vm.state.value.findings.size)
         }
 
     @Test
@@ -102,8 +102,8 @@ class VerificationViewModelTest {
             vm.onQ1Selected(false)
             advanceUntilIdle()
 
-            assertEquals(true, vm.state.value.answers[0].isEgg)
-            assertEquals(false, vm.state.value.answers[1].isEgg)
+            assertEquals(true, vm.state.value.findings[0].answers.isEgg)
+            assertEquals(false, vm.state.value.findings[1].answers.isEgg)
         }
 
     @Test
@@ -496,7 +496,7 @@ class VerificationViewModelTest {
             vm.onStageSelected(EggStage.UNFERTILIZED)
             advanceUntilIdle()
 
-            assertEquals(EggStage.UNFERTILIZED, vm.state.value.answers[0].stage)
+            assertEquals(EggStage.UNFERTILIZED, vm.state.value.findings[0].answers.stage)
         }
 
     @Test
@@ -509,7 +509,7 @@ class VerificationViewModelTest {
             vm.onSpeciesSelected(EggSpecies.TRICHURIS)
             advanceUntilIdle()
 
-            assertEquals(null, vm.state.value.answers[0].stage)
+            assertEquals(null, vm.state.value.findings[0].answers.stage)
         }
 
     @Test
@@ -522,7 +522,7 @@ class VerificationViewModelTest {
             vm.onQ1Selected(true)
             advanceUntilIdle()
 
-            assertEquals(null, vm.state.value.answers[0].stage)
+            assertEquals(null, vm.state.value.findings[0].answers.stage)
         }
 
     @Test
@@ -535,6 +535,6 @@ class VerificationViewModelTest {
             vm.onQ2Selected(true)
             advanceUntilIdle()
 
-            assertEquals(null, vm.state.value.answers[0].stage)
+            assertEquals(null, vm.state.value.findings[0].answers.stage)
         }
 }

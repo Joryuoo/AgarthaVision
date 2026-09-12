@@ -129,7 +129,7 @@ internal fun VerificationSheetContent(
             .format(frame.capturedAt)
     }
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
-    val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
+    val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
     val speciesName = currentPrediction?.classLabel ?: "Unknown"
 
     Column(
@@ -237,7 +237,8 @@ internal fun VerificationSheetContent(
                         color = AgarthaTheme.colors.textPrimary,
                     )
                     Text(
-                        text = "Detection ${state.currentDetectionIndex + 1} of ${state.answers.size.coerceAtLeast(1)}",
+                        text = "Detection ${state.currentDetectionIndex + 1} of " +
+                            "${state.findings.size.coerceAtLeast(1)}",
                         color = AgarthaTheme.colors.textSecondary,
                         fontSize = 12.sp,
                     )
