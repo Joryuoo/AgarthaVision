@@ -14,6 +14,7 @@ AgarthaVision/
 ├── supabase/migrations/       Postgres schema + RLS. The authority for the remote shape
 ├── inference/                 The self-hosted FastAPI inference container
 ├── branding/                  Logo SVGs
+├── tools/psgc/                Generator for the bundled PSGC asset. Run by hand, output committed
 ├── gradle/                    Wrapper + version catalog
 └── .husky/                    Git hooks — the only mechanical rule enforcement in the repo
 ```
@@ -27,6 +28,7 @@ app/
 └── src/
     ├── main/
     │   ├── AndroidManifest.xml    Permissions, single Activity, FileProvider for CSV sharing
+    │   ├── assets/psgc/           Bundled PSGC barangay dataset, gzipped. Room-seeded on first run
     │   ├── res/                   Icons (hand-built stroke drawables), strings, themes
     │   └── java/com/agarthavision/
     │       ├── MainActivity.kt · MainViewModel.kt · AgarthaVisionApp.kt

@@ -50,8 +50,14 @@
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
 
-    <string name="connection_lost_title">Cloud connection lost. Recording stopped.</string>
-    <string name="connection_lost_resume">Resume Recording</string>
+    <!--
+      The banner must not claim capture has stopped. Since 86d4a6prb removed the 2-second
+      timer, a shutter tap while this is showing still records the frame - as a Manual
+      Capture, which is the designed behaviour. See ticket 86d4akgmh.
+    -->
+    <string name="connection_lost_title">Model unreachable</string>
+    <string name="connection_lost_body">Captures are still recorded, as Manual. Verify them as usual.</string>
+    <string name="connection_lost_resume">Retry</string>
     <string name="connection_lost_probing">Checking connection…</string>
 
     <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
@@ -265,4 +271,13 @@
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>
     <string name="settings_about_environment_prod">Production</string>
+    <string name="session_new_required_badge">REQUIRED</string>
+    <string name="session_new_barangay_label">Patient barangay</string>
+    <string name="session_new_barangay_placeholder">Search barangay, city or province</string>
+    <string name="session_new_barangay_hint">Type at least %1$d characters to search</string>
+    <string name="session_new_barangay_no_matches">No barangay matches that search</string>
+    <string name="session_new_barangay_clear">Clear the selected barangay</string>
+    <string name="session_new_barangay_required">Please select the patient\'s barangay to continue.</string>
+    <string name="session_new_sheet_subtitle">Set the label, barangay and a note before scanning</string>
+    <string name="session_new_label_required">Please fill in the label field to continue.</string>
 </resources>

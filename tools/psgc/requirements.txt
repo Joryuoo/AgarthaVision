@@ -1,0 +1,8 @@
+# Pinned so a rebuild of the PSGC asset is reproducible. The previous generator had no
+# lockfile at all, which meant the committed asset could not be shown to match its source.
+#
+# These are the versions the committed asset was built and verified with, on Python 3.13.
+rdata==1.1.0
+pandas==3.0.5
+numpy==2.5.3
+xarray==2026.7.0

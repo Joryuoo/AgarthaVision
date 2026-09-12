@@ -10,6 +10,8 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.repository.PsgcRepository
+import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
@@ -776,12 +778,16 @@ class SessionsViewModelTest {
         val sessionManager = mock<SessionManager>()
         val setExempt = mock<SetSessionClaimExemptUseCase>()
         val claim = mock<ClaimLocalDataUseCase>()
+        // Real use case over a mocked repository, as in SessionPickerViewModelTest; the
+        // barangay picker is out of scope here but the VM wires it up in init.
+        val searchBarangays = SearchBarangaysUseCase(mock<PsgcRepository>())
         return SessionsViewModel(
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             setSessionClaimExemptUseCase = setExempt,
             claimLocalDataUseCase = claim,
+            searchBarangaysUseCase = searchBarangays,
         )
     }
 }
