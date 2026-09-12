@@ -9,6 +9,58 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/86d4ab4xr-sample-geospatial — PSGC barangay on sessions · 2026-09-11
+
+Cut from `staging`. Serves the 4th general objective (DOH-compliant surveillance reports and
+geospatial maps) and the SRS adjustment "samples should have location to allow for geospatial
+mapping". The map itself belongs to the Admin Website (a separate project); this is the app's
+share — the schema, the dataset and the picker.
+
+**The GPS fix was never the answer.** Every sample has carried one since migration `0001` and
+nothing has ever read it. It is taken at the moment of capture — the medtech at the microscope
+— so it records where the smear was *read*, not where the infection came from; plotted, it
+maps laboratories. It stays as audit provenance. Sessions now carry the patient's barangay
+instead, which is also the unit STH surveillance actually decides on: prevalence per
+administrative unit against the WHO 10% / 20% thresholds, never individual pins.
+
+**Schema.** `sessions.psgc_barangay_code`, nullable, one column — a barangay code resolves
+upward to city/municipality, province and region by itself. Stored as the canonical
+zero-padded 10-digit PSGC with a `CHECK` to match, which is what keeps the Admin Website's
+boundary join from silently missing every unit in regions 01–09. Room 8 → 9.
+
+**Aggregation is an RPC, not a view,** because access has to be decided per row-owner and
+`GRANT` cannot tell an admin from a medtech — both hold `authenticated`. It counts smears
+rather than samples, and withholds figures below a minimum cell size: a barangay with one
+smear is effectively an identified patient. PostGIS stays off; with PSGC as the key the
+choropleth is a `GROUP BY`.
+
+**The dataset ships in the APK** (42,010 barangays, 342 KB gzipped) and is Room-seeded on
+first run, because medtechs collect where there is no signal. Pinned to **PSGC 2Q 2026**,
+PSA's current release, and the pin is load-bearing: the boundary GeoJSON the admin map will
+render has to join on the same vintage or it fails silently for the units that moved.
+
+**The first cut of this was built at 4Q 2023 and was wrong by 1,763 barangays** — 4.2% of the
+country. Its upstream stopped publishing in September 2024 and missed two reorganisations:
+the Negros Island Region (RA 12000, 2Q 2024) took Negros Occidental, Negros Oriental,
+Siquijor and Bacolod out of Regions VI and VII into region `18`, and Sulu left BARMM for
+Region IX after the Supreme Court ruling. Both roll up to the *region* a surveillance map
+aggregates on, and `sessions.psgc_barangay_code` is written once with nothing to backfill it.
+Two popular alternatives, `psgc.gitlab.io` and `psgc.cloud`, are 9-digit and also pre-NIR;
+9-digit is a different code system and does not join at all. Changing the vintage is a
+dataset swap plus four constants: the seeder re-seeds when `PsgcDataset.VINTAGE` changes.
+
+**Two things the real data forced.** Searching the dataset showed that matching the query as
+one string returns nothing for "cebu city" — PSA spells it "City of Cebu" — so search matches
+each term independently, which also narrows "lahug cebu" to a single barangay. And Manila's
+14 sub-municipalities turn out to live in the *barangay* file as parents of its 897
+barangays; they are rolled up to the chartered city for display and kept searchable.
+
+**Conventions recorded:** the vintage pin and the aggregate-before-display privacy rule, both
+in the new `docs/map/objects/PsgcBarangay.md` — the seventh object card, and the only one
+with no Supabase table.
+
+---
+
 ## fix/framesampler-stale-cache — camera frames carry a freshness stamp · 2026-09-11
 
 `86d4au2n1`. A shutter tap landing before the analyzer delivered a frame for the *current*

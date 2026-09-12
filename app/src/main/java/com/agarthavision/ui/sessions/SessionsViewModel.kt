@@ -1,14 +1,19 @@
 package com.agarthavision.ui.sessions
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import java.time.Duration
 import java.time.Instant
 import javax.inject.Inject
@@ -17,10 +22,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -32,6 +40,12 @@ data class SessionsState(
     val isCreating: Boolean = false,
     val errorMessage: String? = null,
     val searchQuery: String = "",
+    /** Current text in the New Session sheet's barangay picker. */
+    val barangayQuery: String = "",
+    /** Matches for [barangayQuery], capped by [SearchBarangaysUseCase.RESULT_LIMIT]. */
+    val barangayResults: List<PsgcBarangay> = emptyList(),
+    /** The barangay chosen for the session being created. Required before it can start. */
+    val selectedBarangay: PsgcBarangay? = null,
 )
 
 sealed interface SessionsEvent {
@@ -39,6 +53,15 @@ sealed interface SessionsEvent {
     data class ShareExport(val content: String) : SessionsEvent
 }
 
+/**
+ * Backs the Sessions list and the New Session sheet.
+ *
+ * `TooManyFunctions` is suppressed for the same reason
+ * [com.agarthavision.data.local.dao.SessionDao] suppresses it: one screen's callbacks
+ * belong to one ViewModel, and splitting them across two classes to satisfy a count would
+ * be inconsistent with every other ViewModel here for no functional benefit.
+ */
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
@@ -46,11 +69,18 @@ class SessionsViewModel @Inject constructor(
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase,
     private val claimLocalDataUseCase: ClaimLocalDataUseCase,
+    private val searchBarangaysUseCase: SearchBarangaysUseCase,
 ) : ViewModel() {
 
     private val internalState = MutableStateFlow(SessionsState())
     private val eventChannel = Channel<SessionsEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
+
+    private val barangayQueries = MutableStateFlow("")
+
+    init {
+        observeBarangayQueries()
+    }
 
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
@@ -106,24 +136,91 @@ class SessionsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Runs the barangay search off the keystroke path.
+     *
+     * Debounced so a medtech typing "cebu" triggers one query instead of four, and
+     * [mapLatest] so a slower earlier search cannot land after a newer one and show stale
+     * results. The search itself is a local Room scan — there is no network call here, which
+     * is what makes the picker work with the radio off.
+     */
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+    private fun observeBarangayQueries() {
+        viewModelScope.launch {
+            barangayQueries
+                .debounce(SEARCH_DEBOUNCE_MS)
+                .distinctUntilChanged()
+                .mapLatest { query ->
+                    searchBarangaysUseCase(query).getOrElse { throwable ->
+                        // Without this the picker renders its "no barangay matches" state for a
+                        // broken table exactly as it does for a typo, and nothing anywhere says
+                        // the dataset failed to seed.
+                        Log.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
+                        emptyList()
+                    }
+                }
+                .collect { results -> internalState.update { it.copy(barangayResults = results) } }
+        }
+    }
+
+    fun onBarangayQueryChanged(query: String) {
+        internalState.update { it.copy(barangayQuery = query) }
+        barangayQueries.value = query
+    }
+
+    /**
+     * Resolves [code] against the current result set. Ignored when it matches nothing,
+     * which can only happen if results changed under a tap already in flight.
+     */
+    fun onBarangaySelected(code: String) {
+        val barangay = internalState.value.barangayResults.firstOrNull { it.code == code } ?: return
+        internalState.update {
+            it.copy(selectedBarangay = barangay, barangayQuery = "", barangayResults = emptyList())
+        }
+        barangayQueries.value = ""
+    }
+
+    /** Clears the picker — on the clear button, on sheet dismissal, and after a session starts. */
+    fun onBarangayCleared() {
+        internalState.update {
+            it.copy(selectedBarangay = null, barangayQuery = "", barangayResults = emptyList())
+        }
+        barangayQueries.value = ""
+    }
+
     fun onSearchQueryChanged(query: String) {
         internalState.update { it.copy(searchQuery = query) }
     }
 
     fun onCreateSession(label: String, notes: String?) {
-        if (label.isBlank()) {
-            internalState.update { it.copy(errorMessage = "Label is required.") }
+        if (internalState.value.isCreating) return
+        // The barangay is what makes a smear mappable, so a new session has to carry one.
+        // Sessions predating the picker keep a null code; nothing backfills them.
+        val barangay = internalState.value.selectedBarangay
+        if (label.isBlank() || barangay == null) {
+            // Both guards are defence in depth — SessionsScreen blocks submit before it gets
+            // here. The barangay wording is kept identical to `session_new_barangay_required`
+            // so the two paths cannot drift into two different messages for one rule.
+            val reason = if (label.isBlank()) LABEL_REQUIRED else BARANGAY_REQUIRED
+            internalState.update { it.copy(errorMessage = reason) }
             return
         }
-        if (internalState.value.isCreating) return
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
             runCatching {
-                sessionManager.startSession(label = label.trim(), notes = notes?.takeIf { it.isNotBlank() })
+                sessionManager.startSession(
+                    label = label.trim(),
+                    psgcBarangayCode = barangay.code,
+                    notes = notes?.takeIf { it.isNotBlank() },
+                )
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
+                onBarangayCleared()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
+                // The sheet has already closed and its label/note state has gone with it, so
+                // leaving the selection behind would reopen a half-filled sheet.
+                onBarangayCleared()
                 internalState.update {
                     it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
                 }
@@ -193,6 +290,19 @@ class SessionsViewModel @Inject constructor(
     }
 
     private companion object {
+        private const val TAG = "SessionsViewModel"
+
         private const val RECENT_WINDOW_DAYS = 30L
+
+        /** Long enough to coalesce a burst of keystrokes, short enough to feel immediate. */
+        private const val SEARCH_DEBOUNCE_MS = 150L
+
+        // Copy lives here rather than in strings.xml to match the other ViewModels in this
+        // module (see CaptureViewModel). Lifting all of it into resources needs an error-type
+        // seam across every screen state, which is a wider change than this ticket.
+        private const val LABEL_REQUIRED = "Label is required."
+
+        /** Must stay word-for-word identical to `R.string.session_new_barangay_required`. */
+        private const val BARANGAY_REQUIRED = "Please select the patient's barangay to continue."
     }
 }

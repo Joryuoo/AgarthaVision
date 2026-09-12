@@ -1,7 +1,9 @@
 # docs/map/objects/ — object cards (contract)
 
-One card per core domain noun. Six exist: `Profile`, `Session`, `Sample`, `Detection`,
-`Report`, `StorageObject`. Do not add a seventh without a real entity behind it.
+One card per core domain noun. Seven exist: `Profile`, `Session`, `Sample`, `Detection`,
+`Report`, `StorageObject`, `PsgcBarangay`. Do not add an eighth without a real entity behind
+it. `PsgcBarangay` is the only one with no Supabase table — it earns a card because it is a
+real Room entity with a pinned external vintage and a privacy rule attached.
 
 ## Card shape — these sections, in this order
 
