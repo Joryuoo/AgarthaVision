@@ -69,9 +69,6 @@ fun RecordsScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    val totalEggs = state.sessions.sumOf { it.totalEpg }
-    val totalSamples = state.sessions.sumOf { it.sampleCount }
-
     val listState = rememberLazyListState()
     val shouldLoadMore by remember {
         derivedStateOf {
@@ -114,9 +111,9 @@ fun RecordsScreen(
             item {
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
-                    sessionsCount = state.sessions.size.toString(),
-                    eggsCount = totalEggs.toString(),
-                    samplesCount = totalSamples.toString(),
+                    sessionsCount = state.totals.sessionCount.toString(),
+                    eggsCount = state.totals.totalEpg.toString(),
+                    samplesCount = state.totals.totalSamples.toString(),
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }

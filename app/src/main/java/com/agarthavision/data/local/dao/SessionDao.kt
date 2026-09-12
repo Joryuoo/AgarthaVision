@@ -1,5 +1,6 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -165,43 +166,29 @@ interface SessionDao {
 
     /**
      * Observes a paginated, filtered window of sessions for the Records screen.
-     * Non-flagged sample counts and confirmed-detection EPG totals are pre-aggregated
-     * so the UI avoids per-session N+1 queries. Species-label lookup is done separately
-     * via [DetectionDao.getSpeciesLabelsForSessions].
+     * Non-flagged sample counts and non-false-positive detection EPG totals are
+     * pre-aggregated so the UI avoids per-session N+1 queries. The verdict filter
+     * (`d.verdict != 'false_positive'`) matches [DetectionDao.getConfirmedEggCountsForSession]
+     * so Records cards and Session Detail counts are always consistent.
+     * Species-label lookup is done separately via [DetectionDao.getSpeciesLabelsForSessions].
+     *
+     * Shares [RECORDS_FILTER] with [observeSessionRecordsTotals] so filtering logic
+     * can never diverge between the page and the stat-row totals.
      *
      * The parameter list maps one-to-one onto named SQL bind parameters, so it cannot
      * be collapsed into a holder type without losing Room's query binding.
      */
     @Suppress("LongParameterList")
     @Query(
-        """
-        SELECT s.*,
-          COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS totalSamples,
-          COUNT(d.detection_id) AS totalEpg
-        FROM sessions s
-        LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.status != 'flagged'
-        LEFT JOIN detections d ON smp.sample_id = d.sample_id
-             AND d.verdict = 'confirmed' AND smp.is_repeat = 0
-        WHERE s.user_id = :userId
-          AND (:startMillis IS NULL OR s.started_at >= :startMillis)
-          AND (:endMillis   IS NULL OR s.started_at <= :endMillis)
-          AND (:query = ''
-               OR s.session_id LIKE '%' || :query || '%'
-               OR s.label      LIKE '%' || :query || '%'
-               OR s.notes      LIKE '%' || :query || '%'
-               OR EXISTS (SELECT 1 FROM detections dq JOIN samples sq ON sq.sample_id = dq.sample_id
-                          WHERE sq.session_id = s.session_id AND sq.is_repeat = 0
-                            AND dq.verdict != 'false_positive'
-                            AND COALESCE(dq.expert_class, dq.class_label) LIKE '%' || :query || '%'))
-          AND (:species IS NULL
-               OR EXISTS (SELECT 1 FROM detections ds JOIN samples ss ON ss.sample_id = ds.sample_id
-                          WHERE ss.session_id = s.session_id AND ss.is_repeat = 0
-                            AND ds.verdict != 'false_positive'
-                            AND COALESCE(ds.expert_class, ds.class_label) LIKE '%' || :species || '%'))
-        GROUP BY s.session_id
-        ORDER BY s.started_at DESC
-        LIMIT :limit
-        """
+        "SELECT s.*, " +
+        "  COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS totalSamples, " +
+        "  COUNT(d.detection_id) AS totalEpg " +
+        "FROM sessions s " +
+        "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.status != 'flagged' " +
+        "LEFT JOIN detections d ON smp.sample_id = d.sample_id " +
+        "     AND d.verdict != 'false_positive' AND smp.is_repeat = 0" +
+        RECORDS_FILTER +
+        " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT :limit"
     )
     fun observeSessionRecordsPage(
         userId: String,
@@ -211,7 +198,61 @@ interface SessionDao {
         species: String?,
         limit: Int,
     ): Flow<List<SessionRecordStatsRow>>
+
+    /**
+     * Whole-filtered-set totals for the Records stat row. Applies the same [RECORDS_FILTER]
+     * as [observeSessionRecordsPage] but no LIMIT, aggregated from a per-session subquery so
+     * join fan-out cannot inflate the sums.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        "SELECT COUNT(*) AS sessionCount, " +
+        "COALESCE(SUM(perSession.samples), 0) AS totalSamples, " +
+        "COALESCE(SUM(perSession.eggs), 0) AS totalEpg " +
+        "FROM (SELECT s.session_id, " +
+        "  COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS samples, " +
+        "  COUNT(d.detection_id) AS eggs " +
+        "  FROM sessions s " +
+        "  LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.status != 'flagged' " +
+        "  LEFT JOIN detections d ON smp.sample_id = d.sample_id" +
+        "    AND d.verdict != 'false_positive' AND smp.is_repeat = 0 " +
+        RECORDS_FILTER +
+        "  GROUP BY s.session_id) AS perSession"
+    )
+    fun observeSessionRecordsTotals(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotalsRow>
 }
+
+/**
+ * Shared WHERE predicate for the Records paginated page and totals queries.
+ * Extracted here so both queries apply identical filtering and can never disagree.
+ * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
+ * and `\` in the needle before passing it in. Species LIKE is intentionally left
+ * without ESCAPE since species needles come from a fixed enum, not free text.
+ */
+private const val RECORDS_FILTER = """
+  WHERE s.user_id = :userId
+    AND (:startMillis IS NULL OR s.started_at >= :startMillis)
+    AND (:endMillis   IS NULL OR s.started_at <= :endMillis)
+    AND (:query = ''
+         OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
+         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
+         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\'
+         OR EXISTS (SELECT 1 FROM detections dq JOIN samples sq ON sq.sample_id = dq.sample_id
+                    WHERE sq.session_id = s.session_id AND sq.is_repeat = 0
+                      AND dq.verdict != 'false_positive'
+                      AND COALESCE(dq.expert_class, dq.class_label) LIKE '%' || :query || '%' ESCAPE '\'))
+    AND (:species IS NULL
+         OR EXISTS (SELECT 1 FROM detections ds JOIN samples ss ON ss.sample_id = ds.sample_id
+                    WHERE ss.session_id = s.session_id AND ss.is_repeat = 0
+                      AND ds.verdict != 'false_positive'
+                      AND COALESCE(ds.expert_class, ds.class_label) LIKE '%' || :species || '%'))
+"""
 
 data class SessionWithStats(
     @Embedded val session: SessionEntity,
@@ -234,4 +275,14 @@ data class SessionRecordStatsRow(
     @Embedded val session: SessionEntity,
     @androidx.room.ColumnInfo(name = "totalSamples") val totalSamples: Int,
     @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int,
+)
+
+/**
+ * Aggregate totals returned by [SessionDao.observeSessionRecordsTotals].
+ * All counts apply the same [RECORDS_FILTER] as the page query.
+ */
+data class RecordsTotalsRow(
+    @ColumnInfo(name = "sessionCount") val sessionCount: Int,
+    @ColumnInfo(name = "totalSamples") val totalSamples: Int,
+    @ColumnInfo(name = "totalEpg") val totalEpg: Int,
 )

@@ -185,7 +185,7 @@ fun AgarthaNavHost(
             CaptureScreen(
                 cameraManager = cameraManager,
                 frameSampler = frameSampler,
-                onRecordsClick = { navController.navigate(Screen.Records.route) },
+                onRecordsClick = { navController.navigate(Screen.Records.route) { launchSingleTop = true } },
                 onReportsClick = { sessionId -> navController.navigate(Screen.SessionDetail.createRoute(sessionId)) },
                 onVerifyQueueClick = { navController.navigate(Screen.VerificationQueue.route) },
                 onSessionEnded = {

@@ -2,6 +2,7 @@ package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.mapper.toDomain
+import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
@@ -76,5 +77,21 @@ class SessionRepositoryImpl @Inject constructor(
                         totalEpg = row.totalEpg,
                     )
                 }
+            }
+
+    override fun observeSessionRecordsTotals(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> =
+        sessionDao.observeSessionRecordsTotals(userId, startMillis, endMillis, query, species)
+            .map { row ->
+                RecordsTotals(
+                    sessionCount = row.sessionCount,
+                    totalSamples = row.totalSamples,
+                    totalEpg = row.totalEpg,
+                )
             }
 }

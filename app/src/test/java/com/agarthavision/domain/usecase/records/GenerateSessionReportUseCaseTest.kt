@@ -4,6 +4,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -165,6 +166,13 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         species: String?,
         limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeSessionRecordsTotals(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> = flowOf(RecordsTotals())
 }
 
 private class ReportSampleRepository(

@@ -1,5 +1,6 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import kotlinx.coroutines.flow.Flow
@@ -61,4 +62,20 @@ interface SessionRepository {
         species: String?,
         limit: Int,
     ): Flow<List<SessionWithStats>>
+
+    /**
+     * Observes whole-filtered-set totals for the Records stat row. Applies the same
+     * filter predicate as [observeSessionRecordsPage] (no LIMIT) so the stat row and
+     * the paginated list can never disagree on the universe of sessions counted.
+     *
+     * Mirrors the underlying Room query's bind parameters one-to-one.
+     */
+    @Suppress("LongParameterList")
+    fun observeSessionRecordsTotals(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals>
 }
