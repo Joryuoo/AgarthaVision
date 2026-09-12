@@ -33,7 +33,8 @@ class CaptureFieldUseCase @Inject constructor(
 ) {
     /**
      * @param sessionId the active recording session ID.
-     * @param jpegBytes the snapshot of [FrameSampler.latestFrameBytes] to analyze.
+     * @param jpegBytes the snapshot of [FrameSampler.latestFrame] to analyze. The caller is
+     *   responsible for having checked it is fresh — see `CaptureViewModel.onCapture`.
      * @return the persisted frame's [FrameSource] on success; [Result.failure] on an unexpected
      *   error.
      */
