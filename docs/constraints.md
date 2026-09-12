@@ -124,12 +124,34 @@ is no `REJECTED` sample state.
 
 **Enforcement:** structural, at the storage layer — `0003_storage_rls.sql` deliberately
 creates no DELETE policy for the `samples` bucket
-(`supabase/migrations/0003_storage_rls.sql:45-46`). Postgres rows are likewise
-insert-and-update only (`data/supabase/SampleRemoteDataSource.kt:40-43`).
+(`supabase/migrations/0003_storage_rls.sql:45-46`), and `0009_storage_admin_read.sql:32`
+restates the stance. That remains true and was not amended.
 
-**Local exception:** unverified flagged frames *can* be discarded on-device before
-submission (`data/repository/FlaggedFrameStore.kt:80-99`). Nothing that has been verified is
-deletable.
+**A verified sample can be tombstoned, and that is not a deletion.** A medtech who captured
+the same egg twice needs the duplicate out of the queue, the counts and the report. Setting
+`samples.deleted_at` (`supabase/migrations/0013_sample_soft_delete.sql`) does exactly that
+and nothing more: the detections stay, the findings rows stay, the local JPEG stays, and the
+Storage object stays. Every query that lists or counts samples filters `deleted_at is null`,
+enforced by a naming rule and `SoftDeleteGuardTest` rather than by memory. Do not read the
+queue filter as the whole story — the row is still there, on purpose.
+
+**Local exception:** unverified flagged frames *can* be hard-deleted on-device before
+submission. Nothing that has been *verified* is hard-deletable;
+`domain/usecase/verify/DeleteQueueItemsUseCase.kt` is the single place that decides which of
+the two a delete is, and it branches on `status`.
+
+**One softening, recorded rather than hidden.** Remote sample and detection writes are now
+upserts rather than inserts, because a verified sample is editable and syncs more than once
+(the citation that used to appear here, `SampleRemoteDataSource.kt:40-43`, described the old
+insert-only shape). So an edit overwrites a previously-synced label: correcting a
+`FALSE_POSITIVE` to `CONFIRMED` removes the old row from the corpus rather than adding beside
+it. That is the intended reading — the current expert opinion is the truth — but it is a real
+change to what C8 guarantees. Keeping both would need a `supersedes_detection_id` column and
+its own ticket.
+
+**Findings rows are replaced wholesale on edit**, so a species logged in error disappears. A
+count is a current statement, like `samples.user_note`, not evidence — and the things this
+constraint exists to protect are untouched by it.
 
 ## C9 — Commit and branch format
 

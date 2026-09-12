@@ -9,6 +9,50 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## refactor/never-ending-sessions — sessions stay open, the queue holds everything · 2026-09-13
+
+`86d4ab4vm` with `86d4ab4tq`, `86d4ad75y` and a cherry-picked `86d4a6jwy`. The session
+lifecycle, the verification queue model, and what "delete" means — from the 2026-09-07
+consultation with Dr. Bayron.
+
+**A session no longer ends.** One session is one fecal smear and the medtech keeps coming back
+to it, so `stopSession` is gone and nothing writes `sessions.ended_at`. The column stays
+nullable and `SessionRemoteDataSource.closeSession` stays with it, because sessions closed
+before this are real history; `resumeSession` still refuses to reopen one. Three things fell out
+of it: sign-out now detaches (`SessionManager.clearActive`) instead of being blocked forever,
+`NetworkMonitor` polls `/health` only while a capture screen is mounted instead of forever, and
+the active session id is persisted and restored at launch — without which a process restart
+would come back idle with a smear still open and render the queue empty.
+
+**The queue is the whole session, in two buckets.** Verified and Unverified; the AI/Manual split
+was dropped as unnecessary (revised 2026-09-12). Verified samples stay visible and reopen with
+the medtech's own previous answers, so an edit is a correction rather than a re-review. New
+`QueueSample` carries no `ByteArray` — the old row rendered from bytes re-read off disk on every
+emission, survivable while the queue drained and an OOM risk once it only grows.
+
+**Delete replaces the repeat flag.** Long-press for batch select; an unverified frame is
+hard-deleted, a verified sample is tombstoned via `samples.deleted_at`. `is_repeat` existed only
+because deletion was impossible, and it is removed entirely — including from the report CSV,
+which loses a column. The confirmation dialog states the split, because the two halves are
+irreversible in different ways.
+
+**One verification screen.** `ManualSheet`, `ManualCaptureViewModel` and
+`SubmitManualCaptureUseCase` are deleted (~1,150 lines). A manual capture is just a frame with
+no model output: no box means no box questions. Polyparasitism lands with it —
+`sample_species_findings` records several species and stages per frame with per-species counts,
+because WHO thresholds are species-specific and a combined per-field count cannot be graded.
+
+**Schema:** Room 9 → 12 (skipping two contested numbers), migrations `0012` and `0013`, and
+`AgarthaDatabaseSchemaTest` pinning the result so the collision that nearly shipped in September
+cannot recur silently.
+
+Two hazards worth knowing about, both fixed before they shipped: detection ids were random, so
+re-saving an edited sample would have appended a second full set and doubled every egg count
+with no error anywhere; and `updateSampleOnVerify` nulled `predictions_json`, which would have
+left a reopened sample with no boxes to draw.
+
+---
+
 ## fix/framesampler-stale-cache — camera frames carry a freshness stamp · 2026-09-11
 
 `86d4au2n1`. A shutter tap landing before the analyzer delivered a frame for the *current*

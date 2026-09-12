@@ -89,7 +89,7 @@ Contains no Android imports. Does import `data/` in eleven files — see `constr
 | `theme/` | The design system. Raw hex exists here and nowhere else |
 | `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, hand-drawn icons |
 | `capture/` | The dark immersive capture screen and its connection-loss banner |
-| `verify/` | Verification queue, the one verification sheet (both sources), findings UI, box overlay, species dropdown |
+| `verify/` | Verification queue and its batch-select delete, the one verification sheet (both sources), findings UI, box overlay, species dropdown |
 | `records/` | Records list, session detail, sample detail, and their cards |
 | `dashboard/` `sessions/` `login/` `settings/` | The remaining screens |
 
