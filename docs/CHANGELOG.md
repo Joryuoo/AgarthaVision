@@ -61,6 +61,31 @@ with no Supabase table.
 
 ---
 
+## fix/framesampler-stale-cache — camera frames carry a freshness stamp · 2026-09-11
+
+`86d4au2n1`. A shutter tap landing before the analyzer delivered a frame for the *current*
+camera binding recorded the **previous session's image** under the current `sessionId`.
+`FrameSampler` is `@Singleton`, its cache was never reset, and `CaptureViewModel.onCapture`
+guarded only against `null` — a stale array is not null, so the guard passed and the frame was
+persisted. Reachable on a second session in one process, on re-entering the capture screen, and
+on any camera rebind. In this app a session is a patient, and C8 makes a misattributed frame
+permanent once it is verified.
+
+- `FrameSampler` now publishes `CachedFrame(jpegBytes, elapsedRealtimeMs)` from `latestFrame`
+  (was `latestFrameBytes`), stamped as the frame is encoded.
+- `CaptureViewModel.onCapture` rejects anything older than `MAX_FRAME_AGE_MS` (1 s) with the
+  existing "Waiting for a live frame" message. A bound analyzer delivers ~30 fps, so a live
+  frame is never more than ~33 ms old; every stale path leaves a far longer gap. Fails closed
+  with no lifecycle wiring to maintain, which is why this is a stamp and not a reset call.
+- New `core/util/ElapsedClock.kt`, bound unscoped in `core/di/ClockModule.kt`. A seam over
+  `SystemClock.elapsedRealtime()` so both classes stay unit-testable on the plain JVM —
+  `app/build.gradle.kts` does not set `returnDefaultValues`. Unscoped keeps C5's `@Singleton`
+  list closed.
+
+`FrameSampler` gained no session knowledge; it remains a camera-layer component.
+
+---
+
 ## feat/build-optimization — cloud-only inference, bug fixes for validation · 2026-09-06
 
 Cut from `staging`. Carries forward the documentation shelf, the admin storage policy fix,

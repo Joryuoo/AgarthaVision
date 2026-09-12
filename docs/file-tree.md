@@ -46,7 +46,7 @@ app/
 
 | Folder | For |
 |---|---|
-| `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` throttles to one frame per 2 s and dispatches to inference |
+| `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` caches every analyzed frame as time-stamped JPEG bytes — no timer, no dispatch to inference (the shutter does that) |
 | `connectivity/` | `NetworkMonitor` polls inference `/health`; `ConnectivityObserver` reports device network state |
 | `database/` | `AgarthaDatabase` — the Room database declaration and its version number |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
