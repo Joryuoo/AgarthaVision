@@ -20,23 +20,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,6 +45,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
+import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -69,20 +69,17 @@ fun RecordsScreen(
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var searchText by remember { mutableStateOf("") }
 
-    val filteredRecords = remember(state.sessions, searchText) {
-        state.sessions.filter { item ->
-            searchText.isBlank() ||
-                item.session.id.contains(searchText, ignoreCase = true) ||
-                item.session.label?.contains(searchText, ignoreCase = true) == true ||
-                item.session.notes?.contains(searchText, ignoreCase = true) == true ||
-                item.speciesLabels.any { it.contains(searchText, ignoreCase = true) }
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
         }
     }
-
-    val totalEggs = state.sessions.sumOf { it.totalEpg }
-    val totalSamples = state.sessions.sumOf { it.sampleCount }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) viewModel.onLoadMore()
+    }
 
     Scaffold(
         topBar = {
@@ -98,6 +95,7 @@ fun RecordsScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner),
@@ -106,17 +104,18 @@ fun RecordsScreen(
             item {
                 Spacer(Modifier.height(Spacing.xs))
                 SearchInput(
-                    value = searchText,
-                    onValueChange = { searchText = it },
+                    value = state.searchQuery,
+                    onValueChange = viewModel::onSearchChanged,
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
+
             item {
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
-                    sessionsCount = if (state.isLoading) "—" else state.sessions.size.toString(),
-                    eggsCount = if (state.isLoading) "—" else totalEggs.toString(),
-                    samplesCount = if (state.isLoading) "—" else totalSamples.toString(),
+                    sessionsCount = if (state.isLoading) "—" else state.totals.sessionCount.toString(),
+                    eggsCount = if (state.isLoading) "—" else state.totals.totalEpg.toString(),
+                    samplesCount = if (state.isLoading) "—" else state.totals.totalSamples.toString(),
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
@@ -127,13 +126,22 @@ fun RecordsScreen(
                     onSelect = viewModel::onSpeciesSelected,
                 )
             }
+            item {
+                Spacer(Modifier.height(Spacing.xs))
+                DateRangeFilterBar(
+                    startDate = state.startDate,
+                    endDate = state.endDate,
+                    onRangeSelected = viewModel::onDateRangeSelected,
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
+                )
+            }
             item { Spacer(Modifier.height(Spacing.xs)) }
 
             when {
                 state.isLoading -> items(RECORDS_SKELETON_COUNT) {
                     RecordCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                 }
-                filteredRecords.isEmpty() -> item {
+                state.sessions.isEmpty() -> item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -148,12 +156,29 @@ fun RecordsScreen(
                         )
                     }
                 }
-                else -> items(filteredRecords, key = { it.session.id }) { record ->
-                    RecordCard(
-                        record = record,
-                        onClick = { onSessionClick(record.session.id) },
-                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
-                    )
+                else -> {
+                    items(state.sessions, key = { it.session.id }) { record ->
+                        RecordCard(
+                            record = record,
+                            onClick = { onSessionClick(record.session.id) },
+                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                        )
+                    }
+                    if (state.canLoadMore) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = Spacing.md),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    color = AgarthaTheme.colors.accent,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -186,45 +211,6 @@ private fun RecordsAppBar(subtitle: String) {
     }
 }
 
-@Composable
-private fun SearchInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        placeholder = {
-            Text(
-                "Search sessions, notes, species...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AgarthaTheme.colors.textTertiary,
-            )
-        },
-        leadingIcon = {
-            Icon(
-                painter = painterResource(R.drawable.ic_search),
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp),
-            )
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = AgarthaTheme.colors.surfaceVariant,
-            focusedContainerColor = AgarthaTheme.colors.surface,
-            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
-            focusedBorderColor = AgarthaTheme.colors.accent,
-            cursorColor = AgarthaTheme.colors.accent,
-            unfocusedTextColor = AgarthaTheme.colors.textPrimary,
-            focusedTextColor = AgarthaTheme.colors.textPrimary,
-        ),
-        textStyle = MaterialTheme.typography.bodyMedium,
-    )
-}
 
 @Composable
 private fun StatsRow(
