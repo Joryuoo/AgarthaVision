@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.records.GetRecordsUseCase
@@ -522,6 +523,23 @@ private class RecordingSessionRepository(
         query: String,
         species: String?,
     ): Flow<RecordsTotals> = flowOf(totals)
+
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 // ---------------------------------------------------------------------------
@@ -555,6 +573,21 @@ private class LambdaSessionRepository(
         query: String,
         species: String?,
     ): Flow<RecordsTotals> = flowOf(totals)
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 // ---------------------------------------------------------------------------

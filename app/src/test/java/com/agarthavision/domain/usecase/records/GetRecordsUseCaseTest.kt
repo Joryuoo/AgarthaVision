@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DailyEggCount
@@ -556,6 +557,23 @@ internal class FakeSessionRepository(
         observeTotalsCallArgs += ObserveTotalsArgs(userId, startMillis, endMillis, query, species)
         return flowOf(totals)
     }
+
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 internal class FakeDetectionRepository(
@@ -616,6 +634,23 @@ private class MultiEmitSessionRepository(
     ): Flow<RecordsTotals> = flow {
         totalsEmissions.forEach { emit(it) }
     }
+
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 // ---------------------------------------------------------------------------

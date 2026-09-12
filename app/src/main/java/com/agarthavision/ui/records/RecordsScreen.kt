@@ -24,10 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,7 +35,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +45,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
+import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -108,6 +106,7 @@ fun RecordsScreen(
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
+
             item {
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
@@ -122,6 +121,15 @@ fun RecordsScreen(
                 SpeciesFilterChips(
                     selected = state.selectedSpecies,
                     onSelect = viewModel::onSpeciesSelected,
+                )
+            }
+            item {
+                Spacer(Modifier.height(Spacing.xs))
+                DateRangeFilterBar(
+                    startDate = state.startDate,
+                    endDate = state.endDate,
+                    onRangeSelected = viewModel::onDateRangeSelected,
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
             item { Spacer(Modifier.height(Spacing.xs)) }
@@ -207,45 +215,6 @@ private fun RecordsAppBar(subtitle: String) {
     }
 }
 
-@Composable
-private fun SearchInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        placeholder = {
-            Text(
-                "Search sessions, notes, species...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AgarthaTheme.colors.textTertiary,
-            )
-        },
-        leadingIcon = {
-            Icon(
-                painter = painterResource(R.drawable.ic_search),
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp),
-            )
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = AgarthaTheme.colors.surfaceVariant,
-            focusedContainerColor = AgarthaTheme.colors.surface,
-            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
-            focusedBorderColor = AgarthaTheme.colors.accent,
-            cursorColor = AgarthaTheme.colors.accent,
-            unfocusedTextColor = AgarthaTheme.colors.textPrimary,
-            focusedTextColor = AgarthaTheme.colors.textPrimary,
-        ),
-        textStyle = MaterialTheme.typography.bodyMedium,
-    )
-}
 
 @Composable
 private fun StatsRow(

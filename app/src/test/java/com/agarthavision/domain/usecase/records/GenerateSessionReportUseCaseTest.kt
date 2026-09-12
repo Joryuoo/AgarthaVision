@@ -5,6 +5,7 @@ import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.RecordsTotals
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -173,6 +174,23 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         query: String,
         species: String?,
     ): Flow<RecordsTotals> = flowOf(RecordsTotals())
+
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 private class ReportSampleRepository(

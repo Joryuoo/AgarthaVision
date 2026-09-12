@@ -226,6 +226,95 @@ interface SessionDao {
         query: String,
         species: String?,
     ): Flow<RecordsTotalsRow>
+
+    // -------------------------------------------------------------------------
+    // Sessions screen: paginated, filtered, with active-session priority
+    // -------------------------------------------------------------------------
+
+    /**
+     * Observes a paginated, filtered window of sessions for the Sessions screen.
+     * Aggregate columns mirror [observeSessionsWithStats] so [SessionCard] can display
+     * the same metrics. Active sessions (`ended_at IS NULL`) are always included;
+     * ended sessions appear only within the recent window or the explicit date range.
+     *
+     * Shares [SESSIONS_FILTER] with [observeSessionsCounts] so count and list can
+     * never disagree on the filtered universe. Per ADR-007.
+     *
+     * The parameter list maps one-to-one onto named SQL bind parameters, so it cannot
+     * be collapsed into a holder type without losing Room's query binding.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        "SELECT s.*, " +
+        "  COUNT(DISTINCT smp.sample_id) AS totalSamples, " +
+        "  SUM(CASE WHEN smp.verified_at > 0 THEN 1 ELSE 0 END) AS verifiedSamples, " +
+        "  SUM(CASE WHEN smp.status = 'flagged' AND smp.is_repeat = 0 THEN 1 ELSE 0 END) AS unverifiedSamples, " +
+        "  COUNT(d.detection_id) AS totalEpg " +
+        "FROM sessions s " +
+        "LEFT JOIN samples smp ON s.session_id = smp.session_id " +
+        "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed' AND smp.is_repeat = 0" +
+        SESSIONS_FILTER +
+        " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT :limit"
+    )
+    fun observeSessionsPage(
+        userId: String,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>>
+
+    /**
+     * Live count of total and active sessions matching [SESSIONS_FILTER].
+     * Shares the predicate with [observeSessionsPage] so the header counts
+     * and the list can never disagree. Per ADR-007.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        "SELECT COUNT(*) AS totalCount, " +
+        "COALESCE(SUM(CASE WHEN s.ended_at IS NULL THEN 1 ELSE 0 END), 0) AS activeCount " +
+        "FROM sessions s" +
+        SESSIONS_FILTER
+    )
+    fun observeSessionsCounts(
+        userId: String,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCountsRow>
+
+    /**
+     * Observes a paginated, filtered window of local sessions for a never-logged-in device.
+     * All sessions are visible (no user_id guard); active sessions are always included.
+     * Shares [LOCAL_SESSIONS_FILTER] with [observeAllLocalCounts]. Per ADR-007.
+     */
+    @Suppress("LongParameterList")
+    @Query("SELECT * FROM sessions" + LOCAL_SESSIONS_FILTER + " ORDER BY started_at DESC LIMIT :limit")
+    fun observeAllLocalPage(
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionEntity>>
+
+    /**
+     * Live count of total and active local sessions matching [LOCAL_SESSIONS_FILTER].
+     * Shares the predicate with [observeAllLocalPage]. Per ADR-007.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        "SELECT COUNT(*) AS totalCount, " +
+        "COALESCE(SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END), 0) AS activeCount " +
+        "FROM sessions" +
+        LOCAL_SESSIONS_FILTER
+    )
+    fun observeAllLocalCounts(
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCountsRow>
 }
 
 /**
@@ -253,6 +342,52 @@ private const val RECORDS_FILTER = """
                       AND ds.verdict != 'false_positive'
                       AND COALESCE(ds.expert_class, ds.class_label) LIKE '%' || :species || '%'))
 """
+
+/**
+ * Shared WHERE predicate for the Sessions paginated page and counts queries.
+ * Active sessions (`ended_at IS NULL`) are always visible; ended sessions appear
+ * when they fall within the recent window (`:sinceMillis`) or within an explicit
+ * date range (`:startMillis`/`:endMillis`).
+ *
+ * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
+ * and `\` in the needle before passing it in.
+ */
+private const val SESSIONS_FILTER = """
+  WHERE s.user_id = :userId
+    AND ( s.ended_at IS NULL
+          OR (:startMillis IS NULL AND :endMillis IS NULL AND s.started_at >= :sinceMillis)
+          OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
+    AND (:query = ''
+         OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
+         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
+         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\')
+"""
+
+/**
+ * Shared WHERE predicate for the local-only (never-logged-in) paginated page and
+ * counts queries. No user_id guard; active sessions are always visible.
+ *
+ * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
+ * and `\` in the needle before passing it in.
+ */
+private const val LOCAL_SESSIONS_FILTER = """
+  WHERE ( ended_at IS NULL
+          OR (:startMillis IS NULL AND :endMillis IS NULL)
+          OR (:startMillis IS NOT NULL AND started_at >= :startMillis AND started_at <= :endMillis) )
+    AND (:query = ''
+         OR session_id LIKE '%' || :query || '%' ESCAPE '\'
+         OR label      LIKE '%' || :query || '%' ESCAPE '\'
+         OR notes      LIKE '%' || :query || '%' ESCAPE '\')
+"""
+
+/**
+ * Aggregate row returned by [SessionDao.observeSessionsCounts] and
+ * [SessionDao.observeAllLocalCounts].
+ */
+data class SessionsCountsRow(
+    @ColumnInfo(name = "totalCount") val totalCount: Int,
+    @ColumnInfo(name = "activeCount") val activeCount: Int,
+)
 
 data class SessionWithStats(
     @Embedded val session: SessionEntity,

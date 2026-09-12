@@ -5,6 +5,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
@@ -33,7 +34,14 @@ class SessionPickerViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val sessionsFlow = MutableStateFlow<List<SessionWithStats>>(emptyList())
+    private val countsFlow = MutableStateFlow(SessionsCounts())
     private val sessionRepository: SessionRepository = mock<SessionRepository>().also {
+        // VM now uses observeVisibleSessionsPage / observeVisibleSessionsCounts.
+        whenever(it.observeVisibleSessionsPage(anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any()))
+            .thenReturn(sessionsFlow)
+        whenever(it.observeVisibleSessionsCounts(anyOrNull(), any(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(countsFlow)
+        // Keep the old stub so any residual call doesn't NPE (defensive).
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
     }
     private val sessionManager: SessionManager = mock()

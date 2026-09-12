@@ -2,12 +2,14 @@ package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import kotlinx.coroutines.flow.Flow
 
 /**
  * Repository contract for locally persisted recording sessions.
  */
+@Suppress("TooManyFunctions")
 interface SessionRepository {
     /**
      * Observes all sessions owned by [userId], newest first.
@@ -78,4 +80,34 @@ interface SessionRepository {
         query: String,
         species: String?,
     ): Flow<RecordsTotals>
+
+    /**
+     * Observes a paginated, filtered window of sessions for the Sessions screen.
+     * When [userId] is null (never-signed-in device), observes all local sessions
+     * without a date cap; otherwise applies the recent-window / date-range filter.
+     * Active sessions (`ended_at IS NULL`) are always included. Per ADR-007.
+     */
+    @Suppress("LongParameterList")
+    fun observeVisibleSessionsPage(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>>
+
+    /**
+     * Live counts (total and active) for the Sessions screen header. Applies the same
+     * filter predicate as [observeVisibleSessionsPage] so the header and the list can
+     * never disagree. Per ADR-007.
+     */
+    @Suppress("LongParameterList")
+    fun observeVisibleSessionsCounts(
+        userId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts>
 }
