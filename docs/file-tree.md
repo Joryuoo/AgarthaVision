@@ -107,6 +107,11 @@ Numbered, committed, applied by hand in the Supabase dashboard. Never run progra
 | `0006_sample_is_manual.sql` | `samples.is_manual` |
 | `0007_detection_bbox_nullable.sql` | Nullable bounding boxes for manual captures |
 | `0008_reports.sql` | The `reports` table, its indexes, and its RLS |
+| `0009_storage_admin_read.sql` | Admin read access to the `samples` bucket. Read-only by design — still no DELETE policy |
+| `0010_verification_stage.sql` | `detections.stage` for optional egg/parasite stage classification |
+| `0011_reports_pdf_and_lpf.sql` | `reports.pdf_file_path` |
+| `0012_polyparasitism_findings.sql` | `sample_species_findings`, `detections.species_touched`, and the UPDATE policies an editable sample needs to re-sync |
+| `0013_sample_soft_delete.sql` | `samples.deleted_at` and the partial index over live rows |
 
 ## `inference/`
 

@@ -1,7 +1,7 @@
 # docs/map/objects/ — object cards (contract)
 
-One card per core domain noun. Six exist: `Profile`, `Session`, `Sample`, `Detection`,
-`Report`, `StorageObject`. Do not add a seventh without a real entity behind it.
+One card per core domain noun. Seven exist: `Profile`, `Session`, `Sample`, `Detection`,
+`Finding`, `Report`, `StorageObject`. Do not add an eighth without a real entity behind it.
 
 ## Card shape — these sections, in this order
 

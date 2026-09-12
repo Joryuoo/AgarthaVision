@@ -14,4 +14,6 @@ data class Detection(
     val expertClass: String?,
     val verifiedByUser: Boolean,
     val stage: EggStage? = null,
+    /** See `DetectionEntity.speciesTouched` — provenance of the species answer, not a verdict. */
+    val speciesTouched: Boolean = false,
 )

@@ -68,4 +68,22 @@ data class DetectionEntity(
 
     @ColumnInfo(name = "stage")
     val stage: String? = null,
+
+    /**
+     * `true` when the medtech made a deliberate species selection on this box, including
+     * re-picking the value that was pre-filled from the model output.
+     *
+     * Provenance, not a verdict. Species fields are pre-filled from the model so the medtech
+     * edits only what is wrong, which means an untouched submission produces
+     * [DetectionVerdict.CONFIRMED] — "a human did not object" silently recorded as "a human
+     * confirmed this". Since `detections` doubles as the retraining corpus, that distinction
+     * matters: retraining should weight `false` rows lower. `verdict` keeps its existing
+     * meaning and is unaffected.
+     *
+     * Deliberately **not** `verified_by_user`, which is dead drift — dropped from Supabase in
+     * `0002_verification_fields.sql`, still hardcoded `true` at every write site here, and
+     * cleaned up separately by ticket 86d4akgmf.
+     */
+    @ColumnInfo(name = "species_touched", defaultValue = "0")
+    val speciesTouched: Boolean = false,
 )

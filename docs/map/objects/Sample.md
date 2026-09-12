@@ -33,6 +33,7 @@ only what a verified, uploaded sample looks like.
 | `needs_reannotation` | NOT NULL default false — `0002_verification_fields.sql:23-24` |
 | `user_note` | nullable |
 | `is_manual` | NOT NULL default false — `supabase/migrations/0006_sample_is_manual.sql:13-14` |
+| `deleted_at` | nullable timestamptz — `supabase/migrations/0013_sample_soft_delete.sql`. Null means live. See *the tombstone* below |
 
 **Room** (`app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt:15-99`)
 
@@ -49,6 +50,22 @@ PK column is `sample_id`. Room-only or Room-different:
 | `is_repeat` | **Room-only, never synced.** The medtech's "already counted this one" flag; excluded from EPG | `SampleEntity.kt:83-90`, `supabase/migrations/0006_sample_is_manual.sql:9-11` |
 | `predictions_json` | Room-only cache of the raw inference payload; **nulled on verify** | `SampleEntity.kt:92-93`, `data/local/dao/SampleDao.kt:104` |
 | `image_width` / `image_height` | Room-only, from the inference response | `SampleEntity.kt:95-99` |
+| `deleted_at` | Epoch millis, **synced**. Null means live | `SampleEntity.kt`, `supabase/migrations/0013_sample_soft_delete.sql` |
+
+**The tombstone.** A verified sample is never hard-deleted — C8, and `detections` doubles as the
+retraining corpus. But a medtech who captured the same egg twice needs the duplicate gone from
+the queue, the counts and the report. `deleted_at` does exactly that and nothing more: the
+detections stay, the findings rows stay, the local JPEG stays, the Storage object stays, and
+`0003_storage_rls.sql:45-46` still creates no DELETE policy. Unverified frames are different —
+they are hard-deleted on-device, which is C8's existing local exception.
+
+**The rule this creates.** *Every* query that lists or counts samples must filter
+`deleted_at is null`. Miss one and a deleted duplicate reappears in a report. This is enforced
+by a naming rule plus `SoftDeleteGuardTest`: a DAO method that SELECTs over `samples` must carry
+the predicate unless its name ends in `IncludingDeleted`. Exactly two methods are exempt, and
+each announces it at every call site. The stronger form — a `@DatabaseView` over live rows, with
+every list query reading the view — is the intended end state; it was deferred because it
+changes DAO return types and ripples into `SampleMapper` and every `@Embedded` projection.
 
 The insert row is the definitive list of what actually crosses the wire —
 `data/supabase/SampleRemoteDataSource.kt:100-127`. `image_path`, `status`, `is_repeat`,
@@ -64,6 +81,9 @@ columns. They are not — the migration creates `captured_at`, `gps_latitude`, `
 - **Owned by** [`Session`](Session.md) and, remotely, [`Profile`](Profile.md).
 - **Owns** [`Detection`](Detection.md), 1 → many, CASCADE
   (`supabase/migrations/0001_init.sql:61`). Zero detections is legal.
+- **Owns** [`Finding`](Finding.md), 1 → many, CASCADE
+  (`supabase/migrations/0012_polyparasitism_findings.sql`). Zero findings is legal and
+  meaningful — it is how a clean field is recorded.
 - **Points at** [`StorageObject`](StorageObject.md), 1 → 0..1, via `storage_path`. Local-only
   samples have none.
 - **Looks like but is not** `FlaggedFrame` (`domain/model/FlaggedFrame.kt`). That is the

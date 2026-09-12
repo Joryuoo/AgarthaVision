@@ -19,6 +19,7 @@ fun DetectionEntity.toDomain(): Detection =
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
         stage = stage?.let { EggStage.fromValue(it) },
+        speciesTouched = speciesTouched,
     )
 
 fun Detection.toEntity(): DetectionEntity =
@@ -35,4 +36,5 @@ fun Detection.toEntity(): DetectionEntity =
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
         stage = stage?.value,
+        speciesTouched = speciesTouched,
     )

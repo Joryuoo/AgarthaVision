@@ -27,8 +27,25 @@ trail for every human decision.
 | `confidence` | NOT NULL real, CHECK between 0 and 1 (`0001_init.sql:63`) |
 | `bbox_x/y/w/h` | real, **nullable since** `supabase/migrations/0007_detection_bbox_nullable.sql:10-14` |
 | `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) — `supabase/migrations/0002_verification_fields.sql:30-32` |
-| `expert_class` | nullable — the corrected species, set when the verdict is `WRONG_CLASS` (`0002_verification_fields.sql:38-39`) |
+| `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, and **since `0012` also when the verdict is `BOX_INCORRECT`** and the medtech corrected the species (`0002_verification_fields.sql:38-39` describes the narrower original rule) |
 | `stage` | nullable, CHECK in (`UNFERTILIZED`, `UNEMBRYONATED`, `EMBRYONATED`, `LARVATED`) — optional egg/parasite stage (`supabase/migrations/0010_verification_stage.sql`). Ascaris morphology values `CORTICATED`/`DECORTICATED`/`FERTILIZED` are deliberately excluded for now. |
+| `species_touched` | NOT NULL boolean, default `false` (`supabase/migrations/0012_polyparasitism_findings.sql`) — see below |
+
+**Why `expert_class` widened.** An egg with a misplaced box is still an egg and still has to be
+counted, so the species question is now asked whenever the medtech says the box contains one —
+not only when they also say the box is correctly placed. The verdict precedence is unchanged
+(`BOX_INCORRECT` still outranks `WRONG_CLASS`); only the column's population rule widened.
+`0002` is applied and is not edited (C6), so this card and `schema.ts` carry the current rule.
+
+**`species_touched` is provenance, not a verdict.** Species fields are pre-filled from the model
+output so the medtech edits only what is wrong. That means an untouched submission yields
+`CONFIRMED` — "a human did not object" quietly stored as "a human confirmed this" — and since
+`detections` doubles as the retraining corpus, the difference matters. The flag is `true` only
+when the medtech made a deliberate selection, **including re-picking the pre-filled value**.
+Retraining should weight `false` rows lower. It is deliberately not a new `DetectionVerdict`
+member: that would mean touching the Supabase CHECK constraint and every query naming a
+verdict, for a signal a boolean carries. It is also deliberately **not** a reuse of
+`verified_by_user`, which is dead drift (ticket 86d4akgmf).
 
 Index on `verdict` for retraining queries (`0002_verification_fields.sql:47`).
 `verified_by_user` was **dropped** from Postgres by `0002_verification_fields.sql:42-43`.

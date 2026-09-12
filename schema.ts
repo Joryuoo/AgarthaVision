@@ -203,6 +203,8 @@ export interface Session {
  * - `0003_storage_rls.sql`: defines Storage path policy for sample images.
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0006_sample_is_manual.sql`: adds `is_manual`.
+ * - `0013_sample_soft_delete.sql`: adds `deleted_at` and the partial index
+ *   `samples_live_session_idx` over live rows.
  *
  * Room mirror:
  * - `SampleEntity.kt`
@@ -268,8 +270,8 @@ export interface Sample {
   // Room/domain-only. No Supabase column.
 
   is_repeat: boolean;
-  // Room/domain-only. Allows UI/reporting to mark repeat captures without
-  // changing remote schema in Phase 1.
+  // Room/domain-only, and being removed: it existed only because there was no way to
+  // delete a duplicate, which `deleted_at` now provides. See ticket 86d4ab4vm.
 
   predictions_json: string | null;
   // Room-only raw inference payload/cache for local display and recovery.
@@ -279,6 +281,13 @@ export interface Sample {
 
   image_height: number | null;
   // Room-only captured image height in pixels.
+
+  deleted_at: TimestampTZ | null;
+  // Nullable after migration `0013_sample_soft_delete.sql`. Null means live. A verified
+  // sample is never hard-deleted (C8) — it is tombstoned here, which hides it from every
+  // queue, count and report while its detections stay in the retraining corpus and its
+  // Storage object stays put. Unverified frames are hard-deleted instead, on-device.
+  // EVERY query that lists or counts samples must filter `deleted_at is null`.
 }
 
 /**
@@ -291,8 +300,9 @@ export interface Sample {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0007_detection_bbox_nullable.sql`: makes `bbox_x`, `bbox_y`, `bbox_w`,
  *   and `bbox_h` nullable for manual detections.
- * - `0010_verification_stage.sql`: adds optional `stage` (this file's change only;
- *   sibling tickets 86d4ab4tq and 86d4akgmf append their own columns to the same file).
+ * - `0010_verification_stage.sql`: adds optional `stage`.
+ * - `0012_polyparasitism_findings.sql`: adds `species_touched`, and adds the UPDATE
+ *   policy `detections_update_via_sample` that re-syncing an edited sample needs.
  *
  * Room mirror:
  * - `DetectionEntity.kt`
@@ -327,7 +337,12 @@ export interface Detection {
   // Room stores lowercase domain values and maps them for remote sync.
 
   expert_class: string | null;
-  // Nullable corrected class. Used when verdict is `WRONG_CLASS`.
+  // Nullable corrected class. Used when verdict is `WRONG_CLASS` — and, from
+  // `0012_polyparasitism_findings.sql` on, also when verdict is `BOX_INCORRECT` and the
+  // medtech corrected the species. An egg with a misplaced box is still an egg and still
+  // has to be counted, so the species question is asked whenever the box contains one.
+  // `0002_verification_fields.sql` describes the narrower rule; it is applied and not
+  // edited (C6), so this is the current one.
 
   created_at: TimestampTZ;
   // Supabase NOT NULL. Default `now()`.
@@ -340,6 +355,54 @@ export interface Detection {
   // stage; CHECK constrains values to 'UNFERTILIZED' | 'UNEMBRYONATED' |
   // 'EMBRYONATED' | 'LARVATED'. The Ascaris morphology values 'CORTICATED',
   // 'DECORTICATED', and 'FERTILIZED' are deliberately excluded for now.
+
+  species_touched: boolean;
+  // NOT NULL. Default `false`. Added by `0012_polyparasitism_findings.sql`. True when the
+  // medtech made a deliberate species selection on this box, including re-picking the
+  // value pre-filled from the model. False means the pre-fill was submitted untouched: a
+  // non-objection, not a confirmation. Provenance only — `verdict` is unaffected — but it
+  // matters because `detections` doubles as the retraining corpus. Deliberately NOT a
+  // reuse of the dead `verified_by_user`.
+}
+
+/**
+ * One species-and-stage finding a medtech logged on a single frame, with that pair's
+ * low-power-field egg count.
+ *
+ * One field can hold eggs of more than one species, and that is normal, so a frame carries
+ * zero or more of these. The count is per species AND stage, never a frame total: WHO
+ * infection-intensity thresholds are species-specific and differ by more than an order of
+ * magnitude, so a combined per-field number cannot be graded.
+ *
+ * Zero rows is a meaningful state — a clean field — which is why `EggSpecies` has no
+ * "no egg" member.
+ *
+ * Supabase migrations:
+ * - `0012_polyparasitism_findings.sql`: creates the table, its two partial unique indexes,
+ *   and its RLS policies (scoped through the parent sample, like `detections`).
+ *
+ * Room mirror:
+ * - `SampleSpeciesFindingEntity.kt`
+ */
+export interface SampleSpeciesFinding {
+  id: UUID;
+  // Supabase PK. Room column: `finding_id` PK, derived deterministically from
+  // (sample_id, species, stage) so an edit replaces rather than duplicates.
+
+  sample_id: UUID;
+  // NOT NULL. FK to `samples.id`, ON DELETE CASCADE.
+
+  species: string;
+  // NOT NULL, non-blank. Canonical class name, or free text when the dropdown does not
+  // cover the species. Same convention as `detections.class_label` / `expert_class`.
+
+  stage: string | null;
+  // Nullable — null when the species has no defined stage set (see `EggStage.validFor`).
+  // Same CHECK value set as `detections.stage`.
+
+  egg_count: number;
+  // NOT NULL, CHECK > 0. Eggs of this species and stage in this one low-power field. A
+  // count of zero is the absence of a row, not a row holding zero.
 }
 
 /**
