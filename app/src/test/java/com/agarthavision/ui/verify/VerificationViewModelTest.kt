@@ -125,7 +125,7 @@ class VerificationViewModelTest {
     @Test
     fun `successful submit removes frame and emits Dismiss`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(Result.success("sample-1"))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -191,7 +191,7 @@ class VerificationViewModelTest {
     @Test
     fun `submit failure keeps isSubmitting false and emits ShowError`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(Result.failure(RuntimeException("DB error")))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -206,21 +206,6 @@ class VerificationViewModelTest {
                 assertEquals("DB error", (event as VerificationEvent.ShowError).message)
             }
             assertFalse(vm.state.value.isSubmitting)
-        }
-
-    @Test
-    fun `onToggleRepeat updates state and store`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
-            advanceUntilIdle()
-
-            vm.onToggleRepeat()
-            advanceUntilIdle()
-
-            assertTrue(vm.state.value.isRepeat)
-            verify(flaggedFrameStore).toggleRepeat(frame)
         }
 
     @Test
@@ -377,30 +362,23 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `store emission differing only in markedAsRepeat is not conflated away`() =
+    fun `a store emission that changed a frame is not conflated away`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // The regression: FlaggedFrame.equals compared sampleId alone, so a Room
-            // re-emission that only flipped is_repeat compared equal to the list already
-            // held. StateFlow conflated it, and the queue's Repeat filter went stale.
+            // re-emission carrying a changed frame compared equal to the list already held,
+            // StateFlow conflated it, and the queue silently went stale. The equality contract
+            // itself lives in FlaggedFrameTest; this asserts the collector still sees through.
             val frame = makeIdentifiedFrame("a")
             storeState.value = listOf(frame)
             val vm = viewModel()
             vm.setFrame(frame)
             advanceUntilIdle()
+            assertEquals(1, vm.state.value.queueSize)
 
-            val toggled = frame.copy(markedAsRepeat = true)
-            assertNotEquals(frame, toggled)
-            assertNotEquals(listOf(frame), listOf(toggled))
-
-            storeState.value = listOf(toggled)
+            storeState.value = listOf(frame, makeIdentifiedFrame("b"))
             advanceUntilIdle()
 
-            // The emission getting through is the whole point, and now it is visible twice
-            // over: a repeat leaves the AI cycle, so the size drops to zero and the open
-            // frame reports no position. Under the old sampleId-only equality this
-            // emission was swallowed and both would have stayed at 1.
-            assertEquals(0, vm.state.value.queueSize)
-            assertEquals(0, vm.state.value.frameIndexInQueue)
+            assertEquals(2, vm.state.value.queueSize)
         }
 
     @Test
@@ -459,29 +437,12 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `frame cycling skips repeat frames`() =
+    fun `a frame that leaves the queue stays on screen but loses its position`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val first = makeIdentifiedFrame("ai-1")
-            val repeat = makeIdentifiedFrame("ai-2").copy(markedAsRepeat = true)
-            val last = makeIdentifiedFrame("ai-3")
-            storeState.value = listOf(first, repeat, last)
-            val vm = viewModel()
-            vm.setFrame(first)
-            advanceUntilIdle()
-
-            // Two frames in the cycle, not the three in the store.
-            assertEquals(2, vm.state.value.queueSize)
-
-            vm.onFrameNext()
-            advanceUntilIdle()
-
-            assertEquals(last, vm.state.value.frame)
-            assertEquals(2, vm.state.value.frameIndexInQueue)
-        }
-
-    @Test
-    fun `marking the open frame repeat leaves it on screen but out of cycle`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // This used to be reached by marking the open frame repeat. Repeat is gone, but the
+            // sentinel still earns its keep: the frame can leave the queue underneath the
+            // medtech - deleted from the queue screen, or tombstoned - and showing "Frame 0/2"
+            // was the bug it exists to prevent.
             val open = makeIdentifiedFrame("ai-1")
             val other = makeIdentifiedFrame("ai-2")
             storeState.value = listOf(open, other)
@@ -491,12 +452,11 @@ class VerificationViewModelTest {
             assertEquals(1, vm.state.value.frameIndexInQueue)
             assertTrue(vm.state.value.canGoNext)
 
-            // What the store emits after onToggleRepeat writes is_repeat.
-            storeState.value = listOf(open.copy(markedAsRepeat = true), other)
+            storeState.value = listOf(other)
             advanceUntilIdle()
 
-            // Still showing it, so a mistap can be undone — but with no position, and
-            // both frame buttons disabled so it cannot page from here.
+            // Still showing it, but with no position and both frame buttons disabled, so it
+            // cannot page from a frame that is not there.
             assertEquals(open, vm.state.value.frame)
             assertEquals(0, vm.state.value.frameIndexInQueue)
             assertFalse(vm.state.value.canGoPrev)

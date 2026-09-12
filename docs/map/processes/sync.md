@@ -80,5 +80,6 @@ Only then does the sync pass run. Claim-exempt sessions are never pushed
   container does — see [`infer`](infer.md).
 - **Deletion.** Sync only inserts and upserts. Nothing here can remove a remote row or a
   Storage object (`../../constraints.md` C8).
-- **Repeat samples.** `is_repeat` has no Postgres column and is not in the insert row — the
+- **Repeat samples.** Gone as of 86d4ab4vm — duplicates are deleted, not flagged. While it
+  existed, `is_repeat` had no Postgres column and was not in the insert row — the
   flag stays local by design (`supabase/migrations/0006_sample_is_manual.sql:9-11`).

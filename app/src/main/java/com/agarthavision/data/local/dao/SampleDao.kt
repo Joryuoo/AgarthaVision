@@ -89,9 +89,6 @@ interface SampleDao {
     )
     suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
-    @Query("UPDATE samples SET is_repeat = NOT is_repeat WHERE sample_id = :sampleId")
-    suspend fun toggleIsRepeat(sampleId: String)
-
     @Query("DELETE FROM samples WHERE sample_id = :sampleId")
     suspend fun deleteSample(sampleId: String)
 
@@ -112,7 +109,6 @@ interface SampleDao {
             verified_at = :verifiedAt,
             needs_reannotation = :needsReannotation,
             user_note = :userNote,
-            is_repeat = :isRepeat,
             gps_latitude = :gpsLatitude,
             gps_longitude = :gpsLongitude,
             gps_accuracy = :gpsAccuracy,
@@ -130,7 +126,6 @@ interface SampleDao {
         verifiedAt: Long,
         needsReannotation: Boolean,
         userNote: String?,
-        isRepeat: Boolean,
         gpsLatitude: Double?,
         gpsLongitude: Double?,
         gpsAccuracy: Float?,

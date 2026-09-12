@@ -62,7 +62,11 @@ as working.
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
-- **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced,
+- **Delete a duplicate** — a sample captured twice is removed rather than flagged. Unverified
+  frames are hard-deleted; a verified sample is tombstoned via `samples.deleted_at`, which hides
+  it from every queue, count and report while its detections stay in the retraining corpus (C8).
+  This replaced the **Repeat flag** (86d4ab4vm), which existed only because deletion was not
+  possible. That flag was excluded from EPG, never synced,
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).

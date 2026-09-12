@@ -63,10 +63,7 @@ class GetRecordsUseCase @Inject constructor(
                     val detections = samples.flatMap { sample ->
                         detectionRepository.getDetectionsForSample(sample.id)
                     }
-                    val countedSampleIds = samples
-                        .filterNot { it.isRepeat }
-                        .map { it.id }
-                        .toSet()
+                    val countedSampleIds = samples.map { it.id }.toSet()
                     val totalEpg = detections.count { detection ->
                         detection.sampleId in countedSampleIds &&
                             detection.verdict != DetectionVerdict.FALSE_POSITIVE

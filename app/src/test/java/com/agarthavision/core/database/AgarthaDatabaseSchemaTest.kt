@@ -99,6 +99,16 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
+    fun `samples no longer carry is_repeat`() {
+        // The flag existed only because there was no way to delete a duplicate. deleted_at
+        // provides that, so the workaround went with it (86d4ab4vm).
+        assertFalse(
+            "samples.is_repeat should be gone - duplicates are deleted now, not flagged.",
+            columnsOf("samples").contains("is_repeat"),
+        )
+    }
+
+    @Test
     fun `the tables the earlier versions added are still present`() {
         // If one of these goes missing, a merge dropped a side.
         val tables = tables()

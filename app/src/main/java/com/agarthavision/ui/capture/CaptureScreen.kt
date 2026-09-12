@@ -476,7 +476,7 @@ fun CaptureScreen(
             // nothing to verify — neither should hold a session open. Interim gate until
             // 86d4ab4vm reworks the queue; do not reach into the verification sheets here
             // (86d4ab4tq's territory).
-            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat && it.predictions.isNotEmpty() },
+            blockedCount = state.flaggedFrames.count { it.predictions.isNotEmpty() },
             onConfirm = { notes ->
                 showEndConfirm = false
                 viewModel.endSession(notes)

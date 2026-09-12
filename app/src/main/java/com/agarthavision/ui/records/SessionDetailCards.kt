@@ -258,17 +258,6 @@ internal fun SampleTile(
                     .padding(6.dp),
             )
         }
-        if (sample.isRepeat) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(6.dp)
-                    .background(AgarthaTheme.colors.gold, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 5.dp, vertical = 2.dp),
-            ) {
-                Text("R", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.onGold)
-            }
-        }
         SpeciesBadge(
             text = sample.species,
             isManual = sample.source == SampleSource.Manual,

@@ -103,7 +103,6 @@ class VerificationPreviewScreenshotTest {
         onToggleBoundingBoxes = {},
         onSubmit = {},
         onCancel = {},
-        onToggleRepeat = {},
         onUserNoteChanged = {},
         onAddFinding = {},
         onRemoveFinding = {},

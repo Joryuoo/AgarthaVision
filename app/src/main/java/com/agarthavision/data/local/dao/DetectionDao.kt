@@ -27,7 +27,7 @@ interface DetectionDao {
 
     /**
      * Aggregates confirmed detections per species for a session, excluding repeat
-     * samples (`samples.is_repeat = 0`). The `species` value resolves to
+     * samples. The `species` value resolves to
      * `expert_class` when present, otherwise `class_label`.
      */
     @Query(
@@ -39,7 +39,6 @@ interface DetectionDao {
         WHERE s.session_id = :sessionId
           AND s.user_id = :userId
                     AND s.status != 'flagged'
-          AND s.is_repeat = 0
           AND d.verdict != 'false_positive'
         GROUP BY species
         ORDER BY species ASC
@@ -62,7 +61,6 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
-          AND s.is_repeat = 0
           AND d.verdict = 'confirmed'
         GROUP BY species
         ORDER BY eggCount DESC
@@ -83,7 +81,6 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
-          AND s.is_repeat = 0
           AND d.verdict = 'confirmed'
         GROUP BY s.sample_id
         ORDER BY s.timestamp ASC

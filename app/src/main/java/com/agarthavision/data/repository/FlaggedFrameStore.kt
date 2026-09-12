@@ -84,11 +84,6 @@ class FlaggedFrameStore @Inject constructor(
         }
     }
 
-    suspend fun toggleRepeat(frame: FlaggedFrame) {
-        if (frame.sampleId.isNotBlank()) {
-            sampleDao.toggleIsRepeat(frame.sampleId)
-        }
-    }
 
     suspend fun clear() {
         val userId = authRepository.getCurrentUserId()
@@ -112,7 +107,6 @@ class FlaggedFrameStore @Inject constructor(
             jpegBytes = jpegBytes,
             predictions = predictions,
             source = if (isManual) FrameSource.MANUAL else FrameSource.MODEL,
-            markedAsRepeat = isRepeat,
             inferenceModelVersion = inferenceModelVersion,
             imageWidth = imageWidth,
             imageHeight = imageHeight,

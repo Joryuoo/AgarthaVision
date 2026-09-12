@@ -78,7 +78,6 @@ class ReportCsvBuilder @Inject constructor() {
             longitude?.toString().orEmpty(),
             accuracyMeters?.toString().orEmpty(),
             isManual.toString(),
-            isRepeat.toString(),
             userNote.orEmpty(),
             inferenceModelVersion,
         ).joinToString(",") { it.csvEscape() }
@@ -103,8 +102,11 @@ class ReportCsvBuilder @Inject constructor() {
     private companion object {
         private val CSV_QUOTED_CHARS = charArrayOf(',', '"', '\n', '\r')
 
+        // is_repeat was dropped in 86d4ab4vm along with the flag itself: duplicates are
+        // deleted now, not marked. Anything parsing this file by column position shifts left
+        // by one from user_note onward.
         private const val CSV_HEADER =
             "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,stage," +
-                "gps_lat,gps_lng,gps_accuracy,is_manual,is_repeat,user_note,model_version"
+                "gps_lat,gps_lng,gps_accuracy,is_manual,user_note,model_version"
     }
 }

@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 12,
-    "identityHash": "1bbe0200486d99c7ac455d1e8e7bb5a5",
+    "identityHash": "410efb50ff98ddc97fdd02ed3923e06b",
     "entities": [
       {
         "tableName": "samples",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `gps_latitude` REAL, `gps_longitude` REAL, `gps_accuracy` REAL, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `is_repeat` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, PRIMARY KEY(`sample_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `gps_latitude` REAL, `gps_longitude` REAL, `gps_accuracy` REAL, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, PRIMARY KEY(`sample_id`))",
         "fields": [
           {
             "fieldPath": "sampleId",
@@ -98,13 +98,6 @@
           {
             "fieldPath": "isManual",
             "columnName": "is_manual",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
-          },
-          {
-            "fieldPath": "isRepeat",
-            "columnName": "is_repeat",
             "affinity": "INTEGER",
             "notNull": true,
             "defaultValue": "0"
@@ -549,7 +542,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1bbe0200486d99c7ac455d1e8e7bb5a5')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '410efb50ff98ddc97fdd02ed3923e06b')"
     ]
   }
 }

@@ -149,12 +149,12 @@ interface SessionDao {
                COUNT(DISTINCT smp.sample_id) AS totalSamples,
                SUM(CASE WHEN smp.verified_at > 0 THEN 1 ELSE 0 END) AS verifiedSamples,
                SUM(
-                 CASE WHEN smp.status = 'flagged' AND smp.is_repeat = 0 THEN 1 ELSE 0 END
+                 CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END
                ) AS unverifiedSamples,
                COUNT(d.detection_id) AS totalEpg
         FROM sessions s
         LEFT JOIN samples smp ON s.session_id = smp.session_id
-        LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed' AND smp.is_repeat = 0
+        LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
         WHERE s.user_id = :userId
           AND (s.ended_at IS NULL OR s.started_at >= :sinceMillis)
         GROUP BY s.session_id

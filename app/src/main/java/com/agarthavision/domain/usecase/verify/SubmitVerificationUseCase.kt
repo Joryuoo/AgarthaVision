@@ -37,7 +37,6 @@ class SubmitVerificationUseCase @Inject constructor(
         findings: List<Finding>,
         missedEgg: Boolean?,
         userNote: String? = null,
-        isRepeat: Boolean = false,
     ): Result<String> = runCatching {
         // Per ADR-007, verification works offline. No auth is required — the sample keeps
         // its existing owner (cached identity or null) and is claimed at the next login.
@@ -55,7 +54,6 @@ class SubmitVerificationUseCase @Inject constructor(
             verifiedAt = verifiedAt.toEpochMilli(),
             needsReannotation = missedEgg == true,
             userNote = userNote?.takeIf { it.isNotBlank() },
-            isRepeat = isRepeat,
             gpsLatitude = location?.latitude,
             gpsLongitude = location?.longitude,
             gpsAccuracy = location?.accuracyMeters,

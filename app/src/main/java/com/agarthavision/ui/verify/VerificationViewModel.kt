@@ -57,7 +57,6 @@ data class VerificationUiState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    val isRepeat: Boolean = false,
 ) {
     /**
      * A clean field — an AI capture the model returned no detections for — has no findings to
@@ -129,7 +128,7 @@ class VerificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
-                val cycle = frames.cycle()
+                val cycle = frames
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
@@ -142,20 +141,15 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * The frames this sheet cycles through.
+     * The frames this sheet cycles through: all of them, both sources.
      *
-     * Every frame in the queue, both sources. There used to be two sheets asking different
-     * questions, so paging onto a manual capture from here would have rendered the wrong one —
-     * the host picked a sheet from the frame it was opened with and never re-evaluated. There
-     * is one screen now, so there is nothing to page wrongly onto.
-     *
-     * Frames marked repeat are still excluded: they are duplicates the medtech has already
-     * accounted for, and paging onto one invites verifying it by accident.
+     * There used to be two exclusions. Manual captures were skipped because they had their own
+     * sheet and the host picked one from the frame it opened with, so paging onto a manual
+     * frame rendered the wrong questions (86d4ab4tq merged the screens). Repeat-marked frames
+     * were skipped because verifying a duplicate by accident was the hazard — duplicates are
+     * deleted now rather than flagged (86d4ab4vm), so there is nothing left to skip.
      */
-    private fun List<FlaggedFrame>.cycle(): List<FlaggedFrame> = filter { !it.markedAsRepeat }
-
-    /** The frames currently in the store, in queue order. */
-    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.cycle()
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value
 
     /**
      * 1-based position of [frame] within [frames], or [OUT_OF_CYCLE] when the frame is
@@ -192,22 +186,7 @@ class VerificationViewModel @Inject constructor(
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = "",
-                isRepeat = frame.markedAsRepeat,
             )
-        }
-    }
-
-    /**
-     * Toggles the Room-only `samples.is_repeat` flag (per ADR-005). Marks the
-     * sample as a duplicate of a previously-verified one; excluded from EPG.
-     */
-    fun onToggleRepeat() {
-        val frame = currentFrame
-        _state.update { it.copy(isRepeat = !it.isRepeat) }
-        if (frame != null) {
-            viewModelScope.launch {
-                flaggedFrameStore.toggleRepeat(frame)
-            }
         }
     }
 
@@ -424,7 +403,6 @@ class VerificationViewModel @Inject constructor(
                 findings = snapshot.findings,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
-                isRepeat = snapshot.isRepeat,
             ).fold(
                 onSuccess = {
                     currentFrame = null
@@ -446,7 +424,7 @@ class VerificationViewModel @Inject constructor(
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
      * rather than equality keeps navigation working regardless of how `FlaggedFrame`
-     * defines equals, which now covers mutable fields such as `markedAsRepeat`.
+     * defines equals, which covers mutable fields such as the answers already given.
      */
     private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
         indexOfFirst { it.sampleId == frame.sampleId }

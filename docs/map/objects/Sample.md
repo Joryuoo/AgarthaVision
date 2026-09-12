@@ -47,7 +47,6 @@ PK column is `sample_id`. Room-only or Room-different:
 | `image_path` | Room-only. The on-device file. Postgres has no such column | `SampleEntity.kt:41-42` |
 | `storage_path` | **nullable** in Room until upload succeeds; NOT NULL remotely | `SampleEntity.kt:44-45` |
 | `status` | **Room/domain only.** `flagged`/`verified`/`synced`/`sync_failed`. No Postgres column exists | `SampleEntity.kt:62-63`, `domain/model/SampleStatus.kt:13-18` |
-| `is_repeat` | **Room-only, never synced.** The medtech's "already counted this one" flag; excluded from EPG | `SampleEntity.kt:83-90`, `supabase/migrations/0006_sample_is_manual.sql:9-11` |
 | `predictions_json` | Room-only cache of the raw inference payload; **nulled on verify** | `SampleEntity.kt:92-93`, `data/local/dao/SampleDao.kt:104` |
 | `image_width` / `image_height` | Room-only, from the inference response | `SampleEntity.kt:95-99` |
 | `deleted_at` | Epoch millis, **synced**. Null means live | `SampleEntity.kt`, `supabase/migrations/0013_sample_soft_delete.sql` |
@@ -68,8 +67,8 @@ every list query reading the view — is the intended end state; it was deferred
 changes DAO return types and ripples into `SampleMapper` and every `@Embedded` projection.
 
 The insert row is the definitive list of what actually crosses the wire —
-`data/supabase/SampleRemoteDataSource.kt:100-127`. `image_path`, `status`, `is_repeat`,
-`device_id`, and the prediction cache are all absent from it.
+`data/supabase/SampleRemoteDataSource.kt:100-127`. `image_path`, `status`, `device_id`, and the
+prediction cache are all absent from it.
 
 **`schema.ts` is wrong here and the code wins.** `schema.ts:224-282` names `timestamp`,
 `image_path`, `created_at`, `gps_lat`, `gps_lng`, and `gps_accuracy_m` as if they were Postgres
@@ -100,7 +99,7 @@ columns. They are not — the migration creates `captured_at`, `gps_latitude`, `
 - Every `SampleDao` query filtering `status != 'flagged'`. The flagged/verified split is
   enforced in query text, not by a type — `data/local/dao/SampleDao.kt:39`, `:42`, `:51`,
   `:60`, `:69`, `:78`.
-- The EPG aggregate, which joins samples and excludes `is_repeat = 1`
+- The EPG aggregate, which joins samples
   (`data/local/dao/DetectionDao.kt:33-52`).
 - The CSV row shape (`domain/usecase/records/ReportCsvBuilder.kt`).
 - The Room database version (`core/database/AgarthaDatabase.kt:34`) — and remember the

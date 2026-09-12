@@ -26,9 +26,6 @@ internal object VerifyTestTags {
     const val DETECTION_PREV = "detection_prev"
     const val DETECTION_NEXT = "detection_next"
 
-    /** The repeat-sample flag in the AI sheet's top bar. */
-    const val REPEAT_TOGGLE = "repeat_toggle"
-
     /** Free-text observation field on both sheets. */
     const val NOTE_FIELD = "note_field"
 

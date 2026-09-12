@@ -80,15 +80,6 @@ data class SampleEntity(
     @ColumnInfo(name = "is_manual", defaultValue = "0")
     val isManual: Boolean = false,
 
-    /**
-     * `true` when the medtech has flagged this sample as a duplicate of an
-     * egg already counted on the same smear. **Room-only** flag — never
-     * synced to Supabase. Excluded from EPG counts. Workflow aid for the
-     * medtech to sift through model outputs. Per ADR-005.
-     */
-    @ColumnInfo(name = "is_repeat", defaultValue = "0")
-    val isRepeat: Boolean = false,
-
     @ColumnInfo(name = "predictions_json")
     val predictionsJson: String? = null,
 

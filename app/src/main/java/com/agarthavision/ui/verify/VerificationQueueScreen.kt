@@ -149,7 +149,6 @@ fun VerificationQueueScreen(
                     QueueFilter.ALL to "All",
                     QueueFilter.FLAGGED to "AI",
                     QueueFilter.MANUAL to "Manual",
-                    QueueFilter.REPEAT to "Repeat"
                 ).forEach { (filter, label) ->
                     val isSelected = state.queueFilter == filter
                     val count = counts[filter] ?: 0
@@ -326,29 +325,6 @@ private fun FrameRow(
                         letterSpacing = 0.1.sp,
                         style = InterBaseStyle
                     )
-                }
-
-                if (frame.markedAsRepeat) {
-                    val repeatAccent = colors.accent
-                    Row(
-                        modifier = Modifier
-                            .background(colors.accentTint, CircleShape)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(7.dp)) {
-                            drawCircle(repeatAccent)
-                        }
-                        Text(
-                            "Repeat",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.accent,
-                            letterSpacing = 0.1.sp,
-                            style = InterBaseStyle
-                        )
-                    }
                 }
             }
         }

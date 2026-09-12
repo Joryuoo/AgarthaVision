@@ -82,7 +82,6 @@ class VerificationSheetContentTest {
         var frameNext = 0
         var deletes = 0
         var boxToggles = 0
-        var repeatToggles = 0
         var submits = 0
         var cancels = 0
         var addFindings = 0
@@ -107,7 +106,6 @@ class VerificationSheetContentTest {
         onToggleBoundingBoxes = { r.boxToggles++ },
         onSubmit = { r.submits++ },
         onCancel = { r.cancels++ },
-        onToggleRepeat = { r.repeatToggles++ },
         onUserNoteChanged = { r.notes += it },
         onAddFinding = { r.addFindings++ },
         onRemoveFinding = { r.removedFindings += it },
@@ -515,36 +513,14 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `tapping the repeat flag reports the toggle`() {
-        val r = setContent(state())
-
-        sheetNode(VerifyTestTags.REPEAT_TOGGLE).performClick()
-
-        assertEquals(1, r.repeatToggles)
-    }
-
-    @Test
-    fun `a repeat frame announces itself as enabled`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                VerificationSheetContent(
-                    state = state().copy(isRepeat = true),
-                    actions = actionsFor(Recorder()),
-                )
-            }
-        }
-
-        composeRule.onNodeWithContentDescription("Repeat sample (enabled)").assertIsDisplayed()
-    }
-
-    @Test
-    fun `a frame out of the cycle shows the repeat meta instead of a position`() {
-        // frameIndexInQueue 0 means the frame left the cycle; showing "Frame 0/4" was the bug.
+    fun `a frame out of the queue shows that instead of a position`() {
+        // frameIndexInQueue 0 means the frame is no longer in the queue - deleted from the
+        // queue screen, or tombstoned. Showing "Frame 0/4" was the bug.
         setContent(state(frameIndexInQueue = 0, queueSize = 4))
 
         // Matched on the label alone: the meta also carries a wall-clock time formatted in
         // the default zone, so asserting the whole string would pass or fail by machine.
-        composeRule.onNodeWithText("REPEAT", substring = true).assertIsDisplayed()
+        composeRule.onNodeWithText("NOT IN QUEUE", substring = true).assertIsDisplayed()
         composeRule.onNodeWithText("FRAME 0/4", substring = true).assertDoesNotExist()
     }
 

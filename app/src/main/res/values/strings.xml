@@ -72,8 +72,8 @@
     <string name="connection_lost_probing">Checking connection…</string>
 
     <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
-    <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
-    <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
+    <!-- Shown instead of a position when the open frame is no longer in the queue. -->
+    <string name="verify_frame_meta_out_of_cycle">Not in queue · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
@@ -82,9 +82,6 @@
     <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
 
     <string name="verify_sheet_kebab_desc">Sample actions</string>
-    <string name="verify_mark_repeat">Mark as repeat</string>
-    <string name="verify_unmark_repeat">Unmark as repeat</string>
-    <string name="verify_repeat_badge">Repeat</string>
     <string name="verify_user_note_label">Notes (optional)</string>
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
     <string name="badge_ai_suggested">AI-suggested</string>
@@ -95,7 +92,6 @@
     <string name="queue_filter_all">All</string>
     <string name="queue_filter_flagged">Flagged</string>
     <string name="queue_filter_manual">Manual</string>
-    <string name="queue_filter_repeat">Repeat</string>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$d detection(s) · %2$s</string>

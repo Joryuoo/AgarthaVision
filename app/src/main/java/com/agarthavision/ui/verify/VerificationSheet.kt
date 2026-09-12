@@ -68,7 +68,7 @@ fun VerificationSheet(
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
-    // like markedAsRepeat, so keying on the frame would re-seed the sheet — and wipe
+    // such as the answers already given, so keying on the frame would re-seed it — and wipe
     // the in-progress answers — every time the store re-emits.
     LaunchedEffect(frame.sampleId) {
         viewModel.setFrame(frame)
@@ -108,7 +108,6 @@ fun VerificationSheet(
                 onToggleBoundingBoxes = viewModel::onToggleBoundingBoxes,
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
-                onToggleRepeat = viewModel::onToggleRepeat,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
                 onAddFinding = viewModel::onAddFinding,
                 onRemoveFinding = viewModel::onRemoveFinding,
@@ -159,33 +158,6 @@ internal fun VerificationSheetContent(
                 stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
             },
             onBack = actions.onCancel,
-            actions = {
-                // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (state.isRepeat) AgarthaTheme.colors.accentTint else Color.Transparent)
-                        .border(
-                            width = 0.5.dp,
-                            color = if (state.isRepeat) {
-                                AgarthaTheme.colors.accent.copy(alpha = 0.35f)
-                            } else {
-                                AgarthaTheme.colors.borderStrong
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .clickable { actions.onToggleRepeat() }
-                        .testTag(VerifyTestTags.REPEAT_TOGGLE),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (state.isRepeat) Icons.Filled.Flag else Icons.Outlined.Flag,
-                        contentDescription = if (state.isRepeat) "Repeat sample (enabled)" else "Mark as repeat sample",
-                        tint = if (state.isRepeat) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
-                    )
-                }
-            },
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {

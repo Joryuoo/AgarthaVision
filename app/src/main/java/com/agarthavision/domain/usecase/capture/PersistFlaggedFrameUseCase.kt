@@ -55,7 +55,6 @@ class PersistFlaggedFrameUseCase @Inject constructor(
                 status = SampleStatus.FLAGGED.value,
                 userNote = null,
                 isManual = frame.source == FrameSource.MANUAL,
-                isRepeat = frame.markedAsRepeat,
                 predictionsJson = predictionsJson,
                 imageWidth = frame.imageWidth,
                 imageHeight = frame.imageHeight,

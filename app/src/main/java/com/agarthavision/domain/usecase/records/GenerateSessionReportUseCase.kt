@@ -64,7 +64,7 @@ class GenerateSessionReportUseCase @Inject constructor(
         val epgPerSpecies = normalizedCounts.mapValues { EpgCalculator.epg(it.value) }
         val positiveSpecies = epgPerSpecies.filterValues { it > 0 }.keys.sorted()
         val totalEggsConfirmed = normalizedCounts.values.sum()
-        val totalSamples = samples.count { !it.isRepeat }
+        val totalSamples = samples.size
 
         val reportId = UUID.randomUUID().toString()
         val generatedAt = Instant.now()
