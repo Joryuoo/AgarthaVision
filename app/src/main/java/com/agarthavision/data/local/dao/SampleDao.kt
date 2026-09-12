@@ -1,6 +1,8 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -131,6 +133,31 @@ interface SampleDao {
     )
     suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
+    /**
+     * Every live sample in a session, verified or not — the union the verification queue shows.
+     *
+     * Deliberately carries **no `status` predicate**: that is what makes it a union rather than
+     * one of the two halves. Verified samples stay in the queue and stay editable, so the
+     * medtech can correct a mistake instead of living with it.
+     *
+     * The confirmed-detection count is a correlated subquery rather than a join, so one row
+     * comes back per sample and the caller does not have to collapse duplicates.
+     */
+    @Query(
+        """
+        SELECT s.*,
+               (SELECT COUNT(*) FROM detections d
+                 WHERE d.sample_id = s.sample_id AND d.verdict != 'false_positive')
+                 AS confirmedDetections
+        FROM samples s
+        WHERE s.session_id = :sessionId
+          AND (:userId IS NULL OR s.user_id = :userId OR s.user_id IS NULL)
+          AND s.deleted_at is null
+        ORDER BY s.timestamp DESC
+        """,
+    )
+    fun observeQueueRowsForSession(sessionId: String, userId: String?): Flow<List<QueueSampleRow>>
+
     @Query("DELETE FROM samples WHERE sample_id = :sampleId")
     suspend fun deleteSample(sampleId: String)
 
@@ -170,8 +197,7 @@ interface SampleDao {
             user_note = :userNote,
             gps_latitude = :gpsLatitude,
             gps_longitude = :gpsLongitude,
-            gps_accuracy = :gpsAccuracy,
-            predictions_json = NULL
+            gps_accuracy = :gpsAccuracy
         WHERE sample_id = :sampleId
         """,
     )
@@ -232,3 +258,9 @@ interface SampleDao {
     )
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
 }
+
+/** Projection for [SampleDao.observeQueueRowsForSession]: the sample plus its counted detections. */
+data class QueueSampleRow(
+    @Embedded val sample: SampleEntity,
+    @ColumnInfo(name = "confirmedDetections") val confirmedDetections: Int,
+)

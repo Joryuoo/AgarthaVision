@@ -94,9 +94,19 @@
 
     <string name="queue_sheet_title">Flagged Frames · %1$d</string>
     <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
-    <string name="queue_filter_all">All</string>
-    <string name="queue_filter_flagged">Flagged</string>
-    <string name="queue_filter_manual">Manual</string>
+    <!--
+      Two buckets, not four. Source (AI vs Manual) is shown on the row and decides what the
+      verification screen renders, but it files nothing (revised 2026-09-12, 86d4ab4vm).
+    -->
+    <string name="queue_bucket_unverified">Unverified</string>
+    <string name="queue_bucket_verified">Verified</string>
+    <string name="queue_row_awaiting_review">Awaiting review</string>
+    <string name="queue_status_unverified">Pending</string>
+    <string name="queue_status_verified">Verified</string>
+    <plurals name="queue_row_confirmed">
+        <item quantity="one">%1$d confirmed egg</item>
+        <item quantity="other">%1$d confirmed eggs</item>
+    </plurals>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$d detection(s) · %2$s</string>

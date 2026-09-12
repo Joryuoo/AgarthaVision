@@ -52,11 +52,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import com.agarthavision.domain.model.FlaggedFrame
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.agarthavision.R
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.model.QueueBucket
+import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 
@@ -77,19 +82,10 @@ fun VerificationQueueScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    val filteredFrames = remember(state.flaggedFrames, state.queueFilter) {
-        filterQueueFrames(state.flaggedFrames, state.queueFilter)
-    }
-
-    // Counted through filterQueueFrames rather than a second copy of the predicates —
-    // the duplication is how a chip's count and its list drift apart.
-    val counts = remember(state.flaggedFrames) {
-        QueueFilter.entries.associateWith { filter ->
-            filterQueueFrames(state.flaggedFrames, filter).size
-        }
-    }
-
-    val pendingCount = state.flaggedFrames.size
+    // Both derived from the same list, and a row belongs to exactly one bucket by
+    // construction, so a chip count cannot drift from the list it labels.
+    val visibleSamples = state.visibleSamples
+    val counts = state.counts
     val colors = AgarthaTheme.colors
 
     Box(
@@ -127,7 +123,8 @@ fun VerificationQueueScreen(
                         style = InterBaseStyle
                     )
                     Text(
-                        "${state.flaggedFrames.size} items · $pendingCount pending",
+                        "${state.samples.size} items · " +
+                            "${counts[QueueBucket.UNVERIFIED] ?: 0} unverified",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = colors.textSecondary,
@@ -146,19 +143,18 @@ fun VerificationQueueScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 listOf(
-                    QueueFilter.ALL to "All",
-                    QueueFilter.FLAGGED to "AI",
-                    QueueFilter.MANUAL to "Manual",
-                ).forEach { (filter, label) ->
-                    val isSelected = state.queueFilter == filter
-                    val count = counts[filter] ?: 0
+                    QueueBucket.UNVERIFIED to stringResource(R.string.queue_bucket_unverified),
+                    QueueBucket.VERIFIED to stringResource(R.string.queue_bucket_verified),
+                ).forEach { (bucket, label) ->
+                    val isSelected = state.bucket == bucket
+                    val count = counts[bucket] ?: 0
 
                     Row(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(if (isSelected) colors.textPrimary else colors.surface)
                             .border(1.dp, if (isSelected) colors.textPrimary else colors.borderStrong, CircleShape)
-                            .clickable { viewModel.onQueueFilterSelected(filter) }
+                            .clickable { viewModel.onBucketSelected(bucket) }
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -193,12 +189,14 @@ fun VerificationQueueScreen(
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 items(
-                    items = filteredFrames,
-                    key = { frame -> frame.sampleId }
-                ) { frame ->
+                    items = visibleSamples,
+                    // Keyed by primary key, never by capturedAt: two frames captured in the
+                    // same millisecond once threw a duplicate-key exception.
+                    key = { sample -> sample.sampleId }
+                ) { sample ->
                     FrameRow(
-                        frame = frame,
-                        onClick = { viewModel.onQueueItemSelected(frame) }
+                        sample = sample,
+                        onClick = { viewModel.onQueueItemSelected(sample) }
                     )
                 }
             }
@@ -218,29 +216,33 @@ fun VerificationQueueScreen(
 
 @Composable
 private fun FrameRow(
-    frame: FlaggedFrame,
+    sample: QueueSample,
     onClick: () -> Unit
 ) {
     val colors = AgarthaTheme.colors
-    val isManual = frame.source == FrameSource.MANUAL
-    val top = frame.predictions.firstOrNull()
-    val isAI = !isManual
+    val isAI = sample.source == FrameSource.MODEL
 
-    val title = when {
-        isManual -> "Manual capture"
-        top != null -> top.classLabel
-        else -> "Unknown class"
+    // What the row says the sample IS. Before review there is nothing to report - the model's
+    // own guess is not a finding; after it, the confirmed egg count is.
+    val title = if (sample.isVerified) {
+        pluralStringResource(
+            R.plurals.queue_row_confirmed,
+            sample.confirmedDetections,
+            sample.confirmedDetections,
+        )
+    } else {
+        stringResource(R.string.queue_row_awaiting_review)
     }
 
-    val isItalic = isAI && title != "Unknown class"
-
-    val duration = Duration.between(frame.capturedAt, Instant.now())
+    val duration = Duration.between(sample.capturedAt, Instant.now())
     val timeStr = when {
         duration.toMinutes() > 0 -> "${duration.toMinutes()}m ago"
         else -> "${duration.seconds}s ago"
     }
 
-    val metaSource = if (isAI) "AI" else "Manual"
+    val metaSource = stringResource(
+        if (isAI) R.string.badge_ai_suggested else R.string.badge_manual,
+    )
 
     Row(
         modifier = Modifier
@@ -261,8 +263,12 @@ private fun FrameRow(
                     drawRect(brush = AppColors.MicroscopeBrush)
                 }
         ) {
+            // Loaded from the path, not from bytes held in the row. The queue now holds
+            // every sample in the session, and the old shape re-read every full-resolution JPEG
+            // from disk on every emission - a cost that grows with the smear and never drains.
+            // Coil caches by path, so a visible row decodes once.
             AsyncImage(
-                model = frame.jpegBytes,
+                model = File(sample.imagePath),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -281,7 +287,6 @@ private fun FrameRow(
                     text = title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
                     color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -312,16 +317,25 @@ private fun FrameRow(
 
                 Row(
                     modifier = Modifier
-                        .background(colors.warningTint, CircleShape)
+                        .background(
+                            if (sample.isVerified) colors.successTint else colors.warningTint,
+                            CircleShape,
+                        )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
-                        "Pending",
+                        stringResource(
+                            if (sample.isVerified) {
+                                R.string.queue_status_verified
+                            } else {
+                                R.string.queue_status_unverified
+                            },
+                        ),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = colors.warningText,
+                        color = if (sample.isVerified) colors.successText else colors.warningText,
                         letterSpacing = 0.1.sp,
                         style = InterBaseStyle
                     )

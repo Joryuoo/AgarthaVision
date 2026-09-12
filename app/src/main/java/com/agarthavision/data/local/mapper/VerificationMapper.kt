@@ -58,14 +58,27 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * is no longer nulled on verify. An added row keys on what the medtech asserted, so re-adding
  * the same species and stage lands on the same row rather than duplicating it.
  */
-private fun detectionId(sampleId: String, finding: Finding, ordinal: Int): String {
-    val key = if (finding.prediction != null) {
-        "$sampleId#box#$ordinal"
+private fun detectionId(sampleId: String, finding: Finding, ordinal: Int): String =
+    if (finding.prediction != null) {
+        detectionIdFor(sampleId, ordinal)
     } else {
-        "$sampleId#finding#${finding.answers.speciesLabel.orEmpty()}#${finding.answers.stage?.value.orEmpty()}"
+        derive(
+            "$sampleId#finding#${finding.answers.speciesLabel.orEmpty()}" +
+                "#${finding.answers.stage?.value.orEmpty()}",
+        )
     }
-    return UUID.nameUUIDFromBytes(key.toByteArray()).toString()
-}
+
+/**
+ * The id a prediction-backed detection gets, by its ordinal within the frame.
+ *
+ * Exposed so the reopen path can find the row a box produced without re-deriving the rule in a
+ * second place - two derivations of the same key is how an edit silently starts appending
+ * instead of replacing.
+ */
+fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#box#$ordinal")
+
+private fun derive(key: String): String =
+    UUID.nameUUIDFromBytes(key.toByteArray()).toString()
 
 /** Stable finding-row id, keyed to match the table's uniqueness rule. */
 private fun findingId(sampleId: String, row: FindingRow): String =
