@@ -5,9 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.QueueBucket
 import com.agarthavision.domain.model.QueueSample
-import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.ObserveVerificationQueueUseCase
 import com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,12 +19,18 @@ import javax.inject.Inject
 data class VerificationQueueState(
     val samples: List<QueueSample> = emptyList(),
     val bucket: QueueBucket = QueueBucket.UNVERIFIED,
-    val verificationTarget: FlaggedFrame? = null,
-    val targetFindings: List<Finding> = emptyList(),
-    val targetMissedEgg: Boolean? = null,
-    val targetUserNote: String = "",
+    /**
+     * The sample open in the sheet, with whatever the medtech already said about it.
+     *
+     * One object rather than a frame plus three loose fields, so the answers cannot end up
+     * describing a different sample than the one on screen.
+     */
+    val priorTarget: VerificationTarget? = null,
     val errorMessage: String? = null,
 ) {
+    val verificationTarget: FlaggedFrame?
+        get() = priorTarget?.frame
+
     /** The rows in the selected bucket. */
     val visibleSamples: List<QueueSample>
         get() = samples.filter { it.bucket == bucket }
@@ -75,15 +81,7 @@ class VerificationQueueViewModel @Inject constructor(
         viewModelScope.launch {
             openVerificationTarget(sample.sampleId).fold(
                 onSuccess = { target ->
-                    _state.update {
-                        it.copy(
-                            verificationTarget = target.frame,
-                            targetFindings = target.findings,
-                            targetMissedEgg = target.missedEgg,
-                            targetUserNote = target.userNote,
-                            errorMessage = null,
-                        )
-                    }
+                    _state.update { it.copy(priorTarget = target, errorMessage = null) }
                 },
                 onFailure = { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message) }
@@ -93,14 +91,7 @@ class VerificationQueueViewModel @Inject constructor(
     }
 
     fun onVerificationDismissed() {
-        _state.update {
-            it.copy(
-                verificationTarget = null,
-                targetFindings = emptyList(),
-                targetMissedEgg = null,
-                targetUserNote = "",
-            )
-        }
+        _state.update { it.copy(priorTarget = null) }
     }
 
     fun clearErrorMessage() {

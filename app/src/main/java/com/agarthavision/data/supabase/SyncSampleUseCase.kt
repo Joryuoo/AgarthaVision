@@ -3,6 +3,7 @@ package com.agarthavision.data.supabase
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.model.SampleStatus
@@ -18,6 +19,7 @@ import javax.inject.Inject
 class SyncSampleUseCase @Inject constructor(
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
+    private val findingDao: SampleSpeciesFindingDao,
     private val remoteDataSource: SampleRemoteDataSource,
 ) {
     /**
@@ -27,15 +29,19 @@ class SyncSampleUseCase @Inject constructor(
      * [Result.failure] after marking the local sample [SampleStatus.SYNC_FAILED].
      */
     suspend operator fun invoke(sampleId: String): Result<Unit> {
-        val sample = sampleDao.getSampleById(sampleId)
+        // Including deleted: a tombstoned sample still has to push its tombstone, and reading
+        // it through the filtered accessor would make the delete local-only.
+        val sample = sampleDao.getSampleByIdIncludingDeleted(sampleId)
             ?: return Result.failure(IllegalArgumentException("Sample $sampleId does not exist."))
         val detections = detectionDao.getDetectionsForSample(sampleId)
+        val findings = findingDao.getFindingsForSample(sampleId)
 
         return runCatching {
             val imageBytes = loadAndResizeJpeg(sample)
             val storagePath = remoteDataSource.syncSample(
                 sample = sample,
                 detections = detections,
+                findings = findings,
                 imageBytes = imageBytes,
             )
             sampleDao.updateSyncMetadata(

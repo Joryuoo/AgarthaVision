@@ -1,6 +1,7 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggStage
@@ -29,6 +30,7 @@ class SampleRemoteDataSource @Inject constructor(
     suspend fun syncSample(
         sample: SampleEntity,
         detections: List<DetectionEntity>,
+        findings: List<SampleSpeciesFindingEntity>,
         imageBytes: ByteArray,
     ): String {
         val userId = supabase.auth.currentUserOrNull()?.id
@@ -38,9 +40,29 @@ class SampleRemoteDataSource @Inject constructor(
         supabase.storage.from(SAMPLES_BUCKET).upload(storagePath, imageBytes) {
             upsert = true
         }
-        supabase.postgrest[SAMPLES_TABLE].insert(sample.toInsertRow(userId, storagePath))
+
+        // Upsert, not insert. A verified sample is re-editable now, so it syncs more than once;
+        // the plain insert raised a primary-key conflict on the second attempt and left the row
+        // marked sync_failed forever. Both tables take client-supplied ids, and detection ids
+        // are derived rather than random, so an edit updates the rows it corrects.
+        //
+        // This needs the UPDATE policies added in 0012: 0001_init.sql gave samples and
+        // detections select and insert only, so a conflicting upsert is rejected by RLS
+        // without them.
+        supabase.postgrest[SAMPLES_TABLE].upsert(sample.toInsertRow(userId, storagePath))
         if (detections.isNotEmpty()) {
-            supabase.postgrest[DETECTIONS_TABLE].insert(detections.map { it.toInsertRow() })
+            supabase.postgrest[DETECTIONS_TABLE].upsert(detections.map { it.toInsertRow() })
+        }
+
+        // Findings are replaced wholesale rather than upserted: a species the medtech removed
+        // on re-open has to actually disappear, and an upsert would leave the stale row behind
+        // to inflate the count. Not a C8 deletion - a count is a current statement, and the
+        // detections and the Storage object it protects are untouched.
+        supabase.postgrest[FINDINGS_TABLE].delete {
+            filter { eq("sample_id", sample.sampleId) }
+        }
+        if (findings.isNotEmpty()) {
+            supabase.postgrest[FINDINGS_TABLE].insert(findings.map { it.toInsertRow() })
         }
 
         return storagePath
@@ -95,6 +117,7 @@ class SampleRemoteDataSource @Inject constructor(
             verdict = resolvedVerdict.remoteValue,
             expertClass = expertClass,
             stage = stage?.let { EggStage.fromValue(it)?.remoteValue },
+            speciesTouched = speciesTouched,
         )
     }
 
@@ -153,12 +176,38 @@ class SampleRemoteDataSource @Inject constructor(
         val expertClass: String?,
         @SerialName("stage")
         val stage: String?,
+        @SerialName("species_touched")
+        val speciesTouched: Boolean,
+    )
+
+    @Serializable
+    private data class FindingInsertRow(
+        @SerialName("id")
+        val id: String,
+        @SerialName("sample_id")
+        val sampleId: String,
+        @SerialName("species")
+        val species: String,
+        // Null when the species defines no stage set.
+        @SerialName("stage")
+        val stage: String?,
+        @SerialName("egg_count")
+        val eggCount: Int,
+    )
+
+    private fun SampleSpeciesFindingEntity.toInsertRow(): FindingInsertRow = FindingInsertRow(
+        id = findingId,
+        sampleId = sampleId,
+        species = species,
+        stage = stage,
+        eggCount = eggCount,
     )
 
     private companion object {
         private const val SAMPLES_BUCKET = "samples"
         private const val SAMPLES_TABLE = "samples"
         private const val DETECTIONS_TABLE = "detections"
+        private const val FINDINGS_TABLE = "sample_species_findings"
         private const val UNKNOWN_MODEL_VERSION = "unknown"
         private val SIGNED_URL_EXPIRY = 15.minutes
     }

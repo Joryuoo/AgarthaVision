@@ -10,6 +10,7 @@ import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -173,7 +174,15 @@ class VerificationViewModel @Inject constructor(
         return if (index >= 0) index + 1 else OUT_OF_CYCLE
     }
 
-    fun setFrame(frame: FlaggedFrame) {
+    /**
+     * Opens [frame] for review.
+     *
+     * [prior] carries what the medtech already said, when this sample has been verified before.
+     * A verified sample stays editable, and reopening it with a blank questionnaire would make
+     * every edit a full re-review - and would silently discard answers by resubmitting defaults
+     * over them. Absent it, the frame seeds from its own shape instead.
+     */
+    fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
         _state.update {
             it.copy(
@@ -181,11 +190,12 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = frame.initialFindings(),
-                missedEgg = null,
+                findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
+                    ?: frame.initialFindings(),
+                missedEgg = prior?.missedEgg,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = "",
+                userNote = prior?.userNote.orEmpty(),
             )
         }
     }

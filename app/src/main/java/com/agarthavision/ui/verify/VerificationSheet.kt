@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
@@ -64,6 +65,14 @@ fun VerificationSheet(
     frame: FlaggedFrame,
     onDismiss: () -> Unit,
     viewModel: VerificationViewModel = hiltViewModel(),
+    /**
+     * What the medtech already said about this sample, when it has been verified before.
+     *
+     * Empty for a sample opened from capture, which has no history yet. Supplied by the queue,
+     * which loads it through `OpenVerificationTargetUseCase` - without it, reopening a verified
+     * sample would show a blank questionnaire and the edit would be a re-review.
+     */
+    prior: VerificationTarget? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -71,7 +80,7 @@ fun VerificationSheet(
     // such as the answers already given, so keying on the frame would re-seed it — and wipe
     // the in-progress answers — every time the store re-emits.
     LaunchedEffect(frame.sampleId) {
-        viewModel.setFrame(frame)
+        viewModel.setFrame(frame, prior)
     }
 
     LaunchedEffect(viewModel) {

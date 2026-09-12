@@ -210,6 +210,7 @@ fun VerificationQueueScreen(
         VerificationSheet(
             frame = target,
             onDismiss = viewModel::onVerificationDismissed,
+            prior = state.priorTarget,
         )
     }
 }
