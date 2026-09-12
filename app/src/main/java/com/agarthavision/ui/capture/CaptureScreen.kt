@@ -199,7 +199,6 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
-    onRecordsClick: () -> Unit,
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
     onNavigateBack: () -> Unit = {},

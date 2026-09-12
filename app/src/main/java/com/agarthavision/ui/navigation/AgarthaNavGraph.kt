@@ -81,16 +81,7 @@ fun AgarthaNavGraph(
             ) {
                 AgarthaBottomBar(
                     currentRoute = currentRoute,
-                    onTabSelected = { tab ->
-                        navController.navigate(tab.route) {
-                            // Pop back to start so each tab maintains its own stack
-                            popUpTo(navController.graph.findStartDestination().id) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
+                    onTabSelected = { tab -> navController.navigateToTab(tab.route) },
                 )
             }
         },
@@ -185,7 +176,6 @@ fun AgarthaNavHost(
             CaptureScreen(
                 cameraManager = cameraManager,
                 frameSampler = frameSampler,
-                onRecordsClick = { navController.navigate(Screen.Records.route) },
                 onReportsClick = { sessionId -> navController.navigate(Screen.SessionDetail.createRoute(sessionId)) },
                 onVerifyQueueClick = { navController.navigate(Screen.VerificationQueue.route) },
                 onNavigateBack = { navController.popBackStack() }
@@ -300,5 +290,29 @@ fun AgarthaNavHost(
                 onSignInClick = { navController.navigate(Screen.Login.route) },
             )
         }
+    }
+}
+
+/**
+ * Navigates to one of the four bottom-bar tabs, preserving each tab's own back stack.
+ *
+ * **Use this for every navigation whose destination is a tab route, not just the bar taps.**
+ * Mixing this multi-back-stack pattern with an ad-hoc `popUpTo(someRoute)` elsewhere in the
+ * same graph is a known Navigation-Compose footgun, and it has bitten this app once: ending a
+ * session used to navigate to Sessions with `popUpTo(Screen.Sessions.route)`, which is a no-op
+ * when Sessions is only *saved* rather than present, so a second Sessions entry was pushed
+ * alongside the saved one and the Home tab stopped responding (86d4ad75y).
+ *
+ * That path is gone - sessions no longer end - but the hazard is structural, so the convention
+ * has a name here rather than being copied by hand at each call site. A destination that is not
+ * a tab (capture, a detail screen, login) is an ordinary `navigate` and must not use this:
+ * restoring saved state is exactly wrong for a screen you are pushing onto the current stack.
+ */
+private fun NavHostController.navigateToTab(route: String) {
+    navigate(route) {
+        // Pop back to start so each tab maintains its own stack.
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
     }
 }
