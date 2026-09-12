@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.DialogShape
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -98,8 +99,11 @@ fun DateRangeFilterBar(
             initialSelectedStartDateMillis = startDate?.toUtcMillis(),
             initialSelectedEndDateMillis = endDate?.toUtcMillis(),
         )
+        // Material3 defaults dialogs to shapes.extraLarge, which is this app's
+        // 999.dp pill token - the picker renders as an ellipse without this.
         DatePickerDialog(
             onDismissRequest = { showDialog = false },
+            shape = DialogShape,
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -117,7 +121,8 @@ fun DateRangeFilterBar(
                 TextButton(onClick = { showDialog = false }) { Text("Cancel") }
             },
         ) {
-            DateRangePicker(state = pickerState)
+            // weight(1f) keeps the scrolling month list from pushing the buttons off-screen.
+            DateRangePicker(state = pickerState, modifier = Modifier.weight(1f))
         }
     }
 }
