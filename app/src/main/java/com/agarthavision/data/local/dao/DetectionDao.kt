@@ -93,6 +93,27 @@ interface DetectionDao {
         userId: String,
         sinceTimestamp: Long,
     ): Flow<List<DailyEggCountRow>>
+
+    /**
+     * Bulk-fetches distinct species labels for a set of sessions, excluding repeat
+     * samples and false-positive detections. Used by the Records screen to avoid
+     * per-session N+1 queries after the paginated session load.
+     */
+    @Query(
+        """
+        SELECT s.session_id AS sessionId,
+               COALESCE(d.expert_class, d.class_label) AS species
+        FROM detections d
+        JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.session_id IN (:sessionIds)
+          AND s.is_repeat = 0
+          AND d.verdict != 'false_positive'
+          AND COALESCE(d.expert_class, d.class_label) IS NOT NULL
+        GROUP BY s.session_id, species
+        ORDER BY species ASC
+        """,
+    )
+    suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): List<SessionSpeciesRow>
 }
 
 /**
@@ -109,3 +130,10 @@ data class DailyEggCountRow(
     @ColumnInfo(name = "eggCount")
     val eggCount: Int,
 )
+
+/**
+ * Row result for a bulk species-per-session lookup.
+ * [sessionId] is the SQL alias for `samples.session_id`;
+ * [species] resolves to `expert_class` when set, otherwise `class_label`.
+ */
+data class SessionSpeciesRow(val sessionId: String, val species: String)

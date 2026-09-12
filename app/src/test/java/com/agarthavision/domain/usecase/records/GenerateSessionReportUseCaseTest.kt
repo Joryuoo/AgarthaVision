@@ -157,6 +157,14 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(session?.let(::listOf).orEmpty())
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
+    override fun observeSessionRecordsPage(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
 }
 
 private class ReportSampleRepository(
@@ -193,6 +201,9 @@ private class ReportDetectionRepository(
 
     override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
+
+    override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
+        emptyMap()
 }
 
 private class FakeReportRepository : ReportRepository {

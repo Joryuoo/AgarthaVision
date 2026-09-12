@@ -44,4 +44,21 @@ interface SessionRepository {
      * Per ADR-007.
      */
     suspend fun claimSession(sessionId: String, userId: String)
+
+    /**
+     * Observes a paginated, filtered window of sessions for the Records screen.
+     * Filtering (species, date range, free-text search) and aggregation are performed
+     * in SQL; [limit] controls the page size for load-more pagination.
+     *
+     * Mirrors the underlying Room query's bind parameters one-to-one.
+     */
+    @Suppress("LongParameterList")
+    fun observeSessionRecordsPage(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>>
 }

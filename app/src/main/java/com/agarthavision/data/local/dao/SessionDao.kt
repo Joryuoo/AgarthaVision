@@ -162,6 +162,55 @@ interface SessionDao {
         """
     )
     fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
+
+    /**
+     * Observes a paginated, filtered window of sessions for the Records screen.
+     * Non-flagged sample counts and confirmed-detection EPG totals are pre-aggregated
+     * so the UI avoids per-session N+1 queries. Species-label lookup is done separately
+     * via [DetectionDao.getSpeciesLabelsForSessions].
+     *
+     * The parameter list maps one-to-one onto named SQL bind parameters, so it cannot
+     * be collapsed into a holder type without losing Room's query binding.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        """
+        SELECT s.*,
+          COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS totalSamples,
+          COUNT(d.detection_id) AS totalEpg
+        FROM sessions s
+        LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.status != 'flagged'
+        LEFT JOIN detections d ON smp.sample_id = d.sample_id
+             AND d.verdict = 'confirmed' AND smp.is_repeat = 0
+        WHERE s.user_id = :userId
+          AND (:startMillis IS NULL OR s.started_at >= :startMillis)
+          AND (:endMillis   IS NULL OR s.started_at <= :endMillis)
+          AND (:query = ''
+               OR s.session_id LIKE '%' || :query || '%'
+               OR s.label      LIKE '%' || :query || '%'
+               OR s.notes      LIKE '%' || :query || '%'
+               OR EXISTS (SELECT 1 FROM detections dq JOIN samples sq ON sq.sample_id = dq.sample_id
+                          WHERE sq.session_id = s.session_id AND sq.is_repeat = 0
+                            AND dq.verdict != 'false_positive'
+                            AND COALESCE(dq.expert_class, dq.class_label) LIKE '%' || :query || '%'))
+          AND (:species IS NULL
+               OR EXISTS (SELECT 1 FROM detections ds JOIN samples ss ON ss.sample_id = ds.sample_id
+                          WHERE ss.session_id = s.session_id AND ss.is_repeat = 0
+                            AND ds.verdict != 'false_positive'
+                            AND COALESCE(ds.expert_class, ds.class_label) LIKE '%' || :species || '%'))
+        GROUP BY s.session_id
+        ORDER BY s.started_at DESC
+        LIMIT :limit
+        """
+    )
+    fun observeSessionRecordsPage(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionRecordStatsRow>>
 }
 
 data class SessionWithStats(
@@ -174,4 +223,15 @@ data class SessionWithStats(
      */
     @androidx.room.ColumnInfo(name = "unverifiedSamples") val unverifiedSamples: Int,
     @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int
+)
+
+/**
+ * Slim projection returned by [SessionDao.observeSessionRecordsPage].
+ * Carries only the aggregate columns needed by the Records screen; species labels
+ * are fetched separately via [DetectionDao.getSpeciesLabelsForSessions].
+ */
+data class SessionRecordStatsRow(
+    @Embedded val session: SessionEntity,
+    @androidx.room.ColumnInfo(name = "totalSamples") val totalSamples: Int,
+    @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int,
 )

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -30,10 +31,10 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,20 +68,20 @@ fun RecordsScreen(
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var searchText by remember { mutableStateOf("") }
-
-    val filteredRecords = remember(state.sessions, searchText) {
-        state.sessions.filter { item ->
-            searchText.isBlank() ||
-                item.session.id.contains(searchText, ignoreCase = true) ||
-                item.session.label?.contains(searchText, ignoreCase = true) == true ||
-                item.session.notes?.contains(searchText, ignoreCase = true) == true ||
-                item.speciesLabels.any { it.contains(searchText, ignoreCase = true) }
-        }
-    }
 
     val totalEggs = state.sessions.sumOf { it.totalEpg }
     val totalSamples = state.sessions.sumOf { it.sampleCount }
+
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
+        }
+    }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) viewModel.onLoadMore()
+    }
 
     Scaffold(
         topBar = {
@@ -96,6 +97,7 @@ fun RecordsScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner),
@@ -104,8 +106,8 @@ fun RecordsScreen(
             item {
                 Spacer(Modifier.height(Spacing.xs))
                 SearchInput(
-                    value = searchText,
-                    onValueChange = { searchText = it },
+                    value = state.searchQuery,
+                    onValueChange = viewModel::onSearchChanged,
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
@@ -138,7 +140,7 @@ fun RecordsScreen(
                         CircularProgressIndicator(color = AgarthaTheme.colors.accent)
                     }
                 }
-                filteredRecords.isEmpty() -> item {
+                state.sessions.isEmpty() -> item {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -153,12 +155,29 @@ fun RecordsScreen(
                         )
                     }
                 }
-                else -> items(filteredRecords, key = { it.session.id }) { record ->
-                    RecordCard(
-                        record = record,
-                        onClick = { onSessionClick(record.session.id) },
-                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
-                    )
+                else -> {
+                    items(state.sessions, key = { it.session.id }) { record ->
+                        RecordCard(
+                            record = record,
+                            onClick = { onSessionClick(record.session.id) },
+                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                        )
+                    }
+                    if (state.canLoadMore) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = Spacing.md),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    color = AgarthaTheme.colors.accent,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

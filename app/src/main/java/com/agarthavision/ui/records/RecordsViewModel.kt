@@ -4,17 +4,20 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.GetRecordsUseCase
+import com.agarthavision.domain.usecase.records.RecordsQuery
 import com.agarthavision.domain.usecase.records.SessionRecordItem
 import dagger.hilt.android.lifecycle.HiltViewModel
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import javax.inject.Inject
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 
 /**
  * UI state for the session-first records browser.
@@ -25,11 +28,14 @@ data class RecordsState(
     val selectedSpecies: EggSpecies? = null,
     val startDate: LocalDate? = null,
     val endDate: LocalDate? = null,
+    val searchQuery: String = "",
+    val canLoadMore: Boolean = false,
 )
 
 /**
- * Filters session records by species and date range.
+ * Drives the Records screen with SQL-backed filtering, pagination, and search.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class RecordsViewModel @Inject constructor(
     getRecordsUseCase: GetRecordsUseCase,
@@ -38,53 +44,62 @@ class RecordsViewModel @Inject constructor(
     private val selectedSpecies = MutableStateFlow<EggSpecies?>(null)
     private val startDate = MutableStateFlow<LocalDate?>(null)
     private val endDate = MutableStateFlow<LocalDate?>(null)
+    private val searchQuery = MutableStateFlow("")
+    private val limit = MutableStateFlow(PAGE_SIZE)
 
-    val state: StateFlow<RecordsState> = combine(
-        getRecordsUseCase.invoke(),
-        selectedSpecies,
-        startDate,
-        endDate,
-    ) { sessions, species, start, end ->
-        RecordsState(
-            sessions = sessions.filter { item ->
-                item.matchesSpecies(species) && item.matchesDateRange(start, end)
-            },
-            isLoading = false,
-            selectedSpecies = species,
-            startDate = start,
-            endDate = end,
-        )
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = RecordsState(),
-    )
+    private val retained = MutableStateFlow(RecordsState())
+    val state: StateFlow<RecordsState> = retained.asStateFlow()
 
-    /**
-     * Selects a species filter, or clears it when null.
-     */
-    fun onSpeciesSelected(species: EggSpecies?) {
-        selectedSpecies.value = species
+    init {
+        combine(selectedSpecies, startDate, endDate, searchQuery, limit) { sp, st, en, q, lim ->
+            RecordsQuery(species = sp, startDate = st, endDate = en, searchQuery = q, limit = lim)
+        }.flatMapLatest { q -> getRecordsUseCase(q).map { q to it } }
+            .onEach { (q, items) ->
+                retained.value = RecordsState(
+                    sessions = items,
+                    isLoading = false,
+                    selectedSpecies = q.species,
+                    startDate = q.startDate,
+                    endDate = q.endDate,
+                    searchQuery = q.searchQuery,
+                    canLoadMore = items.size >= q.limit,
+                )
+            }.launchIn(viewModelScope)
     }
 
     /**
-     * Applies an inclusive session-start date range.
+     * Selects a species filter, or clears it when null. Resets pagination.
+     */
+    fun onSpeciesSelected(species: EggSpecies?) {
+        selectedSpecies.value = species
+        limit.value = PAGE_SIZE
+    }
+
+    /**
+     * Applies an inclusive session-start date range. Resets pagination.
      */
     fun onDateRangeSelected(start: LocalDate?, end: LocalDate?) {
         startDate.value = start
         endDate.value = end
+        limit.value = PAGE_SIZE
     }
 
-    private fun SessionRecordItem.matchesSpecies(species: EggSpecies?): Boolean {
-        val needle = species?.canonicalClass ?: return true
-        return speciesLabels.any { label -> label.contains(needle, ignoreCase = true) }
+    /**
+     * Updates the free-text search query. Resets pagination.
+     */
+    fun onSearchChanged(query: String) {
+        searchQuery.value = query
+        limit.value = PAGE_SIZE
     }
 
-    private fun SessionRecordItem.matchesDateRange(start: LocalDate?, end: LocalDate?): Boolean {
-        val sessionDate = Instant.ofEpochMilli(session.startedAt)
-            .atZone(ZoneId.systemDefault())
-            .toLocalDate()
-        return (start == null || !sessionDate.isBefore(start)) &&
-            (end == null || !sessionDate.isAfter(end))
+    /**
+     * Requests the next page of results.
+     */
+    fun onLoadMore() {
+        limit.value += PAGE_SIZE
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 20
     }
 }

@@ -56,4 +56,25 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun claimSession(sessionId: String, userId: String) {
         sessionDao.claimSession(sessionId, userId)
     }
+
+    override fun observeSessionRecordsPage(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> =
+        sessionDao.observeSessionRecordsPage(userId, startMillis, endMillis, query, species, limit)
+            .map { list ->
+                list.map { row ->
+                    SessionWithStats(
+                        session = row.session.toDomain(),
+                        totalSamples = row.totalSamples,
+                        verifiedSamples = 0,
+                        unverifiedSamples = 0,
+                        totalEpg = row.totalEpg,
+                    )
+                }
+            }
 }
