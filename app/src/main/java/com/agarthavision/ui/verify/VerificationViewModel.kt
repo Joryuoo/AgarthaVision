@@ -265,6 +265,56 @@ class VerificationViewModel @Inject constructor(
         updateCurrentAnswer { it.copy(stage = stage) }
     }
 
+    /**
+     * Appends a species the model never boxed.
+     *
+     * The new row has no prediction, which is the same shape a manual capture has: a human
+     * assertion with no box. It is asked for a species, a stage and a count, and never for
+     * the isEgg / isBoxCorrect questions, which are questions about a box.
+     */
+    fun onAddFinding() {
+        _state.update { it.copy(findings = it.findings + Finding()) }
+    }
+
+    /**
+     * Removes a species the medtech added.
+     *
+     * Refused on a prediction-backed row. You cannot delete a box the model produced - the
+     * way to say it was wrong is to answer "not an egg", which persists it as a labelled
+     * FALSE_POSITIVE (constraint C8). Silently refusing rather than throwing because the UI
+     * does not offer the affordance on those rows in the first place; this is the backstop.
+     */
+    fun onRemoveFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index < boxCount || index !in current.findings.indices) {
+                current
+            } else {
+                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+            }
+        }
+    }
+
+    /** Eggs of this species and stage the medtech counted in the field. */
+    fun onEggCountChanged(index: Int, text: String) {
+        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
+        updateAnswerAt(index) { it.copy(eggCount = parsed) }
+    }
+
+    fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
+        updateAnswerAt(index) {
+            it.copy(species = species, otherSpeciesText = "", stage = null, speciesTouched = true)
+        }
+    }
+
+    fun onAddedOtherSpeciesChanged(index: Int, text: String) {
+        updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
+    }
+
+    fun onAddedStageSelected(index: Int, stage: EggStage) {
+        updateAnswerAt(index) { it.copy(stage = stage) }
+    }
+
     fun onQ4Selected(missedEgg: Boolean) {
         _state.update { it.copy(missedEgg = missedEgg) }
     }

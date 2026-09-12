@@ -17,6 +17,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -537,4 +539,100 @@ class VerificationViewModelTest {
 
             assertEquals(null, vm.state.value.findings[0].answers.stage)
         }
+
+    // Polyparasitism: several species on one frame (86d4ab4tq)
+
+    @Test
+    fun `adding a species appends a finding with no prediction`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddFinding()
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(2, findings.size)
+            assertNotNull("The model box keeps its prediction.", findings[0].prediction)
+            assertNull("An added species has no box behind it.", findings[1].prediction)
+        }
+
+    @Test
+    fun `an added species is removable`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+
+            vm.onRemoveFinding(1)
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings.size)
+        }
+
+    @Test
+    fun `a model box cannot be removed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Constraint C8: the way to reject a box is to answer "not an egg", which keeps it
+            // as a labelled FALSE_POSITIVE row. Deleting it would drop it from the corpus.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+
+            vm.onRemoveFinding(0)
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertNotNull(vm.state.value.findings[0].prediction)
+        }
+
+    @Test
+    fun `a typed egg count lands on the added finding`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onAddedStageSelected(1, EggStage.LARVATED)
+            vm.onEggCountChanged(1, "4")
+            advanceUntilIdle()
+
+            val added = vm.state.value.findings[1].answers
+            assertEquals(EggSpecies.HOOKWORM, added.species)
+            assertEquals(EggStage.LARVATED, added.stage)
+            assertEquals(4, added.eggCount)
+            assertEquals(true, added.speciesTouched)
+        }
+
+    @Test
+    fun `a non-numeric egg count clears rather than crashing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+            vm.onEggCountChanged(1, "4")
+
+            vm.onEggCountChanged(1, "abc")
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.findings[1].answers.eggCount)
+        }
+
+    @Test
+    fun `re-picking the species already showing still counts as touched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Once the field is pre-filled from the model, this re-pick is the only signal
+            // separating "I agree" from "I never looked" - and detections is the corpus.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.findings[0].answers.speciesTouched)
+        }
+
 }

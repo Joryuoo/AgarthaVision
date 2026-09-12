@@ -7,6 +7,9 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -82,6 +85,11 @@ class VerificationSheetContentTest {
         var repeatToggles = 0
         var submits = 0
         var cancels = 0
+        var addFindings = 0
+        val removedFindings = mutableListOf<Int>()
+        val counts = mutableListOf<Pair<Int, String>>()
+        val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
+        val addedStages = mutableListOf<Pair<Int, EggStage>>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -101,6 +109,12 @@ class VerificationSheetContentTest {
         onCancel = { r.cancels++ },
         onToggleRepeat = { r.repeatToggles++ },
         onUserNoteChanged = { r.notes += it },
+        onAddFinding = { r.addFindings++ },
+        onRemoveFinding = { r.removedFindings += it },
+        onEggCountChanged = { index, text -> r.counts += index to text },
+        onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
+        onAddedOtherSpeciesChanged = { _, _ -> },
+        onAddedStageSelected = { index, stage -> r.addedStages += index to stage },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -197,8 +211,18 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `a misplaced box stops the chain before the species picker`() {
+    fun `a misplaced box still reaches the species picker`() {
+        // The chain used to stop here. It cannot any more: a misplaced box still holds a
+        // countable egg, and skipping the species question dropped it from the per-species
+        // count. The verdict recorded for the box is still BOX_INCORRECT.
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false))))
+
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+    }
+
+    @Test
+    fun `an unanswered box question stops the chain before the species picker`() {
+        setContent(state(answers = listOf(answered(isEgg = true))))
 
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
@@ -259,14 +283,18 @@ class VerificationSheetContentTest {
             ),
         )
 
-        typeInto(
-            composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).performScrollTo(),
-            "Tri",
-        )
+        // Scoped to the dropdown: the "will be saved" summary now renders the same species
+        // name, so an unscoped text lookup matches two nodes.
+        val speciesField = composeRule
+            .onNode(
+                hasAnyAncestor(hasTestTag(VerifyTestTags.SPECIES_DROPDOWN)) and
+                    hasText(EggSpecies.ASCARIS.displayName),
+            )
+        typeInto(speciesField.performScrollTo(), "Tri")
         composeRule.mainClock.autoAdvance = true
         sheetNode(VerifyTestTags.NOTE_FIELD).performClick()
 
-        composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).assertIsDisplayed()
+        speciesField.assertIsDisplayed()
         composeRule.onNodeWithText("Ascaris lumbricoidesTri").assertDoesNotExist()
         assertEquals(emptyList<EggSpecies>(), r.species)
     }

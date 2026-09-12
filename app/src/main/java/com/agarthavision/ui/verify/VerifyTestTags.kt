@@ -73,7 +73,22 @@ internal object VerifyTestTags {
     /** AI-suggested vs Manual provenance pill. */
     const val SOURCE_BADGE = "source_badge"
 
+    /** "Add species" button beneath the added-findings list. */
+    const val ADD_SPECIES = "add_species"
+
+    /** The live per-species summary of what submitting would write. */
+    const val FINDINGS_SUMMARY = "findings_summary"
+
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
+
+    /** Remove button on the added finding at [index]. */
+    fun removeFinding(index: Int): String = "remove_finding_" + index
+
+    /** Egg-count field on the added finding at [index]. */
+    fun countField(index: Int): String = "count_field_" + index
+
+    /** Species picker on the added finding at [index]. */
+    fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
 
     /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
     fun questionOption(question: String, label: String): String =

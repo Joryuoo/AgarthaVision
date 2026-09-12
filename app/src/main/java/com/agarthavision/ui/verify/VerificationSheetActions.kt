@@ -20,4 +20,12 @@ data class VerificationSheetActions(
     val onCancel: () -> Unit,
     val onToggleRepeat: () -> Unit,
     val onUserNoteChanged: (String) -> Unit,
+    /** Appends a species the model never boxed. */
+    val onAddFinding: () -> Unit,
+    /** Removes an added species. Never offered on a prediction-backed row. */
+    val onRemoveFinding: (Int) -> Unit,
+    val onEggCountChanged: (Int, String) -> Unit,
+    val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
+    val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
+    val onAddedStageSelected: (Int, EggStage) -> Unit,
 )

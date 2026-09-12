@@ -47,6 +47,15 @@
     <string name="verify_prev_detection">Previous detection</string>
     <string name="verify_next_detection">Next detection</string>
     <string name="verify_show_boxes_label">Show bounding boxes</string>
+
+    <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
+    <string name="verify_species_you_added">SPECIES YOU ADDED</string>
+    <string name="verify_add_species">+ Add species</string>
+    <string name="verify_remove_species">Remove</string>
+    <string name="verify_not_boxed">Not boxed by the model</string>
+    <string name="verify_egg_count_label">Eggs in this field</string>
+    <string name="verify_egg_count_addendum">In addition to the %1$d the model boxed</string>
+    <string name="verify_will_be_saved">WILL BE SAVED</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>

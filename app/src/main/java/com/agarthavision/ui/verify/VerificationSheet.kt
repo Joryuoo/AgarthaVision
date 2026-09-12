@@ -110,6 +110,12 @@ fun VerificationSheet(
                 onCancel = viewModel::onCancel,
                 onToggleRepeat = viewModel::onToggleRepeat,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
+                onAddFinding = viewModel::onAddFinding,
+                onRemoveFinding = viewModel::onRemoveFinding,
+                onEggCountChanged = viewModel::onEggCountChanged,
+                onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
+                onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
+                onAddedStageSelected = viewModel::onAddedStageSelected,
             ),
         )
     }
@@ -285,7 +291,10 @@ internal fun VerificationSheetContent(
                     onSelect = actions.onQ2Selected,
                 )
 
-                if (currentAnswers.isBoxCorrect == true) {
+                // Asked whether or not the box is correctly placed. A misplaced box still
+                // contains a countable egg, and short-circuiting here dropped it from the
+                // low-power-field count. The verdict still records BOX_INCORRECT.
+                if (currentAnswers.isBoxCorrect != null) {
                     SpeciesDropdown(
                         selected = currentAnswers.species,
                         otherText = currentAnswers.otherSpeciesText,
@@ -301,6 +310,14 @@ internal fun VerificationSheetContent(
                     )
                 }
             }
+
+            AddedFindings(
+                findings = state.findings,
+                boxCount = frame.predictions.size,
+                actions = actions,
+            )
+
+            FindingsSummary(findings = state.findings)
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
