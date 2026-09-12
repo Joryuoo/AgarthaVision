@@ -6,6 +6,7 @@ import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -186,7 +187,7 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = frame.predictions.map { Finding(prediction = it) },
+                findings = frame.predictions.map { it.toPreFilledFinding() },
                 missedEgg = null,
                 isSubmitting = false,
                 errorMessage = null,
@@ -219,29 +220,39 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer {
-            it.copy(
-                isEgg = isEgg,
-                isBoxCorrect = null,
-                species = null,
-                otherSpeciesText = "",
-                stage = null,
-                speciesTouched = false,
+        updateCurrentFinding { finding ->
+            finding.copy(
+                answers = finding.resetSpecies().copy(isEgg = isEgg, isBoxCorrect = null),
             )
         }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
-        updateCurrentAnswer {
-            it.copy(
-                isBoxCorrect = isBoxCorrect,
-                species = null,
-                otherSpeciesText = "",
-                stage = null,
-                speciesTouched = false,
+        updateCurrentFinding { finding ->
+            finding.copy(
+                answers = finding.resetSpecies().copy(
+                    isEgg = finding.answers.isEgg,
+                    isBoxCorrect = isBoxCorrect,
+                ),
             )
         }
     }
+
+    /**
+     * The species answer a row starts from: the model's own class, or nothing when there is no
+     * model output to borrow from.
+     *
+     * Changing an earlier answer clears the later ones, so that a stale species cannot survive
+     * a change of mind about whether the box even holds an egg. It resets to the **pre-fill**
+     * rather than to empty, because resetting to empty would throw away the model's answer the
+     * moment the medtech answered Q1 — which is every time — and leave the auto-fill visible
+     * only in the instant before it was useful. `speciesTouched` goes back to false with it:
+     * whatever deliberate choice was made no longer applies to the question now being asked.
+     */
+    private fun Finding.resetSpecies(): VerificationAnswers = VerificationAnswers(
+        species = prediction?.classLabel?.let(EggSpecies::fromClassLabel),
+        speciesTouched = false,
+    )
 
     /**
      * Records a deliberate species choice.
@@ -264,6 +275,23 @@ class VerificationViewModel @Inject constructor(
     fun onStageSelected(stage: EggStage) {
         updateCurrentAnswer { it.copy(stage = stage) }
     }
+
+    /**
+     * Seeds a box's answers from what the model called it.
+     *
+     * Model-assisted pre-labelling: the medtech corrects what is wrong instead of retyping
+     * what is right. The firm rule is only that a pre-label must never be the sole source of
+     * truth, which is what [VerificationAnswers.speciesTouched] is for — seeded false here, and
+     * set true by any deliberate selection.
+     *
+     * **Only the species is pre-filled.** isEgg, isBoxCorrect and missedEgg are the remaining
+     * active-judgment gates and are never answered on the medtech's behalf; pre-filling any of
+     * them would let a frame reach CONFIRMED with no engagement at all. An unrecognised class
+     * label pre-fills nothing rather than guessing OTHER, because OTHER carries a free-text
+     * box the model cannot fill in.
+     */
+    private fun Prediction.toPreFilledFinding(): Finding =
+        Finding(prediction = this).let { it.copy(answers = it.resetSpecies()) }
 
     /**
      * Appends a species the model never boxed.
@@ -415,6 +443,15 @@ class VerificationViewModel @Inject constructor(
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {
         updateAnswerAt(_state.value.currentDetectionIndex, transform)
+    }
+
+    private fun updateCurrentFinding(transform: (Finding) -> Finding) {
+        val index = _state.value.currentDetectionIndex
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            if (index in updated.indices) updated[index] = transform(updated[index])
+            current.copy(findings = updated)
+        }
     }
 
     private fun updateAnswerAt(index: Int, transform: (VerificationAnswers) -> VerificationAnswers) {

@@ -635,4 +635,71 @@ class VerificationViewModelTest {
             assertEquals(true, vm.state.value.findings[0].answers.speciesTouched)
         }
 
+
+    // Auto-fill from the model output, and the provenance it needs (86d4ab4tq)
+
+    @Test
+    fun `a box is pre-filled with the class the model gave it, untouched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertFalse(
+                "A pre-fill is not a human answer - submitting it untouched must not read " +
+                    "as a confirmation.",
+                answers.speciesTouched,
+            )
+        }
+
+    @Test
+    fun `answering the box questions keeps the pre-filled species`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The reset that clears later answers used to clear to empty, which threw the
+            // pre-fill away the moment the medtech answered Q1 - i.e. always.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertFalse(answers.speciesTouched)
+        }
+
+    @Test
+    fun `changing the species away and back still reads as touched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertTrue("Landing back on the model's answer deliberately is still a choice.", answers.speciesTouched)
+        }
+
+    @Test
+    fun `an unrecognised model class pre-fills nothing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
+            // fill, so it would look answered while being incomplete.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1).copy(
+                predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
+            ))
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.findings[0].answers.species)
+        }
+
 }
