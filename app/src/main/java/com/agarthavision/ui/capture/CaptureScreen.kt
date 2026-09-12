@@ -144,9 +144,11 @@ private fun IconButtonGlass(
 }
 
 /**
- * Shortcut into the verification queue, with a badge counting the frames still
- * awaiting review. Lives in the bottom-left of the capture chrome: the toast
- * renders top-center and used to sit on top of this button.
+ * Shortcut into the verification queue, badged with the frames still awaiting review.
+ *
+ * Sits bottom-right, where End Session used to be. The badge deliberately counts only the
+ * unverified frames: verified samples live in the queue too now, and including them would turn
+ * a "needs review" number into a "how much is in here" number.
  */
 @Composable
 private fun VerificationQueueButton(
@@ -351,32 +353,37 @@ fun CaptureScreen(
                 )
             }
 
-            // Records shortcut for the active session. Reuses ic_chart's bar geometry so
-            // it reads the same as the Records tab in the bottom bar.
-            Box(
-                modifier = Modifier.width(40.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                val sessionId = state.activeSessionId
-                IconButtonGlass(
-                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
-                    enabled = sessionId != null,
-                    onClick = { sessionId?.let(onReportsClick) },
-                )
-            }
+            // Balances the back button so the session label stays centred. Records moved
+            // to the bottom row, where the three actions now sit together.
+            Spacer(modifier = Modifier.width(40.dp))
         }
 
-        // Connection loss banner positioned under the top chrome (77b5 spacing)
-        ConnectionLossBanner(
-            visible = state.isConnectionLost,
-            isProbing = state.isProbingConnection,
-            onResume = viewModel::resumeConnection,
+        // The row beneath the top chrome. Banner and toast are stacked in one column rather
+        // than both being pinned to the same offset - they could previously occupy the same
+        // band at once, because a shutter tap still records a frame while the connection-loss
+        // banner is latched. That was acknowledged in a comment and deferred; this is it.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 14.dp),
-        )
+                .padding(top = 108.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ConnectionLossBanner(
+                visible = state.isConnectionLost,
+                isProbing = state.isProbingConnection,
+                onResume = viewModel::resumeConnection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+            )
+            AgarthaToastHost(
+                state = toastState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            )
+        }
 
         // Bottom chrome (77b5 style)
         Row(
@@ -387,16 +394,16 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: verification queue shortcut. Its badge already counts the
-            // unverified frames, so the separate FRAMES pill that used to sit here
-            // was redundant.
+            // Left: records for this session.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                VerificationQueueButton(
-                    count = state.flaggedFrames.size,
-                    onClick = onVerifyQueueClick,
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
                 )
             }
 
@@ -411,24 +418,21 @@ fun CaptureScreen(
                     },
             )
 
-            // Right: reserved. The End Session control stood here until sessions stopped
-            // ending (86d4ab4vm); the verification queue button moves in when the capture
-            // chrome is rebuilt.
-            Spacer(modifier = Modifier.weight(1f))
+            // Right: the verification queue, where End Session used to be. Its badge counts
+            // unverified frames only - verified samples live in the queue too now, and
+            // including them would inflate a "needs review" number into a "how much is in
+            // here" number.
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
+                )
+            }
         }
 
-        // Capture toast, below the back button and session pill rather than over them.
-        // NOTE: since capture is manual-trigger, a tap still records a frame (as a Manual
-        // Capture) while the connection-loss banner is latched, so both can now occupy this
-        // band at once. Repositioning to stack them cleanly is tracked as a follow-up.
-        AgarthaToastHost(
-            state = toastState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 20.dp),
-        )
     }
 
     val target = state.verificationTarget
