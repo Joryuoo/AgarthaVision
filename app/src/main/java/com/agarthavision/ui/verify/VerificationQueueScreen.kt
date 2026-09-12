@@ -52,6 +52,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
@@ -101,7 +107,8 @@ fun VerificationQueueScreen(
                 .background(colors.background)
                 .systemBarsPadding()
         ) {
-            // App Bar
+            // App Bar. Swaps to a contextual bar while a selection is live, so the delete
+            // affordance is only ever reachable with something selected.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -109,27 +116,66 @@ fun VerificationQueueScreen(
                     .padding(top = 2.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BackArrow(onBack = onBackClick)
+                if (state.isSelecting) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.queue_selection_clear),
+                        tint = colors.textPrimary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { viewModel.onClearSelection() }
+                            .padding(4.dp)
+                            .size(24.dp),
+                    )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Verify Queue",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
+                        pluralStringResource(
+                            R.plurals.queue_selection_count,
+                            state.selectedIds.size,
+                            state.selectedIds.size,
+                        ),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = colors.textPrimary,
-                        letterSpacing = (-0.44).sp,
+                        modifier = Modifier.weight(1f),
                         style = InterBaseStyle
                     )
-                    Text(
-                        "${state.samples.size} items · " +
-                            "${counts[QueueBucket.UNVERIFIED] ?: 0} unverified",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.textSecondary,
-                        style = InterTabularStyle
+
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.queue_selection_delete),
+                        tint = colors.danger,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { viewModel.onDeleteRequested() }
+                            .padding(4.dp)
+                            .size(24.dp),
                     )
+                } else {
+                    BackArrow(onBack = onBackClick)
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Verify Queue",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary,
+                            letterSpacing = (-0.44).sp,
+                            style = InterBaseStyle
+                        )
+                        Text(
+                            "${state.samples.size} items · " +
+                                "${counts[QueueBucket.UNVERIFIED] ?: 0} unverified",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textSecondary,
+                            style = InterTabularStyle
+                        )
+                    }
                 }
             }
 
@@ -196,11 +242,32 @@ fun VerificationQueueScreen(
                 ) { sample ->
                     FrameRow(
                         sample = sample,
-                        onClick = { viewModel.onQueueItemSelected(sample) }
+                        isSelecting = state.isSelecting,
+                        isSelected = sample.sampleId in state.selectedIds,
+                        onClick = {
+                            if (state.isSelecting) {
+                                viewModel.onToggleSelected(sample)
+                            } else {
+                                viewModel.onQueueItemSelected(sample)
+                            }
+                        },
+                        onLongClick = { viewModel.onToggleSelected(sample) },
                     )
                 }
             }
         }
+    }
+
+    // System back leaves the selection before it leaves the screen.
+    BackHandler(enabled = state.isSelecting) { viewModel.onClearSelection() }
+
+    if (state.showDeleteConfirm) {
+        DeleteSamplesConfirmDialog(
+            verifiedCount = state.selectedVerifiedCount,
+            unverifiedCount = state.selectedUnverifiedCount,
+            onConfirm = viewModel::onDeleteConfirmed,
+            onDismiss = viewModel::onDeleteDismissed,
+        )
     }
 
     val target = state.verificationTarget
@@ -218,7 +285,10 @@ fun VerificationQueueScreen(
 @Composable
 private fun FrameRow(
     sample: QueueSample,
-    onClick: () -> Unit
+    isSelecting: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
     val isAI = sample.source == FrameSource.MODEL
@@ -249,9 +319,13 @@ private fun FrameRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(colors.surface)
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
+            .background(if (isSelected) colors.accentTint else colors.surface)
+            .border(
+                1.dp,
+                if (isSelected) colors.accent else colors.border,
+                RoundedCornerShape(12.dp),
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -346,11 +420,20 @@ private fun FrameRow(
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = colors.textTertiary,
-            modifier = Modifier.size(24.dp)
-        )
+        if (isSelecting) {
+            Icon(
+                if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = null,
+                tint = if (isSelected) colors.accent else colors.textTertiary,
+                modifier = Modifier.size(24.dp),
+            )
+        } else {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 }

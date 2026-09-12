@@ -101,6 +101,30 @@
     <string name="queue_bucket_unverified">Unverified</string>
     <string name="queue_bucket_verified">Verified</string>
     <string name="queue_row_awaiting_review">Awaiting review</string>
+    <string name="queue_selection_clear">Clear selection</string>
+    <string name="queue_selection_delete">Delete selected</string>
+    <plurals name="queue_selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+
+    <!--
+      The two halves of a delete are irreversible in different ways, and the medtech cannot
+      infer that from the word "delete" - so the dialog says both out loud. See C8.
+    -->
+    <plurals name="delete_samples_title">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <plurals name="delete_samples_unverified">
+        <item quantity="one">%1$d unverified frame will be erased permanently.</item>
+        <item quantity="other">%1$d unverified frames will be erased permanently.</item>
+    </plurals>
+    <plurals name="delete_samples_verified">
+        <item quantity="one">%1$d verified sample will be hidden from every queue, count and report. Its detections are kept for model training.</item>
+        <item quantity="other">%1$d verified samples will be hidden from every queue, count and report. Their detections are kept for model training.</item>
+    </plurals>
+    <string name="delete_samples_confirm">Delete</string>
     <string name="queue_status_unverified">Pending</string>
     <string name="queue_status_verified">Verified</string>
     <plurals name="queue_row_confirmed">

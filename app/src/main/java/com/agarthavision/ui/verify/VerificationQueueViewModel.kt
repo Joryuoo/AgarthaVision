@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.QueueBucket
 import com.agarthavision.domain.model.QueueSample
+import com.agarthavision.domain.usecase.verify.DeleteQueueItemsUseCase
 import com.agarthavision.domain.usecase.verify.ObserveVerificationQueueUseCase
 import com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
@@ -26,8 +27,26 @@ data class VerificationQueueState(
      * describing a different sample than the one on screen.
      */
     val priorTarget: VerificationTarget? = null,
+    /**
+     * Sample ids picked out for deletion, **by id rather than by object**.
+     *
+     * The same trap as the list key, one layer up: holding rows would mean a re-emission that
+     * changed a selected sample silently dropped it out of the selection.
+     */
+    val selectedIds: Set<String> = emptySet(),
+    val showDeleteConfirm: Boolean = false,
     val errorMessage: String? = null,
 ) {
+    /** Derived, never stored, so the flag and the set cannot disagree. */
+    val isSelecting: Boolean get() = selectedIds.isNotEmpty()
+
+    /** How the selection splits, which is what the confirmation dialog has to say out loud. */
+    val selectedVerifiedCount: Int
+        get() = samples.count { it.sampleId in selectedIds && it.isVerified }
+
+    val selectedUnverifiedCount: Int
+        get() = samples.count { it.sampleId in selectedIds && !it.isVerified }
+
     val verificationTarget: FlaggedFrame?
         get() = priorTarget?.frame
 
@@ -60,6 +79,7 @@ data class VerificationQueueState(
 class VerificationQueueViewModel @Inject constructor(
     observeVerificationQueue: ObserveVerificationQueueUseCase,
     private val openVerificationTarget: OpenVerificationTargetUseCase,
+    private val deleteQueueItems: DeleteQueueItemsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VerificationQueueState())
@@ -68,13 +88,68 @@ class VerificationQueueViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             observeVerificationQueue().collect { samples ->
-                _state.update { it.copy(samples = samples) }
+                _state.update { current ->
+                    // Prune ids that have left the list. A sample deleted from elsewhere would
+                    // otherwise leave a phantom in the count on the contextual bar.
+                    val live = samples.mapTo(mutableSetOf()) { it.sampleId }
+                    current.copy(
+                        samples = samples,
+                        selectedIds = current.selectedIds intersect live,
+                    )
+                }
             }
         }
     }
 
     fun onBucketSelected(bucket: QueueBucket) {
-        _state.update { it.copy(bucket = bucket) }
+        // Clears the selection: confirming a delete of rows you can no longer see is exactly
+        // the kind of mistake an irreversible action must not allow.
+        _state.update { it.copy(bucket = bucket, selectedIds = emptySet()) }
+    }
+
+    /** Long-press starts selection; tapping while selecting adds and removes. */
+    fun onToggleSelected(sample: QueueSample) {
+        _state.update { current ->
+            val next = if (sample.sampleId in current.selectedIds) {
+                current.selectedIds - sample.sampleId
+            } else {
+                current.selectedIds + sample.sampleId
+            }
+            current.copy(selectedIds = next)
+        }
+    }
+
+    fun onClearSelection() {
+        _state.update { it.copy(selectedIds = emptySet()) }
+    }
+
+    fun onDeleteRequested() {
+        if (_state.value.selectedIds.isNotEmpty()) {
+            _state.update { it.copy(showDeleteConfirm = true) }
+        }
+    }
+
+    fun onDeleteDismissed() {
+        _state.update { it.copy(showDeleteConfirm = false) }
+    }
+
+    fun onDeleteConfirmed() {
+        val ids = _state.value.selectedIds
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            deleteQueueItems(ids).fold(
+                onSuccess = {
+                    _state.update {
+                        it.copy(selectedIds = emptySet(), showDeleteConfirm = false)
+                    }
+                },
+                onFailure = { throwable ->
+                    _state.update {
+                        it.copy(showDeleteConfirm = false, errorMessage = throwable.message)
+                    }
+                },
+            )
+        }
     }
 
     fun onQueueItemSelected(sample: QueueSample) {
