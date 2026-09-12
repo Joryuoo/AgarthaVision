@@ -153,7 +153,7 @@ interface SessionDao {
                ) AS unverifiedSamples,
                COUNT(d.detection_id) AS totalEpg
         FROM sessions s
-        LEFT JOIN samples smp ON s.session_id = smp.session_id
+        LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
         LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
         WHERE s.user_id = :userId
           AND (s.ended_at IS NULL OR s.started_at >= :sinceMillis)

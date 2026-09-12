@@ -40,6 +40,6 @@ class SampleRepositoryImpl @Inject constructor(
     override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
         sampleDao.getSamplesForSession(sessionId, userId).map { it.toDomain() }
 
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> =
-        sampleDao.getSamplesPendingSync(userId).map { it.toDomain() }
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> =
+        sampleDao.getSamplesPendingSyncIncludingDeleted(userId).map { it.toDomain() }
 }

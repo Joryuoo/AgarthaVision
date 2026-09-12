@@ -147,7 +147,7 @@ class DashboardViewModel @Inject constructor(
             flowOf(PendingAndSync(0, "", allSynced = true, lastSyncLabel = "never", syncedSamplesCount = 0))
         } else {
         combine(
-            flow { emit(sampleRepository.getSamplesPendingSync(userId)) },
+            flow { emit(sampleRepository.getSamplesPendingSyncIncludingDeleted(userId)) },
             sampleRepository.observeAllSamples(userId)
         ) { pendingSamples, allSamples ->
             val pendingCount = pendingSamples.size

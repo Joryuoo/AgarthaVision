@@ -175,7 +175,7 @@ private class ReportSampleRepository(
     override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
         samples.filter { it.sessionId == sessionId && it.userId == userId }
 
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 }
 
 private class ReportDetectionRepository(

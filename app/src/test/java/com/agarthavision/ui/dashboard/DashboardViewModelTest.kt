@@ -58,7 +58,7 @@ class DashboardViewModelTest {
     private val sampleRepository: SampleRepository = mock<SampleRepository>().also {
         whenever(it.observeAllSamples(any())).thenReturn(flowOf(emptyList()))
         whenever(it.observeSamplesForSession(any(), any())).thenReturn(flowOf(emptyList()))
-        runBlocking { whenever(it.getSamplesPendingSync(any())).thenReturn(emptyList()) }
+        runBlocking { whenever(it.getSamplesPendingSyncIncludingDeleted(any())).thenReturn(emptyList()) }
     }
     private val detectionRepository: DetectionRepository = mock<DetectionRepository>().also {
         whenever(it.observeConfirmedEggCountsSince(any(), any())).thenReturn(flowOf(emptyList()))

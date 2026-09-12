@@ -108,7 +108,7 @@ private class FakeSampleRepository(
     override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
         samplesBySession[sessionId].orEmpty().filter { it.userId == userId }
 
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 }
 
 private class FakeDetectionRepository(

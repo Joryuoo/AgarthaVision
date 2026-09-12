@@ -36,7 +36,8 @@ interface DetectionDao {
              COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.session_id = :sessionId
+        WHERE s.deleted_at is null
+          AND s.session_id = :sessionId
           AND s.user_id = :userId
                     AND s.status != 'flagged'
           AND d.verdict != 'false_positive'
@@ -59,7 +60,8 @@ interface DetectionDao {
              COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.user_id = :userId
+        WHERE s.deleted_at is null
+          AND s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
           AND d.verdict = 'confirmed'
         GROUP BY species
@@ -79,7 +81,8 @@ interface DetectionDao {
          SELECT s.timestamp, COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.user_id = :userId
+        WHERE s.deleted_at is null
+          AND s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
           AND d.verdict = 'confirmed'
         GROUP BY s.sample_id
