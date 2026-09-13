@@ -64,6 +64,9 @@
     <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
     <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
+    <string name="verify_species_label">SPECIES</string>
+    <string name="verify_remarks_label">REMARKS</string>
+    <string name="verify_remarks_placeholder">Remarks for this sample</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
     <string name="verify_delete_frame">Delete</string>

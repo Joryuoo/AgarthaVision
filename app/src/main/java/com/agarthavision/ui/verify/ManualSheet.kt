@@ -16,7 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
@@ -45,7 +45,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -160,38 +159,13 @@ internal fun ManualSheetContent(
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
 
-            // Cycles manual captures only — model detections need the other sheet.
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                SmallToggle(
-                    label = stringResource(R.string.verify_prev_frame),
-                    selected = false,
-                    onClick = actions.onFramePrev,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_PREV),
-                    enabled = state.canGoPrev,
-                )
-                SmallToggle(
-                    label = stringResource(R.string.verify_next_frame),
-                    selected = false,
-                    onClick = actions.onFrameNext,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_NEXT),
-                    enabled = state.canGoNext,
-                )
-            }
-
-            // Image preview
+            // Image preview — full width between the sheet's side margins, at the frame's
+            // own aspect ratio so nothing is letterboxed or cropped.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp)
+                    .aspectRatio(frame.previewAspectRatio())
                     .testTag(VerifyTestTags.FRAME_PREVIEW)
-                    .padding(bottom = 14.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, colors.border, RoundedCornerShape(18.dp))
             ) {
@@ -207,15 +181,19 @@ internal fun ManualSheetContent(
                 )
             }
 
+            // Cycles manual captures only — model detections need the other sheet.
+            FrameNavRow(
+                canGoPrev = state.canGoPrev,
+                canGoNext = state.canGoNext,
+                onPrev = actions.onFramePrev,
+                onNext = actions.onFrameNext,
+                modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
+            )
+
             // Species Section
-            Text(
-                text = "SPECIES",
-                fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textSecondary,
-                letterSpacing = 0.8.sp,
-                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
+            SheetSectionLabel(
+                text = stringResource(R.string.verify_species_label),
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
             )
 
             // Quick Chips
@@ -292,42 +270,38 @@ internal fun ManualSheetContent(
                 }
             }
 
-            // Note section
-            Column(
+            // Remarks section — a plain field, no enclosing card.
+            SheetSectionLabel(
+                text = stringResource(R.string.verify_remarks_label),
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            )
+            OutlinedTextField(
+                value = state.userNote,
+                onValueChange = actions.onUserNoteChanged,
+                placeholder = {
+                    Text(
+                        stringResource(R.string.verify_remarks_placeholder),
+                        color = colors.textTertiary,
+                        fontSize = 13.sp,
+                    )
+                },
+                minLines = 1,
+                maxLines = 3,
+                enabled = !state.isSubmitting,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 14.dp)
-                    .background(Color.Transparent, RoundedCornerShape(14.dp))
-                    .border(0.5.dp, colors.borderStrong, RoundedCornerShape(14.dp))
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-            ) {
-                Text(
-                    text = "NOTE",
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.textSecondary,
-                    letterSpacing = 0.8.sp,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
-                OutlinedTextField(
-                    value = state.userNote,
-                    onValueChange = actions.onUserNoteChanged,
-                    placeholder = {
-                        Text("Add an observation about morphology, color, or staining.")
-                    },
-                    singleLine = false,
-                    enabled = !state.isSubmitting,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(VerifyTestTags.NOTE_FIELD),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = colors.accent,
-                        unfocusedBorderColor = colors.borderStrong,
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                )
-            }
+                    .testTag(VerifyTestTags.NOTE_FIELD),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = colors.accent,
+                    unfocusedBorderColor = colors.borderStrong,
+                    focusedContainerColor = colors.surface,
+                    unfocusedContainerColor = colors.surface,
+                    focusedTextColor = colors.textPrimary,
+                    unfocusedTextColor = colors.textPrimary,
+                ),
+                shape = RoundedCornerShape(12.dp),
+            )
 
             SheetActionRow(
                 SheetActionRowState(

@@ -9,6 +9,21 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feature/editable-report — verification sheet layout · 2026-09-13
+
+- The frame preview on both sheets fills the width between the side margins at the frame's
+  own aspect ratio (`previewAspectRatio()`, `ui/verify/ModalSheetComponents.kt`) instead of a
+  fixed-height strip that letterboxed a square field. Previous/Next frame moved beneath it
+  (`FrameNavRow`).
+- Submit is the brand maroon with white text; Discard is a neutral grey chip. It opens a
+  confirmation dialog, so it no longer needs to look destructive itself (`SheetActionRow`).
+- "Note" is now "Remarks" on both sheets, as a plain labelled field — the manual sheet's
+  enclosing card is gone. Labels and the top-bar meta line dropped the platform monospace
+  face for the app's Inter styles (`SheetSectionLabel`, `MonoSmallStyle`), matching the records
+  screens.
+- Reverted the egg-stage classification (86d4a6jwy, deprioritised): Room back to staging's v10,
+  `detections.stage` and its migration gone. The species dropdown keeps type-to-search.
+
 ## feat/86d4ab4xr-sample-geospatial — PSGC barangay on sessions · 2026-09-11
 
 Cut from `staging`. Serves the 4th general objective (DOH-compliant surveillance reports and

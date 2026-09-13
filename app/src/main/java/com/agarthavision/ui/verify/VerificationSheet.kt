@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -182,30 +181,8 @@ internal fun VerificationSheetContent(
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                SmallToggle(
-                    label = stringResource(R.string.verify_prev_frame),
-                    selected = false,
-                    onClick = actions.onFramePrev,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_PREV),
-                    enabled = state.canGoPrev,
-                )
-                SmallToggle(
-                    label = stringResource(R.string.verify_next_frame),
-                    selected = false,
-                    onClick = actions.onFrameNext,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_NEXT),
-                    enabled = state.canGoNext,
-                )
-            }
-
+            // Full width between the side margins, at the frame's own aspect ratio, so the
+            // whole field is visible without letterboxing.
             FrameWithBoxes(
                 jpegBytes = frame.jpegBytes,
                 predictions = frame.predictions,
@@ -215,11 +192,18 @@ internal fun VerificationSheetContent(
                 inferenceImageHeight = frame.imageHeight,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .aspectRatio(frame.previewAspectRatio())
                     .testTag(VerifyTestTags.FRAME_PREVIEW)
-                    .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
+            )
+
+            FrameNavRow(
+                canGoPrev = state.canGoPrev,
+                canGoNext = state.canGoNext,
+                onPrev = actions.onFramePrev,
+                onNext = actions.onFrameNext,
+                modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
             Row(
@@ -341,10 +325,14 @@ internal fun VerificationSheetContent(
                 )
             }
 
+            SheetSectionLabel(
+                text = stringResource(R.string.verify_remarks_label),
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            )
             NoteField(
                 value = state.userNote,
                 onValueChange = actions.onUserNoteChanged,
-                placeholder = "Notes for this sample",
+                placeholder = stringResource(R.string.verify_remarks_placeholder),
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
@@ -430,13 +418,8 @@ private fun <T> QuestionSection(
     selected: T?,
     onSelect: (T) -> Unit,
 ) {
-    Text(
+    SheetSectionLabel(
         text = title,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = AgarthaTheme.colors.textSecondary,
-        letterSpacing = 0.8.sp,
         modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
     )
     Row(
