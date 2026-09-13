@@ -23,8 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Flag
@@ -46,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -215,14 +212,40 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
+            val detectionCount = state.answers.size.coerceAtLeast(1)
             DetectionCard(
                 speciesName = speciesName,
-                detectionIndex = state.currentDetectionIndex,
-                detectionCount = state.answers.size.coerceAtLeast(1),
+                detectionLabel = stringResource(
+                    R.string.verify_detection_counter,
+                    state.currentDetectionIndex + 1,
+                    detectionCount,
+                ),
                 source = frame.source,
-                onDetectionPrev = actions.onDetectionPrev,
-                onDetectionNext = actions.onDetectionNext,
                 modifier = Modifier.padding(bottom = 12.dp),
+            )
+
+            // Steps between the boxes on this frame. Only drawn when there is more than one
+            // box, and each side goes dead at its end of the range, so it cannot read as a
+            // way to leave the frame.
+            if (detectionCount > 1) {
+                NavPairRow(
+                    state = NavPairState(
+                        prevLabel = stringResource(R.string.verify_prev_egg),
+                        nextLabel = stringResource(R.string.verify_next_egg),
+                        prevTag = VerifyTestTags.DETECTION_PREV,
+                        nextTag = VerifyTestTags.DETECTION_NEXT,
+                        canGoPrev = state.currentDetectionIndex > 0,
+                        canGoNext = state.currentDetectionIndex < detectionCount - 1,
+                        onPrev = actions.onDetectionPrev,
+                        onNext = actions.onDetectionNext,
+                    ),
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+            }
+
+            BoundingBoxesToggle(
+                checked = state.showBoundingBoxes,
+                onToggle = actions.onToggleBoundingBoxes,
             )
 
             BoxQuestionChain(
@@ -238,42 +261,6 @@ internal fun VerificationSheetContent(
                 selected = state.missedEgg,
                 onSelect = actions.onQ4Selected,
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Boxes",
-                    color = AgarthaTheme.colors.textSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
-                    checked = state.showBoundingBoxes,
-                    onCheckedChange = { actions.onToggleBoundingBoxes() },
-                    thumbContent = if (state.showBoundingBoxes) {
-                        {
-                            Icon(
-                                imageVector = Icons.Outlined.CropSquare,
-                                contentDescription = null,
-                                modifier = Modifier.size(SwitchDefaults.IconSize),
-                            )
-                        }
-                    } else null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = AppColors.White,
-                        checkedTrackColor = AgarthaTheme.colors.accent,
-                        checkedIconColor = AgarthaTheme.colors.accent,
-                        uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
-                        uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
-                    ),
-                )
-            }
 
             SheetSectionLabel(
                 text = stringResource(R.string.verify_remarks_label),
@@ -339,6 +326,51 @@ internal fun VerificationSheetContent(
 }
 
 /**
+ * Show / hide the model's boxes on the preview. Sits directly above the first question
+ * because that question is about the highlighted box.
+ */
+@Composable
+private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.verify_boxes_toggle),
+            color = AgarthaTheme.colors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            thumbContent = if (checked) {
+                {
+                    Icon(
+                        imageVector = Icons.Outlined.CropSquare,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                }
+            } else {
+                null
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = AppColors.White,
+                checkedTrackColor = AgarthaTheme.colors.accent,
+                checkedIconColor = AgarthaTheme.colors.accent,
+                uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
+                uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
+            ),
+        )
+    }
+}
+
+/**
  * The per-box questions, each revealed by the previous answer: is it an egg → is the box
  * placed right → is it the species the model named. The species step is a confirmation
  * before a picker: the common answer is yes, and a yes should not cost a pick from a list
@@ -395,22 +427,15 @@ private fun BoxQuestionChain(
 
 /**
  * Highlights what the model (or the medtech, for a manual capture) put in front of the
- * reviewer: the species large and the provenance pill. When the model drew more than one
- * box on the frame, an egg pager sits inside the card — scoped there deliberately, so it
- * cannot be mistaken for the frame navigation above — and switches which box is highlighted
- * and which answer set is shown. A single box needs no pager, so none is drawn.
- *
+ * reviewer: the species large, which box this is beneath it, and the provenance pill.
  * A model frame carries a caution line under the card, because the name on it is a
  * suggestion the medtech is about to confirm or correct — not a finding (C7).
  */
 @Composable
 private fun DetectionCard(
     speciesName: String,
-    detectionIndex: Int,
-    detectionCount: Int,
+    detectionLabel: String,
     source: FrameSource,
-    onDetectionPrev: () -> Unit,
-    onDetectionNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -418,41 +443,37 @@ private fun DetectionCard(
     // onAccent tints, and the provenance pill becomes a light chip so it stays legible.
     val onCard = colors.onAccent
     Column(modifier = modifier.fillMaxWidth()) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.DETECTION_CARD)
                 .background(colors.accent, RoundedCornerShape(14.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.Top,
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.verify_species_label),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onCard.copy(alpha = 0.72f),
-                        letterSpacing = 0.5.sp,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = speciesName,
-                        style = AppTypography.headlineSmall,
-                        color = onCard,
-                    )
-                }
-                SourceBadge(source = source, onAccentSurface = true)
-            }
-            if (detectionCount > 1) {
-                Spacer(Modifier.height(10.dp))
-                EggPager(
-                    index = detectionIndex,
-                    count = detectionCount,
-                    onPrev = onDetectionPrev,
-                    onNext = onDetectionNext,
-                    contentColor = onCard,
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.verify_species_label),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCard.copy(alpha = 0.72f),
+                    letterSpacing = 0.5.sp,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = speciesName,
+                    style = AppTypography.headlineSmall,
+                    color = onCard,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = detectionLabel,
+                    color = onCard.copy(alpha = 0.72f),
+                    fontSize = 12.sp,
+                    style = MonoDataStyle,
                 )
             }
+            SourceBadge(source = source, onAccentSurface = true)
         }
         if (source == FrameSource.MODEL) {
             Text(
@@ -465,72 +486,6 @@ private fun DetectionCard(
                     .padding(top = 8.dp, start = 4.dp, end = 4.dp),
             )
         }
-    }
-}
-
-/**
- * `‹  Egg n of N  ›` — steps between the boxes on one frame. Each arrow dims and stops
- * accepting taps at its end of the range, so the pager never looks like it could leave the
- * frame.
- */
-@Composable
-private fun EggPager(
-    index: Int,
-    count: Int,
-    onPrev: () -> Unit,
-    onNext: () -> Unit,
-    contentColor: Color,
-) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PagerArrow(
-            icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-            contentDescription = stringResource(R.string.verify_prev_egg),
-            enabled = index > 0,
-            onClick = onPrev,
-            contentColor = contentColor,
-            modifier = Modifier.testTag(VerifyTestTags.DETECTION_PREV),
-        )
-        Text(
-            text = stringResource(R.string.verify_egg_pager, index + 1, count),
-            color = contentColor,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            style = MonoDataStyle,
-            modifier = Modifier.padding(horizontal = 10.dp),
-        )
-        PagerArrow(
-            icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = stringResource(R.string.verify_next_egg),
-            enabled = index < count - 1,
-            onClick = onNext,
-            contentColor = contentColor,
-            modifier = Modifier.testTag(VerifyTestTags.DETECTION_NEXT),
-        )
-    }
-}
-
-@Composable
-private fun PagerArrow(
-    icon: ImageVector,
-    contentDescription: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-    contentColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(10.dp))
-            .background(contentColor.copy(alpha = if (enabled) 0.18f else 0.08f))
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = contentColor.copy(alpha = if (enabled) 1f else 0.35f),
-        )
     }
 }
 

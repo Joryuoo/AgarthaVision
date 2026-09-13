@@ -24,9 +24,10 @@ Verify any entry with `git log --oneline --reverse`.
 - The AI sheet's species line is now a card — "SPECIES" small, the model's class large,
   position and provenance pill inside — followed on model frames by a caution that the result
   is AI-suggested and may be inaccurate (`DetectionCard`, `ui/verify/VerificationSheet.kt`).
-  Manual frames get the card without the caution. The old "Prev/Next detection" pills below
-  the card — which read like a second frame control — became an `‹ Egg n of N ›` pager inside
-  it, shown only when the frame has more than one box, each arrow dead at its end of the range.
+  Manual frames get the card without the caution. The old "Prev/Next detection" pills became
+  full-width "Previous egg / Next egg" buttons under the card, shown only when the frame has
+  more than one box, each side dead at its end of the range. The Boxes toggle moved up to sit
+  directly above the first question, which is about the highlighted box.
 - The species step now asks "Is this egg *Ascaris lumbricoides*?" before offering a list. Yes
   records the model's species as the answer in one tap; only a no opens the "Which species is
   it?" picker, and a class the app cannot map to a species skips straight to it

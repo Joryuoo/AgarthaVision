@@ -178,6 +178,52 @@ internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * Snapshot a [NavPairRow] renders from — bundled like [SheetActionRowState], since the two
+ * halves always travel together.
+ */
+internal data class NavPairState(
+    val prevLabel: String,
+    val nextLabel: String,
+    val prevTag: String,
+    val nextTag: String,
+    val canGoPrev: Boolean,
+    val canGoNext: Boolean,
+    val onPrev: () -> Unit,
+    val onNext: () -> Unit,
+)
+
+/**
+ * A full-width previous / next pair. Full-width on purpose: the medtech is working a
+ * microscope with one hand, so small arrow buttons are a miss waiting to happen.
+ */
+@Composable
+internal fun NavPairRow(state: NavPairState, modifier: Modifier = Modifier) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier,
+    ) {
+        SmallToggle(
+            label = state.prevLabel,
+            selected = false,
+            onClick = state.onPrev,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(state.prevTag),
+            enabled = state.canGoPrev,
+        )
+        SmallToggle(
+            label = state.nextLabel,
+            selected = false,
+            onClick = state.onNext,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(state.nextTag),
+            enabled = state.canGoNext,
+        )
+    }
+}
+
+/**
  * Previous / next frame pair, laid out under the frame preview on both sheets.
  */
 @Composable
@@ -188,29 +234,19 @@ internal fun FrameNavRow(
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    NavPairRow(
+        state = NavPairState(
+            prevLabel = stringResource(R.string.verify_prev_frame),
+            nextLabel = stringResource(R.string.verify_next_frame),
+            prevTag = VerifyTestTags.FRAME_PREV,
+            nextTag = VerifyTestTags.FRAME_NEXT,
+            canGoPrev = canGoPrev,
+            canGoNext = canGoNext,
+            onPrev = onPrev,
+            onNext = onNext,
+        ),
         modifier = modifier,
-    ) {
-        SmallToggle(
-            label = stringResource(R.string.verify_prev_frame),
-            selected = false,
-            onClick = onPrev,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(VerifyTestTags.FRAME_PREV),
-            enabled = canGoPrev,
-        )
-        SmallToggle(
-            label = stringResource(R.string.verify_next_frame),
-            selected = false,
-            onClick = onNext,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(VerifyTestTags.FRAME_NEXT),
-            enabled = canGoNext,
-        )
-    }
+    )
 }
 
 /**

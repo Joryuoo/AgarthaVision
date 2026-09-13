@@ -414,9 +414,9 @@ class VerificationSheetContentTest {
     // Detection navigation
 
     /**
-     * The egg pager lives inside the species card and steps between the boxes on one frame.
-     * Each arrow is dead at its own end of the range, so on the first egg only "next" can
-     * fire, and on the last only "previous" — the pager can never look like it leaves the
+     * The egg buttons sit under the species card and step between the boxes on one frame.
+     * Each side is dead at its own end of the range, so on the first egg only "next" can
+     * fire, and on the last only "previous" — the pair can never look like it leaves the
      * frame.
      */
     @Test
@@ -445,17 +445,18 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `the egg counter reflects how many boxes there are`() {
+    fun `the detection counter reflects how many boxes there are`() {
         setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
 
-        composeRule.onNodeWithText("Egg 1 of 2").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Detection 1 of 2").performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun `a single-box frame shows no egg pager`() {
+    fun `a single-box frame still says which detection it is but offers no egg buttons`() {
         setContent(state())
 
         sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        composeRule.onNodeWithText("Detection 1 of 1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.DETECTION_NEXT).assertDoesNotExist()
     }
