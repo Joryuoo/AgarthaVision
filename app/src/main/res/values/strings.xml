@@ -101,6 +101,7 @@
     <string name="capture_end_session">End Session</string>
     <string name="capture_end_session_title">End this session?</string>
     <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <string name="session_no_items_yet">No items yet</string>
     <string name="session_all_verified">All verified</string>
     <plurals name="session_unverified_count">
         <item quantity="one">%1$d to verify</item>

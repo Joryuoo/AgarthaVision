@@ -246,6 +246,14 @@ private data class SessionCardActions(
     val onClick: () -> Unit,
 )
 
+internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
+
+internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueueBadge = when {
+    totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
+    unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
+    else -> SessionQueueBadge.PENDING
+}
+
 @Composable
 private fun SessionCard(
     sessionData: SessionWithStats,
@@ -262,8 +270,11 @@ private fun SessionCard(
         "$date · $time · ${session.notes}"
     }
 
-    val bgColor = if (isActive) colors.accentTint2 else colors.surface
-    val borderColor = if (isActive) colors.accentTint else colors.border
+    val (bgColor, borderColor) = if (isActive) {
+        colors.accentTint2 to colors.accentTint
+    } else {
+        colors.surface to colors.border
+    }
     // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
     // regardless of active/ended state — local-only is a neutral state, not a warning.
     val linkState = session.linkState
@@ -318,29 +329,35 @@ private fun SessionCard(
                 // Frames still to review, repeats excluded — the same count that blocks
                 // ending the session, so this row and that dialog always agree.
                 val unverified = sessionData.unverifiedSamples
+                val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
+                val hasPending = unverified > 0
+                val (badgeBg, badgeTextColor) = if (hasPending) {
+                    colors.accent to colors.onAccent
+                } else {
+                    colors.surfaceMuted to colors.textSecondary
+                }
                 Row(
                     modifier = Modifier
-                        .background(
-                            if (unverified > 0) colors.accent else colors.surfaceMuted,
-                            CircleShape,
-                        )
+                        .background(badgeBg, CircleShape)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (unverified > 0) LiveDot()
+                    if (hasPending) LiveDot()
                     Text(
-                        // English has no `zero` plural, so 0 needs its own string.
-                        text = if (unverified == 0) {
-                            stringResource(R.string.session_all_verified)
-                        } else {
-                            pluralStringResource(
-                                R.plurals.session_unverified_count,
-                                unverified,
-                                unverified,
-                            )
+                        text = when (queueBadge) {
+                            SessionQueueBadge.NO_ITEMS ->
+                                stringResource(R.string.session_no_items_yet)
+                            SessionQueueBadge.ALL_VERIFIED ->
+                                stringResource(R.string.session_all_verified)
+                            SessionQueueBadge.PENDING ->
+                                pluralStringResource(
+                                    R.plurals.session_unverified_count,
+                                    unverified,
+                                    unverified,
+                                )
                         },
-                        color = if (unverified > 0) colors.onAccent else colors.textSecondary,
+                        color = badgeTextColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
