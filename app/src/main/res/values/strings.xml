@@ -37,14 +37,13 @@
     <string name="verify_predicted">Model predicted: %1$s</string>
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
     <string name="verify_q2">Is the bounding box correctly placed?</string>
-    <string name="verify_q3">What species?</string>
+    <string name="verify_q3">Is this egg %1$s?</string>
+    <string name="verify_species_picker_label">Which species is it?</string>
     <string name="verify_q4">Did the model miss any eggs in this frame?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
     <string name="verify_other_hint">Type the observed species</string>
-    <string name="verify_prev_detection">Previous detection</string>
-    <string name="verify_next_detection">Next detection</string>
     <string name="verify_show_boxes_label">Show bounding boxes</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>

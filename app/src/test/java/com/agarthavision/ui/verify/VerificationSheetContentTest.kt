@@ -67,6 +67,7 @@ class VerificationSheetContentTest {
     private class Recorder {
         val q1 = mutableListOf<Boolean>()
         val q2 = mutableListOf<Boolean>()
+        val speciesConfirmed = mutableListOf<Boolean>()
         val q4 = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
         val notes = mutableListOf<String>()
@@ -84,6 +85,7 @@ class VerificationSheetContentTest {
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
         onQ1Selected = { r.q1 += it },
         onQ2Selected = { r.q2 += it },
+        onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = {},
         onQ4Selected = { r.q4 += it },
@@ -152,9 +154,16 @@ class VerificationSheetContentTest {
     private fun answered(
         isEgg: Boolean? = null,
         isBoxCorrect: Boolean? = null,
+        speciesConfirmed: Boolean? = null,
         species: EggSpecies? = null,
         otherSpeciesText: String = "",
-    ) = VerificationAnswers(isEgg, isBoxCorrect, species, otherSpeciesText)
+    ) = VerificationAnswers(
+        isEgg = isEgg,
+        isBoxCorrect = isBoxCorrect,
+        speciesConfirmed = speciesConfirmed,
+        species = species,
+        otherSpeciesText = otherSpeciesText,
+    )
 
     // The question chain: which sections are visible
 
@@ -188,16 +197,73 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `a misplaced box stops the chain before the species picker`() {
+    fun `a misplaced box stops the chain before the species question`() {
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false))))
+
+        composeRule.onNodeWithTag(
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+        ).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    /**
+     * The species step asks about the model's suggestion first. The common answer is yes,
+     * and a yes must not cost the medtech a pick from a list they just agreed with — so the
+     * picker only appears once they say the suggestion is wrong.
+     */
+    @Test
+    fun `a correct box asks whether the suggested species is right, not for a pick`() {
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        composeRule.onNodeWithText("Is this egg ${EggSpecies.ASCARIS.displayName}?")
+            .performScrollTo()
+            .assertIsDisplayed()
+        option(VerifyTestTags.QUESTION_Q3, "Yes").assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `answering the species question reports the answer`() {
+        val r = setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        option(VerifyTestTags.QUESTION_Q3, "No").performClick()
+
+        assertEquals(listOf(false), r.speciesConfirmed)
+    }
+
+    @Test
+    fun `agreeing with the suggested species keeps the picker hidden`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true, species = EggSpecies.ASCARIS),
+                ),
+            ),
+        )
 
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
     @Test
-    fun `a correct box reveals the species picker`() {
-        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+    fun `rejecting the suggested species reveals the picker`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = false))),
+        )
 
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+    }
+
+    /** A class the app cannot map to a species has nothing to confirm, so ask for a pick. */
+    @Test
+    fun `an unrecognised model class skips the question and shows the picker`() {
+        val unknownClass = frame().copy(
+            predictions = listOf(Prediction("Giardia", 0.9f, 100f, 100f, 50f, 50f)),
+        )
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true)), frame = unknownClass))
+
+        composeRule.onNodeWithTag(
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+        ).assertDoesNotExist()
         sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
 
@@ -212,7 +278,12 @@ class VerificationSheetContentTest {
         val r = setContent(
             state(
                 answers = listOf(
-                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                    answered(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = false,
+                        species = EggSpecies.ASCARIS,
+                    ),
                 ),
             ),
         )
@@ -262,6 +333,15 @@ class VerificationSheetContentTest {
     @Test
     fun `an egg with a correct box needs a species before it completes`() {
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
+    fun `rejecting the suggested species without picking another does not complete`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = false))),
+        )
 
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
     }

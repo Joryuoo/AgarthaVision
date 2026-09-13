@@ -27,6 +27,10 @@ Verify any entry with `git log --oneline --reverse`.
   Manual frames get the card without the caution. The old "Prev/Next detection" pills below
   the card — which read like a second frame control — became an `‹ Egg n of N ›` pager inside
   it, shown only when the frame has more than one box, each arrow dead at its end of the range.
+- The species step now asks "Is this egg *Ascaris lumbricoides*?" before offering a list. Yes
+  records the model's species as the answer in one tap; only a no opens the "Which species is
+  it?" picker, and a class the app cannot map to a species skips straight to it
+  (`VerificationAnswers.speciesConfirmed`, `VerificationViewModel.onSpeciesConfirmed`).
 - Reverted the egg-stage classification (86d4a6jwy, deprioritised): Room back to staging's v10,
   `detections.stage` and its migration gone. The species dropdown keeps type-to-search.
 

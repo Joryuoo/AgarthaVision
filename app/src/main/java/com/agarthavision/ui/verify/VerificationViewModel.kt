@@ -199,11 +199,32 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer { it.copy(isEgg = isEgg, isBoxCorrect = null, species = null, otherSpeciesText = "") }
+        updateCurrentAnswer {
+            it.copy(isEgg = isEgg, isBoxCorrect = null, speciesConfirmed = null, species = null, otherSpeciesText = "")
+        }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
-        updateCurrentAnswer { it.copy(isBoxCorrect = isBoxCorrect, species = null, otherSpeciesText = "") }
+        updateCurrentAnswer {
+            it.copy(isBoxCorrect = isBoxCorrect, speciesConfirmed = null, species = null, otherSpeciesText = "")
+        }
+    }
+
+    /**
+     * "Is this egg <model's species>?" Yes records the model's species as the medtech's
+     * answer in the same step; no clears it so the picker can take over.
+     */
+    fun onSpeciesConfirmed(confirmed: Boolean) {
+        val suggested = _state.value.let { current ->
+            current.frame?.predictions?.getOrNull(current.currentDetectionIndex)
+        }?.let { EggSpecies.fromClassLabel(it.classLabel) }
+        updateCurrentAnswer {
+            it.copy(
+                speciesConfirmed = confirmed,
+                species = if (confirmed) suggested else null,
+                otherSpeciesText = "",
+            )
+        }
     }
 
     fun onSpeciesSelected(species: EggSpecies) {

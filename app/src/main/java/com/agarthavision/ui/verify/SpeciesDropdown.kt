@@ -69,7 +69,7 @@ fun SpeciesDropdown(
                     expanded = true
                 },
                 readOnly = false,
-                label = { Text(stringResource(R.string.verify_q3)) },
+                label = { Text(stringResource(R.string.verify_species_picker_label)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = fieldColors,
                 modifier = Modifier

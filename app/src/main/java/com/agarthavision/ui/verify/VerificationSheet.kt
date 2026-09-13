@@ -54,8 +54,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
@@ -101,6 +103,7 @@ fun VerificationSheet(
             actions = VerificationSheetActions(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
+                onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onQ4Selected = viewModel::onQ4Selected,
@@ -222,36 +225,11 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
-            QuestionSection(
-                title = stringResource(R.string.verify_q1),
-                tag = VerifyTestTags.QUESTION_Q1,
-                options = listOf(true to "Yes", false to "No"),
-                selected = currentAnswers?.isEgg,
-                onSelect = actions.onQ1Selected,
+            BoxQuestionChain(
+                answers = currentAnswers,
+                suggestedSpecies = currentPrediction?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                actions = actions,
             )
-
-            if (currentAnswers?.isEgg == true) {
-                QuestionSection(
-                    title = stringResource(R.string.verify_q2),
-                    tag = VerifyTestTags.QUESTION_Q2,
-                    options = listOf(true to "Yes", false to "No"),
-                    selected = currentAnswers.isBoxCorrect,
-                    onSelect = actions.onQ2Selected,
-                )
-
-                if (currentAnswers.isBoxCorrect == true) {
-                    SpeciesDropdown(
-                        selected = currentAnswers.species,
-                        otherText = currentAnswers.otherSpeciesText,
-                        onSpeciesSelected = actions.onSpeciesSelected,
-                        onOtherTextChanged = actions.onOtherSpeciesChanged,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
-                            .padding(bottom = 14.dp),
-                    )
-                }
-            }
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
@@ -356,6 +334,61 @@ internal fun VerificationSheetContent(
                     Text("Cancel")
                 }
             },
+        )
+    }
+}
+
+/**
+ * The per-box questions, each revealed by the previous answer: is it an egg → is the box
+ * placed right → is it the species the model named. The species step is a confirmation
+ * before a picker: the common answer is yes, and a yes should not cost a pick from a list
+ * the medtech has just agreed with. Only a no opens [SpeciesDropdown]. A model class the
+ * app cannot map to an [EggSpecies] ([suggestedSpecies] null) has nothing to confirm, so
+ * the picker is offered directly.
+ */
+@Composable
+private fun BoxQuestionChain(
+    answers: VerificationAnswers?,
+    suggestedSpecies: EggSpecies?,
+    actions: VerificationSheetActions,
+) {
+    QuestionSection(
+        title = stringResource(R.string.verify_q1),
+        tag = VerifyTestTags.QUESTION_Q1,
+        options = listOf(true to "Yes", false to "No"),
+        selected = answers?.isEgg,
+        onSelect = actions.onQ1Selected,
+    )
+    if (answers?.isEgg != true) return
+
+    QuestionSection(
+        title = stringResource(R.string.verify_q2),
+        tag = VerifyTestTags.QUESTION_Q2,
+        options = listOf(true to "Yes", false to "No"),
+        selected = answers.isBoxCorrect,
+        onSelect = actions.onQ2Selected,
+    )
+    if (answers.isBoxCorrect != true) return
+
+    if (suggestedSpecies != null) {
+        QuestionSection(
+            title = stringResource(R.string.verify_q3, suggestedSpecies.displayName),
+            tag = VerifyTestTags.QUESTION_Q3,
+            options = listOf(true to "Yes", false to "No"),
+            selected = answers.speciesConfirmed,
+            onSelect = actions.onSpeciesConfirmed,
+        )
+    }
+    if (suggestedSpecies == null || answers.speciesConfirmed == false) {
+        SpeciesDropdown(
+            selected = answers.species,
+            otherText = answers.otherSpeciesText,
+            onSpeciesSelected = actions.onSpeciesSelected,
+            onOtherTextChanged = actions.onOtherSpeciesChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.SPECIES_DROPDOWN)
+                .padding(bottom = 14.dp),
         )
     }
 }

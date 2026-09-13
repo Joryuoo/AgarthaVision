@@ -21,9 +21,13 @@ The human-in-the-loop gate. Nothing counts until this runs.
    host picks a sheet from the frame it opened with and never re-evaluates, so crossing
    between the two would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
-   which species (`domain/usecase/verify/VerificationAnswers.kt:5-20`). A "no" at any step
-   short-circuits the rest — `isComplete` encodes exactly which questions still matter
-   (`VerificationAnswers.kt:11-20`).
+   and which species (`domain/usecase/verify/VerificationAnswers.kt`). Species is asked as a
+   confirmation first — "Is this egg *Ascaris lumbricoides*?" — and a yes records the model's
+   species as the medtech's answer in that same step (`ui/verify/VerificationViewModel.kt`
+   `onSpeciesConfirmed`); only a no opens the species picker. A model class that maps to no
+   `EggSpecies` has nothing to confirm, so the picker is offered directly. A "no" to the egg or
+   box question short-circuits the rest — `isComplete` encodes exactly which questions still
+   matter.
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
    `needs_reannotation` (`ui/verify/VerificationViewModel.kt:217`).
 4. **Compute the verdict.** One function, first-match-wins:
