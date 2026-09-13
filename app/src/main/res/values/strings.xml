@@ -67,6 +67,7 @@
     <string name="verify_species_label">SPECIES</string>
     <string name="verify_remarks_label">REMARKS</string>
     <string name="verify_remarks_placeholder">Remarks for this sample</string>
+    <string name="verify_ai_suggestion_note">This is an AI-suggested result and may contain inaccuracies. Review the frame and confirm the species yourself before submitting.</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
     <string name="verify_delete_frame">Delete</string>

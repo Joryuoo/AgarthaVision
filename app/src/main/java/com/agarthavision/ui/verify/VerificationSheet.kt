@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -54,6 +55,7 @@ import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.DialogShape
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -206,27 +208,13 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text(
-                        text = speciesName,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
-                        color = AgarthaTheme.colors.textPrimary,
-                    )
-                    Text(
-                        text = "Detection ${state.currentDetectionIndex + 1} of ${state.answers.size.coerceAtLeast(1)}",
-                        color = AgarthaTheme.colors.textSecondary,
-                        fontSize = 12.sp,
-                    )
-                }
-                SourceBadge(source = frame.source)
-            }
+            val detectionCount = state.answers.size.coerceAtLeast(1)
+            DetectionCard(
+                speciesName = speciesName,
+                detectionLabel = "Detection ${state.currentDetectionIndex + 1} of $detectionCount",
+                source = frame.source,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
 
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -385,6 +373,61 @@ internal fun VerificationSheetContent(
                 }
             },
         )
+    }
+}
+
+/**
+ * Highlights what the model (or the medtech, for a manual capture) put in front of the
+ * reviewer: the species large, the position in the frame's detections beneath it, and the
+ * provenance pill. A model frame carries a caution line under the card, because the name
+ * on it is a suggestion the medtech is about to confirm or correct — not a finding (C7).
+ */
+@Composable
+private fun DetectionCard(
+    speciesName: String,
+    detectionLabel: String,
+    source: FrameSource,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.DETECTION_CARD)
+                .background(colors.surface, RoundedCornerShape(14.dp))
+                .border(0.5.dp, colors.border, RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                SheetSectionLabel(text = stringResource(R.string.verify_species_label))
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = speciesName,
+                    style = AppTypography.headlineSmall,
+                    color = colors.textPrimary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = detectionLabel,
+                    color = colors.textSecondary,
+                    fontSize = 12.sp,
+                )
+            }
+            SourceBadge(source = source)
+        }
+        if (source == FrameSource.MODEL) {
+            Text(
+                text = stringResource(R.string.verify_ai_suggestion_note),
+                color = colors.textTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
+                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            )
+        }
     }
 }
 

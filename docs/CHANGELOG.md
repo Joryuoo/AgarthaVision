@@ -21,6 +21,10 @@ Verify any entry with `git log --oneline --reverse`.
   enclosing card is gone. Labels and the top-bar meta line dropped the platform monospace
   face for the app's Inter styles (`SheetSectionLabel`, `MonoSmallStyle`), matching the records
   screens.
+- The AI sheet's species line is now a card — "SPECIES" small, the model's class large,
+  position and provenance pill inside — followed on model frames by a caution that the result
+  is AI-suggested and may be inaccurate (`DetectionCard`, `ui/verify/VerificationSheet.kt`).
+  Manual frames get the card without the caution.
 - Reverted the egg-stage classification (86d4a6jwy, deprioritised): Room back to staging's v10,
   `detections.stage` and its migration gone. The species dropdown keeps type-to-search.
 

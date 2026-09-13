@@ -399,6 +399,27 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SOURCE_BADGE).onChild().assertTextEquals("Manual")
     }
 
+    /**
+     * The card names the model's class before the medtech has answered anything, so a model
+     * frame must carry the caution that it is a suggestion, not a finding (C7). A manual
+     * frame has no model output to caution about.
+     */
+    @Test
+    fun `a model frame carries the AI-suggestion caution under the detection card`() {
+        setContent(state(frame = frame(source = FrameSource.MODEL)))
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a manual frame shows the detection card without the AI-suggestion caution`() {
+        setContent(state(frame = frame(source = FrameSource.MANUAL)))
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.AI_SUGGESTION_NOTE).assertDoesNotExist()
+    }
+
     @Test
     fun `tapping the repeat flag reports the toggle`() {
         val r = setContent(state())

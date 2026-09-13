@@ -64,6 +64,12 @@ internal object VerifyTestTags {
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
+    /** Card naming the species under review, with the provenance pill inside it. */
+    const val DETECTION_CARD = "detection_card"
+
+    /** Caution line under the card, present only for model frames. */
+    const val AI_SUGGESTION_NOTE = "ai_suggestion_note"
+
     /** AI-suggested vs Manual provenance pill. */
     const val SOURCE_BADGE = "source_badge"
 
