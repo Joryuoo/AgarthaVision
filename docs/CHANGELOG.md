@@ -24,7 +24,9 @@ Verify any entry with `git log --oneline --reverse`.
 - The AI sheet's species line is now a card — "SPECIES" small, the model's class large,
   position and provenance pill inside — followed on model frames by a caution that the result
   is AI-suggested and may be inaccurate (`DetectionCard`, `ui/verify/VerificationSheet.kt`).
-  Manual frames get the card without the caution.
+  Manual frames get the card without the caution. The old "Prev/Next detection" pills below
+  the card — which read like a second frame control — became an `‹ Egg n of N ›` pager inside
+  it, shown only when the frame has more than one box, each arrow dead at its end of the range.
 - Reverted the egg-stage classification (86d4a6jwy, deprioritised): Room back to staging's v10,
   `detections.stage` and its migration gone. The species dropdown keeps type-to-search.
 

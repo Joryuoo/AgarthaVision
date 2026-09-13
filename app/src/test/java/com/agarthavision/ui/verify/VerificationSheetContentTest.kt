@@ -333,22 +333,51 @@ class VerificationSheetContentTest {
 
     // Detection navigation
 
+    /**
+     * The egg pager lives inside the species card and steps between the boxes on one frame.
+     * Each arrow is dead at its own end of the range, so on the first egg only "next" can
+     * fire, and on the last only "previous" — the pager can never look like it leaves the
+     * frame.
+     */
     @Test
-    fun `detection navigation reports both directions`() {
+    fun `on the first egg only next fires`() {
         val r = setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
 
-        sheetNode(VerifyTestTags.DETECTION_PREV).performClick()
-        sheetNode(VerifyTestTags.DETECTION_NEXT).performClick()
+        sheetNode(VerifyTestTags.DETECTION_PREV).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.DETECTION_NEXT).assertIsEnabled().performClick()
 
-        assertEquals(1, r.detectionPrev)
+        assertEquals(0, r.detectionPrev)
         assertEquals(1, r.detectionNext)
     }
 
     @Test
-    fun `the detection counter reflects how many there are`() {
+    fun `on the last egg only previous fires`() {
+        val r = setContent(
+            state(answers = listOf(answered(), answered()), frame = frame(predictions = 2))
+                .copy(currentDetectionIndex = 1),
+        )
+
+        sheetNode(VerifyTestTags.DETECTION_NEXT).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.DETECTION_PREV).assertIsEnabled().performClick()
+
+        assertEquals(1, r.detectionPrev)
+        assertEquals(0, r.detectionNext)
+    }
+
+    @Test
+    fun `the egg counter reflects how many boxes there are`() {
         setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
 
-        composeRule.onNodeWithText("Detection 1 of 2").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Egg 1 of 2").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a single-box frame shows no egg pager`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_NEXT).assertDoesNotExist()
     }
 
     // Bounding boxes

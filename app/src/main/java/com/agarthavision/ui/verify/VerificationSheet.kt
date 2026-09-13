@@ -23,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Flag
@@ -44,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -57,6 +60,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.DialogShape
+import com.agarthavision.ui.theme.MonoDataStyle
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -208,35 +212,15 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
-            val detectionCount = state.answers.size.coerceAtLeast(1)
             DetectionCard(
                 speciesName = speciesName,
-                detectionLabel = "Detection ${state.currentDetectionIndex + 1} of $detectionCount",
+                detectionIndex = state.currentDetectionIndex,
+                detectionCount = state.answers.size.coerceAtLeast(1),
                 source = frame.source,
+                onDetectionPrev = actions.onDetectionPrev,
+                onDetectionNext = actions.onDetectionNext,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                SmallToggle(
-                    "Prev detection",
-                    false,
-                    actions.onDetectionPrev,
-                    Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.DETECTION_PREV),
-                )
-                SmallToggle(
-                    "Next detection",
-                    false,
-                    actions.onDetectionNext,
-                    Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.DETECTION_NEXT),
-                )
-            }
 
             QuestionSection(
                 title = stringResource(R.string.verify_q1),
@@ -378,15 +362,22 @@ internal fun VerificationSheetContent(
 
 /**
  * Highlights what the model (or the medtech, for a manual capture) put in front of the
- * reviewer: the species large, the position in the frame's detections beneath it, and the
- * provenance pill. A model frame carries a caution line under the card, because the name
- * on it is a suggestion the medtech is about to confirm or correct — not a finding (C7).
+ * reviewer: the species large and the provenance pill. When the model drew more than one
+ * box on the frame, an egg pager sits inside the card — scoped there deliberately, so it
+ * cannot be mistaken for the frame navigation above — and switches which box is highlighted
+ * and which answer set is shown. A single box needs no pager, so none is drawn.
+ *
+ * A model frame carries a caution line under the card, because the name on it is a
+ * suggestion the medtech is about to confirm or correct — not a finding (C7).
  */
 @Composable
 private fun DetectionCard(
     speciesName: String,
-    detectionLabel: String,
+    detectionIndex: Int,
+    detectionCount: Int,
     source: FrameSource,
+    onDetectionPrev: () -> Unit,
+    onDetectionNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -394,36 +385,41 @@ private fun DetectionCard(
     // onAccent tints, and the provenance pill becomes a light chip so it stays legible.
     val onCard = colors.onAccent
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.DETECTION_CARD)
                 .background(colors.accent, RoundedCornerShape(14.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.Top,
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.verify_species_label),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = onCard.copy(alpha = 0.72f),
-                    letterSpacing = 0.5.sp,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = speciesName,
-                    style = AppTypography.headlineSmall,
-                    color = onCard,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = detectionLabel,
-                    color = onCard.copy(alpha = 0.72f),
-                    fontSize = 12.sp,
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.verify_species_label),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onCard.copy(alpha = 0.72f),
+                        letterSpacing = 0.5.sp,
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        text = speciesName,
+                        style = AppTypography.headlineSmall,
+                        color = onCard,
+                    )
+                }
+                SourceBadge(source = source, onAccentSurface = true)
+            }
+            if (detectionCount > 1) {
+                Spacer(Modifier.height(10.dp))
+                EggPager(
+                    index = detectionIndex,
+                    count = detectionCount,
+                    onPrev = onDetectionPrev,
+                    onNext = onDetectionNext,
+                    contentColor = onCard,
                 )
             }
-            SourceBadge(source = source, onAccentSurface = true)
         }
         if (source == FrameSource.MODEL) {
             Text(
@@ -436,6 +432,72 @@ private fun DetectionCard(
                     .padding(top = 8.dp, start = 4.dp, end = 4.dp),
             )
         }
+    }
+}
+
+/**
+ * `‹  Egg n of N  ›` — steps between the boxes on one frame. Each arrow dims and stops
+ * accepting taps at its end of the range, so the pager never looks like it could leave the
+ * frame.
+ */
+@Composable
+private fun EggPager(
+    index: Int,
+    count: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    contentColor: Color,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        PagerArrow(
+            icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+            contentDescription = stringResource(R.string.verify_prev_egg),
+            enabled = index > 0,
+            onClick = onPrev,
+            contentColor = contentColor,
+            modifier = Modifier.testTag(VerifyTestTags.DETECTION_PREV),
+        )
+        Text(
+            text = stringResource(R.string.verify_egg_pager, index + 1, count),
+            color = contentColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            style = MonoDataStyle,
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        PagerArrow(
+            icon = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = stringResource(R.string.verify_next_egg),
+            enabled = index < count - 1,
+            onClick = onNext,
+            contentColor = contentColor,
+            modifier = Modifier.testTag(VerifyTestTags.DETECTION_NEXT),
+        )
+    }
+}
+
+@Composable
+private fun PagerArrow(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    contentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .size(32.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(contentColor.copy(alpha = if (enabled) 0.18f else 0.08f))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = contentColor.copy(alpha = if (enabled) 1f else 0.35f),
+        )
     }
 }
 
