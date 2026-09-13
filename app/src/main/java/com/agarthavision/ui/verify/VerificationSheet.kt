@@ -390,32 +390,40 @@ private fun DetectionCard(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    // Maroon brand surface, like Session Detail's hero card: everything on it reads in
+    // onAccent tints, and the provenance pill becomes a light chip so it stays legible.
+    val onCard = colors.onAccent
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.DETECTION_CARD)
-                .background(colors.surface, RoundedCornerShape(14.dp))
-                .border(0.5.dp, colors.border, RoundedCornerShape(14.dp))
+                .background(colors.accent, RoundedCornerShape(14.dp))
                 .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                SheetSectionLabel(text = stringResource(R.string.verify_species_label))
+                Text(
+                    text = stringResource(R.string.verify_species_label),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCard.copy(alpha = 0.72f),
+                    letterSpacing = 0.5.sp,
+                )
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = speciesName,
                     style = AppTypography.headlineSmall,
-                    color = colors.textPrimary,
+                    color = onCard,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = detectionLabel,
-                    color = colors.textSecondary,
+                    color = onCard.copy(alpha = 0.72f),
                     fontSize = 12.sp,
                 )
             }
-            SourceBadge(source = source)
+            SourceBadge(source = source, onAccentSurface = true)
         }
         if (source == FrameSource.MODEL) {
             Text(
@@ -431,24 +439,36 @@ private fun DetectionCard(
     }
 }
 
+/**
+ * Provenance pill. On the maroon [DetectionCard] ([onAccentSurface]) it is a translucent
+ * light chip; elsewhere it keeps the tinted accent/warning treatment.
+ */
 @Composable
-private fun SourceBadge(source: FrameSource) {
+private fun SourceBadge(source: FrameSource, onAccentSurface: Boolean = false) {
+    val colors = AgarthaTheme.colors
     val isModelSource = source == FrameSource.MODEL
+    val background = when {
+        onAccentSurface -> colors.onAccent.copy(alpha = 0.18f)
+        isModelSource -> colors.accentTint
+        else -> colors.warningTint
+    }
+    val textColor = when {
+        onAccentSurface -> colors.onAccent
+        isModelSource -> colors.accent
+        else -> colors.warningText
+    }
 
     Box(
         modifier = Modifier
             .testTag(VerifyTestTags.SOURCE_BADGE)
-            .background(
-                color = if (isModelSource) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.warningTint,
-                shape = RoundedCornerShape(999.dp),
-            )
+            .background(color = background, shape = RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = if (isModelSource) "AI-suggested" else "Manual",
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (isModelSource) AgarthaTheme.colors.accent else AgarthaTheme.colors.warningText,
+            color = textColor,
         )
     }
 }
