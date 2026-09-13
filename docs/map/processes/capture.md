@@ -17,8 +17,11 @@ Getting a frame off the microscope and into a state a human can review.
    view; the analyzer asks for 640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which
    prefers a stream at or above that size so the frame is only ever downscaled. Backpressure
    `KEEP_ONLY_LATEST` (`core/camera/CameraManager.kt`).
-2. **Cache every frame.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG bytes and
-   stores them in `latestFrameBytes` on *every* frame (`core/camera/FrameSampler.kt`). That is
+2. **Cache every frame, stamped.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG
+   bytes and publishes them to `latestFrame` as a `CachedFrame(jpegBytes, elapsedRealtimeMs)`
+   on *every* frame (`core/camera/FrameSampler.kt`). The stamp is an `ElapsedClock` reading
+   taken as the frame is encoded (`core/util/ElapsedClock.kt`), and it is what lets the read
+   end tell a live frame from a leftover — see step 3. That is
    all it does now — there is no timer, no session gate, and no auto-dispatch to inference. It
    runs on a single background thread owned by `CameraManager`, not the main one — encoding
    every frame on the UI thread was visible as preview jank.
@@ -26,12 +29,18 @@ Getting a frame off the microscope and into a state a human can review.
    downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
    geometry. Cropping before scaling is what keeps the image from stretching. A device that
    cannot supply 640 is encoded at its native square size rather than upscaled.
-3. **Wait for the tap.** Capture is medtech-triggered, one frame per field — a fecal smear is
-   read by choosing ~10 likely fields, not by sweeping the slide continuously, so the old
-   2-second timer was removed. The shutter calls `CaptureViewModel.onCapture`, which snapshots
-   `latestFrameBytes` and hands it to `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
-   `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, or no frame cached yet,
-   sets an error and returns without capturing.
+3. **Wait for the tap, and check the frame is live.** Capture is medtech-triggered, one frame
+   per field — a fecal smear is read by choosing ~10 likely fields, not by sweeping the slide
+   continuously, so the old 2-second timer was removed. The shutter calls
+   `CaptureViewModel.onCapture`, which snapshots `latestFrame` and hands the bytes to
+   `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
+   `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, no frame cached yet,
+   **or a frame older than `MAX_FRAME_AGE_MS` (1 s)** sets an error and returns without
+   capturing. The last of those is the one that matters: `FrameSampler` is process-scoped and
+   nothing resets it, so without the age check a tap arriving before the analyzer had delivered
+   a frame for the current binding would record the *previous* session's image under this
+   session's id (86d4au2n1). Stale and absent share one message — from the medtech's side both
+   mean "the camera isn't ready, tap again".
 4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls the
    injected `InferenceEngine` (bound to the cloud `RemoteInferenceEngine`) a single time — what
    happens inside is [`infer`](infer.md).
@@ -84,6 +93,12 @@ nothing verified is deletable (`../../constraints.md` C8).
   gap against the offline-first intent, not a design decision.
 - Inference now runs once per shutter tap, not on a timer. A field costs exactly one
   inference call; there is no idle sampling burning the GPU droplet between taps.
+- **The frame cache outlives the camera binding, and that is handled at the read end.**
+  `FrameSampler` is a `@Singleton` with no session knowledge and no reset — by design. A new
+  session, leaving and re-entering the screen, any rebind: all of them leave the previous
+  frame resident. The freshness stamp is what makes every one of those paths fail closed,
+  including ones nobody enumerated. Adding a reset call instead would only cover the paths
+  someone remembered.
 - Changing the analysis resolution changes the coordinate space of every bounding box, since
   the server returns pixel coordinates.
 - Changing the crop, the aspect-ratio strategy, or `PreviewView.scaleType` breaks

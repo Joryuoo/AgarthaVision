@@ -6,6 +6,7 @@ import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.connectivity.NetworkMonitor
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.core.util.ElapsedClock
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
@@ -49,6 +50,7 @@ class CaptureViewModel @Inject constructor(
     private val frameSampler: FrameSampler,
     private val networkMonitor: NetworkMonitor,
     private val captureFieldUseCase: CaptureFieldUseCase,
+    private val clock: ElapsedClock,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(CaptureState())
@@ -125,6 +127,14 @@ class CaptureViewModel @Inject constructor(
      * [com.agarthavision.domain.usecase.inference.InferenceConnectionException]
      * records a [com.agarthavision.domain.model.FrameSource.MANUAL] frame instead.
      * See [CaptureFieldUseCase].
+     *
+     * The cached frame must be **fresh**, not merely present. `FrameSampler` is process-
+     * scoped and its cache survives a session change, a screen exit and a camera rebind, so
+     * a tap landing before the analyzer has delivered a frame for the current binding would
+     * otherwise record the *previous* session's image under this session's id — and here a
+     * session is a patient. Anything older than [MAX_FRAME_AGE_MS] is refused with the same
+     * "waiting for a live frame" message as no frame at all; from the medtech's side the
+     * two cases are one thing, "the camera isn't ready, tap again".
      */
     fun onCapture() {
         val sessionId = _state.value.activeSessionId
@@ -132,14 +142,14 @@ class CaptureViewModel @Inject constructor(
             _state.update { it.copy(errorMessage = "No active session available.") }
             return
         }
-        val jpegBytes = frameSampler.latestFrameBytes.value
-        if (jpegBytes == null) {
+        val cached = frameSampler.latestFrame.value
+        if (cached == null || clock.elapsedRealtimeMs() - cached.elapsedRealtimeMs > MAX_FRAME_AGE_MS) {
             _state.update { it.copy(errorMessage = "Waiting for a live frame.") }
             return
         }
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
-            captureFieldUseCase(sessionId, jpegBytes)
+            captureFieldUseCase(sessionId, cached.jpegBytes)
                 .onFailure { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
@@ -165,6 +175,19 @@ class CaptureViewModel @Inject constructor(
                 _state.update { it.copy(isProbingConnection = false) }
             }
         }
+    }
+
+    private companion object {
+        /**
+         * How old a cached frame may be and still be captured.
+         *
+         * A bound analyzer delivers roughly 30 frames a second, so a genuinely live frame is
+         * never more than about 33 ms old — a full second is unreachable while the camera is
+         * running. Every stale path, meanwhile, leaves a gap far longer than this: a new
+         * session, re-entering the screen, a camera rebind, a permission re-grant. So the
+         * threshold costs nothing in normal use and fails closed in all of them.
+         */
+        private const val MAX_FRAME_AGE_MS = 1_000L
     }
 }
 

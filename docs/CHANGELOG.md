@@ -9,6 +9,83 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/86d4ab4xr-sample-geospatial — PSGC barangay on sessions · 2026-09-11
+
+Cut from `staging`. Serves the 4th general objective (DOH-compliant surveillance reports and
+geospatial maps) and the SRS adjustment "samples should have location to allow for geospatial
+mapping". The map itself belongs to the Admin Website (a separate project); this is the app's
+share — the schema, the dataset and the picker.
+
+**The GPS fix was never the answer.** Every sample has carried one since migration `0001` and
+nothing has ever read it. It is taken at the moment of capture — the medtech at the microscope
+— so it records where the smear was *read*, not where the infection came from; plotted, it
+maps laboratories. It stays as audit provenance. Sessions now carry the patient's barangay
+instead, which is also the unit STH surveillance actually decides on: prevalence per
+administrative unit against the WHO 10% / 20% thresholds, never individual pins.
+
+**Schema.** `sessions.psgc_barangay_code`, nullable, one column — a barangay code resolves
+upward to city/municipality, province and region by itself. Stored as the canonical
+zero-padded 10-digit PSGC with a `CHECK` to match, which is what keeps the Admin Website's
+boundary join from silently missing every unit in regions 01–09. Room 8 → 9.
+
+**Aggregation is an RPC, not a view,** because access has to be decided per row-owner and
+`GRANT` cannot tell an admin from a medtech — both hold `authenticated`. It counts smears
+rather than samples, and withholds figures below a minimum cell size: a barangay with one
+smear is effectively an identified patient. PostGIS stays off; with PSGC as the key the
+choropleth is a `GROUP BY`.
+
+**The dataset ships in the APK** (42,010 barangays, 342 KB gzipped) and is Room-seeded on
+first run, because medtechs collect where there is no signal. Pinned to **PSGC 2Q 2026**,
+PSA's current release, and the pin is load-bearing: the boundary GeoJSON the admin map will
+render has to join on the same vintage or it fails silently for the units that moved.
+
+**The first cut of this was built at 4Q 2023 and was wrong by 1,763 barangays** — 4.2% of the
+country. Its upstream stopped publishing in September 2024 and missed two reorganisations:
+the Negros Island Region (RA 12000, 2Q 2024) took Negros Occidental, Negros Oriental,
+Siquijor and Bacolod out of Regions VI and VII into region `18`, and Sulu left BARMM for
+Region IX after the Supreme Court ruling. Both roll up to the *region* a surveillance map
+aggregates on, and `sessions.psgc_barangay_code` is written once with nothing to backfill it.
+Two popular alternatives, `psgc.gitlab.io` and `psgc.cloud`, are 9-digit and also pre-NIR;
+9-digit is a different code system and does not join at all. Changing the vintage is a
+dataset swap plus four constants: the seeder re-seeds when `PsgcDataset.VINTAGE` changes.
+
+**Two things the real data forced.** Searching the dataset showed that matching the query as
+one string returns nothing for "cebu city" — PSA spells it "City of Cebu" — so search matches
+each term independently, which also narrows "lahug cebu" to a single barangay. And Manila's
+14 sub-municipalities turn out to live in the *barangay* file as parents of its 897
+barangays; they are rolled up to the chartered city for display and kept searchable.
+
+**Conventions recorded:** the vintage pin and the aggregate-before-display privacy rule, both
+in the new `docs/map/objects/PsgcBarangay.md` — the seventh object card, and the only one
+with no Supabase table.
+
+---
+
+## fix/framesampler-stale-cache — camera frames carry a freshness stamp · 2026-09-11
+
+`86d4au2n1`. A shutter tap landing before the analyzer delivered a frame for the *current*
+camera binding recorded the **previous session's image** under the current `sessionId`.
+`FrameSampler` is `@Singleton`, its cache was never reset, and `CaptureViewModel.onCapture`
+guarded only against `null` — a stale array is not null, so the guard passed and the frame was
+persisted. Reachable on a second session in one process, on re-entering the capture screen, and
+on any camera rebind. In this app a session is a patient, and C8 makes a misattributed frame
+permanent once it is verified.
+
+- `FrameSampler` now publishes `CachedFrame(jpegBytes, elapsedRealtimeMs)` from `latestFrame`
+  (was `latestFrameBytes`), stamped as the frame is encoded.
+- `CaptureViewModel.onCapture` rejects anything older than `MAX_FRAME_AGE_MS` (1 s) with the
+  existing "Waiting for a live frame" message. A bound analyzer delivers ~30 fps, so a live
+  frame is never more than ~33 ms old; every stale path leaves a far longer gap. Fails closed
+  with no lifecycle wiring to maintain, which is why this is a stamp and not a reset call.
+- New `core/util/ElapsedClock.kt`, bound unscoped in `core/di/ClockModule.kt`. A seam over
+  `SystemClock.elapsedRealtime()` so both classes stay unit-testable on the plain JVM —
+  `app/build.gradle.kts` does not set `returnDefaultValues`. Unscoped keeps C5's `@Singleton`
+  list closed.
+
+`FrameSampler` gained no session knowledge; it remains a camera-layer component.
+
+---
+
 ## feat/build-optimization — cloud-only inference, bug fixes for validation · 2026-09-06
 
 Cut from `staging`. Carries forward the documentation shelf, the admin storage policy fix,

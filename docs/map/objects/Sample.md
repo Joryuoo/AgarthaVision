@@ -54,7 +54,7 @@ The insert row is the definitive list of what actually crosses the wire —
 `data/supabase/SampleRemoteDataSource.kt:100-127`. `image_path`, `status`, `is_repeat`,
 `device_id`, and the prediction cache are all absent from it.
 
-**`schema.ts` is wrong here and the code wins.** `schema.ts:224-282` names `timestamp`,
+**`schema.ts` is wrong here and the code wins.** `schema.ts:284-342` names `timestamp`,
 `image_path`, `created_at`, `gps_lat`, `gps_lng`, and `gps_accuracy_m` as if they were Postgres
 columns. They are not — the migration creates `captured_at`, `gps_latitude`, `gps_longitude`,
 `gps_accuracy`, and no `created_at`. Those `schema.ts` names describe the Room entity.
@@ -83,7 +83,7 @@ columns. They are not — the migration creates `captured_at`, `gps_latitude`, `
 - The EPG aggregate, which joins samples and excludes `is_repeat = 1`
   (`data/local/dao/DetectionDao.kt:33-52`).
 - The CSV row shape (`domain/usecase/records/ReportCsvBuilder.kt`).
-- The Room database version (`core/database/AgarthaDatabase.kt:34`) — and remember the
+- The Room database version (`core/database/AgarthaDatabase.kt:46`) — and remember the
   destructive-migration fallback wipes the device.
 
 **Does not hit**
@@ -106,4 +106,4 @@ Detail, the EPG aggregate, and the CSV builder.
 
 `supabase/migrations/0001_init.sql:43-55`,
 `app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt`,
-`data/supabase/SampleRemoteDataSource.kt:100-127`, `schema.ts:214-282`.
+`data/supabase/SampleRemoteDataSource.kt:100-127`, `schema.ts:274-342`.

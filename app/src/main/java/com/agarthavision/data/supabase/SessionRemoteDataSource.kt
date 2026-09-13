@@ -69,6 +69,7 @@ class SessionRemoteDataSource @Inject constructor(
             endedAt = endedAt?.let { Instant.ofEpochMilli(it).toString() },
             notes = notes,
             label = label,
+            psgcBarangayCode = psgcBarangayCode,
         )
 
     @Serializable
@@ -87,6 +88,8 @@ class SessionRemoteDataSource @Inject constructor(
         val notes: String?,
         @SerialName("label")
         val label: String?,
+        @SerialName("psgc_barangay_code")
+        val psgcBarangayCode: String?,
     )
 
     private companion object {

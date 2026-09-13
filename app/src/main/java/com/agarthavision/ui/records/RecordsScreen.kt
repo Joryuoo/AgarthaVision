@@ -21,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -48,12 +47,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+
+private const val RECORDS_SKELETON_COUNT = 6
 
 enum class SyncStatus { Synced, PendingSync }
 
@@ -112,9 +114,9 @@ fun RecordsScreen(
             item {
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
-                    sessionsCount = state.sessions.size.toString(),
-                    eggsCount = totalEggs.toString(),
-                    samplesCount = totalSamples.toString(),
+                    sessionsCount = if (state.isLoading) "—" else state.sessions.size.toString(),
+                    eggsCount = if (state.isLoading) "—" else totalEggs.toString(),
+                    samplesCount = if (state.isLoading) "—" else totalSamples.toString(),
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
@@ -128,15 +130,8 @@ fun RecordsScreen(
             item { Spacer(Modifier.height(Spacing.xs)) }
 
             when {
-                state.isLoading -> item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(color = AgarthaTheme.colors.accent)
-                    }
+                state.isLoading -> items(RECORDS_SKELETON_COUNT) {
+                    RecordCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                 }
                 filteredRecords.isEmpty() -> item {
                     Box(
@@ -425,6 +420,30 @@ private fun RecordCard(
                 Stat(record.sampleCount.toString(), "samples"),
             )
         )
+    }
+}
+
+@Composable
+private fun RecordCardSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AgarthaTheme.colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        SkeletonBox(modifier = Modifier.width(140.dp).height(20.dp))
+        Spacer(Modifier.height(4.dp))
+        SkeletonBox(modifier = Modifier.width(180.dp).height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 1.dp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+        }
     }
 }
 

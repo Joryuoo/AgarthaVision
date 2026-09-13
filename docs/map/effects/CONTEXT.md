@@ -17,15 +17,35 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
    `samples.status`, `sessions.claim_exempt`, `reports.supabase_status`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
-3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:34`.
+3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:46`.
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
 
-**The non-obvious break:** `core/di/DatabaseModule.kt:49` uses
+**The non-obvious break:** `core/di/DatabaseModule.kt:54` uses
 `fallbackToDestructiveMigration(dropAllTables = true)`. A Room version bump **wipes every
 device**, it does not migrate. Fine in Phase 1; a data-loss incident the day there is real
 data.
+
+**The second non-obvious break:** that same wipe takes `psgc_barangays` with it. Reference
+data has to be re-seedable, not just seeded — which is why `PsgcSeeder` gates on the row
+count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt:63-66`). A gate on
+the vintage alone leaves the picker permanently empty after any future version bump.
+
+## Changing the surveillance map or the barangay picker
+
+**Open:** `../objects/PsgcBarangay.md` · `../objects/Session.md` ·
+`supabase/migrations/0010_session_psgc_barangay.sql` · `tools/psgc/README.md`.
+
+**The non-obvious break:** the PSGC vintage is pinned, and the code list and the Admin
+Website's boundary GeoJSON must come from the **same release**. Move one without the other
+and the choropleth silently fails to join for every unit that changed — it looks like
+missing data, not a version mismatch. Newer code lists on the legacy 9-digit PSGC do not
+join this dataset's 10-digit codes at all.
+
+**Also easy to miss:** the barangay code is patient-locating data. The admin aggregation
+suppresses figures below a minimum cell size, and that threshold is deliberately not a
+parameter. Do not add a barangay to the patient-facing report.
 
 ## Changing RLS, auth, or ownership
 
@@ -51,8 +71,16 @@ live session (`data/supabase/SampleRemoteDataSource.kt:35`). Change either and e
 (`data/repository/FlaggedFrameStore.kt:58-74`), and it is filtered by `user_id`, so it is
 invisible on a device that has never signed in. Also: there is no `ImageCapture` use case —
 manual capture reads a cached JPEG from the analysis stream
-(`ui/capture/CaptureViewModel.kt:135`), so anything that stops populating `latestFrameBytes`
+(`ui/capture/CaptureViewModel.kt`), so anything that stops populating `FrameSampler.latestFrame`
 breaks manual capture without touching manual-capture code.
+
+**The other one:** that cache is process-scoped and is **never reset**, so it routinely holds a
+frame from a previous session or a previous camera binding. What keeps it safe is the freshness
+stamp on `CachedFrame` and the age check in `CaptureViewModel.onCapture` — slow the analyzer
+down, drop the stamp, or widen `MAX_FRAME_AGE_MS` and you reopen a clinical-data-integrity
+fault, not a UI glitch: one patient's image filed under another's session, permanent once
+verified (C8). `FrameSampler` must not gain session knowledge to compensate; the fix lives at
+the read end on purpose (86d4au2n1).
 
 ## Changing the inference contract
 

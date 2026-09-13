@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SessionDao
@@ -11,12 +12,14 @@ import com.agarthavision.data.repository.AndroidReportPdfRenderer
 import com.agarthavision.data.repository.DetectionRepositoryImpl
 import com.agarthavision.data.repository.DocumentsReportFileStore
 import com.agarthavision.data.repository.LocalReportRepository
+import com.agarthavision.data.repository.PsgcRepositoryImpl
 import com.agarthavision.data.repository.SampleRepositoryImpl
 import com.agarthavision.data.repository.SessionRepositoryImpl
 import com.agarthavision.data.repository.SupabaseAuthRepository
 import com.agarthavision.data.repository.SupabaseSampleImageRepository
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
 import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
@@ -62,6 +65,10 @@ object DatabaseModule {
 
     @Provides
     fun provideReportDao(database: AgarthaDatabase): ReportDao = database.reportDao()
+
+    @Provides
+    fun providePsgcBarangayDao(database: AgarthaDatabase): PsgcBarangayDao =
+        database.psgcBarangayDao()
 }
 
 /**
@@ -94,6 +101,11 @@ abstract class RepositoryModule {
     abstract fun bindReportRepository(
         implementation: LocalReportRepository,
     ): ReportRepository
+
+    @Binds
+    abstract fun bindPsgcRepository(
+        implementation: PsgcRepositoryImpl,
+    ): PsgcRepository
 
     @Binds
     abstract fun bindReportFileStore(

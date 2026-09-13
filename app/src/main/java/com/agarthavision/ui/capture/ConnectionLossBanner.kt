@@ -32,9 +32,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.R
 import com.agarthavision.ui.components.SvgIcon
 
 private val RedColor = Color(0xFFDC2626)
@@ -115,13 +117,19 @@ fun ConnectionLossBanner(
                     // Text
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Connection lost",
+                            text = stringResource(R.string.connection_lost_title),
                             color = Color.White,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Recording stopped. Tap Resume to reconnect.",
+                            // While probing, this line carries the status; the pill shows only
+                            // the spinner. Neither claims capture has stopped, because it has not -
+                            // a shutter tap still records a Manual Capture (86d4akgmh).
+                            text = stringResource(
+                                if (isProbing) R.string.connection_lost_probing
+                                else R.string.connection_lost_body,
+                            ),
                             color = Color.White.copy(alpha = 0.8f),
                             fontSize = 11.sp,
                             lineHeight = 15.sp
@@ -144,7 +152,7 @@ fun ConnectionLossBanner(
                             )
                         } else {
                             Text(
-                                text = "Resume",
+                                text = stringResource(R.string.connection_lost_resume),
                                 color = Color.White,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
