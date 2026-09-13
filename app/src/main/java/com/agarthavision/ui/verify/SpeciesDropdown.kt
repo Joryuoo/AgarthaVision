@@ -24,13 +24,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.ui.theme.AgarthaTheme
 
-// Species + stage are two related pickers sharing one composable so the stage field can be
-// gated on the species answer without a second file; the extra params are the stage
-// counterparts of the existing species params, not independently meaningful knobs.
-@Suppress("LongParameterList")
 @Composable
 fun SpeciesDropdown(
     selected: EggSpecies?,
@@ -38,9 +33,6 @@ fun SpeciesDropdown(
     onSpeciesSelected: (EggSpecies) -> Unit,
     onOtherTextChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
-    selectedStage: EggStage? = null,
-    onStageSelected: (EggStage) -> Unit = {},
-    stageModifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf(selected?.displayName ?: "") }
@@ -58,8 +50,11 @@ fun SpeciesDropdown(
         focusedLabelColor = colors.textSecondary,
         unfocusedLabelColor = colors.textSecondary,
     )
+    // The committed selection's own name is not a filter: reopening the menu after a pick
+    // must still show every species, not just the one already chosen.
+    val committedName = selected?.displayName ?: ""
     val filteredSpecies = EggSpecies.entries.filter { species ->
-        query.isBlank() || species.displayName.contains(query, ignoreCase = true)
+        query.isBlank() || query == committedName || species.displayName.contains(query, ignoreCase = true)
     }
 
     Column(modifier = modifier) {
@@ -120,42 +115,6 @@ fun SpeciesDropdown(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-        }
-        val stageOptions = selected?.let { EggStage.validFor(it) }.orEmpty()
-        if (selected != null && stageOptions.isNotEmpty()) {
-            var stageExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = stageExpanded,
-                onExpandedChange = { stageExpanded = it },
-            ) {
-                OutlinedTextField(
-                    value = selectedStage?.displayName ?: "",
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text(stringResource(R.string.verify_q3b)) },
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = stageExpanded)
-                    },
-                    colors = fieldColors,
-                    modifier = stageModifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                )
-                ExposedDropdownMenu(
-                    expanded = stageExpanded,
-                    onDismissRequest = { stageExpanded = false },
-                ) {
-                    stageOptions.forEach { stage ->
-                        DropdownMenuItem(
-                            text = { Text(stage.displayName) },
-                            onClick = {
-                                onStageSelected(stage)
-                                stageExpanded = false
-                            },
-                        )
-                    }
-                }
-            }
         }
     }
 }

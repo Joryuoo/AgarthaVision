@@ -40,6 +40,5 @@ fun Prediction.toDetectionEntity(
         verdict = verdict.value,
         expertClass = expertClass,
         verifiedByUser = true,
-        stage = answers.stage?.value,
     )
 }

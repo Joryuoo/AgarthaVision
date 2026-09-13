@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -200,27 +199,19 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer {
-            it.copy(isEgg = isEgg, isBoxCorrect = null, species = null, otherSpeciesText = "", stage = null)
-        }
+        updateCurrentAnswer { it.copy(isEgg = isEgg, isBoxCorrect = null, species = null, otherSpeciesText = "") }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
-        updateCurrentAnswer {
-            it.copy(isBoxCorrect = isBoxCorrect, species = null, otherSpeciesText = "", stage = null)
-        }
+        updateCurrentAnswer { it.copy(isBoxCorrect = isBoxCorrect, species = null, otherSpeciesText = "") }
     }
 
     fun onSpeciesSelected(species: EggSpecies) {
-        updateCurrentAnswer { it.copy(species = species, otherSpeciesText = "", stage = null) }
+        updateCurrentAnswer { it.copy(species = species, otherSpeciesText = "") }
     }
 
     fun onOtherSpeciesChanged(text: String) {
         updateCurrentAnswer { it.copy(otherSpeciesText = text) }
-    }
-
-    fun onStageSelected(stage: EggStage) {
-        updateCurrentAnswer { it.copy(stage = stage) }
     }
 
     fun onQ4Selected(missedEgg: Boolean) {

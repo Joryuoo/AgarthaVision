@@ -417,14 +417,6 @@ private fun DetectionCard(index: Int, detection: Detection) {
                 isLast = false,
             )
 
-            detection.stage?.let { stage ->
-                DetailRow(
-                    label = "Stage",
-                    value = stage.displayName,
-                    isLast = false,
-                )
-            }
-
             val bboxStr = if (detection.bboxX != null) {
                 String.format(
                     Locale.US,

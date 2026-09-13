@@ -4,7 +4,6 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -79,7 +78,7 @@ class GenerateSessionReportUseCaseTest {
     }
 
     @Test
-    fun `carries species and stage from verification into the generated csv without re-entry`() = runTest {
+    fun `carries the verified species into the generated csv without re-entry`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
         val useCase = GenerateSessionReportUseCase(
@@ -98,7 +97,6 @@ class GenerateSessionReportUseCaseTest {
                             classLabel = "Ascaris",
                             confidence = 0.91f,
                             expertClass = "Ascaris lumbricoides",
-                            stage = EggStage.UNFERTILIZED,
                         ),
                     ),
                 ),
@@ -121,7 +119,6 @@ class GenerateSessionReportUseCaseTest {
         assertNotNull(dataRow)
         val fields = dataRow!!.split(",")
         assertEquals("Ascaris lumbricoides", fields[5])
-        assertEquals("unfertilized", fields[7])
     }
 
     @Test
@@ -324,7 +321,6 @@ private fun reportDetection(
     classLabel: String,
     confidence: Float,
     expertClass: String? = null,
-    stage: EggStage? = null,
 ): Detection =
     Detection(
         id = "detection-$sampleId",
@@ -337,7 +333,6 @@ private fun reportDetection(
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = expertClass,
-        stage = stage,
         verifiedByUser = true,
     )
 

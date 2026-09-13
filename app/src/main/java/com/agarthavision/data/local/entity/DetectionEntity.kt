@@ -65,7 +65,4 @@ data class DetectionEntity(
 
     @ColumnInfo(name = "verified_by_user")
     val verifiedByUser: Boolean = true,
-
-    @ColumnInfo(name = "stage")
-    val stage: String? = null,
 )

@@ -24,8 +24,7 @@ import com.agarthavision.data.local.entity.SessionEntity
  * to nullable. Version 9 adds `reports.pdf_file_path` (`0011_reports_pdf_and_lpf.sql`).
  * Version 10 adds `sessions.psgc_barangay_code` and the bundled `psgc_barangays`
  * reference table behind the session barangay picker
- * (`0010_session_psgc_barangay.sql`). Version 11 adds the optional `detections.stage`
- * column for egg/parasite stage classification (`0010_verification_stage.sql`).
+ * (`0010_session_psgc_barangay.sql`).
  *
  * `psgc_barangays` is the one table here with no Supabase mirror: it is reference data
  * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the
@@ -44,7 +43,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         ReportEntity::class,
         PsgcBarangayEntity::class,
     ],
-    version = 11,
+    version = 10,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

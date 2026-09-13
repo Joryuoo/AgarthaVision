@@ -72,12 +72,6 @@ class AgarthaDatabaseSchemaTest {
             "reports.pdf_file_path is missing — staging's v9 was lost in the merge.",
             columnsOf("reports").contains("pdf_file_path"),
         )
-        // The stage-classification half (v11) — staging and feature/editable-report both
-        // claimed v10, so the merge bumped to 11 with both sides' columns.
-        assertTrue(
-            "detections.stage is missing — the stage dropdown would write to nothing.",
-            columnsOf("detections").contains("stage"),
-        )
     }
 
     @Test
@@ -110,6 +104,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 11
+        private const val EXPECTED_VERSION = 10
     }
 }

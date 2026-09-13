@@ -2,7 +2,6 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
@@ -72,7 +71,6 @@ class ReportCsvBuilderTest {
                     verdict = DetectionVerdict.CONFIRMED,
                     expertClass = "Ascaris lumbricoides",
                     verifiedByUser = true,
-                    stage = EggStage.UNFERTILIZED,
                 ),
             ),
         )
@@ -110,9 +108,9 @@ class ReportCsvBuilderTest {
             # epg_trichuris_trichiura: 0
             # epg_hookworm: 0
 
-            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,stage,gps_lat,gps_lng,gps_accuracy,is_manual,is_repeat,user_note,model_version
-            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,unfertilized,10.0,20.0,5.0,false,false,"note,one",model-1
-            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,,,,,true,true,,model-2
+            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,gps_lat,gps_lng,gps_accuracy,is_manual,is_repeat,user_note,model_version
+            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,10.0,20.0,5.0,false,false,"note,one",model-1
+            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,,,,true,true,,model-2
 
         """.trimIndent() + "\n"
 
