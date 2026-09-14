@@ -163,6 +163,7 @@
     <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
+    <string name="records_status_pending_sync">Pending sync</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
     <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>

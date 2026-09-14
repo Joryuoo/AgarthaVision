@@ -48,6 +48,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.usecase.records.SessionRecordItem
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -61,8 +62,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private const val RECORDS_SKELETON_COUNT = 6
-
-enum class SyncStatus { Synced, PendingSync }
 
 @Composable
 fun RecordsScreen(
@@ -408,7 +407,7 @@ private fun RecordCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            StatusPill(SyncStatus.Synced)
+            StatusPill(linkState = record.session.linkState)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -450,11 +449,27 @@ private fun RecordCardSkeleton(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatusPill(status: SyncStatus) {
+internal fun StatusPill(linkState: SessionLinkState) {
     val colors = AgarthaTheme.colors
-    val (bg, fg, text) = when (status) {
-        SyncStatus.Synced -> Triple(colors.successTint, colors.successText, "Synced")
-        SyncStatus.PendingSync -> Triple(colors.warningTint, colors.warningText, "Pending sync")
+    // Per ADR-007: UNOWNED/NOT_LINKED are local-only states — neutral, not a warning.
+    // Mirrors the Sessions tab "Not linked" badge (colors.surfaceMuted / colors.textSecondary).
+    val (bg, fg, text) = when (linkState) {
+        SessionLinkState.SYNCED -> Triple(
+            colors.successTint,
+            colors.successText,
+            stringResource(R.string.report_status_synced),
+        )
+        SessionLinkState.PENDING -> Triple(
+            colors.warningTint,
+            colors.warningText,
+            stringResource(R.string.records_status_pending_sync),
+        )
+        SessionLinkState.UNOWNED,
+        SessionLinkState.NOT_LINKED -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            stringResource(R.string.session_not_linked),
+        )
     }
     Box(
         modifier = Modifier
