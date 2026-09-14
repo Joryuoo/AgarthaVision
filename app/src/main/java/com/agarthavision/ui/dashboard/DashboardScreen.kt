@@ -79,6 +79,9 @@ fun DashboardScreen(
             }
 
             // 3. Today's Activity KPI Grid
+            if (state.activeSession == null) {
+                item { Spacer(Modifier.height(Spacing.lg)) }
+            }
             item {
                 SectionLabel(
                     "Today's activity",

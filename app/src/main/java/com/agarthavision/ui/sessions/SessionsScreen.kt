@@ -78,6 +78,7 @@ import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.navigation.Screen
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.time.Instant
@@ -302,7 +303,9 @@ private fun SessionCard(
                 text = meta,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = colors.accent.copy(alpha = 0.7f)
+                color = colors.accent.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (showNotLinkedBadge) {
                 Spacer(modifier = Modifier.height(6.dp))

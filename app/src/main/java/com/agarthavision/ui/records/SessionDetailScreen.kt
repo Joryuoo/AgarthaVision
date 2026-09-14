@@ -62,6 +62,7 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -333,6 +334,8 @@ private fun SessionDetailAppBar(
                 color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 2.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }

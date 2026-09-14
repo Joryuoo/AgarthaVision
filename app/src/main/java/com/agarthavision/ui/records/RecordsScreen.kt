@@ -49,6 +49,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.records.SessionRecordItem
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -404,6 +405,8 @@ private fun RecordCard(
                     color = AgarthaTheme.colors.textSecondary,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                     modifier = Modifier.padding(top = 2.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             StatusPill(SyncStatus.Synced)
