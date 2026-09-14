@@ -123,6 +123,7 @@
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
+    <string name="records_subtitle_purpose">Search and review all logged results across sessions</string>
     <string name="records_back">Back to capture</string>
     <string name="records_empty">No sessions found</string>
     <string name="records_filter_start">Start date</string>
@@ -218,6 +219,7 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
     <string name="session_picker_title">Sessions</string>
     <string name="session_picker_empty_title">No recent sessions</string>
     <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
@@ -241,6 +243,7 @@
     <string name="nav_tab_records">Records</string>
 
     <string name="settings_title">Settings</string>
+    <string name="settings_subtitle_purpose">Manage your account, sync, and app preferences</string>
     <string name="settings_section_account">Account</string>
     <string name="settings_section_sync">Data &amp; Sync</string>
     <string name="settings_section_appearance">Appearance</string>

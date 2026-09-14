@@ -178,6 +178,12 @@ private fun RecordsAppBar(subtitle: String) {
                 color = AgarthaTheme.colors.textPrimary,
             )
             Text(
+                stringResource(R.string.records_subtitle_purpose),
+                style = MaterialTheme.typography.labelSmall,
+                color = AgarthaTheme.colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
                 subtitle,
                 style = MaterialTheme.typography.labelSmall,
                 color = AgarthaTheme.colors.textSecondary,

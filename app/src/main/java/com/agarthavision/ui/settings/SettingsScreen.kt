@@ -2,6 +2,7 @@ package com.agarthavision.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -110,15 +112,24 @@ private fun SettingsContent(
             contentPadding = PaddingValues(bottom = Spacing.xl),
         ) {
             item {
-                Text(
-                    text = stringResource(R.string.settings_title),
-                    color = colors.textPrimary,
-                    style = MaterialTheme.typography.headlineSmall,
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = Spacing.xl)
                         .padding(top = Spacing.xl, bottom = Spacing.lg),
-                )
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_title),
+                        color = colors.textPrimary,
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_subtitle_purpose),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.textSecondary,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_account)) {

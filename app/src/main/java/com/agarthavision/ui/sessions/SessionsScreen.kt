@@ -233,6 +233,13 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
+                text = stringResource(R.string.sessions_subtitle_purpose),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textSecondary
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
                 text = "$totalCount sessions · $activeCount active",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
