@@ -35,6 +35,18 @@ data class SessionEntity(
     val label: String? = null,
 
     /**
+     * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
+     * sessions created before the picker existed. Mirrors `sessions.psgc_barangay_code`
+     * (`supabase/migrations/0010_session_psgc_barangay.sql`).
+     *
+     * Barangay level only — the code resolves upward to city/municipality, province and
+     * region on its own. This is the key the surveillance map aggregates on; the
+     * capture-time GPS fix on each sample stays provenance only.
+     */
+    @ColumnInfo(name = "psgc_barangay_code")
+    val psgcBarangayCode: String? = null,
+
+    /**
      * Room-only cloud sync state. Per ADR-007, a session is now written locally first
      * and pushed best-effort; `pending` until the Supabase row exists. Never a Supabase
      * column — remote presence is authoritative there. Defaults `synced` on migration so

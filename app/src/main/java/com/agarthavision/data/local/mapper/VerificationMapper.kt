@@ -56,16 +56,13 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * A prediction-backed row keys on its ordinal, which is its index into the frame's predictions
  * and is stable as long as `predictions_json` survives verification — which is why that column
  * is no longer nulled on verify. An added row keys on what the medtech asserted, so re-adding
- * the same species and stage lands on the same row rather than duplicating it.
+ * the same species lands on the same row rather than duplicating it.
  */
 private fun detectionId(sampleId: String, finding: Finding, ordinal: Int): String =
     if (finding.prediction != null) {
         detectionIdFor(sampleId, ordinal)
     } else {
-        derive(
-            "$sampleId#finding#${finding.answers.speciesLabel.orEmpty()}" +
-                "#${finding.answers.stage?.value.orEmpty()}",
-        )
+        derive("$sampleId#finding#${finding.answers.speciesLabel.orEmpty()}")
     }
 
 /**
@@ -80,11 +77,15 @@ fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#b
 private fun derive(key: String): String =
     UUID.nameUUIDFromBytes(key.toByteArray()).toString()
 
-/** Stable finding-row id, keyed to match the table's uniqueness rule. */
+/**
+ * Stable finding-row id, keyed to match the table's uniqueness rule.
+ *
+ * `sample_species_findings` is unique on `(sample_id, species)` while `stage` is null, which it
+ * always is — nothing writes a stage since 86d4a6jwy was reverted. If the stage work returns,
+ * this key and `sample_species_findings_unique_staged` have to move together.
+ */
 private fun findingId(sampleId: String, row: FindingRow): String =
-    UUID.nameUUIDFromBytes(
-        "$sampleId#row#${row.species}#${row.stage?.value.orEmpty()}".toByteArray(),
-    ).toString()
+    UUID.nameUUIDFromBytes("$sampleId#row#${row.species}".toByteArray()).toString()
 
 /**
  * Persists one finding as a detection row.
@@ -123,7 +124,6 @@ fun Finding.toDetectionEntity(sampleId: String, ordinal: Int): DetectionEntity {
         verdict = verdict.value,
         expertClass = expertClass,
         verifiedByUser = true,
-        stage = answers.stage?.value,
         speciesTouched = answers.speciesTouched,
     )
 }
@@ -134,6 +134,8 @@ fun FindingRow.toFindingEntity(sampleId: String): SampleSpeciesFindingEntity =
         findingId = findingId(sampleId, this),
         sampleId = sampleId,
         species = species,
-        stage = stage?.value,
+        // Always null: the column exists because `0012_polyparasitism_findings.sql` is applied
+        // and frozen (C6), but 86d4a6jwy was reverted on staging, so nothing produces a stage.
+        stage = null,
         eggCount = eggCount,
     )

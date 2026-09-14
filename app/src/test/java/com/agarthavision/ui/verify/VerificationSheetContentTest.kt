@@ -20,7 +20,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
@@ -72,9 +71,9 @@ class VerificationSheetContentTest {
     private class Recorder {
         val q1 = mutableListOf<Boolean>()
         val q2 = mutableListOf<Boolean>()
+        val speciesConfirmed = mutableListOf<Boolean>()
         val q4 = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
-        val stages = mutableListOf<EggStage>()
         val notes = mutableListOf<String>()
         var detectionPrev = 0
         var detectionNext = 0
@@ -88,15 +87,14 @@ class VerificationSheetContentTest {
         val removedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
-        val addedStages = mutableListOf<Pair<Int, EggStage>>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
         onQ1Selected = { r.q1 += it },
         onQ2Selected = { r.q2 += it },
+        onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = {},
-        onStageSelected = { r.stages += it },
         onQ4Selected = { r.q4 += it },
         onDetectionPrev = { r.detectionPrev++ },
         onDetectionNext = { r.detectionNext++ },
@@ -112,7 +110,6 @@ class VerificationSheetContentTest {
         onEggCountChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
-        onAddedStageSelected = { index, stage -> r.addedStages += index to stage },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -172,10 +169,16 @@ class VerificationSheetContentTest {
     private fun answered(
         isEgg: Boolean? = null,
         isBoxCorrect: Boolean? = null,
+        speciesConfirmed: Boolean? = null,
         species: EggSpecies? = null,
         otherSpeciesText: String = "",
-        stage: EggStage? = null,
-    ) = VerificationAnswers(isEgg, isBoxCorrect, species, otherSpeciesText, stage)
+    ) = VerificationAnswers(
+        isEgg = isEgg,
+        isBoxCorrect = isBoxCorrect,
+        speciesConfirmed = speciesConfirmed,
+        species = species,
+        otherSpeciesText = otherSpeciesText,
+    )
 
     // The question chain: which sections are visible
 
@@ -209,60 +212,96 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `a misplaced box still reaches the species picker`() {
-        // The chain used to stop here. It cannot any more: a misplaced box still holds a
-        // countable egg, and skipping the species question dropped it from the per-species
-        // count. The verdict recorded for the box is still BOX_INCORRECT.
+    fun `a misplaced box still reaches the species question`() {
+        // The chain used to stop here, on both branches, and it must not. A misplaced box
+        // still holds a countable egg: skipping the species question drops that egg from the
+        // per-species count, and - since `Finding.isComplete` asks for a species on a
+        // BOX_INCORRECT row - leaves the frame permanently unsubmittable. The verdict
+        // recorded for the box is still BOX_INCORRECT.
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false))))
 
-        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+        option(VerifyTestTags.QUESTION_Q3, "Yes").assertIsDisplayed()
+    }
+
+    /**
+     * The species step asks about the model's suggestion first. The common answer is yes,
+     * and a yes must not cost the medtech a pick from a list they just agreed with — so the
+     * picker only appears once they say the suggestion is wrong.
+     */
+    @Test
+    fun `a correct box asks whether the suggested species is right, not for a pick`() {
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        composeRule.onNodeWithText("Is this egg ${EggSpecies.ASCARIS.displayName}?")
+            .performScrollTo()
+            .assertIsDisplayed()
+        option(VerifyTestTags.QUESTION_Q3, "Yes").assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
     @Test
-    fun `an unanswered box question stops the chain before the species picker`() {
+    fun `answering the species question reports the answer`() {
+        val r = setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        option(VerifyTestTags.QUESTION_Q3, "No").performClick()
+
+        assertEquals(listOf(false), r.speciesConfirmed)
+    }
+
+    @Test
+    fun `an unanswered box question stops the chain before the species question`() {
         setContent(state(answers = listOf(answered(isEgg = true))))
+
+        composeRule.onNodeWithTag(
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+        ).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+    }
+
+    @Test
+    fun `agreeing with the suggested species keeps the picker hidden`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = true,
+                        species = EggSpecies.ASCARIS,
+                    ),
+                ),
+            ),
+        )
 
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
     @Test
-    fun `a correct box reveals the species picker`() {
-        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+    fun `rejecting the suggested species reveals the picker`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = false))),
+        )
 
         sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
 
+    /** A class the app cannot map to a species has nothing to confirm, so ask for a pick. */
     @Test
-    fun `the stage picker appears once a species with defined stages is selected`() {
+    fun `an unrecognised model class skips the question and shows the picker`() {
+        val unknownClass = frame().copy(
+            predictions = listOf(Prediction("Giardia", 0.9f, 100f, 100f, 50f, 50f)),
+        )
         setContent(
             state(
-                answers = listOf(
-                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
-                ),
+                answers = listOf(answered(isEgg = true, isBoxCorrect = true)),
+                frame = unknownClass,
             ),
         )
 
-        sheetNode(VerifyTestTags.STAGE_DROPDOWN).assertIsDisplayed()
-    }
-
-    @Test
-    fun `the stage picker is hidden for a species with no defined stages`() {
-        setContent(
-            state(
-                answers = listOf(
-                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.OTHER),
-                ),
-            ),
-        )
-
-        composeRule.onNodeWithTag(VerifyTestTags.STAGE_DROPDOWN).assertDoesNotExist()
-    }
-
-    @Test
-    fun `the stage picker is hidden before a species is selected`() {
-        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
-
-        composeRule.onNodeWithTag(VerifyTestTags.STAGE_DROPDOWN).assertDoesNotExist()
+        composeRule.onNodeWithTag(
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+        ).assertDoesNotExist()
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
 
     /**
@@ -276,13 +315,19 @@ class VerificationSheetContentTest {
         val r = setContent(
             state(
                 answers = listOf(
-                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                    answered(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = false,
+                        species = EggSpecies.ASCARIS,
+                    ),
                 ),
             ),
         )
 
-        // Scoped to the dropdown: the "will be saved" summary now renders the same species
-        // name, so an unscoped text lookup matches two nodes.
+        // Scoped to the dropdown. The "will be saved" summary renders the same species
+        // name, and the detection card renders the model's class label, so an unscoped text
+        // lookup matches more than one node.
         val speciesField = composeRule
             .onNode(
                 hasAnyAncestor(hasTestTag(VerifyTestTags.SPECIES_DROPDOWN)) and
@@ -351,6 +396,15 @@ class VerificationSheetContentTest {
     }
 
     @Test
+    fun `rejecting the suggested species without picking another does not complete`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = false))),
+        )
+
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+    }
+
+    @Test
     fun `a fully answered detection unlocks submit`() {
         setContent(
             state(
@@ -360,21 +414,6 @@ class VerificationSheetContentTest {
             ),
         )
 
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
-    }
-
-    @Test
-    fun `leaving the stage unanswered does not block submit`() {
-        // Ascaris defines a stage set, and the picker is shown - but it is not a gate.
-        setContent(
-            state(
-                answers = listOf(
-                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
-                ),
-            ),
-        )
-
-        sheetNode(VerifyTestTags.STAGE_DROPDOWN).assertIsDisplayed()
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
 
@@ -446,22 +485,52 @@ class VerificationSheetContentTest {
 
     // Detection navigation
 
+    /**
+     * The egg buttons sit under the species card and step between the boxes on one frame.
+     * Each side is dead at its own end of the range, so on the first egg only "next" can
+     * fire, and on the last only "previous" — the pair can never look like it leaves the
+     * frame.
+     */
     @Test
-    fun `detection navigation reports both directions`() {
+    fun `on the first egg only next fires`() {
         val r = setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
 
-        sheetNode(VerifyTestTags.DETECTION_PREV).performClick()
-        sheetNode(VerifyTestTags.DETECTION_NEXT).performClick()
+        sheetNode(VerifyTestTags.DETECTION_PREV).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.DETECTION_NEXT).assertIsEnabled().performClick()
 
-        assertEquals(1, r.detectionPrev)
+        assertEquals(0, r.detectionPrev)
         assertEquals(1, r.detectionNext)
     }
 
     @Test
-    fun `the detection counter reflects how many there are`() {
+    fun `on the last egg only previous fires`() {
+        val r = setContent(
+            state(answers = listOf(answered(), answered()), frame = frame(predictions = 2))
+                .copy(currentDetectionIndex = 1),
+        )
+
+        sheetNode(VerifyTestTags.DETECTION_NEXT).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.DETECTION_PREV).assertIsEnabled().performClick()
+
+        assertEquals(1, r.detectionPrev)
+        assertEquals(0, r.detectionNext)
+    }
+
+    @Test
+    fun `the detection counter reflects how many boxes there are`() {
         setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
 
         composeRule.onNodeWithText("Detection 1 of 2").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun `a single-box frame still says which detection it is but offers no egg buttons`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        composeRule.onNodeWithText("Detection 1 of 1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_NEXT).assertDoesNotExist()
     }
 
     // Bounding boxes
@@ -510,6 +579,27 @@ class VerificationSheetContentTest {
         setContent(state(frame = frame(source = FrameSource.MANUAL)))
 
         sheetNode(VerifyTestTags.SOURCE_BADGE).onChild().assertTextEquals("Manual")
+    }
+
+    /**
+     * The card names the model's class before the medtech has answered anything, so a model
+     * frame must carry the caution that it is a suggestion, not a finding (C7). A manual
+     * frame has no model output to caution about.
+     */
+    @Test
+    fun `a model frame carries the AI-suggestion caution under the detection card`() {
+        setContent(state(frame = frame(source = FrameSource.MODEL)))
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a manual frame shows the detection card without the AI-suggestion caution`() {
+        setContent(state(frame = frame(source = FrameSource.MANUAL)))
+
+        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.AI_SUGGESTION_NOTE).assertDoesNotExist()
     }
 
     @Test

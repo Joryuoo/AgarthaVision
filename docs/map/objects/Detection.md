@@ -28,7 +28,6 @@ trail for every human decision.
 | `bbox_x/y/w/h` | real, **nullable since** `supabase/migrations/0007_detection_bbox_nullable.sql:10-14` |
 | `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) — `supabase/migrations/0002_verification_fields.sql:30-32` |
 | `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, and **since `0012` also when the verdict is `BOX_INCORRECT`** and the medtech corrected the species (`0002_verification_fields.sql:38-39` describes the narrower original rule) |
-| `stage` | nullable, CHECK in (`UNFERTILIZED`, `UNEMBRYONATED`, `EMBRYONATED`, `LARVATED`) — optional egg/parasite stage (`supabase/migrations/0010_verification_stage.sql`). Ascaris morphology values `CORTICATED`/`DECORTICATED`/`FERTILIZED` are deliberately excluded for now. |
 | `species_touched` | NOT NULL boolean, default `false` (`supabase/migrations/0012_polyparasitism_findings.sql`) — see below |
 
 **Why `expert_class` widened.** An egg with a misplaced box is still an egg and still has to be
@@ -62,10 +61,6 @@ PK column is `detection_id`. Two things to know:
 - `verified_by_user` **still exists in Room** (`DetectionEntity.kt:66-67`) even though Postgres
   dropped it, and is not in the insert row.
 
-| Field | Constraint |
-|---|---|
-| `stage` | nullable `TEXT`, added at Room version 10 (`core/database/AgarthaDatabase.kt`). Mirrors the Postgres `stage` column and is mapped via `EggStage.fromValue`/`.value` (`data/local/mapper/DetectionMapper.kt`). |
-
 **Contradiction in the source, unresolved:** the entity's class KDoc says bounding boxes are
 "normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says
 "source-image pixels" (`DetectionEntity.kt:43-46`); `0001_init.sql:64` also says normalized.
@@ -74,7 +69,7 @@ width, height in pixels (`inference/server.py:47-55`), and the mapper stores tho
 unchanged (`data/local/mapper/VerificationMapper.kt:36-39`). Treat the "normalized" comments as
 stale.
 
-Documented shape: `schema.ts:298-335`.
+Documented shape: `schema.ts:358-395`.
 
 ## Connected to
 
@@ -122,4 +117,4 @@ the CSV builder. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
 `supabase/migrations/0002_verification_fields.sql`,
 `supabase/migrations/0007_detection_bbox_nullable.sql`,
 `app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt`,
-`data/local/mapper/VerificationMapper.kt`, `schema.ts:298-335`.
+`data/local/mapper/VerificationMapper.kt`, `schema.ts:358-395`.

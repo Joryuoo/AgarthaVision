@@ -85,6 +85,9 @@ private class DetailDetectionRepository(
 
     override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
+
+    override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
+        emptyMap()
 }
 
 private fun detailSample(userId: String): Sample =

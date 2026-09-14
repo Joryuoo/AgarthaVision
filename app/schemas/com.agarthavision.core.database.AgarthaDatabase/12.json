@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 12,
-    "identityHash": "410efb50ff98ddc97fdd02ed3923e06b",
+    "identityHash": "04234d54c3bdbb6ee0fb1f77e3b9eb53",
     "entities": [
       {
         "tableName": "samples",
@@ -132,7 +132,7 @@
       },
       {
         "tableName": "sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `notes` TEXT, `label` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'synced', `claim_exempt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`session_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `notes` TEXT, `label` TEXT, `psgc_barangay_code` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'synced', `claim_exempt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`session_id`))",
         "fields": [
           {
             "fieldPath": "sessionId",
@@ -173,6 +173,11 @@
             "affinity": "TEXT"
           },
           {
+            "fieldPath": "psgcBarangayCode",
+            "columnName": "psgc_barangay_code",
+            "affinity": "TEXT"
+          },
+          {
             "fieldPath": "supabaseStatus",
             "columnName": "supabase_status",
             "affinity": "TEXT",
@@ -196,7 +201,7 @@
       },
       {
         "tableName": "detections",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `verified_by_user` INTEGER NOT NULL, `stage` TEXT, `species_touched` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `verified_by_user` INTEGER NOT NULL, `species_touched` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "detectionId",
@@ -259,11 +264,6 @@
             "columnName": "verified_by_user",
             "affinity": "INTEGER",
             "notNull": true
-          },
-          {
-            "fieldPath": "stage",
-            "columnName": "stage",
-            "affinity": "TEXT"
           },
           {
             "fieldPath": "speciesTouched",
@@ -538,11 +538,75 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "psgc_barangays",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`code` TEXT NOT NULL, `name` TEXT NOT NULL, `city_muni_code` TEXT NOT NULL, `city_muni_name` TEXT NOT NULL, `province_code` TEXT, `province_name` TEXT, `region_code` TEXT NOT NULL, `region_name` TEXT NOT NULL, `search_text` TEXT NOT NULL, PRIMARY KEY(`code`))",
+        "fields": [
+          {
+            "fieldPath": "code",
+            "columnName": "code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cityMuniCode",
+            "columnName": "city_muni_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cityMuniName",
+            "columnName": "city_muni_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "provinceCode",
+            "columnName": "province_code",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "provinceName",
+            "columnName": "province_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "regionCode",
+            "columnName": "region_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "regionName",
+            "columnName": "region_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "searchText",
+            "columnName": "search_text",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "code"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '410efb50ff98ddc97fdd02ed3923e06b')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '04234d54c3bdbb6ee0fb1f77e3b9eb53')"
     ]
   }
 }

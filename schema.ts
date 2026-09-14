@@ -165,6 +165,8 @@ export interface Profile {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0005_session_label.sql`: adds nullable `label` and
  *   `sessions_user_started_idx`.
+ * - `0010_session_psgc_barangay.sql`: adds nullable `psgc_barangay_code`, a
+ *   partial index on it, and the admin-only `barangay_prevalence()` RPC.
  *
  * Room mirror:
  * - `SessionEntity.kt`
@@ -191,6 +193,64 @@ export interface Session {
 
   label: string | null;
   // Nullable human-friendly smear/session label added by migration `0005`.
+
+  psgc_barangay_code: string | null;
+  // Nullable. The patient's barangay as a canonical zero-padded 10-digit PSGC
+  // code ('0102801001'), added by migration `0010`. CHECK `^[0-9]{10}$`.
+  //
+  // Barangay level only: the code resolves upward to city/municipality, province
+  // and region on its own, so there are deliberately no denormalised parent
+  // columns. This is the key the surveillance choropleth aggregates on. The
+  // per-sample GPS fix (`samples.gps_*`) stays capture provenance and is not a
+  // mapping key — it records where the smear was read, not where the infection
+  // came from.
+  //
+  // Reference data for the picker lives on-device only, in Room's
+  // `psgc_barangays` (see `PsgcBarangay` below). There is no Supabase table of
+  // barangays: the map joins this code against PSGC boundary GeoJSON.
+}
+
+/**
+ * Bundled PSGC barangay reference data. **Room-only — there is no Supabase
+ * table.** Seeded from an APK asset on first run so the picker works with no
+ * cellular signal.
+ *
+ * Pinned to PSGC 2Q 2026 (42,010 barangays, 18 regions). The Admin Website's
+ * boundary GeoJSON must join on this same vintage — see
+ * `docs/map/objects/PsgcBarangay.md` and `tools/psgc/README.md`, which record why
+ * the earlier 4Q 2023 pin misfiled 1,763 barangays across the Negros Island
+ * Region and Sulu reorganisations.
+ *
+ * Room mirror:
+ * - `PsgcBarangayEntity.kt`, Room schema v10.
+ */
+export interface PsgcBarangay {
+  code: string;
+  // PK. Canonical zero-padded 10-digit PSGC.
+
+  name: string;
+  // NOT NULL barangay name.
+
+  city_muni_code: string;
+  city_muni_name: string;
+  // NOT NULL. For Manila's 897 barangays this is the chartered city, not the
+  // sub-municipality that is their direct PSGC parent.
+
+  province_code: string | null;
+  province_name: string | null;
+  // Null for the 3,083 barangays in highly urbanised and independent cities:
+  // those cities occupy the province slot themselves, so PSGC gives them no
+  // province. Not missing data.
+
+  region_code: string;
+  region_name: string;
+  // NOT NULL.
+
+  search_text: string;
+  // NOT NULL pre-lowercased search haystack: barangay, city/municipality and
+  // province names plus Manila's sub-municipality. Region names are excluded as
+  // boilerplate. Folded in Kotlin, not SQL — `lower()` is ASCII-only and 439
+  // names contain 'n' with a tilde.
 }
 
 /**
@@ -269,10 +329,6 @@ export interface Sample {
   status: SampleStatus;
   // Room/domain-only. No Supabase column.
 
-  is_repeat: boolean;
-  // Room/domain-only, and being removed: it existed only because there was no way to
-  // delete a duplicate, which `deleted_at` now provides. See ticket 86d4ab4vm.
-
   predictions_json: string | null;
   // Room-only raw inference payload/cache for local display and recovery.
 
@@ -300,7 +356,6 @@ export interface Sample {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
  * - `0007_detection_bbox_nullable.sql`: makes `bbox_x`, `bbox_y`, `bbox_w`,
  *   and `bbox_h` nullable for manual detections.
- * - `0010_verification_stage.sql`: adds optional `stage`.
  * - `0012_polyparasitism_findings.sql`: adds `species_touched`, and adds the UPDATE
  *   policy `detections_update_via_sample` that re-syncing an edited sample needs.
  *
@@ -350,12 +405,6 @@ export interface Detection {
   verified_by_user: boolean;
   // Room-only after migration `0002` dropped the Supabase column.
 
-  stage: string | null;
-  // Nullable after migration `0010_verification_stage.sql`. Optional egg/parasite
-  // stage; CHECK constrains values to 'UNFERTILIZED' | 'UNEMBRYONATED' |
-  // 'EMBRYONATED' | 'LARVATED'. The Ascaris morphology values 'CORTICATED',
-  // 'DECORTICATED', and 'FERTILIZED' are deliberately excluded for now.
-
   species_touched: boolean;
   // NOT NULL. Default `false`. Added by `0012_polyparasitism_findings.sql`. True when the
   // medtech made a deliberate species selection on this box, including re-picking the
@@ -366,11 +415,11 @@ export interface Detection {
 }
 
 /**
- * One species-and-stage finding a medtech logged on a single frame, with that pair's
+ * One species finding a medtech logged on a single frame, with that species'
  * low-power-field egg count.
  *
  * One field can hold eggs of more than one species, and that is normal, so a frame carries
- * zero or more of these. The count is per species AND stage, never a frame total: WHO
+ * zero or more of these. The count is per species, never a frame total: WHO
  * infection-intensity thresholds are species-specific and differ by more than an order of
  * magnitude, so a combined per-field number cannot be graded.
  *
@@ -387,7 +436,7 @@ export interface Detection {
 export interface SampleSpeciesFinding {
   id: UUID;
   // Supabase PK. Room column: `finding_id` PK, derived deterministically from
-  // (sample_id, species, stage) so an edit replaces rather than duplicates.
+  // (sample_id, species) so an edit replaces rather than duplicates.
 
   sample_id: UUID;
   // NOT NULL. FK to `samples.id`, ON DELETE CASCADE.
@@ -397,12 +446,17 @@ export interface SampleSpeciesFinding {
   // cover the species. Same convention as `detections.class_label` / `expert_class`.
 
   stage: string | null;
-  // Nullable — null when the species has no defined stage set (see `EggStage.validFor`).
-  // Same CHECK value set as `detections.stage`.
+  // ALWAYS NULL, and dormant. `0012` created it with a CHECK on 'UNFERTILIZED' |
+  // 'UNEMBRYONATED' | 'EMBRYONATED' | 'LARVATED' for ticket 86d4a6jwy, which staging then
+  // reverted (`9dcfd5d`) and deprioritised — those four values were never checked against
+  // literature, and Ascaris could only be tagged UNFERTILIZED, the one stage that is never
+  // infective. The column stays because 0012 is applied and frozen (C6); nothing in the app
+  // reads or writes it, and `sample_species_findings_unique_unstaged` is the index in force.
+  // Reviving the ticket needs a migration widening that CHECK first.
 
   egg_count: number;
-  // NOT NULL, CHECK > 0. Eggs of this species and stage in this one low-power field. A
-  // count of zero is the absence of a row, not a row holding zero.
+  // NOT NULL, CHECK > 0. Eggs of this species in this one low-power field. A count of zero
+  // is the absence of a row, not a row holding zero.
 }
 
 /**
@@ -655,9 +709,15 @@ export type RelationshipMatrix = [
  *   remote `samples.user_id` stays NOT NULL, enforced by claim-before-sync. Room
  *   `sessions` gains two Room-only columns — `supabase_status`
  *   (pending/synced/sync_failed, `SessionSyncStatus`) and `claim_exempt` (the
- *   per-session "don't link to account" opt-out) — neither exists in Supabase. Room
- *   schema is v8; no Supabase migration was added.
+ *   per-session "don't link to account" opt-out) — neither exists in Supabase.
+ *   Introduced at Room schema v8; no Supabase migration was added.
  * - Reports are implemented for session reports only; admin/cross-session
  *   report types require a future migration.
+ * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled
+ *   reference data for the barangay picker; the surveillance map joins
+ *   `sessions.psgc_barangay_code` against PSGC boundary GeoJSON instead. Room
+ *   schema is v9.
+ * - PostGIS is deliberately not enabled. The map keys on PSGC, so the
+ *   choropleth is a GROUP BY rather than a spatial query.
  */
 export type GroundTruthNotes = never;

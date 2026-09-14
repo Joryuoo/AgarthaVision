@@ -4,6 +4,8 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.RecordsTotals
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
@@ -78,6 +80,50 @@ class GenerateSessionReportUseCaseTest {
         assertEquals("", reportFileStore.lastCsv)
         assertEquals(report.id, reportFileStore.lastPdfReportId)
         assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
+    }
+
+    @Test
+    fun `carries the verified species into the generated csv without re-entry`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(
+                samples = listOf(
+                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
+                ),
+            ),
+            detectionRepository = ReportDetectionRepository(
+                detectionsBySample = mapOf(
+                    "sample-1" to listOf(
+                        reportDetection(
+                            sampleId = "sample-1",
+                            classLabel = "Ascaris",
+                            confidence = 0.91f,
+                            expertClass = "Ascaris lumbricoides",
+                        ),
+                    ),
+                ),
+                eggCounts = listOf(EggCount("Ascaris lumbricoides", 2)),
+            ),
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
+            syncReportUseCase = noOpSyncReportUseCase(),
+        )
+
+        val result = useCase("session-1", ReportFormat.CSV)
+
+        assertTrue(result.isSuccess)
+        val dataRow = reportFileStore.lastCsv
+            .lines()
+            .firstOrNull { it.startsWith("sample-1,") }
+        assertNotNull(dataRow)
+        val fields = dataRow!!.split(",")
+        assertEquals("Ascaris lumbricoides", fields[5])
     }
 
     @Test
@@ -160,6 +206,40 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(session?.let(::listOf).orEmpty())
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
+    override fun observeSessionRecordsPage(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeSessionRecordsTotals(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> = flowOf(RecordsTotals())
+
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 private class ReportSampleRepository(
@@ -196,6 +276,9 @@ private class ReportDetectionRepository(
 
     override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
+
+    override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
+        emptyMap()
 }
 
 private class FakeReportRepository : ReportRepository {
@@ -274,7 +357,12 @@ private fun reportSample(id: String, sessionId: String, userId: String): Sample 
         status = SampleStatus.SYNCED,
     )
 
-private fun reportDetection(sampleId: String, classLabel: String, confidence: Float): Detection =
+private fun reportDetection(
+    sampleId: String,
+    classLabel: String,
+    confidence: Float,
+    expertClass: String? = null,
+): Detection =
     Detection(
         id = "detection-$sampleId",
         sampleId = sampleId,
@@ -285,7 +373,7 @@ private fun reportDetection(sampleId: String, classLabel: String, confidence: Fl
         bboxW = 0.3f,
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
-        expertClass = null,
+        expertClass = expertClass,
         verifiedByUser = true,
     )
 

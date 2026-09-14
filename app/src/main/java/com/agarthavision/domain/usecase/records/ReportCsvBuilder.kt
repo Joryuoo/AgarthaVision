@@ -73,7 +73,6 @@ class ReportCsvBuilder @Inject constructor() {
             detection?.confidence?.toString().orEmpty(),
             detection?.expertClass.orEmpty(),
             detection?.verdict?.value.orEmpty(),
-            detection?.stage?.value.orEmpty(),
             latitude?.toString().orEmpty(),
             longitude?.toString().orEmpty(),
             accuracyMeters?.toString().orEmpty(),
@@ -106,7 +105,7 @@ class ReportCsvBuilder @Inject constructor() {
         // deleted now, not marked. Anything parsing this file by column position shifts left
         // by one from user_note onward.
         private const val CSV_HEADER =
-            "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,stage," +
+            "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict," +
                 "gps_lat,gps_lng,gps_accuracy,is_manual,user_note,model_version"
     }
 }

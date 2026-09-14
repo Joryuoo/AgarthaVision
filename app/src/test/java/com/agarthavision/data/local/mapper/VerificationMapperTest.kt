@@ -3,7 +3,6 @@ package com.agarthavision.data.local.mapper
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import org.junit.Assert.assertEquals
@@ -78,28 +77,5 @@ class VerificationMapperTest {
         val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
         assertNull(entity.expertClass)
         assertEquals(DetectionVerdict.CONFIRMED.value, entity.verdict)
-    }
-
-    @Test
-    fun `stage carries through to entity when set`() {
-        val answers = VerificationAnswers(
-            isEgg = true,
-            isBoxCorrect = true,
-            species = EggSpecies.ASCARIS,
-            stage = EggStage.UNFERTILIZED,
-        )
-        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
-        assertEquals(EggStage.UNFERTILIZED.value, entity.stage)
-    }
-
-    @Test
-    fun `stage is null on entity when unset`() {
-        val answers = VerificationAnswers(
-            isEgg = true,
-            isBoxCorrect = true,
-            species = EggSpecies.ASCARIS,
-        )
-        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
-        assertNull(entity.stage)
     }
 }

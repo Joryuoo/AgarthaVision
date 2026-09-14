@@ -42,12 +42,22 @@ forever.
 | `id` | PK, default `uuid_generate_v4()` |
 | `sample_id` | NOT NULL, FK → `samples(id)`, CASCADE |
 | `species` | NOT NULL, CHECK non-blank — canonical class name, or free text the dropdown does not cover |
-| `stage` | nullable, CHECK in (`UNFERTILIZED`, `UNEMBRYONATED`, `EMBRYONATED`, `LARVATED`) — same value set as `detections.stage` |
+| `stage` | nullable, CHECK in (`UNFERTILIZED`, `UNEMBRYONATED`, `EMBRYONATED`, `LARVATED`) — **always null, dormant.** See below. |
 | `egg_count` | NOT NULL integer, CHECK `> 0` |
+
+**`stage` is dormant and always null.** It was created for 86d4a6jwy, which staging reverted
+(`9dcfd5d`) and deprioritised: the four values the CHECK hard-codes were never checked against
+literature, and Ascaris could only be tagged `UNFERTILIZED` — the one stage that is never
+infective — while the embryonated fertilised egg the consultation cared about was
+unselectable. `0012` is applied and frozen under C6, so the column stays; no code path reads or
+writes it, `FindingRow` carries no stage, and the row id derives from `(sample_id, species)`
+alone. **Reviving the ticket needs a migration widening that CHECK before anything is written
+here**, plus a matching change to the id derivation in `VerificationMapper`.
 
 Uniqueness is **two partial indexes**, not one constraint —
 `sample_species_findings_unique_staged` where `stage is not null`, and
-`..._unique_unstaged` where it is null. A single `unique nulls not distinct` would have been
+`..._unique_unstaged` where it is null. With `stage` always null, the unstaged index is the one
+in force, and it is exactly the uniqueness the app wants: one row per species per sample. A single `unique nulls not distinct` would have been
 tidier but needs PostgreSQL 15; nothing upserts this table (the client deletes a sample's rows
 and reinserts), so no PostgREST `on_conflict` target is needed and the weaker form costs
 nothing.

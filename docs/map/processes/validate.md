@@ -21,11 +21,20 @@ The human-in-the-loop gate. Nothing counts until this runs.
    one from the frame it opened with and never re-evaluated — so each sheet had to page only
    through its own source or it would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
-   which species, and — optionally, once a species with a defined stage set is picked — which
-   egg/parasite stage (`domain/usecase/verify/VerificationAnswers.kt`,
-   `domain/model/EggStage.kt`). A "no" at any step short-circuits the rest — `isComplete`
-   encodes exactly which questions still matter, and deliberately does not gate on stage since
-   it is optional (`VerificationAnswers.kt`).
+   and which species (`domain/usecase/verify/VerificationAnswers.kt`). Species is asked as a
+   confirmation first — "Is this egg *Ascaris lumbricoides*?" — and a yes records the model's
+   species as the medtech's answer in that same step (`ui/verify/VerificationViewModel.kt`
+   `onSpeciesConfirmed`); only a no opens the species picker. A model class that maps to no
+   `EggSpecies` has nothing to confirm, so the picker is offered directly.
+
+   A "no" to the egg question short-circuits the rest. A "no" to the **box** question does not:
+   a misplaced box still contains a countable egg, so the species is still asked and the egg
+   still reaches the per-species count — the verdict records `BOX_INCORRECT` separately.
+   `Finding.isComplete` encodes exactly which questions still matter.
+
+   There is no developmental-stage question. 86d4a6jwy added one and staging reverted it
+   (`9dcfd5d`); the ticket is deprioritised. `sample_species_findings.stage` survives as a
+   dormant column because `0012` is applied and frozen under C6.
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
    `needs_reannotation` (`ui/verify/VerificationViewModel.kt:217`).
 4. **Compute the verdict.** One function, first-match-wins:
@@ -46,9 +55,7 @@ The human-in-the-loop gate. Nothing counts until this runs.
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:46-49`). The model's label is
    canonicalised into `class_label`, and the expert's correction goes to `expert_class`
    (`data/local/mapper/VerificationMapper.kt:24-39`). **Both halves persist** — a rejection is a
-   row, never a deletion (`../../constraints.md` C8). The optional stage answer, when set,
-   carries through to `detections.stage` (`data/local/mapper/VerificationMapper.kt`,
-   `supabase/migrations/0010_verification_stage.sql`).
+   row, never a deletion (`../../constraints.md` C8).
 8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline — see [`sync`](sync.md)
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`).
 
@@ -93,6 +100,42 @@ reason.
   corpus; consuming it is a separate, out-of-repo activity.
 - **The image bytes.** Verification never rewrites the JPEG. Resizing happens later, in
   [`sync`](sync.md).
+
+## Free-text audit (C13)
+
+Every text-entry field reachable from verification/manual capture and the records screens,
+audited for whether it is sanctioned free text, a dropdown-gated fallback, or not free text at
+all.
+
+- **Sanctioned free text (keep).** The per-detection sample note: `NoteField` in
+  `ui/verify/VerificationSheet.kt:348-353` (call site) and `:482-497` (definition), and the
+  equivalent `OutlinedTextField` in `ui/verify/ManualSheet.kt:313-329`. Both write to
+  `state.userNote` / `samples.user_note` and land unchanged in the CSV `user_note` column
+  (`domain/usecase/records/ReportCsvBuilder.kt:82`, `:108`). Also sanctioned: the session label
+  entered at session creation (`ui/sessions/SessionsScreen.kt:436-441`), an administrative
+  specimen identifier rather than a clinical observation, which flows into the CSV
+  `session_label` header (`ReportCsvBuilder.kt:47`) and the PDF header
+  (`domain/usecase/records/ReportPdfBuilder.kt:31`).
+- **Dropdown-gated fallback (legitimate, but a *species* field, not remarks).** The "Other
+  species" text field in `ui/verify/SpeciesDropdown.kt:113-122`, rendered only when
+  `EggSpecies.OTHER` is selected. Its value becomes `expert_class`
+  (`data/local/mapper/VerificationMapper.kt:24-39`), not a note — it names the organism, it
+  doesn't annotate it.
+- **Not actually free text.** The species dropdown's own `query` state
+  (`ui/verify/SpeciesDropdown.kt:46`, `:61-63`, `:70-93`) is a live filter over the `EggSpecies`
+  enum; the committed value only ever comes from a `DropdownMenuItem` tap
+  (`SpeciesDropdown.kt:101-109`), never from the typed text itself.
+- **No editable/free-text fields** exist on `ui/records/SampleDetailScreen.kt` or
+  `ui/records/SessionDetailScreen.kt` — both are read-only presentations of already-committed
+  data.
+
+**Governing rule status.** The only clinical free-text field in the app is the dropdown-gated
+"Other species" fallback above — there is no manual LPF/count field yet (blocked on
+`86d4a6jxw`), so the "only LPF is typed" rule has nothing to satisfy or violate today.
+
+**Deferred (explicitly out of scope here).** Per-species LPF count carry-through and the PDF
+per-detection breakdown are blocked on `86d4ab4tq` (polyparasitism findings table) and
+`86d4a6jxw` (LPF unit) respectively.
 
 ## The inconsistency worth knowing
 

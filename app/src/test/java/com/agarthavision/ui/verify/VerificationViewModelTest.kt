@@ -4,7 +4,6 @@ import app.cash.turbine.test
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -161,6 +160,69 @@ class VerificationViewModelTest {
             vm.onQ1Selected(false) // complete after Q1=No
             advanceUntilIdle()
             assertTrue(vm.state.value.canSubmit)
+        }
+
+    // Confirming the suggested species
+
+    @Test
+    fun `agreeing with the suggested species records it as the answer and completes the detection`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesConfirmed(true)
+            advanceUntilIdle()
+
+            val answer = vm.state.value.findings[0].answers
+            assertEquals(true, answer.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, answer.species)
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `rejecting the suggested species clears it and waits for a pick`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onSpeciesConfirmed(false)
+            advanceUntilIdle()
+
+            val answer = vm.state.value.findings[0].answers
+            assertEquals(false, answer.speciesConfirmed)
+            assertEquals(null, answer.species)
+            assertFalse(vm.state.value.canSubmit)
+
+            vm.onSpeciesSelected(EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+            assertEquals(EggSpecies.HOOKWORM, vm.state.value.findings[0].answers.species)
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `changing an earlier answer resets the species confirmation`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(null, vm.state.value.findings[0].answers.species)
+
+            vm.onSpeciesConfirmed(true)
+            vm.onQ1Selected(true)
+            advanceUntilIdle()
+            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(null, vm.state.value.findings[0].answers.species)
         }
 
     @Test
@@ -463,57 +525,6 @@ class VerificationViewModelTest {
             assertFalse(vm.state.value.canGoNext)
         }
 
-    @Test
-    fun `onStageSelected updates the current answer's stage`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-
-            vm.onStageSelected(EggStage.UNFERTILIZED)
-            advanceUntilIdle()
-
-            assertEquals(EggStage.UNFERTILIZED, vm.state.value.findings[0].answers.stage)
-        }
-
-    @Test
-    fun `onSpeciesSelected resets stage to null`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onStageSelected(EggStage.UNFERTILIZED)
-
-            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
-            advanceUntilIdle()
-
-            assertEquals(null, vm.state.value.findings[0].answers.stage)
-        }
-
-    @Test
-    fun `onQ1Selected resets stage to null`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onStageSelected(EggStage.UNFERTILIZED)
-
-            vm.onQ1Selected(true)
-            advanceUntilIdle()
-
-            assertEquals(null, vm.state.value.findings[0].answers.stage)
-        }
-
-    @Test
-    fun `onQ2Selected resets stage to null`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onStageSelected(EggStage.UNFERTILIZED)
-
-            vm.onQ2Selected(true)
-            advanceUntilIdle()
-
-            assertEquals(null, vm.state.value.findings[0].answers.stage)
-        }
-
     // Polyparasitism: several species on one frame (86d4ab4tq)
 
     @Test
@@ -567,13 +578,11 @@ class VerificationViewModelTest {
             vm.onAddFinding()
 
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
-            vm.onAddedStageSelected(1, EggStage.LARVATED)
             vm.onEggCountChanged(1, "4")
             advanceUntilIdle()
 
             val added = vm.state.value.findings[1].answers
             assertEquals(EggSpecies.HOOKWORM, added.species)
-            assertEquals(EggStage.LARVATED, added.stage)
             assertEquals(4, added.eggCount)
             assertEquals(true, added.speciesTouched)
         }
@@ -610,38 +619,62 @@ class VerificationViewModelTest {
         }
 
 
-    // Auto-fill from the model output, and the provenance it needs (86d4ab4tq)
+    // Where the species comes from, and the provenance it needs (86d4ab4tq / 86d4auj84)
 
     @Test
-    fun `a box is pre-filled with the class the model gave it, untouched`() =
+    fun `a box opens with no species filled in`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The sheet used to pre-fill the model's class here and flag it untouched. That
+            // was replaced by the explicit "is this egg <species>?" step, which solves the
+            // same problem - the medtech does not retype what the model got right - without
+            // ever putting an unreviewed model answer where a human answer is read from.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
+            assertEquals(null, answers.species)
+            assertFalse(answers.speciesTouched)
+        }
+
+    @Test
+    fun `confirming the model's species records it as a human answer`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesConfirmed(true)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertFalse(
-                "A pre-fill is not a human answer - submitting it untouched must not read " +
-                    "as a confirmation.",
+            assertTrue(
+                "A yes is a deliberate assertion: the medtech read the suggestion and agreed " +
+                    "with it. detections doubles as the retraining corpus, so a species with " +
+                    "no human behind it must never look like one with.",
                 answers.speciesTouched,
             )
         }
 
     @Test
-    fun `answering the box questions keeps the pre-filled species`() =
+    fun `changing an earlier answer clears the species rather than re-seeding it`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // The reset that clears later answers used to clear to empty, which threw the
-            // pre-fill away the moment the medtech answered Q1 - i.e. always.
+            // Re-seeding from the model here would answer the confirm question on the
+            // medtech's behalf - the one thing that step exists to stop.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-
             vm.onQ1Selected(true)
             vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onQ1Selected(true)
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
-            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertEquals(null, answers.species)
+            assertEquals(null, answers.speciesConfirmed)
             assertFalse(answers.speciesTouched)
         }
 

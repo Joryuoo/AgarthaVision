@@ -66,9 +66,6 @@ data class DetectionEntity(
     @ColumnInfo(name = "verified_by_user")
     val verifiedByUser: Boolean = true,
 
-    @ColumnInfo(name = "stage")
-    val stage: String? = null,
-
     /**
      * `true` when the medtech made a deliberate species selection on this box, including
      * re-picking the value that was pre-filled from the model output.

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
@@ -209,51 +208,71 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentFinding { finding ->
-            finding.copy(
-                answers = finding.resetSpecies().copy(isEgg = isEgg, isBoxCorrect = null),
-            )
+        updateCurrentAnswer {
+            it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
         }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
+        updateCurrentAnswer {
+            it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+        }
+    }
+
+    /**
+     * "Is this egg <model's species>?" Yes records the model's species as the medtech's answer
+     * in the same step; no clears it so the picker can take over (86d4auj84).
+     *
+     * The suggestion is read from **this finding's own prediction**, not from
+     * `frame.predictions[currentDetectionIndex]`. The two agreed while the answer list was one
+     * entry per box; once a medtech can append a species the model never boxed, the list is
+     * longer than `predictions` and the index would run off the end - or, worse, land on a
+     * different box and confirm a species nothing suggested.
+     */
+    fun onSpeciesConfirmed(confirmed: Boolean) {
         updateCurrentFinding { finding ->
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
             finding.copy(
-                answers = finding.resetSpecies().copy(
-                    isEgg = finding.answers.isEgg,
-                    isBoxCorrect = isBoxCorrect,
+                answers = finding.answers.copy(
+                    speciesConfirmed = confirmed,
+                    species = if (confirmed) suggested else null,
+                    otherSpeciesText = "",
+                    // A yes is a deliberate assertion, not a silent pass-through: the medtech
+                    // read the model's answer and agreed with it.
+                    speciesTouched = confirmed,
                 ),
             )
         }
     }
 
     /**
-     * The species answer a row starts from: the model's own class, or nothing when there is no
-     * model output to borrow from.
+     * Drops the species half of a row's answers.
      *
-     * Changing an earlier answer clears the later ones, so that a stale species cannot survive
-     * a change of mind about whether the box even holds an egg. It resets to the **pre-fill**
-     * rather than to empty, because resetting to empty would throw away the model's answer the
-     * moment the medtech answered Q1 — which is every time — and leave the auto-fill visible
-     * only in the instant before it was useful. `speciesTouched` goes back to false with it:
-     * whatever deliberate choice was made no longer applies to the question now being asked.
+     * Changing an earlier answer clears the later ones, so a stale species cannot survive a
+     * change of mind about whether the box even holds an egg. This clears to **empty** rather
+     * than back to the model's class: 86d4auj84 replaced the silent pre-fill with an explicit
+     * "is this egg <species>?", and re-seeding here would answer that question on the
+     * medtech's behalf - the one thing the confirm step exists to stop.
+     *
+     * [VerificationAnswers.speciesConfirmed] and [VerificationAnswers.speciesTouched] go with
+     * it: whatever was asserted no longer applies to the question now being asked.
      */
-    private fun Finding.resetSpecies(): VerificationAnswers = VerificationAnswers(
-        species = prediction?.classLabel?.let(EggSpecies::fromClassLabel),
-        speciesTouched = false,
+    private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
+        eggCount = eggCount,
     )
 
     /**
      * Records a deliberate species choice.
      *
-     * [VerificationAnswers.speciesTouched] is set unconditionally, **including when the medtech
-     * re-picks the value already showing**. Once the field is pre-filled from the model output
-     * that re-pick is the only signal distinguishing "I agree" from "I never looked", and the
-     * distinction matters because `detections` doubles as the retraining corpus.
+     * [VerificationAnswers.speciesTouched] is set unconditionally. Under the confirm-first flow
+     * this is reached only after the medtech has said the model was wrong (or there was nothing
+     * to confirm), so it is a human judgement by construction — and the flag stays because
+     * `detections` doubles as the retraining corpus, where a species with no human behind it
+     * must never be indistinguishable from one with.
      */
     fun onSpeciesSelected(species: EggSpecies) {
         updateCurrentAnswer {
-            it.copy(species = species, otherSpeciesText = "", stage = null, speciesTouched = true)
+            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
         }
     }
 
@@ -261,48 +280,34 @@ class VerificationViewModel @Inject constructor(
         updateCurrentAnswer { it.copy(otherSpeciesText = text) }
     }
 
-    fun onStageSelected(stage: EggStage) {
-        updateCurrentAnswer { it.copy(stage = stage) }
-    }
-
     /**
      * What the screen opens with, for each of the three shapes a frame can take.
      *
      * A manual capture gets exactly one finding with no prediction: there is no box, so the
      * isEgg and isBoxCorrect questions never render, and the medtech names a species and a
-     * count directly. An AI frame with boxes gets one pre-filled finding per box. An AI frame
-     * with none gets an empty list — a clean field, which is a real result and is submittable
-     * on the missed-egg answer alone.
+     * count directly. An AI frame with boxes gets one empty finding per box, each carrying the
+     * prediction it is about. An AI frame with none gets an empty list — a clean field, which
+     * is a real result and is submittable on the missed-egg answer alone.
+     *
+     * **No answer is seeded.** The species used to be pre-filled from the model's class; that
+     * was replaced by the explicit confirm step (86d4auj84), which gets the same
+     * "correct what is wrong rather than retype what is right" benefit without ever putting an
+     * unreviewed model answer where a human answer is read from. isEgg, isBoxCorrect and
+     * missedEgg were never pre-filled and still are not: they are the active-judgment gates,
+     * and answering any of them would let a frame reach CONFIRMED with no engagement at all.
      */
     private fun FlaggedFrame.initialFindings(): List<Finding> = when {
-        predictions.isNotEmpty() -> predictions.map { it.toPreFilledFinding() }
+        predictions.isNotEmpty() -> predictions.map { Finding(prediction = it) }
         source == FrameSource.MANUAL -> listOf(Finding())
         else -> emptyList()
     }
 
     /**
-     * Seeds a box's answers from what the model called it.
-     *
-     * Model-assisted pre-labelling: the medtech corrects what is wrong instead of retyping
-     * what is right. The firm rule is only that a pre-label must never be the sole source of
-     * truth, which is what [VerificationAnswers.speciesTouched] is for — seeded false here, and
-     * set true by any deliberate selection.
-     *
-     * **Only the species is pre-filled.** isEgg, isBoxCorrect and missedEgg are the remaining
-     * active-judgment gates and are never answered on the medtech's behalf; pre-filling any of
-     * them would let a frame reach CONFIRMED with no engagement at all. An unrecognised class
-     * label pre-fills nothing rather than guessing OTHER, because OTHER carries a free-text
-     * box the model cannot fill in.
-     */
-    private fun Prediction.toPreFilledFinding(): Finding =
-        Finding(prediction = this).let { it.copy(answers = it.resetSpecies()) }
-
-    /**
      * Appends a species the model never boxed.
      *
      * The new row has no prediction, which is the same shape a manual capture has: a human
-     * assertion with no box. It is asked for a species, a stage and a count, and never for
-     * the isEgg / isBoxCorrect questions, which are questions about a box.
+     * assertion with no box. It is asked for a species and a count, and never for the
+     * isEgg / isBoxCorrect questions, which are questions about a box.
      */
     fun onAddFinding() {
         _state.update { it.copy(findings = it.findings + Finding()) }
@@ -327,7 +332,7 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    /** Eggs of this species and stage the medtech counted in the field. */
+    /** Eggs of this species the medtech counted in the field. */
     fun onEggCountChanged(index: Int, text: String) {
         val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
         updateAnswerAt(index) { it.copy(eggCount = parsed) }
@@ -335,16 +340,12 @@ class VerificationViewModel @Inject constructor(
 
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
         updateAnswerAt(index) {
-            it.copy(species = species, otherSpeciesText = "", stage = null, speciesTouched = true)
+            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
         }
     }
 
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
-    }
-
-    fun onAddedStageSelected(index: Int, stage: EggStage) {
-        updateAnswerAt(index) { it.copy(stage = stage) }
     }
 
     fun onQ4Selected(missedEgg: Boolean) {

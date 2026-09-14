@@ -80,56 +80,6 @@ internal fun ModelOutputPanel(
 }
 
 /**
- * The question chain for one row: is it an egg, is the box right, and what is it.
- *
- * The first two are questions *about a box*. A row with no [prediction] — a manual capture, or
- * a species the medtech added — has none, so they do not render and are never answered on the
- * medtech's behalf. Such a row goes straight to the species picker.
- */
-@Composable
-internal fun BoxReview(
-    prediction: Prediction?,
-    answers: VerificationAnswers?,
-    actions: VerificationSheetActions,
-) {
-    if (prediction != null) {
-        QuestionSection(
-            title = stringResource(R.string.verify_q1),
-            tag = VerifyTestTags.QUESTION_Q1,
-            options = listOf(true to "Yes", false to "No"),
-            selected = answers?.isEgg,
-            onSelect = actions.onQ1Selected,
-        )
-        if (answers?.isEgg != true) return
-        QuestionSection(
-            title = stringResource(R.string.verify_q2),
-            tag = VerifyTestTags.QUESTION_Q2,
-            options = listOf(true to "Yes", false to "No"),
-            selected = answers.isBoxCorrect,
-            onSelect = actions.onQ2Selected,
-        )
-        // Shown whether or not the box is correctly placed. A misplaced box still contains a
-        // countable egg, and stopping here dropped it from the low-power-field count. The
-        // verdict for the box still records BOX_INCORRECT.
-        if (answers.isBoxCorrect == null) return
-    }
-
-    SpeciesDropdown(
-        selected = answers?.species,
-        otherText = answers?.otherSpeciesText.orEmpty(),
-        onSpeciesSelected = actions.onSpeciesSelected,
-        onOtherTextChanged = actions.onOtherSpeciesChanged,
-        selectedStage = answers?.stage,
-        onStageSelected = actions.onStageSelected,
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
-            .padding(bottom = 14.dp),
-        stageModifier = Modifier.testTag(VerifyTestTags.STAGE_DROPDOWN),
-    )
-}
-
-/**
  * The species the medtech added on top of whatever the model boxed.
  *
  * Rendered as a stacked, always-visible list rather than the one-at-a-time carousel the model's
@@ -159,13 +109,12 @@ internal fun AddedFindings(
                 index = index,
                 finding = findings[index],
                 // Counted separately from this row: the boxes the model already drew for this
-                // same species and stage. Shown so the medtech types the additional eggs
-                // rather than the field total, which would double-count.
+                // same species. Shown so the medtech types the additional eggs rather than
+                // the field total, which would double-count.
                 alreadyBoxed = findings.take(boxCount).count { boxed ->
                     boxed.eggContribution > 0 &&
                         boxed.answers.speciesLabel != null &&
-                        boxed.answers.speciesLabel == findings[index].answers.speciesLabel &&
-                        boxed.answers.stage == findings[index].answers.stage
+                        boxed.answers.speciesLabel == findings[index].answers.speciesLabel
                 },
                 actions = actions,
             )
@@ -226,8 +175,6 @@ private fun AddedFindingCard(
             otherText = finding.answers.otherSpeciesText,
             onSpeciesSelected = { actions.onAddedSpeciesSelected(index, it) },
             onOtherTextChanged = { actions.onAddedOtherSpeciesChanged(index, it) },
-            selectedStage = finding.answers.stage,
-            onStageSelected = { actions.onAddedStageSelected(index, it) },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.addedSpeciesDropdown(index))
@@ -256,8 +203,9 @@ private fun AddedFindingCard(
  * What submitting would actually write, recomputed as the medtech answers.
  *
  * This is the annotator's feedback loop: the clinical record forming in front of them, per
- * species and stage, which is the unit the count is interpreted in. Read-only — the numbers
- * come from the box answers and the typed counts above it.
+ * species, which is the unit the count is interpreted in — WHO intensity thresholds differ
+ * between species by more than an order of magnitude, so a combined total is uninterpretable.
+ * Read-only — the numbers come from the box answers and the typed counts above it.
  */
 @Composable
 internal fun FindingsSummary(
@@ -286,7 +234,7 @@ internal fun FindingsSummary(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = row.stage?.let { "${row.species} · ${it.displayName}" } ?: row.species,
+                        text = row.species,
                         color = AgarthaTheme.colors.textPrimary,
                         fontSize = 13.sp,
                     )

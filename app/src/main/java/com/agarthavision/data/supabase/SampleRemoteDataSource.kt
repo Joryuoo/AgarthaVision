@@ -4,7 +4,6 @@ import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.model.DetectionVerdict
-import com.agarthavision.domain.model.EggStage
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
@@ -116,7 +115,6 @@ class SampleRemoteDataSource @Inject constructor(
             bboxH = bboxH,
             verdict = resolvedVerdict.remoteValue,
             expertClass = expertClass,
-            stage = stage?.let { EggStage.fromValue(it)?.remoteValue },
             speciesTouched = speciesTouched,
         )
     }
@@ -174,8 +172,6 @@ class SampleRemoteDataSource @Inject constructor(
         val verdict: String,
         @SerialName("expert_class")
         val expertClass: String?,
-        @SerialName("stage")
-        val stage: String?,
         @SerialName("species_touched")
         val speciesTouched: Boolean,
     )
@@ -188,7 +184,8 @@ class SampleRemoteDataSource @Inject constructor(
         val sampleId: String,
         @SerialName("species")
         val species: String,
-        // Null when the species defines no stage set.
+        // Always null. The column is in the applied migration and cannot be dropped (C6),
+        // but nothing writes a stage since 86d4a6jwy was reverted.
         @SerialName("stage")
         val stage: String?,
         @SerialName("egg_count")

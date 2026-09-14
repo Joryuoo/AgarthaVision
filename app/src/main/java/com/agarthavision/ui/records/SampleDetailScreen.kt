@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Tab
@@ -85,9 +84,7 @@ fun SampleDetailScreen(
 
     Box(modifier = Modifier.fillMaxSize().background(AgarthaTheme.colors.surfaceVariant)) {
         if (item == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AgarthaTheme.colors.accent)
-            }
+            SampleDetailSkeleton(onBack = onBack)
         } else {
             Column(
                 modifier = Modifier
@@ -107,10 +104,8 @@ fun SampleDetailScreen(
                     else -> MetadataTab(sample = item.sample)
                 }
             }
-        }
 
-        // Top Navigation Bar
-        if (item != null) {
+            // Top Navigation Bar
             SampleDetailNavBar(
                 title = "Sample #${item.sample.id.take(4)}",
                 onBack = onBack
@@ -421,14 +416,6 @@ private fun DetectionCard(index: Int, detection: Detection) {
                 valueColor = if (isVerified) AgarthaTheme.colors.success else AgarthaTheme.colors.danger,
                 isLast = false,
             )
-
-            detection.stage?.let { stage ->
-                DetailRow(
-                    label = "Stage",
-                    value = stage.displayName,
-                    isLast = false,
-                )
-            }
 
             val bboxStr = if (detection.bboxX != null) {
                 String.format(

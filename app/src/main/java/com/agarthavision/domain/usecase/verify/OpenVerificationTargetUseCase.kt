@@ -9,7 +9,6 @@ import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.google.gson.Gson
@@ -66,11 +65,10 @@ class OpenVerificationTargetUseCase @Inject constructor(
         // what the boxes already account for from the stored per-species totals.
         val boxedCounts = boxFindings
             .filter { it.eggContribution > 0 }
-            .groupingBy { it.answers.speciesLabel to it.answers.stage }
+            .groupingBy { it.answers.speciesLabel }
             .eachCount()
         val addedFindings = findingDao.getFindingsForSample(sampleId).mapNotNull { row ->
-            val stage = row.stage?.let(EggStage::fromValue)
-            val remainder = row.eggCount - (boxedCounts[row.species to stage] ?: 0)
+            val remainder = row.eggCount - (boxedCounts[row.species] ?: 0)
             if (remainder <= 0) return@mapNotNull null
             Finding(
                 prediction = null,
@@ -79,7 +77,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     otherSpeciesText = row.species.takeIf {
                         EggSpecies.fromClassLabel(it) == null
                     }.orEmpty(),
-                    stage = stage,
                     eggCount = remainder,
                     speciesTouched = true,
                 ),
@@ -114,7 +111,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 isBoxCorrect = false,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
-                stage = stage?.let(EggStage::fromValue),
                 speciesTouched = speciesTouched,
             )
             else -> VerificationAnswers(
@@ -122,7 +118,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 isBoxCorrect = true,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
-                stage = stage?.let(EggStage::fromValue),
                 speciesTouched = speciesTouched,
             )
         }

@@ -2,7 +2,6 @@ package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.EggStage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,31 +45,13 @@ class FindingTest {
                 isEgg = true,
                 isBoxCorrect = false,
                 species = EggSpecies.ASCARIS,
-                stage = EggStage.UNFERTILIZED,
             ),
         )
         assertTrue(boxWrongWithSpecies.isComplete)
     }
 
     @Test
-    fun `a stage is optional and never blocks submit`() {
-        // Offered wherever the species defines one, persisted when given, but not a gate -
-        // the rule 86d4a6jwy set when the dropdown was introduced. The reading that matters
-        // for surveillance is the infectivity level, tracked separately (86d3fzd28).
-        val noStage = VerificationAnswers(
-            isEgg = true,
-            isBoxCorrect = true,
-            species = EggSpecies.TRICHURIS,
-        )
-        assertTrue(Finding(prediction(), noStage).isComplete)
-        assertTrue(
-            Finding(prediction(), noStage.copy(stage = EggStage.EMBRYONATED)).isComplete,
-        )
-    }
-
-    @Test
     fun `OTHER needs its free text`() {
-        // EggStage.validFor(OTHER) is empty, so there is no stage question to answer.
         val blank = VerificationAnswers(
             isEgg = true,
             isBoxCorrect = true,
@@ -100,7 +81,6 @@ class FindingTest {
                 isEgg = true,
                 isBoxCorrect = true,
                 species = EggSpecies.ASCARIS,
-                stage = EggStage.UNFERTILIZED,
                 // A typed count on a box row is ignored - the box is one egg.
                 eggCount = 99,
             ),
@@ -112,12 +92,11 @@ class FindingTest {
     // ── grouping ────────────────────────────────────────────────────────────
 
     @Test
-    fun `boxes and added rows of the same species and stage sum into one row`() {
+    fun `boxes and added rows of the same species sum into one row`() {
         val ascaris = VerificationAnswers(
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
-            stage = EggStage.UNFERTILIZED,
         )
         val findings = listOf(
             Finding(prediction(), ascaris),
@@ -130,25 +109,28 @@ class FindingTest {
 
         assertEquals(1, rows.size)
         assertEquals("Ascaris lumbricoides", rows[0].species)
-        assertEquals(EggStage.UNFERTILIZED, rows[0].stage)
         assertEquals(5, rows[0].eggCount)
     }
 
     @Test
-    fun `the same species at different stages stays two rows`() {
-        // The whole point of the table: a stage is part of the key, not a detail.
+    fun `the row key is the species alone`() {
+        // This used to assert the opposite - two rows, split by developmental stage. 86d4a6jwy
+        // was reverted on staging (9dcfd5d) and the stage went with it, so two boxes of the
+        // same species are now one row of two eggs. `sample_species_findings.stage` survives
+        // as a dormant column (C6: 0012 is applied), and if the ticket returns this test and
+        // the id derivation in VerificationMapper have to move together.
         val hookworm = VerificationAnswers(
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.HOOKWORM,
         )
         val rows = listOf(
-            Finding(prediction("Hookworm"), hookworm.copy(stage = EggStage.UNEMBRYONATED)),
-            Finding(prediction("Hookworm"), hookworm.copy(stage = EggStage.LARVATED)),
+            Finding(prediction("Hookworm"), hookworm),
+            Finding(prediction("Hookworm"), hookworm),
         ).toFindingRows()
 
-        assertEquals(2, rows.size)
-        assertEquals(setOf(EggStage.UNEMBRYONATED, EggStage.LARVATED), rows.map { it.stage }.toSet())
+        assertEquals(1, rows.size)
+        assertEquals(2, rows[0].eggCount)
     }
 
     @Test
@@ -160,7 +142,6 @@ class FindingTest {
                     isEgg = true,
                     isBoxCorrect = true,
                     species = EggSpecies.ASCARIS,
-                    stage = EggStage.UNFERTILIZED,
                 ),
             ),
             Finding(
@@ -169,7 +150,6 @@ class FindingTest {
                     isEgg = true,
                     isBoxCorrect = true,
                     species = EggSpecies.HOOKWORM,
-                    stage = EggStage.LARVATED,
                 ),
             ),
         ).toFindingRows()

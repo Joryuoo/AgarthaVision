@@ -37,7 +37,17 @@ as working.
 - **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:79-89`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
-  `data/local/entity/SessionEntity.kt:46-52`.
+  `data/local/entity/SessionEntity.kt:58-64`.
+- **Patient barangay, required at session start.** A PSGC-coded barangay is the unit the
+  surveillance map aggregates on; the capture-time GPS fix stays audit provenance and is
+  still read by nothing. `ui/sessions/SessionsViewModel.kt:195-207`,
+  `supabase/migrations/0010_session_psgc_barangay.sql`.
+- **Offline barangay picker** over all 42,010 barangays, type-to-filter with results in a
+  lazily-rendered list. The PSGC dataset ships in the APK (342 KB gzipped) and is Room-seeded
+  on first run, so it works with the radio off — there is no network path on this route.
+  `ui/components/SearchableDropdown.kt`, `data/local/psgc/PsgcSeeder.kt`,
+  `domain/usecase/sessions/SearchBarangaysUseCase.kt`. Vintage pin and privacy rule:
+  `docs/map/objects/PsgcBarangay.md`.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
@@ -80,10 +90,11 @@ as working.
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
-- **Optional stage dropdown** — once a species with a defined stage set is picked, a second
-  searchable dropdown offers that species' valid egg/parasite stages; stored on
-  `detections.stage` (`domain/model/EggStage.kt`, `ui/verify/SpeciesDropdown.kt`,
-  `data/local/entity/DetectionEntity.kt`).
+- **No developmental-stage question.** 86d4a6jwy added one; staging reverted it (`9dcfd5d`)
+  because the four stages it shipped were never checked against literature — Ascaris could only
+  be tagged `UNFERTILIZED`, the one stage that is never infective — and the ticket is
+  deprioritised. `sample_species_findings.stage` survives as a dormant, always-null column
+  because `0012` is applied and frozen (C6).
 
 ### Sync
 - **Verify-time sync**: resize the JPEG to 640×640 at quality 80, upload to Storage, insert
@@ -98,6 +109,16 @@ as working.
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
   `domain/usecase/records/GetRecordsUseCase.kt`).
 - **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:63-79`).
+- **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
+  an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
+  `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against
+  WHO Kato-Katz per-species EPG cutoffs — population-surveillance cutoffs, **pending clinical
+  sign-off (Dr. Bayron)**, not yet a validated diagnostic threshold. `EggSpecies.OTHER`/
+  unrecognized species are excluded from the tier (no WHO table exists for them); zero confirmed
+  eggs shows no badge at all (a true negative, not "Low"). The mandatory disclaimer
+  (`session_detail_infectivity_disclaimer`) renders alongside every tier, never just Extreme.
+  UI: `ui/records/InfectivityBadge.kt`, wired into `EpgHeroCard`
+  (`ui/records/SessionDetailScreen.kt`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
@@ -136,7 +157,8 @@ as working.
   (`ui/settings/SettingsViewModel.kt:59-136`).
 
 ### Backend and inference service
-- Eight applied Postgres migrations, `0001`–`0008`, with owner-scoped RLS throughout.
+- Eleven numbered Postgres migrations, `0001`–`0011`, with owner-scoped RLS throughout.
+  `0010_session_psgc_barangay.sql` is the one not yet applied — see its header on apply order.
 - FastAPI container with `GET /health` and `POST /infer`, bearer-token auth, weights baked in
   (`inference/server.py:29`, `:34`, `inference/Dockerfile`).
 
@@ -144,11 +166,11 @@ as working.
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:397-421`, `schema.ts:538-553` | **Not implemented.** No migration through `0008` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
+| `validation_records` table | `schema.ts:463-487`, `schema.ts:605-622` | **Not implemented.** No migration through `0011` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
 | WorkManager sync queue | `app/build.gradle.kts:164` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
 | `administrative` report type | `supabase/migrations/0008_reports.sql:9` | Reserved in a comment; the CHECK allows only `session` (`0008_reports.sql:17`) |
-| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:210-212`) |
-| `reports.supabase_status` in Postgres | `schema.ts:382-383` | Room-only column |
+| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:270-272`) |
+| `reports.supabase_status` in Postgres | `schema.ts:448-449` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | The `admin` role and `is_admin()` exist in SQL (`0001_init.sql:13`, `0004_fix_profiles_rls_recursion.sql:4-16`); no admin UI exists in the app |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path. Superseded by the self-hosted container; the response shape is kept compatible only |
 | In-app bounding-box editing | Verification design | Deferred to offline annotation tooling. `BOX_INCORRECT` records the problem; nothing fixes the box in-app |

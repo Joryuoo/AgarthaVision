@@ -53,19 +53,26 @@ internal object VerifyTestTags {
      */
     const val QUESTION_Q1 = "q1"
     const val QUESTION_Q2 = "q2"
+
+    /** "Is this egg <suggested species>?" — shown only when the model's class is a known species. */
+    const val QUESTION_Q3 = "q3"
     const val QUESTION_Q4 = "q4"
 
-    /** Species picker, shown only once Q1 and Q2 are both answered yes. */
+    /**
+     * Species picker, shown once Q1 and Q2 are both yes and either the medtech said the
+     * suggested species is wrong or the model's class is not a known species.
+     */
     const val SPECIES_DROPDOWN = "species_dropdown"
 
-    /**
-     * Stage picker, shown only once a species with a non-empty
-     * [com.agarthavision.domain.model.EggStage.validFor] set is selected.
-     */
-    const val STAGE_DROPDOWN = "stage_dropdown"
 
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
+
+    /** Card naming the species under review, with the provenance pill inside it. */
+    const val DETECTION_CARD = "detection_card"
+
+    /** Caution line under the card, present only for model frames. */
+    const val AI_SUGGESTION_NOTE = "ai_suggestion_note"
 
     /** AI-suggested vs Manual provenance pill. */
     const val SOURCE_BADGE = "source_badge"

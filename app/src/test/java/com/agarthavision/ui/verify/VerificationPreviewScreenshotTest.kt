@@ -59,9 +59,11 @@ class VerificationPreviewScreenshotTest {
     /**
      * A square frame with distinctly coloured bands top and bottom.
      *
-     * Square on purpose: the preview container is a landscape 200dp strip, so `Fit`
-     * letterboxes this and keeps both bands visible while `Crop` fills the width and clips
-     * them away. If the bands survive, the frame is whole.
+     * Square on purpose, matching the 640x640 frames the capture pipeline emits. The preview
+     * now lays itself out at the frame's own aspect ratio (`previewAspectRatio()`), so the
+     * golden also pins that the container is square rather than a fixed-height strip that
+     * would letterbox or crop the frame. If both bands survive edge to edge, the frame is
+     * whole.
      */
     private fun squareFrameJpeg(): ByteArray {
         val size = 640
@@ -91,9 +93,9 @@ class VerificationPreviewScreenshotTest {
     private fun noopActions() = VerificationSheetActions(
         onQ1Selected = {},
         onQ2Selected = {},
+        onSpeciesConfirmed = {},
         onSpeciesSelected = {},
         onOtherSpeciesChanged = {},
-        onStageSelected = {},
         onQ4Selected = {},
         onDetectionPrev = {},
         onDetectionNext = {},
@@ -109,7 +111,6 @@ class VerificationPreviewScreenshotTest {
         onEggCountChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },
-        onAddedStageSelected = { _, _ -> },
     )
 
     @Test

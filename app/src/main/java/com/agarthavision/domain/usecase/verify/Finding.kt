@@ -1,7 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.domain.inference.Prediction
-import com.agarthavision.domain.model.EggStage
 
 /**
  * One thing the medtech is asserting about the frame in front of them.
@@ -44,7 +43,7 @@ data class Finding(
         }
 
     /**
-     * Eggs this finding contributes to its (species, stage) count.
+     * Eggs this finding contributes to its species count.
      *
      * A prediction-backed row is worth exactly one egg and the medtech cannot edit that — the
      * number of boxes they said "yes" to *is* the count. Only an added row carries a typed
@@ -59,21 +58,25 @@ data class Finding(
 }
 
 /**
- * One `(species, stage)` pair and its egg count for this field — the shape that reaches
+ * One species and its egg count for this field — the shape that reaches
  * `sample_species_findings`.
+ *
+ * The table also has a `stage` column, always null here. 86d4a6jwy shipped a developmental
+ * stage dropdown, staging reverted it (`9dcfd5d`) because its four values were never checked
+ * against literature, and the migration that carries the column is already applied and frozen
+ * under C6. The column stays, dormant, for the ticket's return.
  */
 data class FindingRow(
     val species: String,
-    val stage: EggStage?,
     val eggCount: Int,
 )
 
 /**
  * Collapses a frame's findings into the rows that get persisted.
  *
- * Several findings can land on the same `(species, stage)` — five confirmed Ascaris boxes plus
- * a typed count for Ascaris the model missed — and they add up into one row, because the table
- * holds one row per pair per frame, not one per assertion.
+ * Several findings can land on the same species — five confirmed Ascaris boxes plus a typed
+ * count for Ascaris the model missed — and they add up into one row, because the table holds
+ * one row per species per frame, not one per assertion.
  *
  * Rows contributing zero eggs drop out, which is how a rejected box (`isEgg = false`) leaves no
  * trace in the count while still persisting as a labelled `FALSE_POSITIVE` detection.
@@ -81,10 +84,8 @@ data class FindingRow(
 fun List<Finding>.toFindingRows(): List<FindingRow> =
     filter { it.eggContribution > 0 }
         .mapNotNull { finding ->
-            finding.answers.speciesLabel?.let { label ->
-                Triple(label, finding.answers.stage, finding.eggContribution)
-            }
+            finding.answers.speciesLabel?.let { label -> label to finding.eggContribution }
         }
-        .groupBy { (label, stage, _) -> label to stage }
-        .map { (key, group) -> FindingRow(key.first, key.second, group.sumOf { it.third }) }
-        .sortedWith(compareBy({ it.species }, { it.stage?.value ?: "" }))
+        .groupBy { (label, _) -> label }
+        .map { (label, group) -> FindingRow(label, group.sumOf { it.second }) }
+        .sortedBy { it.species }

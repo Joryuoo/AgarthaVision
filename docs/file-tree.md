@@ -14,6 +14,7 @@ AgarthaVision/
 ├── supabase/migrations/       Postgres schema + RLS. The authority for the remote shape
 ├── inference/                 The self-hosted FastAPI inference container
 ├── branding/                  Logo SVGs
+├── tools/psgc/                Generator for the bundled PSGC asset. Run by hand, output committed
 ├── gradle/                    Wrapper + version catalog
 └── .husky/                    Git hooks — the only mechanical rule enforcement in the repo
 ```
@@ -27,6 +28,7 @@ app/
 └── src/
     ├── main/
     │   ├── AndroidManifest.xml    Permissions, single Activity, FileProvider for CSV sharing
+    │   ├── assets/psgc/           Bundled PSGC barangay dataset, gzipped. Room-seeded on first run
     │   ├── res/                   Icons (hand-built stroke drawables), strings, themes
     │   └── java/com/agarthavision/
     │       ├── MainActivity.kt · MainViewModel.kt · AgarthaVisionApp.kt
@@ -108,7 +110,7 @@ Numbered, committed, applied by hand in the Supabase dashboard. Never run progra
 | `0007_detection_bbox_nullable.sql` | Nullable bounding boxes for manual captures |
 | `0008_reports.sql` | The `reports` table, its indexes, and its RLS |
 | `0009_storage_admin_read.sql` | Admin read access to the `samples` bucket. Read-only by design — still no DELETE policy |
-| `0010_verification_stage.sql` | `detections.stage` for optional egg/parasite stage classification |
+| `0010_session_psgc_barangay.sql` | `sessions.psgc_barangay_code` and the `psgc_barangays` reference table |
 | `0011_reports_pdf_and_lpf.sql` | `reports.pdf_file_path` |
 | `0012_polyparasitism_findings.sql` | `sample_species_findings`, `detections.species_touched`, and the UPDATE policies an editable sample needs to re-sync |
 | `0013_sample_soft_delete.sql` | `samples.deleted_at` and the partial index over live rows |

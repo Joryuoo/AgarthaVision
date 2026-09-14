@@ -8,7 +8,7 @@ import androidx.room.Transaction
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 
 /**
- * Reads and writes the per-species, per-stage egg counts a medtech logged on one frame.
+ * Reads and writes the per-species egg counts a medtech logged on one frame.
  *
  * There is deliberately no session-level aggregate query here. Rolling findings up into a
  * session figure is an average across the fields examined, not a sum — a density that gets
@@ -23,7 +23,7 @@ interface SampleSpeciesFindingDao {
 
     @Query(
         "SELECT * FROM sample_species_findings WHERE sample_id = :sampleId " +
-            "ORDER BY species ASC, stage ASC",
+            "ORDER BY species ASC",
     )
     suspend fun getFindingsForSample(sampleId: String): List<SampleSpeciesFindingEntity>
 

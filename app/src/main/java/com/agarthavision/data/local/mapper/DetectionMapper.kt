@@ -3,7 +3,6 @@ package com.agarthavision.data.local.mapper
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
-import com.agarthavision.domain.model.EggStage
 
 fun DetectionEntity.toDomain(): Detection =
     Detection(
@@ -18,7 +17,6 @@ fun DetectionEntity.toDomain(): Detection =
         verdict = DetectionVerdict.fromValue(verdict),
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
-        stage = stage?.let { EggStage.fromValue(it) },
         speciesTouched = speciesTouched,
     )
 
@@ -35,6 +33,5 @@ fun Detection.toEntity(): DetectionEntity =
         verdict = verdict.value,
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
-        stage = stage?.value,
         speciesTouched = speciesTouched,
     )
