@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Bone (#FAFAF7) — used only for the adaptive launcher icon background.
-         All other colour values live in ui/theme/Color.kt. -->
+    <!-- Bone (#FAFAF7) — used only for the adaptive launcher icon background and
+         the launch splash window. All other colour values live in ui/theme/Color.kt. -->
     <color name="ic_launcher_background">#FAFAF7</color>
+    <color name="splash_background">#FAFAF7</color>
 </resources>

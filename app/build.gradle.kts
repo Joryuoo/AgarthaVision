@@ -122,6 +122,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     // Core
     implementation(libs.core.ktx)
+    implementation(libs.core.splashscreen)
     implementation(libs.exifinterface)
 
     // Activity

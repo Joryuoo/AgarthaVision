@@ -25,7 +25,7 @@
             android:exported="true"
             android:label="@string/app_name"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AgarthaVision">
+            android:theme="@style/Theme.AgarthaVision.Starting">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
