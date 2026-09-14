@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -49,6 +50,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
@@ -57,12 +59,17 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
@@ -125,6 +132,71 @@ private fun PulsingDot() {
 
 /** Fill of the capture chrome's glass buttons: near-black at 55%, mode-independent like the feed. */
 private val GlassFill = Color(28, 20, 18, (0.55f * 255).toInt())
+
+private val ShutterSize = 100.dp
+private val ShutterArcStroke = 3.dp
+private const val SHUTTER_BUSY_ALPHA = 0.6f
+private const val SHUTTER_ARC_SWEEP_DEGREES = 100f
+private const val SHUTTER_ARC_ROTATION_MS = 1_100
+private const val FULL_TURN_DEGREES = 360f
+
+/**
+ * The 100dp shutter. While a capture is in flight it shows that in its own bounds - dimmed,
+ * with an indeterminate arc travelling its circumference - instead of the app floating a
+ * spinner over the live field. The medtech keeps seeing the smear for the whole round
+ * trip, which on a slow link can be the full inference timeout.
+ */
+@Composable
+internal fun Shutter(
+    isBusy: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val description = stringResource(
+        if (isBusy) R.string.capture_shutter_busy_desc else R.string.capture_shutter_desc,
+    )
+    val arcStart = if (isBusy) {
+        rememberInfiniteTransition(label = "shutterArc").animateFloat(
+            initialValue = 0f,
+            targetValue = FULL_TURN_DEGREES,
+            animationSpec = infiniteRepeatable(
+                animation = tween(SHUTTER_ARC_ROTATION_MS, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "shutterArcStart",
+        ).value
+    } else {
+        0f
+    }
+    Box(
+        modifier = Modifier
+            .size(ShutterSize)
+            .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
+            // alpha only dims what follows it in the chain: keep it ahead of the fill and arc.
+            .alpha(if (isBusy) SHUTTER_BUSY_ALPHA else 1f)
+            .background(Color.White, CircleShape)
+            .drawBehind {
+                // Maroon reads on the white disc even dimmed; a white arc would vanish into it.
+                if (isBusy) {
+                    val stroke = ShutterArcStroke.toPx()
+                    drawArc(
+                        color = AppColors.Maroon,
+                        startAngle = arcStart,
+                        sweepAngle = SHUTTER_ARC_SWEEP_DEGREES,
+                        useCenter = false,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
+            }
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
+            .clickable(enabled = enabled, onClick = onClick),
+    )
+}
 
 /** The 40dp translucent circle shared by every glass button on the capture chrome. */
 private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifier = this
@@ -341,11 +413,6 @@ fun CaptureScreen(
             )
         }
 
-        // Busy overlay (keeps the old 77b5 layout, but prevents duplicate taps)
-        if (state.isBusy) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        }
-
         // Top chrome (77b5 style) - action shortcuts removed (records/reports are reachable outside capture)
         Row(
             modifier = Modifier
@@ -442,14 +509,10 @@ fun CaptureScreen(
             }
 
             // Center: shutter
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
-                    .background(Color.White, CircleShape)
-                    .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                        viewModel.onCapture()
-                    },
+            Shutter(
+                isBusy = state.isBusy,
+                enabled = state.activeSessionId != null && !state.isBusy,
+                onClick = viewModel::onCapture,
             )
 
             // Right: end session
