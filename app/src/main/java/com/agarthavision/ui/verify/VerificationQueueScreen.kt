@@ -117,10 +117,12 @@ fun VerificationQueueScreen(
             // App Bar. Swaps to a contextual bar while a selection is live, so the delete
             // affordance is only ever reachable with something selected.
             Row(
+                // Matches ScreenTopBar (the verification sheet's header) so the back arrow and
+                // title hold their position as you move queue -> sheet -> record.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 2.dp, bottom = 12.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (state.isSelecting) {

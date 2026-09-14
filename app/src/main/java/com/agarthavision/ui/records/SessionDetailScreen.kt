@@ -272,7 +272,7 @@ private fun SessionDetailSkeleton(onBack: () -> Unit) {
                     .fillMaxWidth()
                     .background(colors.background)
                     .statusBarsPadding()
-                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 BackArrow(
                     onBack = onBack,
@@ -281,7 +281,7 @@ private fun SessionDetailSkeleton(onBack: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = Spacing.xs),
+                        .padding(start = Spacing.sm),
                 ) {
                     SkeletonBox(modifier = Modifier.width(160.dp).height(22.dp))
                     Spacer(Modifier.height(4.dp))
@@ -346,7 +346,7 @@ private fun SessionDetailAppBar(
             onBack = onBack,
             contentDescription = stringResource(R.string.session_detail_back),
         )
-        Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary)
             Text(
                 subtitle,
