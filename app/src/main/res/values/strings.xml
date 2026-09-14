@@ -305,4 +305,13 @@
     <string name="verify_queue_view_records">View session records</string>
     <!-- Verify entry point from Session Detail (86d4ayefd) -->
     <string name="session_detail_open_verify">Verify flagged frames</string>
+    <!-- Session/sample unavailable states (86d4b5uz7) -->
+    <string name="session_detail_not_found_title">Session not found</string>
+    <string name="session_detail_not_found_body">This session isn\'t on this device.</string>
+    <string name="session_detail_not_visible_title">Not your session</string>
+    <string name="session_detail_not_visible_body">This session belongs to a different account.</string>
+    <string name="sample_detail_not_found_title">Sample not found</string>
+    <string name="sample_detail_not_found_body">This sample isn\'t on this device.</string>
+    <string name="sample_detail_not_visible_title">Not your sample</string>
+    <string name="sample_detail_not_visible_body">This sample belongs to a different account.</string>
 </resources>

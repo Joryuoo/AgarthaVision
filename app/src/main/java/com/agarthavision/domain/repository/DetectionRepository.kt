@@ -10,9 +10,9 @@ interface DetectionRepository {
 
     /**
      * Returns per-species confirmed egg counts for one session, excluding repeat
-     * samples.
+     * samples. null userId = counts for all ownership rows on the device.
      */
-    suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount>
+    suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount>
 
     /**
      * Observes confirmed egg counts aggregated by species over a specific time window.

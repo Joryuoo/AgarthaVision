@@ -32,12 +32,12 @@ class SampleRepositoryImpl @Inject constructor(
     override suspend fun getSampleById(sampleId: String): Sample? =
         sampleDao.getSampleById(sampleId)?.toDomain()
 
-    override fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
+    override fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
         sampleDao.observeSamplesForSession(sessionId, userId).map { entities ->
             entities.map { it.toDomain() }
         }
 
-    override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
+    override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
         sampleDao.getSamplesForSession(sessionId, userId).map { it.toDomain() }
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> =
@@ -45,7 +45,7 @@ class SampleRepositoryImpl @Inject constructor(
 
     override fun observeFlaggedSamplesForSession(
         sessionId: String,
-        userId: String,
+        userId: String?,
     ): Flow<List<Sample>> =
         sampleDao.observeFlaggedSamplesForSession(sessionId, userId).map { entities ->
             entities.map { it.toDomain() }

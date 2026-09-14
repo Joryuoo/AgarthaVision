@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod")
+@file:Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod", "ReturnCount")
 
 package com.agarthavision.ui.records
 
@@ -29,6 +29,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FactCheck
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +66,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -154,6 +157,15 @@ fun SessionDetailScreen(
         }
     }
 
+    if (!state.sessionResolved) {
+        SessionDetailSkeleton(onBack = onBack)
+        return
+    }
+    val unavailable = state.unavailable
+    if (unavailable != null) {
+        SessionDetailUnavailableScreen(unavailable = unavailable, onBack = onBack)
+        return
+    }
     if (sessionDetail == null) {
         SessionDetailSkeleton(onBack = onBack)
         return
@@ -246,6 +258,53 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         samplesTotal = sessionData.samples.size,
         verifiedSamples = samples,
     )
+}
+
+@Composable
+private fun SessionDetailUnavailableScreen(
+    unavailable: SessionUnavailable,
+    onBack: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Scaffold(
+        topBar = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.background)
+                    .statusBarsPadding()
+                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+            ) {
+                BackArrow(
+                    onBack = onBack,
+                    contentDescription = stringResource(R.string.session_detail_back),
+                )
+            }
+        },
+        containerColor = colors.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { inner ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (unavailable) {
+                SessionUnavailable.NOT_FOUND -> EmptyState(
+                    icon = Icons.Outlined.SearchOff,
+                    title = stringResource(R.string.session_detail_not_found_title),
+                    body = stringResource(R.string.session_detail_not_found_body),
+                )
+                SessionUnavailable.NOT_VISIBLE -> EmptyState(
+                    icon = Icons.Outlined.Lock,
+                    title = stringResource(R.string.session_detail_not_visible_title),
+                    body = stringResource(R.string.session_detail_not_visible_body),
+                )
+            }
+        }
+    }
 }
 
 @Composable

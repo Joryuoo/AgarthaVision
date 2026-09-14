@@ -19,7 +19,7 @@ import org.junit.Test
 class ObserveSessionPendingCountUseCaseTest {
 
     @Test
-    fun `emits 0 when no user is authenticated`() = runTest {
+    fun `emits 0 when no flagged samples exist for null user identity`() = runTest {
         val useCase = ObserveSessionPendingCountUseCase(
             authRepository = FakeCountAuthRepository(userId = null),
             sampleRepository = FakeCountSampleRepository(),
@@ -56,6 +56,31 @@ class ObserveSessionPendingCountUseCaseTest {
         val count = useCase("session-1").first()
 
         assertEquals(0, count)
+    }
+
+    /**
+     * Signed-out device has unowned flagged samples waiting for review.
+     * Before the fix, the use case bailed on null userId and emitted 0. After the fix it passes
+     * null through to the repository which applies the tolerant predicate and returns all unowned
+     * rows.
+     */
+    @Test
+    fun `signed-out with unowned flagged samples emits their count`() = runTest {
+        val useCase = ObserveSessionPendingCountUseCase(
+            authRepository = FakeCountAuthRepository(userId = null),
+            sampleRepository = FakeCountSampleRepository(
+                flagged = MutableStateFlow(
+                    listOf(
+                        pendingUnownedSample("u1"),
+                        pendingUnownedSample("u2"),
+                    ),
+                ),
+            ),
+        )
+
+        val count = useCase("session-1").first()
+
+        assertEquals(2, count)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -105,20 +130,35 @@ private class FakeCountSampleRepository(
     override suspend fun getSampleById(sampleId: String): Sample? = null
     override fun observeSamplesForSession(
         sessionId: String,
-        userId: String,
+        userId: String?,
     ): Flow<List<Sample>> = flowOf(emptyList())
-    override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
+    override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
         emptyList()
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
     override fun observeFlaggedSamplesForSession(
         sessionId: String,
-        userId: String,
+        userId: String?,
     ): Flow<List<Sample>> = flagged
 }
 
 private fun pendingSample(id: String): Sample = Sample(
     id = id,
     userId = "user-1",
+    timestamp = 1_000L,
+    verifiedAt = 1_000L,
+    deviceId = "device-1",
+    sessionId = "session-1",
+    filePath = "/tmp/$id.jpg",
+    storagePath = null,
+    latitude = 10.0,
+    longitude = 20.0,
+    accuracyMeters = 5f,
+    status = SampleStatus.FLAGGED,
+)
+
+private fun pendingUnownedSample(id: String): Sample = Sample(
+    id = id,
+    userId = null,   // captured before any sign-in
     timestamp = 1_000L,
     verifiedAt = 1_000L,
     deviceId = "device-1",

@@ -28,8 +28,19 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE session_id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: String): SessionEntity?
 
-    @Query("SELECT * FROM sessions WHERE user_id = :userId ORDER BY started_at DESC")
-    fun observeAllSessions(userId: String): Flow<List<SessionEntity>>
+    /**
+     * Observes sessions visible to the caller: their own rows plus unowned rows recorded while
+     * signed out. A null owner (signed out) sees only the unowned rows - never another
+     * medtech's data left on a shared phone.
+     */
+    @Query(
+        """
+        SELECT * FROM sessions
+        WHERE (user_id = :userId OR user_id IS NULL)
+        ORDER BY started_at DESC
+        """,
+    )
+    fun observeAllSessions(userId: String?): Flow<List<SessionEntity>>
 
     @Query("UPDATE sessions SET label = :label WHERE session_id = :sessionId")
     suspend fun updateSessionLabel(sessionId: String, label: String)

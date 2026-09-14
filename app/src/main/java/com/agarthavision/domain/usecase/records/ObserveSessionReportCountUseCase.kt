@@ -18,7 +18,7 @@ class ObserveSessionReportCountUseCase @Inject constructor(
     private val reportRepository: ReportRepository,
 ) {
     operator fun invoke(sessionId: String): Flow<Int> = flow {
-        val userId = authRepository.getCurrentUserId()
+        val userId = authRepository.currentLocalUserId()
         if (userId == null) {
             emitAll(flowOf(0))
             return@flow

@@ -49,7 +49,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
         ORDER BY timestamp DESC
         """,
@@ -60,7 +60,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
         ORDER BY timestamp DESC
         """,
@@ -71,7 +71,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
         ORDER BY timestamp DESC
         """,
@@ -82,7 +82,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
         ORDER BY timestamp DESC
         """,
@@ -99,7 +99,7 @@ interface SampleDao {
         """
         DELETE FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
         """,
     )

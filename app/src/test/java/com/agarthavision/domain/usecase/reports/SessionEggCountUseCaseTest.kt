@@ -11,10 +11,12 @@ import org.mockito.kotlin.whenever
 
 class SessionEggCountUseCaseTest {
     @Test
-    fun `returns empty counts when no user session`() = runTest {
+    fun `returns empty counts when no cached local identity`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn(null)
+        whenever(authRepository.currentLocalUserId()).thenReturn(null)
+        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", null))
+            .thenReturn(emptyList())
 
         val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
         val result = useCase("session-1")
@@ -28,7 +30,7 @@ class SessionEggCountUseCaseTest {
     fun `computes total eggs and epg from confirmed counts`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             listOf(EggCount("Ascaris", 2), EggCount("Trichuris", 1)),
         )

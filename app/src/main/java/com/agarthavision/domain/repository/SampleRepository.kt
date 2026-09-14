@@ -28,14 +28,16 @@ interface SampleRepository {
     suspend fun getSampleById(sampleId: String): Sample?
 
     /**
-     * Observes samples in one session for the given user, newest first.
+     * Observes samples in one session, newest first.
+     * null userId = own rows plus unowned rows; concrete userId = same scope.
      */
-    fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>>
+    fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
 
     /**
-     * Loads samples in one session for the given user, newest first.
+     * Loads samples in one session, newest first.
+     * null userId = own rows plus unowned rows; concrete userId = same scope.
      */
-    suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample>
+    suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample>
 
     /**
      * Returns samples that haven't been successfully synced to Supabase for the given user.
@@ -43,8 +45,8 @@ interface SampleRepository {
     suspend fun getSamplesPendingSync(userId: String): List<Sample>
 
     /**
-     * Observes flagged (pending-verification) samples in one session for the given user,
-     * newest first. Used to derive a pending-count for the Session Detail entry point.
+     * Observes flagged (pending-verification) samples in one session, newest first.
+     * null userId = all flagged rows on the device; concrete userId = own plus unowned rows.
      */
-    fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>>
+    fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
 }

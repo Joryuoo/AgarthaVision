@@ -5,6 +5,7 @@ import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
@@ -49,15 +50,80 @@ class GetRecordsUseCaseTest {
     }
 
     @Test
-    fun `records are empty when no user is authenticated`() = runTest {
+    fun `records returns only unowned sessions when no identity is cached`() = runTest {
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = null),
-            sessionRepository = FakeSessionRepository(listOf(session(id = "session-1", userId = "user-1"))),
+            sessionRepository = FakeSessionRepository(
+                listOf(
+                    sessionNullOwner(id = "session-1"),
+                    session(id = "session-2", userId = "user-1"),
+                ),
+            ),
             sampleRepository = FakeSampleRepository(emptyMap()),
             detectionRepository = FakeDetectionRepository(emptyMap()),
         )
 
-        assertEquals(emptyList<SessionRecordItem>(), useCase().first())
+        val records = useCase().first()
+        assertEquals(1, records.size)
+        assertEquals("session-1", records.single().session.id)
+        assertEquals(0, records.single().sampleCount)
+    }
+
+    @Test
+    fun `signed-in user-b does not see session owned by user-a`() = runTest {
+        val useCase = GetRecordsUseCase(
+            authRepository = FakeAuthRepository(userId = "user-b"),
+            sessionRepository = FakeSessionRepository(
+                listOf(
+                    session(id = "session-a", userId = "user-a"),
+                ),
+            ),
+            sampleRepository = FakeSampleRepository(emptyMap()),
+            detectionRepository = FakeDetectionRepository(emptyMap()),
+        )
+
+        val records = useCase().first()
+        assertEquals(0, records.size)
+    }
+
+    @Test
+    fun `signed-in user-b sees an unowned session`() = runTest {
+        val useCase = GetRecordsUseCase(
+            authRepository = FakeAuthRepository(userId = "user-b"),
+            sessionRepository = FakeSessionRepository(
+                listOf(
+                    sessionNullOwner(id = "session-unowned"),
+                ),
+            ),
+            sampleRepository = FakeSampleRepository(emptyMap()),
+            detectionRepository = FakeDetectionRepository(emptyMap()),
+        )
+
+        val records = useCase().first()
+        assertEquals(1, records.size)
+        assertEquals("session-unowned", records.single().session.id)
+    }
+
+    /**
+     * Offline-signed-in: the cached local identity is "user-a" but the live token is
+     * gone (getCurrentUserId returns null). GetRecordsUseCase relies on currentLocalUserId()
+     * so the medtech must still see their own sessions while offline.
+     */
+    @Test
+    fun `offline-signed-in user still sees owned records`() = runTest {
+        val ownedSession = session(id = "session-a", userId = "user-a")
+        val ownedSample = sample(id = "sample-1", sessionId = "session-a", userId = "user-a")
+        val useCase = GetRecordsUseCase(
+            authRepository = FakeOfflineAuthRepository(localUserId = "user-a"),
+            sessionRepository = FakeSessionRepository(listOf(ownedSession)),
+            sampleRepository = FakeSampleRepository(mapOf("session-a" to listOf(ownedSample))),
+            detectionRepository = FakeDetectionRepository(emptyMap()),
+        )
+
+        val records = useCase().first()
+        assertEquals(1, records.size)
+        assertEquals("session-a", records.single().session.id)
+        assertEquals(1, records.single().sampleCount)
     }
 }
 
@@ -75,8 +141,8 @@ private class FakeAuthRepository(private val userId: String?) : AuthRepository {
 private class FakeSessionRepository(
     private val sessions: List<Session>,
 ) : SessionRepository {
-    override fun observeAllSessions(userId: String): Flow<List<Session>> =
-        flowOf(sessions.filter { it.userId == userId })
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> =
+        flowOf(sessions.filter { isVisible(it.userId, userId) })
 
     override suspend fun getSessionById(sessionId: String): Session? =
         sessions.firstOrNull { it.id == sessionId }
@@ -86,7 +152,7 @@ private class FakeSessionRepository(
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
-        flowOf(sessions.filter { it.userId == userId })
+        flowOf(sessions.filter { isVisible(it.userId, userId) })
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
 }
@@ -102,15 +168,15 @@ private class FakeSampleRepository(
     override suspend fun getSampleById(sampleId: String): Sample? =
         samplesBySession.values.flatten().firstOrNull { it.id == sampleId }
 
-    override fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
-        flowOf(samplesBySession[sessionId].orEmpty().filter { it.userId == userId })
+    override fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
+        flowOf(samplesBySession[sessionId].orEmpty().filter { isVisible(it.userId, userId) })
 
-    override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
-        samplesBySession[sessionId].orEmpty().filter { it.userId == userId }
+    override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
+        samplesBySession[sessionId].orEmpty().filter { isVisible(it.userId, userId) }
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
 
-    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
+    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
         flowOf(emptyList())
 }
 
@@ -123,7 +189,7 @@ private class FakeDetectionRepository(
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(detectionsBySample[sampleId].orEmpty())
 
-    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) = emptyList<EggCount>()
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) = emptyList<EggCount>()
 
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
@@ -132,10 +198,33 @@ private class FakeDetectionRepository(
         flowOf(emptyList())
 }
 
+/** Auth fake where the cached local identity differs from the live network identity (offline). */
+private class FakeOfflineAuthRepository(private val localUserId: String?) : AuthRepository {
+    override fun observeLocalIdentity(): Flow<LocalIdentity?> =
+        flowOf(localUserId?.let { LocalIdentity(userId = it, email = "user@example.com") })
+    override suspend fun currentLocalUserId(): String? = localUserId
+    override suspend fun isAuthenticated(): Boolean = false
+    override suspend fun signIn(email: String, password: String) = Unit
+    override suspend fun hasActiveSession(): Boolean = false
+    override suspend fun getCurrentUserId(): String? = null   // offline — no live token
+    override suspend fun signOut() = Unit
+}
+
 private fun session(id: String, userId: String): Session =
     Session(
         id = id,
         userId = userId,
+        deviceId = "device-1",
+        startedAt = 1_000L,
+        endedAt = 2_000L,
+        notes = null,
+        label = null,
+    )
+
+private fun sessionNullOwner(id: String): Session =
+    Session(
+        id = id,
+        userId = null,
         deviceId = "device-1",
         startedAt = 1_000L,
         endedAt = 2_000L,
@@ -158,6 +247,10 @@ private fun sample(id: String, sessionId: String, userId: String): Sample =
         accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
+
+/** null caller = sees everything; concrete caller = sees own rows plus unowned rows. */
+private fun isVisible(rowUserId: String?, callerId: String?) =
+    rowUserId == null || rowUserId == callerId
 
 private fun detection(sampleId: String, classLabel: String, confidence: Float): Detection =
     Detection(

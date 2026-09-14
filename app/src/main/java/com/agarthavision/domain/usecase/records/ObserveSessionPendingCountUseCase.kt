@@ -6,7 +6,6 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -21,11 +20,7 @@ class ObserveSessionPendingCountUseCase @Inject constructor(
     private val sampleRepository: SampleRepository,
 ) {
     operator fun invoke(sessionId: String): Flow<Int> = flow {
-        val userId = authRepository.getCurrentUserId()
-        if (userId == null) {
-            emitAll(flowOf(0))
-            return@flow
-        }
+        val userId = authRepository.currentLocalUserId()
         emitAll(
             sampleRepository.observeFlaggedSamplesForSession(sessionId, userId)
                 .map { it.size },

@@ -3,6 +3,7 @@ package com.agarthavision.ui.records
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.usecase.records.SessionSamples
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -56,6 +57,31 @@ class SessionDetailStateTest {
     @Test
     fun `canOpenVerifyQueue is false when session is null and pendingFlagged is zero`() {
         val state = SessionDetailState(session = null, pendingFlagged = 0)
+        assertFalse(state.canOpenVerifyQueue)
+    }
+
+    // ---------- sessionResolved / unavailable defaults ----------
+
+    @Test
+    fun `default state has sessionResolved false`() {
+        val state = SessionDetailState()
+        assertFalse(state.sessionResolved)
+    }
+
+    @Test
+    fun `default state has unavailable null`() {
+        val state = SessionDetailState()
+        assertNull(state.unavailable)
+    }
+
+    @Test
+    fun `canOpenVerifyQueue is false when sessionResolved is false`() {
+        // Simulate the loading skeleton: session not yet emitted, pendingFlagged unknown.
+        val state = SessionDetailState(
+            session = null,
+            sessionResolved = false,
+            pendingFlagged = 99,  // even a large pending count must not override unresolved
+        )
         assertFalse(state.canOpenVerifyQueue)
     }
 

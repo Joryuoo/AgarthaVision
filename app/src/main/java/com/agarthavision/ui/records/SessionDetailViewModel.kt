@@ -11,6 +11,7 @@ import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCas
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
 import com.agarthavision.domain.usecase.records.SessionSamples
+import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,10 +29,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
+ * Reason why a session cannot be displayed on this device.
+ */
+enum class SessionUnavailable { NOT_FOUND, NOT_VISIBLE }
+
+/**
  * UI state for one session's verified samples + persisted reports.
  */
 data class SessionDetailState(
     val session: SessionSamples? = null,
+    val sessionResolved: Boolean = false,
+    val unavailable: SessionUnavailable? = null,
     val eggCounts: List<EggCountSummary> = emptyList(),
     val totalEggCount: Int = 0,
     val epg: Int = 0,
@@ -115,10 +123,18 @@ class SessionDetailViewModel @Inject constructor(
             observeSessionReportCountUseCase(sessionId),
             generationState,
             currentReportPage,
-        ) { session, reports, totalReports, generation, page ->
+        ) { result, reports, totalReports, generation, page ->
             val eggCounts = sessionEggCountUseCase(sessionId)
+            val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
+            val unavail = when (result) {
+                is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
+                is SessionSamplesResult.NotVisible -> SessionUnavailable.NOT_VISIBLE
+                else -> null
+            }
             SessionDetailState(
-                session = session,
+                session = resolvedSession,
+                sessionResolved = true,
+                unavailable = unavail,
                 eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
                 totalEggCount = eggCounts.totalEggCount,
                 epg = eggCounts.epg,

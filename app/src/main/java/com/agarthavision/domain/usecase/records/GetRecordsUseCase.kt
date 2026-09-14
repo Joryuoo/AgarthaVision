@@ -50,11 +50,7 @@ class GetRecordsUseCase @Inject constructor(
     private val detectionRepository: DetectionRepository,
 ) {
     operator fun invoke(): Flow<List<SessionRecordItem>> = flow {
-        val userId = authRepository.getCurrentUserId()
-        if (userId == null) {
-            emit(emptyList())
-            return@flow
-        }
+        val userId = authRepository.currentLocalUserId()
 
         emitAll(
             sessionRepository.observeAllSessions(userId).map { sessions ->

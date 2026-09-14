@@ -128,6 +128,10 @@ class GenerateSessionReportUseCaseTest {
         )
 }
 
+/** null caller = sees everything; concrete caller = sees own rows plus unowned rows. */
+private fun isVisible(rowUserId: String?, callerId: String?) =
+    rowUserId == null || rowUserId == callerId
+
 /** Non-empty marker bytes so tests can assert the renderer's output actually reached the file store. */
 private val FAKE_PDF_BYTES = byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), 'D'.code.toByte(), 'F'.code.toByte())
 
@@ -147,7 +151,9 @@ private class ReportAuthRepository(private val userId: String?) : AuthRepository
 }
 
 private class ReportSessionRepository(private val session: Session?) : SessionRepository {
-    override fun observeAllSessions(userId: String): Flow<List<Session>> = flowOf(session?.let(::listOf).orEmpty())
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(
+        session?.let(::listOf).orEmpty().filter { isVisible(it.userId, userId) },
+    )
     override suspend fun getSessionById(sessionId: String): Session? = session?.takeIf { it.id == sessionId }
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
@@ -166,15 +172,15 @@ private class ReportSampleRepository(
     override fun observeLatestSample(userId: String): Flow<Sample?> = flowOf(null)
     override fun observeAllSamples(userId: String): Flow<List<Sample>> = flowOf(samples)
     override suspend fun getSampleById(sampleId: String): Sample? = samples.firstOrNull { it.id == sampleId }
-    override fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
-        flowOf(samples.filter { it.sessionId == sessionId && it.userId == userId })
+    override fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
+        flowOf(samples.filter { s -> s.sessionId == sessionId && isVisible(s.userId, userId) })
 
-    override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
-        samples.filter { it.sessionId == sessionId && it.userId == userId }
+    override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
+        samples.filter { s -> s.sessionId == sessionId && isVisible(s.userId, userId) }
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
 
-    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
+    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
         flowOf(emptyList())
 }
 
@@ -188,7 +194,7 @@ private class ReportDetectionRepository(
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(detectionsBySample[sampleId].orEmpty())
 
-    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount> =
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCounts
 
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =

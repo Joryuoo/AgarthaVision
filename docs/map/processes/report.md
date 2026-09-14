@@ -13,10 +13,11 @@ over.
 
 ## Movement
 
-1. **Require auth and ownership.** `GenerateSessionReportUseCase` fails if there is no live
-   Supabase user, if the session is missing, or if the session is not owned by the current user
-   (`domain/usecase/records/GenerateSessionReportUseCase.kt:38-46`). **This is the one flow
-   that does not work offline** — capture, verification, and manual capture all do.
+1. **Require cached identity and ownership.** `GenerateSessionReportUseCase` fails if there is
+   no cached local identity (i.e. the device has never signed in), if the session is missing,
+   or if the session is not owned by the current user
+   (`domain/usecase/records/GenerateSessionReportUseCase.kt:42-50`). Works offline when signed
+   in; blocked when the device has never signed in (no cached identity).
 2. **Gather.** Fetch the session's non-flagged samples and each one's detections
    (`domain/usecase/records/GenerateSessionReportUseCase.kt:48-51`).
 3. **Count.** `getConfirmedEggCountsForSession` groups by `COALESCE(expert_class, class_label)`,

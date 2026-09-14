@@ -21,7 +21,11 @@ as working.
   `data/repository/SupabaseAuthRepository.kt:64-71`.
 - **Deferred claim.** Work recorded while signed out is owned by nobody
   (`user_id = NULL`) and is claimed at the next login, cascading sessions → samples → reports
-  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`).
+  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`). Unowned rows are visible to every
+  caller on the device — Records, Sessions, and Verify all read them without a sign-in. The
+  records DAO predicate is `(user_id = :userId OR user_id IS NULL)`, so a signed-out caller
+  sees unowned rows only, never another medtech's data left on a shared phone
+  (`data/local/dao/SessionDao.kt:39`, `SampleDao.kt:52`, `DetectionDao.kt:40`).
 
 ### Sessions
 - **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
@@ -93,9 +97,13 @@ as working.
   (`data/local/dao/SampleDao.kt:137`, `:145`).
 
 ### Records and reports
-- **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
-  `domain/usecase/records/GetRecordsUseCase.kt`).
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:119-124`).
+- **Records browser** over verified samples, including unowned local sessions
+  (`ui/records/RecordsScreen.kt`, `domain/usecase/records/GetRecordsUseCase.kt`).
+  Records reads unowned local data the same way Sessions and Verify do — no sign-in required.
+  Report generation still requires a cached local identity.
+- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:131-148`).
+  Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
+  is absent or belongs to a different account.
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).

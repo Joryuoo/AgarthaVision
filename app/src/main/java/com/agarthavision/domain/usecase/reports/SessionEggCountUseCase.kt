@@ -17,7 +17,7 @@ class SessionEggCountUseCase @Inject constructor(
      * Returns per-species counts, total egg count, and EPG for a session.
      */
     suspend operator fun invoke(sessionId: String): SessionEggCounts {
-        val userId = authRepository.getCurrentUserId() ?: return SessionEggCounts.empty()
+        val userId = authRepository.currentLocalUserId()
         val counts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
         val total = counts.sumOf { it.count }
         val epg = EpgCalculator.epg(total)
