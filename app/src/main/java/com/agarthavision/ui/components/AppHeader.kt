@@ -91,21 +91,21 @@ fun AppHeader(
                         .clip(RoundedCornerShape(percent = 50))
                         .background(colors.gold)
                         .clickable(onClick = onSync)
-                        .padding(start = 14.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                        .padding(start = 12.dp, end = 10.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
                         text = stringResource(R.string.dashboard_sync_now),
                         color = colors.onGold,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Icon(
                         imageVector = AgarthaIcons.Sync,
                         contentDescription = null,
                         tint = colors.onGold,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(15.dp),
                     )
                 }
             } else {
@@ -113,7 +113,7 @@ fun AppHeader(
                 // a sync actually runs.
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(colors.accent)
                         .clickable(onClick = onSync),
@@ -124,7 +124,7 @@ fun AppHeader(
                         contentDescription = stringResource(R.string.dashboard_sync_now),
                         tint = colors.onAccent,
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(17.dp)
                             .rotate(if (isSyncing) spin else 0f),
                     )
                 }

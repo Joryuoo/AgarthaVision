@@ -1,5 +1,6 @@
 package com.agarthavision.ui.dashboard
 
+import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -27,6 +29,35 @@ import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
+/** Minimum gap between accepted sync-button taps, to stop spamming the sync action. */
+private const val SYNC_TAP_COOLDOWN_MS = 3_000L
+
+/** Toast shown for a sync-button tap, chosen from the current account/sync state. */
+private fun syncToastMessage(state: DashboardUiState): Int = when {
+    !state.isSignedIn -> R.string.dashboard_sync_toast_signed_out
+    state.isOffline -> R.string.dashboard_sync_toast_offline
+    state.isSyncing -> R.string.dashboard_syncing
+    state.pendingUploadCount == 0 -> R.string.dashboard_all_synced
+    else -> R.string.dashboard_sync_toast_started
+}
+
+/**
+ * Handles a sync-button tap: ignores it when inside the [SYNC_TAP_COOLDOWN_MS] window
+ * ([lastTapMs] is a single-slot holder), otherwise toasts and kicks off a sync.
+ */
+private fun handleSyncTap(
+    context: Context,
+    state: DashboardUiState,
+    lastTapMs: LongArray,
+    onSyncNow: () -> Unit,
+) {
+    val now = System.currentTimeMillis()
+    if (now - lastTapMs[0] < SYNC_TAP_COOLDOWN_MS) return
+    lastTapMs[0] = now
+    Toast.makeText(context, context.getString(syncToastMessage(state)), Toast.LENGTH_SHORT).show()
+    onSyncNow()
+}
+
 @Composable
 fun DashboardScreen(
     onNavigate: (String) -> Unit = {},
@@ -34,6 +65,8 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // Rate-limit the sync button so rapid taps can't fire a burst of sync passes (or toasts).
+    val lastSyncTapMs = remember { longArrayOf(0L) }
 
     Box(
         modifier = Modifier
@@ -53,15 +86,7 @@ fun DashboardScreen(
                     isSyncing = state.isSyncing,
                     needsSync = state.isSignedIn && state.pendingUploadCount > 0 && !state.isSyncing,
                     onSync = {
-                        val message = when {
-                            !state.isSignedIn -> R.string.dashboard_sync_toast_signed_out
-                            state.isOffline -> R.string.dashboard_sync_toast_offline
-                            state.isSyncing -> R.string.dashboard_syncing
-                            state.pendingUploadCount == 0 -> R.string.dashboard_all_synced
-                            else -> R.string.dashboard_sync_toast_started
-                        }
-                        Toast.makeText(context, context.getString(message), Toast.LENGTH_SHORT).show()
-                        viewModel.onSyncNow()
+                        handleSyncTap(context, state, lastSyncTapMs) { viewModel.onSyncNow() }
                     }
                 )
             }
