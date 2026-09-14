@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -51,6 +50,7 @@ import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
@@ -87,12 +87,16 @@ fun RecordsScreen(
 
     Scaffold(
         topBar = {
-            RecordsAppBar(
-                subtitle = if (state.startDate == null && state.endDate == null) {
-                    "All sessions"
-                } else {
-                    "Filtered date range"
-                },
+            ScreenHeader(
+                title = stringResource(R.string.records_title),
+                purpose = stringResource(R.string.records_subtitle_purpose),
+                status = stringResource(
+                    if (state.startDate == null && state.endDate == null) {
+                        R.string.records_scope_all
+                    } else {
+                        R.string.records_scope_filtered
+                    },
+                ),
             )
         },
         containerColor = AgarthaTheme.colors.background,
@@ -161,37 +165,6 @@ fun RecordsScreen(
     }
 }
 
-@Composable
-private fun RecordsAppBar(subtitle: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AgarthaTheme.colors.background)
-            .statusBarsPadding()
-            .padding(horizontal = Spacing.xl, vertical = 12.dp),
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Records",
-                style = MaterialTheme.typography.headlineSmall,
-                color = AgarthaTheme.colors.textPrimary,
-            )
-            Text(
-                stringResource(R.string.records_subtitle_purpose),
-                style = MaterialTheme.typography.labelSmall,
-                color = AgarthaTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = AgarthaTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-    }
-}
 
 @Composable
 private fun SearchInput(

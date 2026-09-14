@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -82,6 +81,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.time.Instant
@@ -232,38 +232,11 @@ fun SessionsScreen(
 
 @Composable
 private fun AppBar(activeCount: Int, totalCount: Int) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = 14.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Sessions",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                letterSpacing = (-0.02).em
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = stringResource(R.string.sessions_subtitle_purpose),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "$totalCount sessions · $activeCount active",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary
-            )
-        }
-    }
+    ScreenHeader(
+        title = stringResource(R.string.sessions_title),
+        purpose = stringResource(R.string.sessions_subtitle_purpose),
+        status = stringResource(R.string.sessions_status_counts, totalCount, activeCount),
+    )
 }
 
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */

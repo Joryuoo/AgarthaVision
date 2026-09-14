@@ -123,6 +123,8 @@
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
+    <string name="records_scope_all">All sessions</string>
+    <string name="records_scope_filtered">Filtered date range</string>
     <string name="records_subtitle_purpose">Search and review all logged results across sessions</string>
     <string name="records_back">Back to capture</string>
     <string name="records_empty">No sessions found</string>
@@ -219,6 +221,8 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <string name="sessions_title">Sessions</string>
+    <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
     <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
     <string name="session_picker_title">Sessions</string>
     <string name="session_picker_empty_title">No recent sessions</string>

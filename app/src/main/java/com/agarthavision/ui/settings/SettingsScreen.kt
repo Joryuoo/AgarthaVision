@@ -5,12 +5,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -22,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -31,6 +28,7 @@ import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import kotlinx.coroutines.flow.collectLatest
 
@@ -98,39 +96,21 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Box(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background),
     ) {
+        // AgarthaNavGraph zeroes contentWindowInsets app-wide; the header owns the status-bar
+        // inset and stays put, so nothing scrolls under the phone's status bar.
+        ScreenHeader(
+            title = stringResource(R.string.settings_title),
+            purpose = stringResource(R.string.settings_subtitle_purpose),
+        )
         LazyColumn(
-            // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
-            // its own. Without this the title draws under the status bar.
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = Spacing.xl),
         ) {
-            item {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.xl)
-                        .padding(top = Spacing.xl, bottom = Spacing.lg),
-                ) {
-                    Text(
-                        text = stringResource(R.string.settings_title),
-                        color = colors.textPrimary,
-                        style = MaterialTheme.typography.headlineSmall,
-                    )
-                    Text(
-                        text = stringResource(R.string.settings_subtitle_purpose),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.textSecondary,
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
-            }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_account)) {
                     AccountCard(
