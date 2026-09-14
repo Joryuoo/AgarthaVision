@@ -1,5 +1,7 @@
 package com.agarthavision.ui.theme
 
+import android.app.Activity
+import android.content.ContextWrapper
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -8,7 +10,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsControllerCompat
 
 // ── Shapes ─────────────────────────────────────────────────────────────────
 // Radius scale for MaterialTheme shapes. Pills use `extraLarge`.
@@ -83,6 +88,17 @@ fun AgarthaVisionTheme(
     content: @Composable () -> Unit,
 ) {
     val agarthaColors = if (darkTheme) DarkAgarthaColors else LightAgarthaColors
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            var ctx: android.content.Context = view.context
+            while (ctx is ContextWrapper && ctx !is Activity) {
+                ctx = ctx.baseContext
+            }
+            val window = (ctx as? Activity)?.window ?: return@SideEffect
+            WindowInsetsControllerCompat(window, view).isAppearanceLightStatusBars = !darkTheme
+        }
+    }
     CompositionLocalProvider(LocalAgarthaColors provides agarthaColors) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,

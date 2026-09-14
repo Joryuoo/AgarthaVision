@@ -236,12 +236,15 @@ fun CaptureScreen(
     DisposableEffect(Unit) {
         val window = (context as? androidx.activity.ComponentActivity)?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, view) }
+        val previousLight = controller?.isAppearanceLightStatusBars
         controller?.let {
             it.hide(WindowInsetsCompat.Type.navigationBars())
             it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.isAppearanceLightStatusBars = false
         }
         onDispose {
             controller?.show(WindowInsetsCompat.Type.navigationBars())
+            controller?.isAppearanceLightStatusBars = previousLight ?: false
         }
     }
 
