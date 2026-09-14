@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -97,7 +96,10 @@ fun AgarthaBottomBar(
         shadowElevation = 0.dp
     ) {
         Column(
-            modifier = Modifier.navigationBarsPadding()
+            // Balance the bar: equal padding above and below the tab row. Previously
+            // navigationBarsPadding() dumped the whole system-nav inset below the row with
+            // nothing above it, so the bar read bottom-heavy.
+            modifier = Modifier.padding(vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier
