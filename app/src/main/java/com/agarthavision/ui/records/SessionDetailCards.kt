@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -299,7 +300,18 @@ private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = M
             .background(bg, RoundedCornerShape(999.dp))
             .padding(horizontal = 7.dp, vertical = 3.dp),
     ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AppColors.White)
+        // A binomial like "Ascaris lumbricoides" is wider than a grid tile; wrapping it
+        // turned the pill into a two-line block that hid most of the image. One line,
+        // ellipsized - the full name is on the sample detail screen.
+        Text(
+            text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = AppColors.White,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
