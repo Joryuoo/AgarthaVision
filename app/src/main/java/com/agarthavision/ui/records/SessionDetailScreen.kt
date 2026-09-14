@@ -533,7 +533,7 @@ internal fun SessionNoteCard(note: String, modifier: Modifier = Modifier) {
             color = colors.textSecondary,
         )
         Spacer(Modifier.height(4.dp))
-        Text(text = note, fontSize = 14.sp, color = colors.textPrimary)
+        Text(text = note, fontSize = 13.sp, lineHeight = 17.sp, color = colors.textPrimary)
     }
 }
 
