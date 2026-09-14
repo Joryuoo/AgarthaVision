@@ -57,7 +57,6 @@ class ReportPdfBuilderTest {
                 storagePath = "user-1/sample-1.jpg",
                 inferenceModelVersion = "model-1",
                 isManual = false,
-                isRepeat = false,
                 latitude = null,
                 longitude = null,
                 accuracyMeters = null,

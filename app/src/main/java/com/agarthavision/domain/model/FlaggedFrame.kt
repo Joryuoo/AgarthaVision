@@ -10,7 +10,6 @@ data class FlaggedFrame(
     val jpegBytes: ByteArray,
     val predictions: List<Prediction>,
     val source: FrameSource = FrameSource.MODEL,
-    val markedAsRepeat: Boolean = false,
     val inferenceModelVersion: String? = null,
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
@@ -30,9 +29,10 @@ data class FlaggedFrame(
      * - A failed read yields `ByteArray(0)`, so two unrelated broken frames would then
      *   compare equal.
      *
-     * The mutable fields *are* compared, deliberately: `markedAsRepeat` drives the
-     * queue's Repeat filter, and if it were excluded the `StateFlow` would conflate the
-     * update away and the filter would go stale.
+     * **Every other property is compared, deliberately — including the mutable ones.** This
+     * once compared `sampleId` alone, and a Room re-emission that had only flipped a flag
+     * therefore compared equal to the list already held; `StateFlow` conflated it away and the
+     * queue silently went stale. Anything the queue renders from has to be in here.
      */
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -42,7 +42,6 @@ data class FlaggedFrame(
             capturedAt == other.capturedAt &&
             predictions == other.predictions &&
             source == other.source &&
-            markedAsRepeat == other.markedAsRepeat &&
             inferenceModelVersion == other.inferenceModelVersion &&
             imageWidth == other.imageWidth &&
             imageHeight == other.imageHeight
@@ -54,7 +53,6 @@ data class FlaggedFrame(
         result = 31 * result + capturedAt.hashCode()
         result = 31 * result + predictions.hashCode()
         result = 31 * result + source.hashCode()
-        result = 31 * result + markedAsRepeat.hashCode()
         result = 31 * result + (inferenceModelVersion?.hashCode() ?: 0)
         result = 31 * result + (imageWidth ?: 0)
         result = 31 * result + (imageHeight ?: 0)

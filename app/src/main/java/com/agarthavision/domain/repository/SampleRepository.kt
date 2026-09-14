@@ -42,11 +42,11 @@ interface SampleRepository {
     /**
      * Returns samples that haven't been successfully synced to Supabase for the given user.
      */
-    suspend fun getSamplesPendingSync(userId: String): List<Sample>
+    suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample>
 
     /**
      * Observes flagged (pending-verification) samples in one session, newest first.
-     * null userId = all flagged rows on the device; concrete userId = own plus unowned rows.
+     * A concrete owner sees their own rows plus unowned ones; a null owner sees unowned only.
      */
     fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
 }

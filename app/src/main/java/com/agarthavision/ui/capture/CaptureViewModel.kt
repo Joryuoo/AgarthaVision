@@ -56,10 +56,12 @@ class CaptureViewModel @Inject constructor(
     private val _state = MutableStateFlow(CaptureState())
     val state: StateFlow<CaptureState> = _state.asStateFlow()
 
-    private val eventChannel = Channel<CaptureEvent>(Channel.BUFFERED)
-    val events = eventChannel.receiveAsFlow()
 
     init {
+        // The /health poll runs only while a capture screen is mounted. Gating it on the
+        // session instead would now mean polling forever, since sessions never end.
+        networkMonitor.acquire()
+
         viewModelScope.launch {
             sessionManager.state.collect { sessionState ->
                 _state.update { current ->
@@ -93,24 +95,6 @@ class CaptureViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Closes the active smear session, persists optional [notes], and emits a
-     * navigate-to-picker event.
-     */
-    fun endSession(notes: String?) {
-        val cleanNotes = notes?.takeIf { it.isNotBlank() }
-        viewModelScope.launch {
-            _state.update { it.copy(isBusy = true, errorMessage = null) }
-            runCatching {
-                sessionManager.stopSession(notes = cleanNotes)
-            }.onSuccess {
-                eventChannel.send(CaptureEvent.SessionEnded)
-            }.onFailure { throwable ->
-                _state.update { it.copy(errorMessage = throwable.message) }
-            }
-            _state.update { it.copy(isBusy = false) }
-        }
-    }
 
     fun onDetectionToastTap(frame: FlaggedFrame) {
         _state.update { it.copy(verificationTarget = frame) }
@@ -161,6 +145,11 @@ class CaptureViewModel @Inject constructor(
      * Clears [CaptureState.errorMessage] once the screen has surfaced it (as a toast),
      * so the same error can fire again on the next tap.
      */
+    override fun onCleared() {
+        networkMonitor.release()
+        super.onCleared()
+    }
+
     fun clearErrorMessage() {
         _state.update { it.copy(errorMessage = null) }
     }
@@ -191,12 +180,6 @@ class CaptureViewModel @Inject constructor(
     }
 }
 
-/**
- * One-shot events emitted to the Capture composable.
- */
-sealed interface CaptureEvent {
-    data object SessionEnded : CaptureEvent
-}
 
 /**
  * Immutable UI state surface for the Capture screen.

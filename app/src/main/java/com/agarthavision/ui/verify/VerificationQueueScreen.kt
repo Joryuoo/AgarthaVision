@@ -48,24 +48,32 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FilterAlt
-import androidx.compose.material.icons.outlined.FilterAltOff
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.ui.res.stringResource
-import com.agarthavision.R
-import com.agarthavision.ui.components.EmptyState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
-import com.agarthavision.domain.model.FlaggedFrame
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Circle
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.agarthavision.R
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.model.QueueBucket
+import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import java.io.File
 import java.time.Duration
 import java.time.Instant
 
@@ -87,19 +95,10 @@ fun VerificationQueueScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
-    val filteredFrames = remember(state.flaggedFrames, state.queueFilter) {
-        filterQueueFrames(state.flaggedFrames, state.queueFilter)
-    }
-
-    // Counted through filterQueueFrames rather than a second copy of the predicates —
-    // the duplication is how a chip's count and its list drift apart.
-    val counts = remember(state.flaggedFrames) {
-        QueueFilter.entries.associateWith { filter ->
-            filterQueueFrames(state.flaggedFrames, filter).size
-        }
-    }
-
-    val pendingCount = state.flaggedFrames.size
+    // Both derived from the same list, and a row belongs to exactly one bucket by
+    // construction, so a chip count cannot drift from the list it labels.
+    val visibleSamples = state.visibleSamples
+    val counts = state.counts
     val colors = AgarthaTheme.colors
 
     Box(
@@ -115,7 +114,8 @@ fun VerificationQueueScreen(
                 .background(colors.background)
                 .systemBarsPadding()
         ) {
-            // App Bar
+            // App Bar. Swaps to a contextual bar while a selection is live, so the delete
+            // affordance is only ever reachable with something selected.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -123,26 +123,66 @@ fun VerificationQueueScreen(
                     .padding(top = 2.dp, bottom = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BackArrow(onBack = onBackClick)
+                if (state.isSelecting) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.queue_selection_clear),
+                        tint = colors.textPrimary,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { viewModel.onClearSelection() }
+                            .padding(4.dp)
+                            .size(24.dp),
+                    )
 
-                Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(12.dp))
 
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Verify Queue",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
+                        pluralStringResource(
+                            R.plurals.queue_selection_count,
+                            state.selectedIds.size,
+                            state.selectedIds.size,
+                        ),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = colors.textPrimary,
-                        letterSpacing = (-0.44).sp,
+                        modifier = Modifier.weight(1f),
                         style = InterBaseStyle
                     )
-                    Text(
-                        "${state.flaggedFrames.size} items · $pendingCount pending",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.textSecondary,
-                        style = InterTabularStyle
+
+                    Icon(
+                        imageVector = Icons.Outlined.Delete,
+                        contentDescription = stringResource(R.string.queue_selection_delete),
+                        tint = colors.danger,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { viewModel.onDeleteRequested() }
+                            .padding(4.dp)
+                            .size(24.dp),
                     )
+                } else {
+                    BackArrow(onBack = onBackClick)
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            "Verify Queue",
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.textPrimary,
+                            letterSpacing = (-0.44).sp,
+                            style = InterBaseStyle
+                        )
+                        Text(
+                            "${state.samples.size} items · " +
+                                "${counts[QueueBucket.UNVERIFIED] ?: 0} unverified",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.textSecondary,
+                            style = InterTabularStyle
+                        )
+                    }
                 }
             }
 
@@ -156,20 +196,18 @@ fun VerificationQueueScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 listOf(
-                    QueueFilter.ALL to "All",
-                    QueueFilter.FLAGGED to "AI",
-                    QueueFilter.MANUAL to "Manual",
-                    QueueFilter.REPEAT to "Repeat"
-                ).forEach { (filter, label) ->
-                    val isSelected = state.queueFilter == filter
-                    val count = counts[filter] ?: 0
+                    QueueBucket.UNVERIFIED to stringResource(R.string.queue_bucket_unverified),
+                    QueueBucket.VERIFIED to stringResource(R.string.queue_bucket_verified),
+                ).forEach { (bucket, label) ->
+                    val isSelected = state.bucket == bucket
+                    val count = counts[bucket] ?: 0
 
                     Row(
                         modifier = Modifier
                             .clip(CircleShape)
                             .background(if (isSelected) colors.textPrimary else colors.surface)
                             .border(1.dp, if (isSelected) colors.textPrimary else colors.borderStrong, CircleShape)
-                            .clickable { viewModel.onQueueFilterSelected(filter) }
+                            .clickable { viewModel.onBucketSelected(bucket) }
                             .padding(horizontal = 12.dp, vertical = 7.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -196,14 +234,11 @@ fun VerificationQueueScreen(
                 }
             }
 
-            // Frame List / empty state
-            if (filteredFrames.isEmpty()) {
+            // Frame list, or why it is empty
+            if (visibleSamples.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     QueueEmptyState(
-                        variant = queueEmptyVariant(
-                            verified = state.verifiedCount,
-                            filterActive = state.queueFilter != QueueFilter.ALL,
-                        ),
+                        variant = queueEmptyVariant(state.bucket, state.verifiedCount),
                         onViewRecords = { state.activeSessionId?.let(onGoToRecords) },
                     )
                 }
@@ -215,12 +250,23 @@ fun VerificationQueueScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(
-                        items = filteredFrames,
-                        key = { frame -> frame.sampleId }
-                    ) { frame ->
+                        items = visibleSamples,
+                        // Keyed by primary key, never by capturedAt: two frames captured in the
+                        // same millisecond once threw a duplicate-key exception.
+                        key = { sample -> sample.sampleId }
+                    ) { sample ->
                         FrameRow(
-                            frame = frame,
-                            onClick = { viewModel.onQueueItemSelected(frame) }
+                            sample = sample,
+                            isSelecting = state.isSelecting,
+                            isSelected = sample.sampleId in state.selectedIds,
+                            onClick = {
+                                if (state.isSelecting) {
+                                    viewModel.onToggleSelected(sample)
+                                } else {
+                                    viewModel.onQueueItemSelected(sample)
+                                }
+                            },
+                            onLongClick = { viewModel.onToggleSelected(sample) },
                         )
                     }
                 }
@@ -228,26 +274,34 @@ fun VerificationQueueScreen(
         }
     }
 
+    // System back leaves the selection before it leaves the screen.
+    BackHandler(enabled = state.isSelecting) { viewModel.onClearSelection() }
+
+    if (state.showDeleteConfirm) {
+        DeleteSamplesConfirmDialog(
+            verifiedCount = state.selectedVerifiedCount,
+            unverifiedCount = state.selectedUnverifiedCount,
+            onConfirm = viewModel::onDeleteConfirmed,
+            onDismiss = viewModel::onDeleteDismissed,
+        )
+    }
+
     val target = state.verificationTarget
     if (target != null) {
-        if (target.source == FrameSource.MANUAL) {
-            ManualSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        } else {
-            VerificationSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        }
+        // One screen for both sources. What makes a sample "AI" is simply that it has model
+        // output, which the sheet reads off the frame itself.
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
+            prior = state.priorTarget,
+        )
     }
 }
 
 /**
- * Body shown when the filtered queue has no rows. Three cases look alike from the list's
- * point of view but mean different things to the medtech, so each gets its own copy; only
- * the all-verified case offers a way onward, into the session's records.
+ * Body shown when the selected bucket has no rows. The cases look alike from the list's point
+ * of view but mean different things to the medtech, so each gets its own copy; only the
+ * all-verified case offers a way onward, into the session's records.
  */
 @Composable
 internal fun QueueEmptyState(
@@ -264,10 +318,10 @@ internal fun QueueEmptyState(
             body = stringResource(R.string.verify_queue_empty_body),
             modifier = padded,
         )
-        QueueEmptyVariant.FILTERED -> EmptyState(
-            icon = Icons.Outlined.FilterAltOff,
-            title = stringResource(R.string.verify_queue_filtered_title),
-            body = stringResource(R.string.verify_queue_filtered_body),
+        QueueEmptyVariant.NONE_VERIFIED -> EmptyState(
+            icon = Icons.Outlined.Inbox,
+            title = stringResource(R.string.verify_queue_none_verified_title),
+            body = stringResource(R.string.verify_queue_none_verified_body),
             modifier = padded,
         )
         QueueEmptyVariant.ALL_DONE -> EmptyState(
@@ -303,37 +357,48 @@ internal fun QueueEmptyState(
 
 @Composable
 private fun FrameRow(
-    frame: FlaggedFrame,
-    onClick: () -> Unit
+    sample: QueueSample,
+    isSelecting: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    val isManual = frame.source == FrameSource.MANUAL
-    val top = frame.predictions.firstOrNull()
-    val isAI = !isManual
+    val isAI = sample.source == FrameSource.MODEL
 
-    val title = when {
-        isManual -> "Manual capture"
-        top != null -> top.classLabel
-        else -> "Unknown class"
+    // What the row says the sample IS. Before review there is nothing to report - the model's
+    // own guess is not a finding; after it, the confirmed egg count is.
+    val title = if (sample.isVerified) {
+        pluralStringResource(
+            R.plurals.queue_row_confirmed,
+            sample.confirmedDetections,
+            sample.confirmedDetections,
+        )
+    } else {
+        stringResource(R.string.queue_row_awaiting_review)
     }
 
-    val isItalic = isAI && title != "Unknown class"
-
-    val duration = Duration.between(frame.capturedAt, Instant.now())
+    val duration = Duration.between(sample.capturedAt, Instant.now())
     val timeStr = when {
         duration.toMinutes() > 0 -> "${duration.toMinutes()}m ago"
         else -> "${duration.seconds}s ago"
     }
 
-    val metaSource = if (isAI) "AI" else "Manual"
+    val metaSource = stringResource(
+        if (isAI) R.string.badge_ai_suggested else R.string.badge_manual,
+    )
 
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .background(colors.surface)
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .clickable { onClick() }
+            .background(if (isSelected) colors.accentTint else colors.surface)
+            .border(
+                1.dp,
+                if (isSelected) colors.accent else colors.border,
+                RoundedCornerShape(12.dp),
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -346,8 +411,12 @@ private fun FrameRow(
                     drawRect(brush = AppColors.MicroscopeBrush)
                 }
         ) {
+            // Loaded from the path, not from bytes held in the row. The queue now holds
+            // every sample in the session, and the old shape re-read every full-resolution JPEG
+            // from disk on every emission - a cost that grows with the smear and never drains.
+            // Coil caches by path, so a visible row decodes once.
             AsyncImage(
-                model = frame.jpegBytes,
+                model = File(sample.imagePath),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
@@ -366,7 +435,6 @@ private fun FrameRow(
                     text = title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
-                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal,
                     color = colors.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -397,53 +465,48 @@ private fun FrameRow(
 
                 Row(
                     modifier = Modifier
-                        .background(colors.warningTint, CircleShape)
+                        .background(
+                            if (sample.isVerified) colors.successTint else colors.warningTint,
+                            CircleShape,
+                        )
                         .padding(horizontal = 6.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
-                        "Pending",
+                        stringResource(
+                            if (sample.isVerified) {
+                                R.string.queue_status_verified
+                            } else {
+                                R.string.queue_status_unverified
+                            },
+                        ),
                         fontSize = 10.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = colors.warningText,
+                        color = if (sample.isVerified) colors.successText else colors.warningText,
                         letterSpacing = 0.1.sp,
                         style = InterBaseStyle
                     )
-                }
-
-                if (frame.markedAsRepeat) {
-                    val repeatAccent = colors.accent
-                    Row(
-                        modifier = Modifier
-                            .background(colors.accentTint, CircleShape)
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(7.dp)) {
-                            drawCircle(repeatAccent)
-                        }
-                        Text(
-                            "Repeat",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.accent,
-                            letterSpacing = 0.1.sp,
-                            style = InterBaseStyle
-                        )
-                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.width(6.dp))
 
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            tint = colors.textTertiary,
-            modifier = Modifier.size(24.dp)
-        )
+        if (isSelecting) {
+            Icon(
+                if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.Circle,
+                contentDescription = null,
+                tint = if (isSelected) colors.accent else colors.textTertiary,
+                modifier = Modifier.size(24.dp),
+            )
+        } else {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colors.textTertiary,
+                modifier = Modifier.size(24.dp),
+            )
+        }
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -13,18 +14,23 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Pins the Room schema version and the shape the PSGC work added to it.
+ * Pins the Room schema version and the shape every merged branch added to it.
  *
- * This exists because staging and the barangay branch each bumped the database 8 → 9
- * independently — staging for `reports.pdf_file_path`, this branch for `psgc_barangays` and
- * `sessions.psgc_barangay_code`. Merged, the code declared version 9 with a schema that was
- * neither side's v9. `fallbackToDestructiveMigration` does not cover that: destructive
- * fallback only fires on a version *change*, so at an equal version with a different identity
- * hash Room throws `IllegalStateException: Room cannot verify the data integrity` when it
- * opens the file, and every device carrying the other build crashes at launch.
+ * This exists because the collision has already happened once. Staging and the barangay branch
+ * each bumped the database 8 -> 9 independently, and merged, the code declared version 9 with a
+ * schema that was neither side's v9. `fallbackToDestructiveMigration` does not cover that:
+ * destructive fallback only fires on a version *change*, so at an equal version with a different
+ * identity hash Room throws `IllegalStateException: Room cannot verify the data integrity` when
+ * it opens the file, and every device carrying the other build crashes at launch.
  *
- * A version bump is cheap and a collision is not, so this test fails loudly when the declared
- * version and the exported schema history disagree about what v[EXPECTED_VERSION] contains.
+ * It then nearly happened a second time. Three branches declared version 10 at once —
+ * `feat/sample-geospatial-mapping` (`psgc_barangays`), `feature/editable-report`
+ * (`detections.stage`) and this one. The barangay branch kept 10, the stage work was reverted on
+ * staging (86d4a6jwy, deprioritised), and this branch skipped to 12 rather than taking the next
+ * free-looking number. A version bump is cheap and a collision is not.
+ *
+ * So the assertions below are deliberately a **union across branches**, not this branch's half:
+ * each one names the merge that would have dropped it.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -52,25 +58,79 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `both halves of the merged schema are present`() {
-        val tables = database.openHelper.writableDatabase
-            .query("SELECT name FROM sqlite_master WHERE type = 'table'")
-            .use { cursor ->
-                buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
-            }
+    fun `the polyparasitism findings table is present`() {
+        assertTrue(
+            "sample_species_findings is missing from v$EXPECTED_VERSION — a mixed-species " +
+                "field would have nowhere to be recorded.",
+            tables().contains("sample_species_findings"),
+        )
+        val columns = columnsOf("sample_species_findings")
+        listOf("finding_id", "sample_id", "species", "stage", "egg_count").forEach { column ->
+            assertTrue("sample_species_findings.$column is missing", columns.contains(column))
+        }
+    }
 
-        // The branch's half.
-        assertTrue("psgc_barangays is missing from v$EXPECTED_VERSION", tables.contains("psgc_barangays"))
-        // Staging's half — if this goes missing the merge dropped a side.
-        assertTrue("reports is missing from v$EXPECTED_VERSION", tables.contains("reports"))
+    @Test
+    fun `a finding stage is nullable because nothing writes one yet`() {
+        // The column mirrors `0012_polyparasitism_findings.sql`, which is applied and frozen
+        // under C6 — but 86d4a6jwy was reverted on staging and deprioritised, so no code path
+        // sets it. Nullable is what keeps that dormant rather than broken. See Finding.md.
+        assertFalse(isNotNull("sample_species_findings", "stage"))
+    }
 
+    @Test
+    fun `the species provenance flag is present and is not verified_by_user`() {
+        val columns = columnsOf("detections")
+        assertTrue(
+            "detections.species_touched is missing — an untouched model pre-fill would be " +
+                "indistinguishable from a deliberate human confirmation in the training corpus.",
+            columns.contains("species_touched"),
+        )
+        // Deliberately a new column rather than reusing the dead one. If verified_by_user has
+        // gone, ticket 86d4akgmf landed and this assertion is the one to delete.
+        assertTrue(columns.contains("verified_by_user"))
+    }
+
+    @Test
+    fun `detections carry no stage column`() {
+        // Not an omission. Staging reverted 86d4a6jwy (9dcfd5d) because the four stages shipped
+        // there were never checked against literature — Ascaris could only be tagged
+        // UNFERTILIZED, the one stage that is never infective. This branch cherry-picked that
+        // commit before the revert existed, so this merge is the exact place it could come back
+        // by accident. It must not.
+        assertFalse(columnsOf("detections").contains("stage"))
+    }
+
+    @Test
+    fun `samples carry a nullable tombstone`() {
+        assertTrue(
+            "samples.deleted_at is missing — a verified duplicate could not be removed " +
+                "without breaching C8.",
+            columnsOf("samples").contains("deleted_at"),
+        )
+        // Nullable: null means live, and almost every row is live.
+        assertFalse(isNotNull("samples", "deleted_at"))
+    }
+
+    @Test
+    fun `samples no longer carry is_repeat`() {
+        // The flag existed only because there was no way to delete a duplicate. deleted_at
+        // provides that, so the workaround went with it (86d4ab4vm).
+        assertFalse(
+            "samples.is_repeat should be gone - duplicates are deleted now, not flagged.",
+            columnsOf("samples").contains("is_repeat"),
+        )
+    }
+
+    @Test
+    fun `the barangay picker's half of the schema survived the merge`() {
+        assertTrue(
+            "psgc_barangays is missing from v$EXPECTED_VERSION — the picker has no data.",
+            tables().contains("psgc_barangays"),
+        )
         assertTrue(
             "sessions.psgc_barangay_code is missing — the picker would write to nothing.",
             columnsOf("sessions").contains("psgc_barangay_code"),
-        )
-        assertTrue(
-            "reports.pdf_file_path is missing — staging's v9 was lost in the merge.",
-            columnsOf("reports").contains("pdf_file_path"),
         )
     }
 
@@ -78,21 +138,28 @@ class AgarthaDatabaseSchemaTest {
     fun `the barangay code is nullable so sessions predating the picker survive`() {
         // Nothing backfills older rows, and the destructive migration means a device may hold
         // sessions created before the column existed. A NOT NULL here would be unrecoverable.
-        val notNull = database.openHelper.writableDatabase
-            .query("PRAGMA table_info(sessions)")
-            .use { cursor ->
-                val nameIndex = cursor.getColumnIndexOrThrow("name")
-                val notNullIndex = cursor.getColumnIndexOrThrow("notnull")
-                var result = false
-                while (cursor.moveToNext()) {
-                    if (cursor.getString(nameIndex) == "psgc_barangay_code") {
-                        result = cursor.getInt(notNullIndex) == 1
-                    }
-                }
-                result
-            }
-        assertEquals(false, notNull)
+        assertFalse(isNotNull("sessions", "psgc_barangay_code"))
     }
+
+    @Test
+    fun `the tables the earlier versions added are still present`() {
+        // If one of these goes missing, a merge dropped a side.
+        val tables = tables()
+        listOf("samples", "sessions", "detections", "reports").forEach { table ->
+            assertTrue("$table is missing from v$EXPECTED_VERSION", tables.contains(table))
+        }
+        assertTrue(
+            "reports.pdf_file_path is missing — staging's v9 was lost in the merge.",
+            columnsOf("reports").contains("pdf_file_path"),
+        )
+    }
+
+    private fun tables(): List<String> =
+        database.openHelper.writableDatabase
+            .query("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .use { cursor ->
+                buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+            }
 
     private fun columnsOf(table: String): List<String> =
         database.openHelper.writableDatabase
@@ -102,8 +169,23 @@ class AgarthaDatabaseSchemaTest {
                 buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
             }
 
+    private fun isNotNull(table: String, column: String): Boolean =
+        database.openHelper.writableDatabase
+            .query("PRAGMA table_info($table)")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val notNullIndex = cursor.getColumnIndexOrThrow("notnull")
+                var result = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == column) {
+                        result = cursor.getInt(notNullIndex) == 1
+                    }
+                }
+                result
+            }
+
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 10
+        private const val EXPECTED_VERSION = 12
     }
 }

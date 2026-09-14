@@ -13,7 +13,7 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 `supabase/migrations/` (highest number wins) · the matching Room entity.
 
 **Then check, in order:**
-1. Does the column need to exist remotely at all? Several deliberately do not — `is_repeat`,
+1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`,
    `samples.status`, `sessions.claim_exempt`, `reports.supabase_status`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**

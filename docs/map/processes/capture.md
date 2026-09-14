@@ -69,7 +69,7 @@ is an **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` is
 Capture** (`FrameSource.MANUAL`). A clean field is recorded like any other AI Capture, since a
 negative result is still a result. The `InferenceConnectionException` the call already throws on
 transport failure *is* the AI-vs-Manual classifier — there is no separate timeout or signal.
-`SubmitManualCaptureUseCase` remains the pattern for turning a recorded frame into a verified
+`SubmitVerificationUseCase` handles both sources for turning a recorded frame into a verified
 sample downstream. Aggregating clean fields as an LPF-density denominator is a separate concern
 (86d4a6jxw).
 

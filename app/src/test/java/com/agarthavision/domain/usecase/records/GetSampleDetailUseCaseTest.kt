@@ -94,7 +94,7 @@ private class DetailSampleRepository(
     override suspend fun getSampleById(sampleId: String): Sample? = sample?.takeIf { it.id == sampleId }
     override fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> = flowOf(emptyList())
     override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> = emptyList()
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
     override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
         flowOf(emptyList())
 }
@@ -115,6 +115,9 @@ private class DetailDetectionRepository(
 
     override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
+
+    override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
+        emptyMap()
 }
 
 private fun detailSample(userId: String?): Sample =

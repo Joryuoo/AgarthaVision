@@ -37,18 +37,38 @@
     <string name="verify_predicted">Model predicted: %1$s</string>
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
     <string name="verify_q2">Is the bounding box correctly placed?</string>
-    <string name="verify_q3">What species?</string>
+    <string name="verify_q3">Is this egg %1$s?</string>
+    <string name="verify_species_picker_label">Which species is it?</string>
     <string name="verify_q4">Did the model miss any eggs in this frame?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
     <string name="verify_other_hint">Type the observed species</string>
-    <string name="verify_prev_detection">Previous detection</string>
-    <string name="verify_next_detection">Next detection</string>
     <string name="verify_show_boxes_label">Show bounding boxes</string>
+
+    <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
+    <string name="verify_species_you_added">SPECIES YOU ADDED</string>
+    <string name="verify_add_species">+ Add species</string>
+    <string name="verify_remove_species">Remove</string>
+    <string name="verify_not_boxed">Not boxed by the model</string>
+    <string name="verify_egg_count_label">Eggs in this field</string>
+    <string name="verify_egg_count_addendum">In addition to the %1$d the model boxed</string>
+    <string name="verify_will_be_saved">WILL BE SAVED</string>
+    <string name="verify_model_output">MODEL OUTPUT</string>
+    <!--
+      Kept distinct on purpose: "no signal was collected" and "the model looked and found
+      nothing" are different facts, and the second is itself a labelled datapoint.
+    -->
+    <string name="verify_model_none_manual">No model output — captured manually.</string>
+    <string name="verify_model_clean_field">Model output: 0 detections (%1$s).</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
+
+    <plurals name="sessions_subtitle">
+        <item quantity="one">%1$d session · %2$d unverified</item>
+        <item quantity="other">%1$d sessions · %2$d unverified</item>
+    </plurals>
 
     <!--
       The banner must not claim capture has stopped. Since 86d4a6prb removed the 2-second
@@ -61,9 +81,17 @@
     <string name="connection_lost_probing">Checking connection…</string>
 
     <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
-    <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
-    <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
+    <!-- Shown instead of a position when the open frame is no longer in the queue. -->
+    <string name="verify_frame_meta_out_of_cycle">Not in queue · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
+    <string name="verify_species_label">SPECIES</string>
+    <string name="verify_remarks_label">REMARKS</string>
+    <string name="verify_remarks_placeholder">Remarks for this sample</string>
+    <string name="verify_detection_counter">Detection %1$d of %2$d</string>
+    <string name="verify_boxes_toggle">Boxes</string>
+    <string name="verify_prev_egg">Previous egg</string>
+    <string name="verify_next_egg">Next egg</string>
+    <string name="verify_ai_suggestion_note">This is an AI-suggested result and may contain inaccuracies. Review the frame and confirm the species yourself before submitting.</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
     <string name="verify_delete_frame">Delete</string>
@@ -71,9 +99,6 @@
     <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
 
     <string name="verify_sheet_kebab_desc">Sample actions</string>
-    <string name="verify_mark_repeat">Mark as repeat</string>
-    <string name="verify_unmark_repeat">Unmark as repeat</string>
-    <string name="verify_repeat_badge">Repeat</string>
     <string name="verify_user_note_label">Notes (optional)</string>
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
     <string name="badge_ai_suggested">AI-suggested</string>
@@ -81,10 +106,43 @@
 
     <string name="queue_sheet_title">Flagged Frames · %1$d</string>
     <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>
-    <string name="queue_filter_all">All</string>
-    <string name="queue_filter_flagged">Flagged</string>
-    <string name="queue_filter_manual">Manual</string>
-    <string name="queue_filter_repeat">Repeat</string>
+    <!--
+      Two buckets, not four. Source (AI vs Manual) is shown on the row and decides what the
+      verification screen renders, but it files nothing (revised 2026-09-12, 86d4ab4vm).
+    -->
+    <string name="queue_bucket_unverified">Unverified</string>
+    <string name="queue_bucket_verified">Verified</string>
+    <string name="queue_row_awaiting_review">Awaiting review</string>
+    <string name="queue_selection_clear">Clear selection</string>
+    <string name="queue_selection_delete">Delete selected</string>
+    <plurals name="queue_selection_count">
+        <item quantity="one">%1$d selected</item>
+        <item quantity="other">%1$d selected</item>
+    </plurals>
+
+    <!--
+      The two halves of a delete are irreversible in different ways, and the medtech cannot
+      infer that from the word "delete" - so the dialog says both out loud. See C8.
+    -->
+    <plurals name="delete_samples_title">
+        <item quantity="one">Delete %1$d item?</item>
+        <item quantity="other">Delete %1$d items?</item>
+    </plurals>
+    <plurals name="delete_samples_unverified">
+        <item quantity="one">%1$d unverified frame will be erased permanently.</item>
+        <item quantity="other">%1$d unverified frames will be erased permanently.</item>
+    </plurals>
+    <plurals name="delete_samples_verified">
+        <item quantity="one">%1$d verified sample will be hidden from every queue, count and report. Its detections are kept for model training.</item>
+        <item quantity="other">%1$d verified samples will be hidden from every queue, count and report. Their detections are kept for model training.</item>
+    </plurals>
+    <string name="delete_samples_confirm">Delete</string>
+    <string name="queue_status_unverified">Pending</string>
+    <string name="queue_status_verified">Verified</string>
+    <plurals name="queue_row_confirmed">
+        <item quantity="one">%1$d confirmed egg</item>
+        <item quantity="other">%1$d confirmed eggs</item>
+    </plurals>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$d detection(s) · %2$s</string>
@@ -198,6 +256,14 @@
     <string name="session_detail_epg_title">EPG</string>
     <string name="session_detail_epg_total_label">Total eggs: %1$d</string>
     <string name="session_detail_epg_empty">No confirmed eggs yet</string>
+    <string name="session_detail_infectivity_low">Low Infectivity</string>
+    <string name="session_detail_infectivity_moderate">Moderate Infectivity</string>
+    <string name="session_detail_infectivity_extreme">Extreme Infectivity</string>
+    <string name="session_detail_infectivity_extreme_title">Elevated Parasite Load Detected</string>
+    <string name="session_detail_species_detected">Detected</string>
+    <string name="session_detail_species_more">+%1$d more</string>
+    <string name="session_detail_infectivity_extreme_body">The %1$s egg count estimate for this session is in the WHO high-intensity reference range. This is an algorithmic indicator, not a diagnosis — please refer this patient to a qualified health professional for clinical confirmation and follow-up.</string>
+    <string name="session_detail_infectivity_disclaimer">This is an algorithmic estimate for reference only, not a medical diagnosis. All findings require confirmation by a qualified health professional.</string>
 
     <string name="sample_detail_title">Sample Detail</string>
     <string name="sample_detail_missing">Sample not found</string>
@@ -310,8 +376,8 @@
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_empty_title">Queue is clear</string>
     <string name="verify_queue_empty_body">Nothing to verify right now.</string>
-    <string name="verify_queue_filtered_title">No items match this filter</string>
-    <string name="verify_queue_filtered_body">Switch filters to see other frames.</string>
+    <string name="verify_queue_none_verified_title">No verified samples yet</string>
+    <string name="verify_queue_none_verified_body">Samples you verify will appear here.</string>
     <string name="verify_queue_done_title">All items verified</string>
     <string name="verify_queue_done_body">Every egg in this session has been checked.</string>
     <string name="verify_queue_view_records">View session records</string>

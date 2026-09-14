@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -94,7 +95,6 @@ import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -242,9 +242,11 @@ internal fun IconButtonGlass(
 }
 
 /**
- * Shortcut into the verification queue, with a badge counting the frames still
- * awaiting review. Lives in the bottom-left of the capture chrome: the toast
- * renders top-center and used to sit on top of this button.
+ * Shortcut into the verification queue, badged with the frames still awaiting review.
+ *
+ * Sits bottom-right, where End Session used to be. The badge deliberately counts only the
+ * unverified frames: verified samples live in the queue too now, and including them would turn
+ * a "needs review" number into a "how much is in here" number.
  */
 @Composable
 private fun VerificationQueueButton(
@@ -297,10 +299,8 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
-    onRecordsClick: () -> Unit,
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
-    onSessionEnded: () -> Unit,
     onNavigateBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -309,7 +309,6 @@ fun CaptureScreen(
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
     val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
-    var showEndConfirm by rememberSaveable { mutableStateOf(false) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -341,14 +340,6 @@ fun CaptureScreen(
         onDispose {
             controller?.show(WindowInsetsCompat.Type.navigationBars())
             controller?.isAppearanceLightStatusBars = previousLight ?: false
-        }
-    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                CaptureEvent.SessionEnded -> onSessionEnded()
-            }
         }
     }
 
@@ -458,33 +449,37 @@ fun CaptureScreen(
                 )
             }
 
-            // Records shortcut: list glyph used instead of bar glyph because the bar
-            // glyph read as signal strength, not session records.
-            Box(
-                modifier = Modifier.width(40.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                val sessionId = state.activeSessionId
-                IconButtonGlass(
-                    icon = Icons.AutoMirrored.Outlined.ListAlt,
-                    contentDescription = stringResource(R.string.capture_records_action_desc),
-                    enabled = sessionId != null,
-                    onClick = { sessionId?.let(onReportsClick) },
-                )
-            }
+            // Balances the back button so the session label stays centred. Records moved
+            // to the bottom row, where the three actions now sit together.
+            Spacer(modifier = Modifier.width(40.dp))
         }
 
-        // Connection loss banner positioned under the top chrome (77b5 spacing)
-        ConnectionLossBanner(
-            visible = state.isConnectionLost,
-            isProbing = state.isProbingConnection,
-            onResume = viewModel::resumeConnection,
+        // The row beneath the top chrome. Banner and toast are stacked in one column rather
+        // than both being pinned to the same offset - they could previously occupy the same
+        // band at once, because a shutter tap still records a frame while the connection-loss
+        // banner is latched. That was acknowledged in a comment and deferred; this is it.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 14.dp),
-        )
+                .padding(top = 108.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ConnectionLossBanner(
+                visible = state.isConnectionLost,
+                isProbing = state.isProbingConnection,
+                onResume = viewModel::resumeConnection,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+            )
+            AgarthaToastHost(
+                state = toastState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            )
+        }
 
         // Bottom chrome (77b5 style)
         Row(
@@ -495,16 +490,18 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: verification queue shortcut. Its badge already counts the
-            // unverified frames, so the separate FRAMES pill that used to sit here
-            // was redundant.
+            // Left: records for this session. A list glyph, not the bar glyph, which read as
+            // signal strength next to the connection-loss banner (86d4ayef8).
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                VerificationQueueButton(
-                    count = state.flaggedFrames.size,
-                    onClick = onVerifyQueueClick,
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    icon = Icons.AutoMirrored.Outlined.ListAlt,
+                    contentDescription = stringResource(R.string.capture_records_action_desc),
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
                 )
             }
 
@@ -515,173 +512,34 @@ fun CaptureScreen(
                 onClick = viewModel::onCapture,
             )
 
-            // Right: end session
+            // Right: the verification queue, where End Session used to be. Its badge counts
+            // unverified frames only - verified samples live in the queue too now, and
+            // including them would inflate a "needs review" number into a "how much is in
+            // here" number.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .offset(x = (-30).dp)
-                        .shadow(
-                            14.dp,
-                            RoundedCornerShape(12.dp),
-                            spotColor = Color(0xFFDC2626).copy(alpha = 0.4f),
-                        )
-                        .background(Color(0xFFDC2626), RoundedCornerShape(12.dp))
-                        .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                            showEndConfirm = true
-                        },
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
                 )
             }
         }
 
-        // Capture toast, below the back button and session pill rather than over them.
-        // NOTE: since capture is manual-trigger, a tap still records a frame (as a Manual
-        // Capture) while the connection-loss banner is latched, so both can now occupy this
-        // band at once. Repositioning to stack them cleanly is tracked as a follow-up.
-        AgarthaToastHost(
-            state = toastState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 20.dp),
-        )
     }
 
     val target = state.verificationTarget
     if (target != null) {
-        if (target.source == FrameSource.MANUAL) {
-            ManualSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        } else {
-            VerificationSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        }
-    }
-
-    if (showEndConfirm) {
-        EndSessionConfirmDialog(
-            initialNotes = "",
-            isBusy = state.isBusy,
-            // Repeat frames are duplicates the medtech already accounted for, and
-            // zero-detection frames (clean fields, and Manual frames from an outage) have
-            // nothing to verify — neither should hold a session open. Interim gate until
-            // 86d4ab4vm reworks the queue; do not reach into the verification sheets here
-            // (86d4ab4tq's territory).
-            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat && it.predictions.isNotEmpty() },
-            onConfirm = { notes ->
-                showEndConfirm = false
-                viewModel.endSession(notes)
-            },
-            onDismiss = { showEndConfirm = false },
+        // One screen for both sources. What makes a sample "AI" is simply that it has model
+        // output, which the sheet reads off the frame itself.
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
         )
     }
 }
 
-@Composable
-private fun EndSessionConfirmDialog(
-    initialNotes: String,
-    isBusy: Boolean,
-    blockedCount: Int,
-    onConfirm: (notes: String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var notes by rememberSaveable { mutableStateOf(initialNotes) }
-    val isBlocked = blockedCount > 0
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = DialogShape,
-        confirmButton = {
-            AgarthaButton(
-                onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
-                variant = AgarthaButtonVariant.Destructive,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy && !isBlocked,
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = AppColors.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(stringResource(R.string.capture_end_session_confirm))
-                }
-            }
-        },
-        dismissButton = {
-            AgarthaButton(
-                onClick = onDismiss,
-                variant = AgarthaButtonVariant.Ghost,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy,
-            ) {
-                Text(stringResource(R.string.verify_cancel))
-            }
-        },
-        title = { Text(stringResource(R.string.capture_end_session_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.sm)) {
-                if (isBlocked) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.capture_end_blocked_body,
-                            blockedCount,
-                            blockedCount,
-                        ),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.capture_end_session_body),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.capture_end_session_notes_label),
-                        color = AppColors.Gray900,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = limitInput(notes, it, SESSION_NOTE_MAX_LENGTH) },
-                        placeholder = {
-                            Text(stringResource(R.string.capture_end_session_notes_placeholder))
-                        },
-                        singleLine = false,
-                        enabled = !isBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AgarthaTheme.colors.accent,
-                            unfocusedBorderColor = AppColors.Gray200,
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        supportingText = {
-                            Text(
-                                stringResource(
-                                    R.string.session_new_char_counter,
-                                    notes.length,
-                                    SESSION_NOTE_MAX_LENGTH,
-                                )
-                            )
-                        },
-                    )
-                }
-            }
-        },
-        containerColor = AppColors.White,
-        titleContentColor = AppColors.Gray900,
-        textContentColor = AppColors.Gray900,
-    )
-}
 
 @Composable
 private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {

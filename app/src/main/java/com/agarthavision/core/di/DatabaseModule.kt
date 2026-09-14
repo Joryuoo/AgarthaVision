@@ -7,6 +7,7 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.repository.AndroidReportPdfRenderer
 import com.agarthavision.data.repository.DetectionRepositoryImpl
@@ -69,6 +70,11 @@ object DatabaseModule {
     @Provides
     fun providePsgcBarangayDao(database: AgarthaDatabase): PsgcBarangayDao =
         database.psgcBarangayDao()
+
+    @Provides
+    fun provideSampleSpeciesFindingDao(
+        database: AgarthaDatabase,
+    ): SampleSpeciesFindingDao = database.sampleSpeciesFindingDao()
 }
 
 /**

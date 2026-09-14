@@ -39,4 +39,10 @@ class DetectionRepositoryImpl @Inject constructor(
                 com.agarthavision.domain.repository.DailyEggCount(timestamp = it.timestamp, count = it.eggCount)
             }
         }
+
+    override suspend fun getSpeciesLabelsForSessions(
+        sessionIds: List<String>,
+    ): Map<String, List<String>> =
+        detectionDao.getSpeciesLabelsForSessions(sessionIds)
+            .groupBy({ it.sessionId }, { it.species })
 }

@@ -60,35 +60,35 @@ class QueueEmptyStateTest {
         composeRule.onNodeWithText("View session records").assertDoesNotExist()
     }
 
-    // ---------- FILTERED ----------
+    // ---------- NONE_VERIFIED ----------
 
     @Test
-    fun `FILTERED shows its title`() {
+    fun `NONE_VERIFIED shows its title`() {
         composeRule.setContent {
             AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.FILTERED, onViewRecords = {})
+                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
             }
         }
 
-        composeRule.onNodeWithText("No items match this filter").assertIsDisplayed()
+        composeRule.onNodeWithText("No verified samples yet").assertIsDisplayed()
     }
 
     @Test
-    fun `FILTERED shows its body`() {
+    fun `NONE_VERIFIED shows its body`() {
         composeRule.setContent {
             AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.FILTERED, onViewRecords = {})
+                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
             }
         }
 
-        composeRule.onNodeWithText("Switch filters to see other frames.").assertIsDisplayed()
+        composeRule.onNodeWithText("Samples you verify will appear here.").assertIsDisplayed()
     }
 
     @Test
-    fun `FILTERED does not show View session records button`() {
+    fun `NONE_VERIFIED does not show View session records button`() {
         composeRule.setContent {
             AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.FILTERED, onViewRecords = {})
+                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
             }
         }
 

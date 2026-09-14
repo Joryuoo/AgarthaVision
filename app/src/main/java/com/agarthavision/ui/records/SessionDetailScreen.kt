@@ -8,6 +8,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -29,8 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.FactCheck
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,9 +64,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.InfectivityLevel
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
-import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -85,6 +85,10 @@ internal data class SessionDetailUi(
     val confirmedEggs: Int,
     val speciesCount: Int,
     val samplesTotal: Int,
+    val infectivityLevel: InfectivityLevel?,
+    val infectivitySpeciesLabel: String?,
+    /** Every distinct species confirmed this session, custom "Other" names included. */
+    val detectedSpecies: List<String>,
     val verifiedSamples: List<SampleUi>,
 )
 
@@ -94,7 +98,6 @@ internal data class SampleUi(
     val species: String,
     val confidence: Int?,
     val filePath: String?,
-    val isRepeat: Boolean = false,
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -238,7 +241,6 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
             confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
-            isRepeat = item.sample.isRepeat,
         )
     }
 
@@ -252,55 +254,11 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         confirmedEggs = state.totalEggCount,
         speciesCount = state.eggCounts.size,
         samplesTotal = sessionData.samples.size,
+        infectivityLevel = state.infectivityLevel,
+        infectivitySpeciesLabel = state.infectivitySpeciesLabel,
+        detectedSpecies = state.eggCounts.map { it.species },
         verifiedSamples = samples,
     )
-}
-
-@Composable
-private fun SessionDetailUnavailableScreen(
-    unavailable: SessionUnavailable,
-    onBack: () -> Unit,
-) {
-    val colors = AgarthaTheme.colors
-    Scaffold(
-        topBar = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(colors.background)
-                    .statusBarsPadding()
-                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
-            ) {
-                BackArrow(
-                    onBack = onBack,
-                    contentDescription = stringResource(R.string.session_detail_back),
-                )
-            }
-        },
-        containerColor = colors.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-    ) { inner ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(inner),
-            contentAlignment = Alignment.Center,
-        ) {
-            when (unavailable) {
-                SessionUnavailable.NOT_FOUND -> EmptyState(
-                    icon = Icons.Outlined.SearchOff,
-                    title = stringResource(R.string.session_detail_not_found_title),
-                    body = stringResource(R.string.session_detail_not_found_body),
-                )
-                SessionUnavailable.NOT_VISIBLE -> EmptyState(
-                    icon = Icons.Outlined.Lock,
-                    title = stringResource(R.string.session_detail_not_visible_title),
-                    body = stringResource(R.string.session_detail_not_visible_body),
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -455,10 +413,7 @@ private fun SessionDetailPopulated(
                     Spacer(Modifier.height(Spacing.md))
                 }
                 EpgHeroCard(
-                    epg = session.epg,
-                    confirmedEggs = session.confirmedEggs,
-                    speciesCount = session.speciesCount,
-                    samplesTotal = session.samplesTotal,
+                    session = session,
                     modifier = Modifier.semantics(mergeDescendants = true) {
                         contentDescription = "Eggs per gram: ${session.epg}, " +
                             "${session.confirmedEggs} confirmed, " +
@@ -498,12 +453,7 @@ private fun SessionDetailEmpty(
             SessionNoteCard(note = session.patientIdOrNote)
             Spacer(Modifier.height(Spacing.md))
         }
-        EpgHeroCard(
-            epg = session.epg,
-            confirmedEggs = session.confirmedEggs,
-            speciesCount = session.speciesCount,
-            samplesTotal = session.samplesTotal,
-        )
+        EpgHeroCard(session = session)
         Spacer(Modifier.height(Spacing.md))
         ReportsSection(state = state)
         Spacer(Modifier.height(60.dp))
@@ -511,47 +461,26 @@ private fun SessionDetailEmpty(
     }
 }
 
-/**
- * The session note in full, above the EPG card. It used to ride the app-bar subtitle after
- * the date and time, where a note of any length either wrapped into a wall or got clipped;
- * a card is the one place it can be read whole.
- */
-@Composable
-internal fun SessionNoteCard(note: String, modifier: Modifier = Modifier) {
-    val colors = AgarthaTheme.colors
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-    ) {
-        Text(
-            text = stringResource(R.string.session_detail_notes_label),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.textSecondary,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(text = note, fontSize = 13.sp, lineHeight = 17.sp, color = colors.textPrimary)
-    }
-}
-
 @Composable
 internal fun EpgHeroCard(
-    epg: Int,
-    confirmedEggs: Int,
-    speciesCount: Int,
-    samplesTotal: Int,
+    session: SessionDetailUi,
     modifier: Modifier = Modifier,
 ) {
+    val epg = session.epg
+    val confirmedEggs = session.confirmedEggs
+    val speciesCount = session.speciesCount
+    val samplesTotal = session.samplesTotal
+    val infectivityLevel = session.infectivityLevel
+    val infectivitySpeciesLabel = session.infectivitySpeciesLabel
     val themeColors = AgarthaTheme.colors
-    val heroGlow = themeColors.accentTint
+    // The hero card is the maroon brand surface; all text reads in onAccent tints.
+    val onCard = themeColors.onAccent
+    val onCardMuted = onCard.copy(alpha = 0.72f)
+    val onCardFaint = onCard.copy(alpha = 0.6f)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(themeColors.surfaceVariant, RoundedCornerShape(12.dp))
-            .border(1.dp, themeColors.border, RoundedCornerShape(12.dp))
+            .background(themeColors.accent, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(
@@ -560,7 +489,7 @@ internal fun EpgHeroCard(
                 .drawBehind {
                     drawRect(
                         brush = Brush.radialGradient(
-                            colors = listOf(heroGlow.copy(alpha = 0.6f), Color.Transparent),
+                            colors = listOf(onCard.copy(alpha = 0.10f), Color.Transparent),
                             center = Offset(size.width, 0f),
                             radius = 220.dp.toPx(),
                         ),
@@ -568,39 +497,142 @@ internal fun EpgHeroCard(
                 },
         )
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                "EGGS PER GRAM",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = AgarthaTheme.colors.textSecondary,
-                letterSpacing = 1.sp,
-            )
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Text(
+                    "EGGS PER GRAM",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCardMuted,
+                    letterSpacing = 1.sp,
+                    modifier = Modifier.weight(1f).padding(top = 2.dp),
+                )
+                // Red area: the infectivity severity indicator sits in the top-right corner.
+                if (infectivityLevel != null) {
+                    InfectivityTierBadge(level = infectivityLevel)
+                }
+            }
             Spacer(Modifier.height(8.dp))
             Text(
                 epg.toString(),
                 fontSize = 56.sp,
                 lineHeight = 56.sp,
                 fontWeight = FontWeight.Bold,
-                color = AgarthaTheme.colors.textPrimary,
+                color = onCard,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             )
             Spacer(Modifier.height(12.dp))
-            EpgMeta(confirmedEggs, speciesCount, samplesTotal)
+            EpgMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
+            // Blue area: the species detected this session, custom "Other" names included.
+            if (session.detectedSpecies.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                DetectedSpecies(species = session.detectedSpecies, labelColor = onCardMuted)
+            }
+            // Zero eggs found is a neutral/absent state, not "Low" — infectivityLevel is
+            // already null then, so no consult message or disclaimer renders.
+            if (infectivityLevel != null) {
+                if (infectivityLevel == InfectivityLevel.EXTREME) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = stringResource(
+                            R.string.session_detail_infectivity_extreme_body,
+                            infectivitySpeciesLabel ?: "",
+                        ),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = onCard,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(onCard.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.session_detail_infectivity_disclaimer),
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        color = onCardFaint,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Blue area of the hero card: the distinct species confirmed this session (custom "Other"
+ * names included), each in a gold pill. Shows at most four, then a "+N more" pill so a
+ * polyparasitism-heavy field does not overflow the card.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DetectedSpecies(species: List<String>, labelColor: Color) {
+    val colors = AgarthaTheme.colors
+    val maxShown = 4
+    val shown = species.take(maxShown)
+    val remaining = species.size - shown.size
+    Column {
+        Text(
+            text = stringResource(R.string.session_detail_species_detected),
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = labelColor,
+            letterSpacing = 1.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            shown.forEach { name ->
+                SpeciesPill(text = name, background = colors.goldTint, textColor = colors.goldText)
+            }
+            if (remaining > 0) {
+                SpeciesPill(
+                    text = stringResource(R.string.session_detail_species_more, remaining),
+                    background = labelColor.copy(alpha = 0.18f),
+                    textColor = labelColor,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun EpgMeta(confirmedEggs: Int, speciesCount: Int, samplesTotal: Int) {
+private fun SpeciesPill(text: String, background: Color, textColor: Color) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium,
+        color = textColor,
+        modifier = Modifier
+            .background(background, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    )
+}
+
+@Composable
+private fun EpgMeta(
+    confirmedEggs: Int,
+    speciesCount: Int,
+    samplesTotal: Int,
+    contentColor: Color,
+) {
+    val labelColor = contentColor.copy(alpha = 0.72f)
     if (confirmedEggs == 0) {
-        Text("No confirmed eggs yet", fontSize = 13.sp, color = AgarthaTheme.colors.textSecondary)
+        Text("No confirmed eggs yet", fontSize = 13.sp, color = labelColor)
     } else {
         StatRun(
             listOf(
                 Stat(confirmedEggs.toString(), "confirmed"),
                 Stat(speciesCount.toString(), "species"),
                 Stat(samplesTotal.toString(), "samples"),
-            )
+            ),
+            valueColor = contentColor,
+            labelColor = labelColor,
+            separatorColor = contentColor.copy(alpha = 0.6f),
         )
     }
 }

@@ -32,6 +32,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -76,6 +79,8 @@ import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
+import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.navigation.Screen
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Inbox
@@ -84,6 +89,7 @@ import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -129,9 +135,38 @@ fun SessionsScreen(
                     .widthIn(max = 480.dp)
                     .align(Alignment.TopCenter)
             ) {
-                // App Bar
-                val activeCount = state.sessions.count { it.session.endedAt == null }
-                AppBar(activeCount = activeCount, totalCount = state.sessions.size)
+                // App Bar. Counts come from the repository query, not from the loaded page:
+                // the list is paginated, so summing what is in `state.sessions` would report
+                // only what had been scrolled into view. Sessions do not end any more, so the
+                // count is of frames awaiting review rather than of open sessions - the
+                // latter would have counted every session and said nothing.
+                AppBar(unverifiedCount = state.unverifiedCount, totalCount = state.totalCount)
+
+                // Search + date filter row
+                SearchInput(
+                    value = state.searchQuery,
+                    onValueChange = viewModel::onSearchQueryChanged,
+                    placeholder = "Search sessions, notes...",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+                DateRangeFilterBar(
+                    startDate = state.startDate,
+                    endDate = state.endDate,
+                    onRangeSelected = viewModel::onDateRangeSelected,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+
+                // Sessions List with load-more pagination
+                val listState = rememberLazyListState()
+                val shouldLoadMore by remember {
+                    derivedStateOf {
+                        val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                        lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
+                    }
+                }
+                LaunchedEffect(shouldLoadMore) {
+                    if (shouldLoadMore) viewModel.onLoadMore()
+                }
 
                 // Sessions List
                 when {
@@ -149,7 +184,9 @@ fun SessionsScreen(
                             body = stringResource(R.string.sessions_empty_body),
                         )
                     }
-                    else -> LazyColumn(
+                    else ->
+                    LazyColumn(
+                        state = listState,
                         modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -168,6 +205,21 @@ fun SessionsScreen(
                                     },
                                 )
                             )
+                        }
+                        if (state.canLoadMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = Spacing.md),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = AgarthaTheme.colors.accent,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -231,11 +283,11 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun AppBar(activeCount: Int, totalCount: Int) {
+private fun AppBar(unverifiedCount: Int, totalCount: Int) {
     ScreenHeader(
         title = stringResource(R.string.sessions_title),
         purpose = stringResource(R.string.sessions_subtitle_purpose),
-        status = stringResource(R.string.sessions_status_counts, totalCount, activeCount),
+        status = pluralStringResource(R.plurals.sessions_subtitle, totalCount, totalCount, unverifiedCount),
     )
 }
 

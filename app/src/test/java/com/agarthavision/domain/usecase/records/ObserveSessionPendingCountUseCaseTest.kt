@@ -134,7 +134,7 @@ private class FakeCountSampleRepository(
     ): Flow<List<Sample>> = flowOf(emptyList())
     override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
         emptyList()
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
     override fun observeFlaggedSamplesForSession(
         sessionId: String,
         userId: String?,

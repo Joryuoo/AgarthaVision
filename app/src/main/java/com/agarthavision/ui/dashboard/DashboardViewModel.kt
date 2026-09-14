@@ -135,7 +135,10 @@ class DashboardViewModel @Inject constructor(
                     sessionsCount = totalSessions.toString(),
                     samplesCount = totalSamples.toString(),
                     verifiedRatio = verifiedRatio,
-                    epgAvgStatus = if (totalSamples > 100) "Heavy" else "Light"
+                    // Non-diagnostic wording only — "Heavy"/"Light" read as WHO clinical
+                    // intensity tiers, which this sample-count heuristic is not. This does not
+                    // touch the separate totalEpg=0 mock bug in activeSessionStateFlow below.
+                    epgAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
                 )
             }
         }
@@ -147,7 +150,7 @@ class DashboardViewModel @Inject constructor(
             flowOf(PendingAndSync(0, "", allSynced = true, lastSyncLabel = "never", syncedSamplesCount = 0))
         } else {
         combine(
-            flow { emit(sampleRepository.getSamplesPendingSync(userId)) },
+            flow { emit(sampleRepository.getSamplesPendingSyncIncludingDeleted(userId)) },
             sampleRepository.observeAllSamples(userId)
         ) { pendingSamples, allSamples ->
             val pendingCount = pendingSamples.size

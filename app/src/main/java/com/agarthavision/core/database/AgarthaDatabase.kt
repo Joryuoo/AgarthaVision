@@ -6,11 +6,13 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PsgcBarangayEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
 
 /**
@@ -30,6 +32,20 @@ import com.agarthavision.data.local.entity.SessionEntity
  * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the
  * surveillance map joins on the code a session stores rather than on this table.
  *
+ * Version 12 adds the `sample_species_findings` table and `detections.species_touched`
+ * (`0012_polyparasitism_findings.sql`) plus `samples.deleted_at`
+ * (`0013_sample_soft_delete.sql`).
+ *
+ * **The jump from 10 to 12 is deliberate: 11 is left free.** Three branches wanted version 10
+ * at once — `feat/sample-geospatial-mapping` (`psgc_barangays`), which won it and is merged
+ * above; `feature/editable-report` (`detections.stage`), which lost it and was reverted on
+ * staging with 86d4a6jwy deprioritised; and this one. Room only falls back destructively on a
+ * version *change*; at an equal version with a different identity hash it throws
+ * `IllegalStateException: Room cannot verify the data integrity` on open, and every device
+ * carrying one of the other builds crashes at launch. That has already happened once on this
+ * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
+ * an ordering token under destructive fallback, so a skipped number costs nothing.
+ *
  * No hand-written `Migration` is supplied: per [DatabaseModule] the app
  * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
  * these entities. Acceptable in Phase 1 (no production data). Local schema history is
@@ -41,9 +57,10 @@ import com.agarthavision.data.local.entity.SessionEntity
         SessionEntity::class,
         DetectionEntity::class,
         ReportEntity::class,
+        SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
     ],
-    version = 10,
+    version = 12,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
@@ -52,4 +69,6 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun detectionDao(): DetectionDao
     abstract fun reportDao(): ReportDao
     abstract fun psgcBarangayDao(): PsgcBarangayDao
+
+    abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
 }

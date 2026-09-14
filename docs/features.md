@@ -28,9 +28,17 @@ as working.
   (`data/local/dao/SessionDao.kt:39`, `SampleDao.kt:52`, `DetectionDao.kt:40`).
 
 ### Sessions
-- **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
-  Session writes `ended_at`. `core/session/SessionManager.kt:57-80`, `:103-126`.
-- **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:86-96`).
+- **Session = one fecal smear, and it does not end.** Start with a label and optional notes;
+  it then stays open, because the medtech keeps coming back to the smear - correcting a sample,
+  generating a report from whatever is verified so far (86d4ab4vm).
+  `core/session/SessionManager.kt`.
+- **`ended_at` is legacy.** Nothing writes it any more. The column stays nullable and
+  `SessionRemoteDataSource.closeSession` stays with it, because sessions closed before this
+  change are real history; `resumeSession` still refuses to reopen one.
+- **Sign-out detaches rather than ends** (`SessionManager.clearActive`), and the open session is
+  restored at the next launch (`SessionManager.restoreActiveSession`) - without which a process
+  restart would render the verification queue empty while the smear was still open.
+- **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:79-89`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
   `data/local/entity/SessionEntity.kt:58-64`.
@@ -64,9 +72,11 @@ as working.
   (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the
   only backend: on-device TFLite was built, benchmarked at 20.8 s per frame, and deferred to
   `feat/offline-inference`.
-- **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
-  consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
-  surface as `ui/capture/ConnectionLossBanner.kt`.
+- **Connection-loss detection.** `GET /health` every 10 s **while a capture screen is
+  mounted**; two consecutive failures flip to disconnected
+  (`core/connectivity/NetworkMonitor.kt`) and surface as `ui/capture/ConnectionLossBanner.kt`.
+  Gated on the screen rather than the session since 86d4ab4vm: a session that never ends would
+  otherwise poll forever, to drive a banner nobody is looking at.
 
 ### Validation (human-in-the-loop)
 - **Per-box verdict questionnaire** producing `CONFIRMED` / `FALSE_POSITIVE` /
@@ -82,10 +92,19 @@ as working.
   directly when the session is active and has pending frames
   (`ui/records/SessionDetailScreen.kt`, `ui/records/SessionDetailViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
-- **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced,
+- **Delete a duplicate** — a sample captured twice is removed rather than flagged. Unverified
+  frames are hard-deleted; a verified sample is tombstoned via `samples.deleted_at`, which hides
+  it from every queue, count and report while its detections stay in the retraining corpus (C8).
+  This replaced the **Repeat flag** (86d4ab4vm), which existed only because deletion was not
+  possible. That flag was excluded from EPG, never synced,
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
+- **No developmental-stage question.** 86d4a6jwy added one; staging reverted it (`9dcfd5d`)
+  because the four stages it shipped were never checked against literature — Ascaris could only
+  be tagged `UNFERTILIZED`, the one stage that is never infective — and the ticket is
+  deprioritised. `sample_species_findings.stage` survives as a dormant, always-null column
+  because `0012` is applied and frozen (C6).
 
 ### Sync
 - **Verify-time sync**: resize the JPEG to 640×640 at quality 80, upload to Storage, insert
@@ -105,9 +124,19 @@ as working.
   (`ui/records/RecordsScreen.kt`, `domain/usecase/records/GetRecordsUseCase.kt`).
   Records reads unowned local data the same way Sessions and Verify do — no sign-in required.
   Report generation still requires a cached local identity.
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:131-148`).
+- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt`).
   Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
   is absent or belongs to a different account.
+- **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
+  an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
+  `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against
+  WHO Kato-Katz per-species EPG cutoffs — population-surveillance cutoffs, **pending clinical
+  sign-off (Dr. Bayron)**, not yet a validated diagnostic threshold. `EggSpecies.OTHER`/
+  unrecognized species are excluded from the tier (no WHO table exists for them); zero confirmed
+  eggs shows no badge at all (a true negative, not "Low"). The mandatory disclaimer
+  (`session_detail_infectivity_disclaimer`) renders alongside every tier, never just Extreme.
+  UI: `ui/records/InfectivityBadge.kt`, wired into `EpgHeroCard`
+  (`ui/records/SessionDetailScreen.kt`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
@@ -123,7 +152,8 @@ as working.
   shared from the generation snackbar or a report row
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
-  `ui/records/ReportSharing.kt:30-37`).
+  `ui/records/ReportSharing.kt:30-37`). The row also emits a `stage` column
+  (`domain/usecase/records/ReportCsvBuilder.kt`).
 - **PDF export** — the patient-facing artifact. A report is generated in the single format the
   medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
   generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,

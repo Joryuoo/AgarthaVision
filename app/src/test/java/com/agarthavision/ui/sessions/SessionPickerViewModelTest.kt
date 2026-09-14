@@ -2,10 +2,12 @@ package com.agarthavision.ui.sessions
 
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
+import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -29,6 +31,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -41,10 +44,27 @@ class SessionPickerViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val sessionsFlow = MutableStateFlow<List<SessionWithStats>>(emptyList())
+    private val countsFlow = MutableStateFlow(SessionsCounts())
     private val sessionRepository: SessionRepository = mock<SessionRepository>().also {
+        // VM now uses observeVisibleSessionsPage / observeVisibleSessionsCounts.
+        whenever(
+            it.observeVisibleSessionsPage(
+                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any(),
+            ),
+        )
+            .thenReturn(sessionsFlow)
+        whenever(
+            it.observeVisibleSessionsCounts(
+                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(),
+            ),
+        )
+            .thenReturn(countsFlow)
+        // Keep the old stub so any residual call doesn't NPE (defensive).
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
     }
-    private val sessionManager: SessionManager = mock()
+    private val sessionManager: SessionManager = mock {
+        on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+    }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(

@@ -4,10 +4,12 @@ import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
@@ -200,6 +202,38 @@ private class SamplesSessionRepository(
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
+    override fun observeSessionRecordsPage(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeSessionRecordsTotals(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> = flowOf(RecordsTotals())
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 private class SamplesSampleRepository(
@@ -213,7 +247,7 @@ private class SamplesSampleRepository(
         flowOf(samplesBySession[sessionId].orEmpty())
     override suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample> =
         samplesBySession[sessionId].orEmpty()
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
     override fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>> =
         flowOf(emptyList())
 }
@@ -231,6 +265,8 @@ private class SamplesDetectionRepository(
         flowOf(emptyList())
     override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
+    override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
+        emptyMap()
 }
 
 private fun sessionsSession(id: String, userId: String?) = Session(

@@ -9,29 +9,38 @@ The human-in-the-loop gate. Nothing counts until this runs.
 **consumes** [`Sample`](../objects/Sample.md) (status `flagged`)
 **produces** [`Detection`](../objects/Detection.md), [`Sample`](../objects/Sample.md) (status `verified`)
 
-## Movement — AI frames
+## Movement
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:59-76`, `:126-144`). Two companion flows
-   (`FlaggedFrameStore.activeSessionId`, `FlaggedFrameStore.verifiedCount`) power the
-   queue's empty-state logic: when all frames are gone the screen shows one of three
-   variants — **never-had** (queue always empty), **filtered** (a chip is hiding rows),
-   or **all-done** (session has verified samples). The all-done variant includes a
-   "View session records" button linking to `SessionDetail`. Medtechs on an active session
-   can also reach the queue from the Session Detail app bar icon
-   (`ui/records/SessionDetailScreen.kt`, controlled by
-   `domain/usecase/records/ObserveSessionPendingCountUseCase`). Each sheet pages only through
-   its own source: the AI sheet cycles `FrameSource.MODEL` frames **that are not marked
-   repeat**, the manual sheet cycles `FrameSource.MANUAL`, and `Frame n/N` counts that subset
-   rather than the whole queue. Marking the open frame repeat drops it from the cycle: it stays
-   on screen so the mark can be undone, but reports no position and both frame buttons dim. The
-   host picks a sheet from the frame it opened with and never re-evaluates, so crossing
-   between the two would render the wrong questions.
+   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). When the selected bucket has
+   no rows the screen says which of three things is true — nothing captured yet, every capture
+   verified (with a "View session records" button into `SessionDetail`), or nothing verified
+   yet — chosen by the pure `queueEmptyVariant` in `ui/verify/VerificationQueueViewModel.kt`.
+   A running session with pending frames can also reach the queue from the Session Detail app
+   bar (`ui/records/SessionDetailScreen.kt`, gated by
+   `domain/usecase/records/ObserveSessionPendingCountUseCase`). **One screen handles both
+   sources**, so the cycle is the whole queue and `Frame n/N` counts all of it. Frames marked
+   repeat are the one exclusion: marking the open frame repeat drops it from the cycle, and it
+   stays on screen so the mark can be undone but reports no position and both frame buttons
+   dim. Until 86d4ab4tq there were two sheets asking different questions, and the host picked
+   one from the frame it opened with and never re-evaluated — so each sheet had to page only
+   through its own source or it would render the wrong questions.
 2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
-   which species (`domain/usecase/verify/VerificationAnswers.kt:5-20`). A "no" at any step
-   short-circuits the rest — `isComplete` encodes exactly which questions still matter
-   (`VerificationAnswers.kt:11-20`).
+   and which species (`domain/usecase/verify/VerificationAnswers.kt`). Species is asked as a
+   confirmation first — "Is this egg *Ascaris lumbricoides*?" — and a yes records the model's
+   species as the medtech's answer in that same step (`ui/verify/VerificationViewModel.kt`
+   `onSpeciesConfirmed`); only a no opens the species picker. A model class that maps to no
+   `EggSpecies` has nothing to confirm, so the picker is offered directly.
+
+   A "no" to the egg question short-circuits the rest. A "no" to the **box** question does not:
+   a misplaced box still contains a countable egg, so the species is still asked and the egg
+   still reaches the per-species count — the verdict records `BOX_INCORRECT` separately.
+   `Finding.isComplete` encodes exactly which questions still matter.
+
+   There is no developmental-stage question. 86d4a6jwy added one and staging reverted it
+   (`9dcfd5d`); the ticket is deprioritised. `sample_species_findings.stage` survives as a
+   dormant column because `0012` is applied and frozen under C6.
 3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
    `needs_reannotation` (`ui/verify/VerificationViewModel.kt:217`).
 4. **Compute the verdict.** One function, first-match-wins:
@@ -56,16 +65,22 @@ The human-in-the-loop gate. Nothing counts until this runs.
 8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline — see [`sync`](sync.md)
    (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`).
 
-## Movement — manual captures
+## Manual captures take the same path
 
-Same destination, shorter path, and since this pass the manual sheet pages its queue the same
-way the AI sheet does. `SubmitManualCaptureUseCase` requires a species, resolves the
-label (canonical name, or free text for `OTHER`), and writes **one** detection with
-`confidence = 1.0f`, all four box columns null, `verdict = CONFIRMED`, and `expert_class` set to
-the same label (`domain/usecase/verify/SubmitManualCaptureUseCase.kt:34-72`). It sets
-`needs_reannotation = true` unconditionally
-(`domain/usecase/verify/SubmitManualCaptureUseCase.kt:50`), so every manual capture is queued
-for offline annotation.
+There is no second use case and no second screen. A manual capture is a frame with no model
+output, so it opens with exactly one finding whose `prediction` is null: the isEgg and
+isBoxCorrect questions do not render, and the medtech names a species and a count directly.
+`Finding.toDetectionEntity` writes that as **one** detection with `confidence = 1.0f`, all four
+box columns null and `verdict = CONFIRMED` — the same row `SubmitManualCaptureUseCase` used to
+write before it was absorbed (`data/local/mapper/VerificationMapper.kt`).
+
+**One behaviour did change in the merge.** The old manual path set `needs_reannotation = true`
+unconditionally, so every manual capture was queued for offline annotation whether or not the
+medtech thought anything was missing. On the shared path it follows the missed-egg answer like
+any other frame. The question is asked on a manual capture — it is not gated on having a box —
+so the flag now records what the medtech actually said rather than an assumption made on their
+behalf. Fewer frames land in the annotation queue, and the ones that do are there for a
+reason.
 
 ## Hits
 
@@ -91,6 +106,42 @@ for offline annotation.
   corpus; consuming it is a separate, out-of-repo activity.
 - **The image bytes.** Verification never rewrites the JPEG. Resizing happens later, in
   [`sync`](sync.md).
+
+## Free-text audit (C13)
+
+Every text-entry field reachable from verification/manual capture and the records screens,
+audited for whether it is sanctioned free text, a dropdown-gated fallback, or not free text at
+all.
+
+- **Sanctioned free text (keep).** The per-detection sample note: `NoteField` in
+  `ui/verify/VerificationSheet.kt:348-353` (call site) and `:482-497` (definition), and the
+  equivalent `OutlinedTextField` in `ui/verify/ManualSheet.kt:313-329`. Both write to
+  `state.userNote` / `samples.user_note` and land unchanged in the CSV `user_note` column
+  (`domain/usecase/records/ReportCsvBuilder.kt:82`, `:108`). Also sanctioned: the session label
+  entered at session creation (`ui/sessions/SessionsScreen.kt:436-441`), an administrative
+  specimen identifier rather than a clinical observation, which flows into the CSV
+  `session_label` header (`ReportCsvBuilder.kt:47`) and the PDF header
+  (`domain/usecase/records/ReportPdfBuilder.kt:31`).
+- **Dropdown-gated fallback (legitimate, but a *species* field, not remarks).** The "Other
+  species" text field in `ui/verify/SpeciesDropdown.kt:113-122`, rendered only when
+  `EggSpecies.OTHER` is selected. Its value becomes `expert_class`
+  (`data/local/mapper/VerificationMapper.kt:24-39`), not a note — it names the organism, it
+  doesn't annotate it.
+- **Not actually free text.** The species dropdown's own `query` state
+  (`ui/verify/SpeciesDropdown.kt:46`, `:61-63`, `:70-93`) is a live filter over the `EggSpecies`
+  enum; the committed value only ever comes from a `DropdownMenuItem` tap
+  (`SpeciesDropdown.kt:101-109`), never from the typed text itself.
+- **No editable/free-text fields** exist on `ui/records/SampleDetailScreen.kt` or
+  `ui/records/SessionDetailScreen.kt` — both are read-only presentations of already-committed
+  data.
+
+**Governing rule status.** The only clinical free-text field in the app is the dropdown-gated
+"Other species" fallback above — there is no manual LPF/count field yet (blocked on
+`86d4a6jxw`), so the "only LPF is typed" rule has nothing to satisfy or violate today.
+
+**Deferred (explicitly out of scope here).** Per-species LPF count carry-through and the PDF
+per-detection breakdown are blocked on `86d4ab4tq` (polyparasitism findings table) and
+`86d4a6jxw` (LPF unit) respectively.
 
 ## The inconsistency worth knowing
 
