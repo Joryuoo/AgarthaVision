@@ -30,6 +30,7 @@
     <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>
     <string name="dashboard_sync_toast_offline">You\'re offline — sync will resume when you reconnect</string>
     <string name="dashboard_sync_toast_started">Syncing your records…</string>
+    <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
 
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
     <string name="session_not_linked">Not linked</string>

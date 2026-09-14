@@ -41,20 +41,32 @@ private fun syncToastMessage(state: DashboardUiState): Int = when {
     else -> R.string.dashboard_sync_toast_started
 }
 
+/** Shows a toast, cancelling any still-visible one first so rapid taps can't stack them. */
+private fun showSyncToast(context: Context, holder: Array<Toast?>, messageRes: Int) {
+    holder[0]?.cancel()
+    holder[0] = Toast.makeText(context, context.getString(messageRes), Toast.LENGTH_SHORT)
+        .also { it.show() }
+}
+
 /**
- * Handles a sync-button tap: ignores it when inside the [SYNC_TAP_COOLDOWN_MS] window
- * ([lastTapMs] is a single-slot holder), otherwise toasts and kicks off a sync.
+ * Handles a sync-button tap: inside the [SYNC_TAP_COOLDOWN_MS] window it only warns that a sync
+ * just ran ([lastTapMs] is a single-slot timestamp holder); otherwise it toasts the sync status
+ * and kicks off a sync. [toastHolder] dedupes toasts so spamming the button never stacks them.
  */
 private fun handleSyncTap(
     context: Context,
     state: DashboardUiState,
     lastTapMs: LongArray,
+    toastHolder: Array<Toast?>,
     onSyncNow: () -> Unit,
 ) {
     val now = System.currentTimeMillis()
-    if (now - lastTapMs[0] < SYNC_TAP_COOLDOWN_MS) return
+    if (now - lastTapMs[0] < SYNC_TAP_COOLDOWN_MS) {
+        showSyncToast(context, toastHolder, R.string.dashboard_sync_toast_rate_limited)
+        return
+    }
     lastTapMs[0] = now
-    Toast.makeText(context, context.getString(syncToastMessage(state)), Toast.LENGTH_SHORT).show()
+    showSyncToast(context, toastHolder, syncToastMessage(state))
     onSyncNow()
 }
 
@@ -67,6 +79,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     // Rate-limit the sync button so rapid taps can't fire a burst of sync passes (or toasts).
     val lastSyncTapMs = remember { longArrayOf(0L) }
+    val syncToastHolder = remember { arrayOfNulls<Toast>(1) }
 
     Box(
         modifier = Modifier
@@ -86,7 +99,9 @@ fun DashboardScreen(
                     isSyncing = state.isSyncing,
                     needsSync = state.isSignedIn && state.pendingUploadCount > 0 && !state.isSyncing,
                     onSync = {
-                        handleSyncTap(context, state, lastSyncTapMs) { viewModel.onSyncNow() }
+                        handleSyncTap(context, state, lastSyncTapMs, syncToastHolder) {
+                            viewModel.onSyncNow()
+                        }
                     }
                 )
             }
