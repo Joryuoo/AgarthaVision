@@ -7,7 +7,6 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
-import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -470,20 +469,6 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `a manual frame opens with one finding and no box`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // No prediction means the isEgg / isBoxCorrect questions never render, and the
-            // medtech names a species and a count directly - the old ManualSheet flow.
-            val vm = viewModel()
-            vm.setFrame(makeManualFrame("manual-1"))
-            advanceUntilIdle()
-
-            val findings = vm.state.value.findings
-            assertEquals(1, findings.size)
-            assertNull(findings[0].prediction)
-        }
-
-    @Test
     fun `queueSize counts both sources`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             storeState.value = listOf(
@@ -708,5 +693,6 @@ class VerificationViewModelTest {
 
             assertNull(vm.state.value.findings[0].answers.species)
         }
+
 
 }

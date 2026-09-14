@@ -84,6 +84,10 @@
     <!-- Shown instead of a position when the open frame is no longer in the queue. -->
     <string name="verify_frame_meta_out_of_cycle">Not in queue · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
+    <string name="verify_manual_title">Label sample</string>
+    <string name="verify_select_species">Select species present in frame:</string>
+    <string name="verify_no_detection">No eggs / species detected</string>
+    <string name="verify_manual_count_label">Count</string>
     <string name="verify_species_label">SPECIES</string>
     <string name="verify_remarks_label">REMARKS</string>
     <string name="verify_remarks_placeholder">Remarks for this sample</string>

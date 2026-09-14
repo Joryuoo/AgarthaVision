@@ -1,5 +1,7 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.model.EggSpecies
+
 /**
  * Stable handles for the verification sheets' UI tests.
  *
@@ -85,6 +87,12 @@ internal object VerifyTestTags {
 
     /** The live per-species summary of what submitting would write. */
     const val FINDINGS_SUMMARY = "findings_summary"
+
+    const val MANUAL_NO_DETECTION = "manual_no_detection"
+    const val MANUAL_OTHER_NAME_FIELD = "manual_other_name_field"
+
+    fun manualSpeciesCheckbox(species: EggSpecies): String = "manual_species_" + species.name
+    fun manualCountField(species: EggSpecies): String = "manual_count_" + species.name
 
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
 

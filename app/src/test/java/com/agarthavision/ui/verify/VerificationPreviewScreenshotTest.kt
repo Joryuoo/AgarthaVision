@@ -111,6 +111,10 @@ class VerificationPreviewScreenshotTest {
         onEggCountChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onManualNoDetectionSelected = {},
+        onManualSpeciesToggled = { _, _ -> },
+        onManualCountChanged = { _, _ -> },
+        onManualOtherNameChanged = {},
     )
 
     @Test
