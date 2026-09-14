@@ -116,7 +116,7 @@
     <string name="capture_end_session_confirm">End session</string>
     <string name="capture_verify_action_desc">Verify flagged frames</string>
     <string name="capture_reports_action_desc">View session EPG</string>
-    <string name="capture_records_action_desc">View records</string>
+    <string name="capture_records_action_desc">View session records</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_frame_captured_message">Frame captured</string>

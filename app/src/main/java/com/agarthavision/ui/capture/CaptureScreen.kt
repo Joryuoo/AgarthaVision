@@ -13,6 +13,10 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ListAlt
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -119,6 +123,17 @@ private fun PulsingDot() {
     )
 }
 
+/** Fill of the capture chrome's glass buttons: near-black at 55%, mode-independent like the feed. */
+private val GlassFill = Color(28, 20, 18, (0.55f * 255).toInt())
+
+/** The 40dp translucent circle shared by every glass button on the capture chrome. */
+private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifier = this
+    .size(40.dp)
+    .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+    .background(GlassFill, CircleShape)
+    .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+    .clickable(enabled = enabled) { onClick() }
+
 @Composable
 private fun IconButtonGlass(
     pathData: String,
@@ -126,21 +141,30 @@ private fun IconButtonGlass(
     enabled: Boolean = true,
     drawExtras: (DrawScope.() -> Unit)? = null,
 ) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-            .background(Color(28, 20, 18, (0.55f * 255).toInt()), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
-            .clickable(enabled = enabled) { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
         SvgIcon(
             pathData,
             color = Color.White,
             strokeWidth = 1.8f,
             modifier = Modifier.size(22.dp),
             drawExtras = drawExtras,
+        )
+    }
+}
+
+@Composable
+internal fun IconButtonGlass(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
         )
     }
 }
@@ -367,15 +391,16 @@ fun CaptureScreen(
                 )
             }
 
-            // Records shortcut for the active session. Reuses ic_chart's bar geometry so
-            // it reads the same as the Records tab in the bottom bar.
+            // Records shortcut: list glyph used instead of bar glyph because the bar
+            // glyph read as signal strength, not session records.
             Box(
                 modifier = Modifier.width(40.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 val sessionId = state.activeSessionId
                 IconButtonGlass(
-                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
+                    icon = Icons.AutoMirrored.Outlined.ListAlt,
+                    contentDescription = stringResource(R.string.capture_records_action_desc),
                     enabled = sessionId != null,
                     onClick = { sessionId?.let(onReportsClick) },
                 )
