@@ -490,18 +490,16 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: records for this session. A list glyph, not the bar glyph, which read as
-            // signal strength next to the connection-loss banner (86d4ayef8).
+            // Left: the verification queue. Its badge counts unverified frames only - verified
+            // samples live in the queue too now, and including them would inflate a "needs
+            // review" number into a "how much is in here" number.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                val sessionId = state.activeSessionId
-                IconButtonGlass(
-                    icon = AgarthaIcons.LabProfile,
-                    contentDescription = stringResource(R.string.capture_records_action_desc),
-                    enabled = sessionId != null,
-                    onClick = { sessionId?.let(onReportsClick) },
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
                 )
             }
 
@@ -512,17 +510,18 @@ fun CaptureScreen(
                 onClick = viewModel::onCapture,
             )
 
-            // Right: the verification queue, where End Session used to be. Its badge counts
-            // unverified frames only - verified samples live in the queue too now, and
-            // including them would inflate a "needs review" number into a "how much is in
-            // here" number.
+            // Right: records for this session. A lab-profile glyph, not the bar glyph, which
+            // read as signal strength next to the connection-loss banner (86d4ayef8).
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                VerificationQueueButton(
-                    count = state.flaggedFrames.size,
-                    onClick = onVerifyQueueClick,
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    icon = AgarthaIcons.LabProfile,
+                    contentDescription = stringResource(R.string.capture_records_action_desc),
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
                 )
             }
         }

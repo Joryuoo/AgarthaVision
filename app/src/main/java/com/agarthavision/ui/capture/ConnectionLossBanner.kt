@@ -65,10 +65,11 @@ fun ConnectionLossBanner(
             label = "BannerCollapse"
         ) { collapsed ->
             if (collapsed) {
-                // Collapsed: just the warning icon pill on the left — tap to expand
+                // Collapsed: just the warning icon pill tucked into the top-right corner —
+                // tap to expand. Sits out of the way of the shutter and session chrome.
                 Box(
                     modifier = Modifier.fillMaxWidth(),
-                    contentAlignment = Alignment.CenterStart
+                    contentAlignment = Alignment.CenterEnd
                 ) {
                     Box(
                         modifier = Modifier
