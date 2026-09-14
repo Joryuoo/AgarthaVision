@@ -95,6 +95,10 @@ as working.
   cleanly when signed out or offline (`domain/usecase/sync/SyncPendingDataUseCase.kt:60-81`).
 - **Pending / failed sync counts** surfaced in Settings
   (`data/local/dao/SampleDao.kt:137`, `:145`).
+- **Signed-out "N not linked" badge**: when signed out and unowned local sessions exist
+  (`user_id IS NULL AND claim_exempt = 0`), the sync badge shows "N not linked" and a
+  helper line prompts sign-in to link them; uses `SessionDao.observeUnlinkedCount()` via
+  `ObserveUnlinkedSessionCountUseCase` and `syncBadgeState()` in `ui/settings/SettingsCards.kt`.
 
 ### Records and reports
 - **Records browser** over verified samples, including unowned local sessions

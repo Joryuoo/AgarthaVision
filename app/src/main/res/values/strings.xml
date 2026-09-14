@@ -278,6 +278,15 @@
     <string name="settings_sync_reports">Reports</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_syncing">Syncing…</string>
+    <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
+    <plurals name="settings_sync_not_linked">
+        <item quantity="one">%1$d not linked</item>
+        <item quantity="other">%1$d not linked</item>
+    </plurals>
+    <plurals name="settings_sync_sign_in_to_link">
+        <item quantity="one">Sign in to link and upload %1$d session.</item>
+        <item quantity="other">Sign in to link and upload %1$d sessions.</item>
+    </plurals>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>

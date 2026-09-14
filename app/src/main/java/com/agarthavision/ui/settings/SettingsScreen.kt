@@ -130,6 +130,7 @@ private fun SettingsContent(
                             counts = state.pendingSyncCounts,
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
+                            unlinkedSessions = state.unlinkedSessions,
                         ),
                         onSyncNowClick = actions.onSyncNowClick,
                     )
@@ -208,6 +209,28 @@ private fun SettingsScreenPreview() {
             isOffline = false,
             isDarkMode = false,
             pendingSyncCounts = PendingSyncCounts(2, 5, 1, 0),
+        ),
+        actions = SettingsActions(
+            onSignInClick = {},
+            onSignOutClick = {},
+            onSyncNowClick = {},
+            onToggleTheme = {},
+        ),
+    )
+}
+
+@Preview(showBackground = true, name = "Settings - signed out with unlinked sessions")
+@Composable
+private fun SettingsScreenSignedOutPreview() {
+    SettingsContent(
+        state = SettingsUiState(
+            isLoading = false,
+            identity = null,
+            isSignedIn = false,
+            isOffline = false,
+            isDarkMode = false,
+            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+            unlinkedSessions = 3,
         ),
         actions = SettingsActions(
             onSignInClick = {},

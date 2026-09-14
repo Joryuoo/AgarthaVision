@@ -152,6 +152,15 @@ interface SessionDao {
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
+     * Live count of unowned, non-exempt local sessions (user_id IS NULL AND claim_exempt = 0):
+     * recorded while signed out and still claimable at the next login. Drives the signed-out
+     * "not linked" badge in Settings. Session-level only - unowned samples always belong to
+     * an unowned session, so a session count fully describes the claim backlog. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM sessions WHERE user_id IS NULL AND claim_exempt = 0")
+    fun observeUnlinkedCount(): Flow<Int>
+
+    /**
      * Observes sessions with their associated sample, verification, and EPG counts.
      */
     @Query(

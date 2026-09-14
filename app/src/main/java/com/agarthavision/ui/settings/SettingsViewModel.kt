@@ -11,6 +11,7 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
+import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -41,6 +42,7 @@ data class SettingsUiState(
     val isDarkMode: Boolean = false,
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
     val isSyncing: Boolean = false,
+    val unlinkedSessions: Int = 0,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -63,6 +65,7 @@ class SettingsViewModel @Inject constructor(
     private val setThemeModeUseCase: SetThemeModeUseCase,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val signOutUseCase: SignOutUseCase,
+    private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -86,8 +89,8 @@ class SettingsViewModel @Inject constructor(
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        isSyncingFlow,
-    ) { identity, online, themeMode, pendingSync, syncing ->
+        combine(isSyncingFlow, observeUnlinkedSessionCountUseCase()) { s, u -> s to u },
+    ) { identity, online, themeMode, pendingSync, (syncing, unlinked) ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
@@ -96,6 +99,7 @@ class SettingsViewModel @Inject constructor(
             isDarkMode = themeMode == ThemeMode.DARK,
             pendingSyncCounts = pendingSync,
             isSyncing = syncing,
+            unlinkedSessions = unlinked,
         )
     }.stateIn(
         scope = viewModelScope,
