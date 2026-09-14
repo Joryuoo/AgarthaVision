@@ -14,11 +14,13 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
@@ -33,6 +35,10 @@ fun SpeciesDropdown(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf(selected?.displayName ?: "") }
+    LaunchedEffect(selected) {
+        query = selected?.displayName ?: ""
+    }
     val colors = AgarthaTheme.colors
     val fieldColors = OutlinedTextFieldDefaults.colors(
         focusedBorderColor = colors.accent,
@@ -44,6 +50,12 @@ fun SpeciesDropdown(
         focusedLabelColor = colors.textSecondary,
         unfocusedLabelColor = colors.textSecondary,
     )
+    // The committed selection's own name is not a filter: reopening the menu after a pick
+    // must still show every species, not just the one already chosen.
+    val committedName = selected?.displayName ?: ""
+    val filteredSpecies = EggSpecies.entries.filter { species ->
+        query.isBlank() || query == committedName || species.displayName.contains(query, ignoreCase = true)
+    }
 
     Column(modifier = modifier) {
         ExposedDropdownMenuBox(
@@ -51,24 +63,41 @@ fun SpeciesDropdown(
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = selected?.displayName ?: "",
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(stringResource(R.string.verify_q3)) },
+                value = query,
+                onValueChange = {
+                    query = it
+                    expanded = true
+                },
+                readOnly = false,
+                label = { Text(stringResource(R.string.verify_species_picker_label)) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = fieldColors,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .onFocusChanged { focusState ->
+                        // Losing focus without tapping a menu item (e.g. tabbing away, or the
+                        // outside-click that also triggers onDismissRequest) must not leave a
+                        // typed-but-uncommitted query on screen - it has to fall back to the
+                        // last committed selection.
+                        if (!focusState.isFocused) {
+                            expanded = false
+                            query = selected?.displayName ?: ""
+                        }
+                    },
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = { expanded = false },
+                onDismissRequest = {
+                    expanded = false
+                    query = selected?.displayName ?: ""
+                },
             ) {
-                EggSpecies.entries.forEach { species ->
+                filteredSpecies.forEach { species ->
                     DropdownMenuItem(
                         text = { Text(species.displayName) },
                         onClick = {
+                            query = species.displayName
                             onSpeciesSelected(species)
                             expanded = false
                         },

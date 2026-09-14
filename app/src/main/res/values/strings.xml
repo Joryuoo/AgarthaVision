@@ -37,14 +37,13 @@
     <string name="verify_predicted">Model predicted: %1$s</string>
     <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
     <string name="verify_q2">Is the bounding box correctly placed?</string>
-    <string name="verify_q3">What species?</string>
+    <string name="verify_q3">Is this egg %1$s?</string>
+    <string name="verify_species_picker_label">Which species is it?</string>
     <string name="verify_q4">Did the model miss any eggs in this frame?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
     <string name="verify_other_hint">Type the observed species</string>
-    <string name="verify_prev_detection">Previous detection</string>
-    <string name="verify_next_detection">Next detection</string>
     <string name="verify_show_boxes_label">Show bounding boxes</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
@@ -64,6 +63,14 @@
     <!-- Shown instead of a position once the open frame is marked repeat and leaves the cycle. -->
     <string name="verify_frame_meta_out_of_cycle">Repeat · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
+    <string name="verify_species_label">SPECIES</string>
+    <string name="verify_remarks_label">REMARKS</string>
+    <string name="verify_remarks_placeholder">Remarks for this sample</string>
+    <string name="verify_detection_counter">Detection %1$d of %2$d</string>
+    <string name="verify_boxes_toggle">Boxes</string>
+    <string name="verify_prev_egg">Previous egg</string>
+    <string name="verify_next_egg">Next egg</string>
+    <string name="verify_ai_suggestion_note">This is an AI-suggested result and may contain inaccuracies. Review the frame and confirm the species yourself before submitting.</string>
     <string name="verify_prev_frame">Previous frame</string>
     <string name="verify_next_frame">Next frame</string>
     <string name="verify_delete_frame">Delete</string>
@@ -188,6 +195,14 @@
     <string name="session_detail_epg_title">EPG</string>
     <string name="session_detail_epg_total_label">Total eggs: %1$d</string>
     <string name="session_detail_epg_empty">No confirmed eggs yet</string>
+    <string name="session_detail_infectivity_low">Low Infectivity</string>
+    <string name="session_detail_infectivity_moderate">Moderate Infectivity</string>
+    <string name="session_detail_infectivity_extreme">Extreme Infectivity</string>
+    <string name="session_detail_infectivity_extreme_title">Elevated Parasite Load Detected</string>
+    <string name="session_detail_species_detected">Detected</string>
+    <string name="session_detail_species_more">+%1$d more</string>
+    <string name="session_detail_infectivity_extreme_body">The %1$s egg count estimate for this session is in the WHO high-intensity reference range. This is an algorithmic indicator, not a diagnosis — please refer this patient to a qualified health professional for clinical confirmation and follow-up.</string>
+    <string name="session_detail_infectivity_disclaimer">This is an algorithmic estimate for reference only, not a medical diagnosis. All findings require confirmation by a qualified health professional.</string>
 
     <string name="sample_detail_title">Sample Detail</string>
     <string name="sample_detail_missing">Sample not found</string>

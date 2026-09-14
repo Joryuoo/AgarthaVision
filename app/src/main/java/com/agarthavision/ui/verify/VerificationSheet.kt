@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -44,18 +45,21 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.DialogShape
+import com.agarthavision.ui.theme.MonoDataStyle
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -96,6 +100,7 @@ fun VerificationSheet(
             actions = VerificationSheetActions(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
+                onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onQ4Selected = viewModel::onQ4Selected,
@@ -182,30 +187,8 @@ internal fun VerificationSheetContent(
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                SmallToggle(
-                    label = stringResource(R.string.verify_prev_frame),
-                    selected = false,
-                    onClick = actions.onFramePrev,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_PREV),
-                    enabled = state.canGoPrev,
-                )
-                SmallToggle(
-                    label = stringResource(R.string.verify_next_frame),
-                    selected = false,
-                    onClick = actions.onFrameNext,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.FRAME_NEXT),
-                    enabled = state.canGoNext,
-                )
-            }
-
+            // Full width between the side margins, at the frame's own aspect ratio, so the
+            // whole field is visible without letterboxing.
             FrameWithBoxes(
                 jpegBytes = frame.jpegBytes,
                 predictions = frame.predictions,
@@ -215,87 +198,61 @@ internal fun VerificationSheetContent(
                 inferenceImageHeight = frame.imageHeight,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .aspectRatio(frame.previewAspectRatio())
                     .testTag(VerifyTestTags.FRAME_PREVIEW)
-                    .padding(bottom = 18.dp)
                     .clip(RoundedCornerShape(18.dp))
                     .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column {
-                    Text(
-                        text = speciesName,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 18.sp,
-                        color = AgarthaTheme.colors.textPrimary,
-                    )
-                    Text(
-                        text = "Detection ${state.currentDetectionIndex + 1} of ${state.answers.size.coerceAtLeast(1)}",
-                        color = AgarthaTheme.colors.textSecondary,
-                        fontSize = 12.sp,
-                    )
-                }
-                SourceBadge(source = frame.source)
-            }
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(bottom = 12.dp),
-            ) {
-                SmallToggle(
-                    "Prev detection",
-                    false,
-                    actions.onDetectionPrev,
-                    Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.DETECTION_PREV),
-                )
-                SmallToggle(
-                    "Next detection",
-                    false,
-                    actions.onDetectionNext,
-                    Modifier
-                        .weight(1f)
-                        .testTag(VerifyTestTags.DETECTION_NEXT),
-                )
-            }
-
-            QuestionSection(
-                title = stringResource(R.string.verify_q1),
-                tag = VerifyTestTags.QUESTION_Q1,
-                options = listOf(true to "Yes", false to "No"),
-                selected = currentAnswers?.isEgg,
-                onSelect = actions.onQ1Selected,
+            FrameNavRow(
+                canGoPrev = state.canGoPrev,
+                canGoNext = state.canGoNext,
+                onPrev = actions.onFramePrev,
+                onNext = actions.onFrameNext,
+                modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
-            if (currentAnswers?.isEgg == true) {
-                QuestionSection(
-                    title = stringResource(R.string.verify_q2),
-                    tag = VerifyTestTags.QUESTION_Q2,
-                    options = listOf(true to "Yes", false to "No"),
-                    selected = currentAnswers.isBoxCorrect,
-                    onSelect = actions.onQ2Selected,
-                )
+            val detectionCount = state.answers.size.coerceAtLeast(1)
+            DetectionCard(
+                speciesName = speciesName,
+                detectionLabel = stringResource(
+                    R.string.verify_detection_counter,
+                    state.currentDetectionIndex + 1,
+                    detectionCount,
+                ),
+                source = frame.source,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
 
-                if (currentAnswers.isBoxCorrect == true) {
-                    SpeciesDropdown(
-                        selected = currentAnswers.species,
-                        otherText = currentAnswers.otherSpeciesText,
-                        onSpeciesSelected = actions.onSpeciesSelected,
-                        onOtherTextChanged = actions.onOtherSpeciesChanged,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(VerifyTestTags.SPECIES_DROPDOWN)
-                            .padding(bottom = 14.dp),
-                    )
-                }
+            // Steps between the boxes on this frame. Only drawn when there is more than one
+            // box, and each side goes dead at its end of the range, so it cannot read as a
+            // way to leave the frame.
+            if (detectionCount > 1) {
+                NavPairRow(
+                    state = NavPairState(
+                        prevLabel = stringResource(R.string.verify_prev_egg),
+                        nextLabel = stringResource(R.string.verify_next_egg),
+                        prevTag = VerifyTestTags.DETECTION_PREV,
+                        nextTag = VerifyTestTags.DETECTION_NEXT,
+                        canGoPrev = state.currentDetectionIndex > 0,
+                        canGoNext = state.currentDetectionIndex < detectionCount - 1,
+                        onPrev = actions.onDetectionPrev,
+                        onNext = actions.onDetectionNext,
+                    ),
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
             }
+
+            BoundingBoxesToggle(
+                checked = state.showBoundingBoxes,
+                onToggle = actions.onToggleBoundingBoxes,
+            )
+
+            BoxQuestionChain(
+                answers = currentAnswers,
+                suggestedSpecies = currentPrediction?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                actions = actions,
+            )
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
@@ -305,46 +262,14 @@ internal fun VerificationSheetContent(
                 onSelect = actions.onQ4Selected,
             )
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Boxes",
-                    color = AgarthaTheme.colors.textSecondary,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
-                    checked = state.showBoundingBoxes,
-                    onCheckedChange = { actions.onToggleBoundingBoxes() },
-                    thumbContent = if (state.showBoundingBoxes) {
-                        {
-                            Icon(
-                                imageVector = Icons.Outlined.CropSquare,
-                                contentDescription = null,
-                                modifier = Modifier.size(SwitchDefaults.IconSize),
-                            )
-                        }
-                    } else null,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = AppColors.White,
-                        checkedTrackColor = AgarthaTheme.colors.accent,
-                        checkedIconColor = AgarthaTheme.colors.accent,
-                        uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
-                        uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
-                    ),
-                )
-            }
-
+            SheetSectionLabel(
+                text = stringResource(R.string.verify_remarks_label),
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+            )
             NoteField(
                 value = state.userNote,
                 onValueChange = actions.onUserNoteChanged,
-                placeholder = "Notes for this sample",
+                placeholder = stringResource(R.string.verify_remarks_placeholder),
                 modifier = Modifier.padding(bottom = 12.dp),
             )
 
@@ -400,24 +325,200 @@ internal fun VerificationSheetContent(
     }
 }
 
+/**
+ * Show / hide the model's boxes on the preview. Sits directly above the first question
+ * because that question is about the highlighted box.
+ */
 @Composable
-private fun SourceBadge(source: FrameSource) {
+private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.verify_boxes_toggle),
+            color = AgarthaTheme.colors.textSecondary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        Switch(
+            modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            thumbContent = if (checked) {
+                {
+                    Icon(
+                        imageVector = Icons.Outlined.CropSquare,
+                        contentDescription = null,
+                        modifier = Modifier.size(SwitchDefaults.IconSize),
+                    )
+                }
+            } else {
+                null
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = AppColors.White,
+                checkedTrackColor = AgarthaTheme.colors.accent,
+                checkedIconColor = AgarthaTheme.colors.accent,
+                uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
+                uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
+            ),
+        )
+    }
+}
+
+/**
+ * The per-box questions, each revealed by the previous answer: is it an egg → is the box
+ * placed right → is it the species the model named. The species step is a confirmation
+ * before a picker: the common answer is yes, and a yes should not cost a pick from a list
+ * the medtech has just agreed with. Only a no opens [SpeciesDropdown]. A model class the
+ * app cannot map to an [EggSpecies] ([suggestedSpecies] null) has nothing to confirm, so
+ * the picker is offered directly.
+ */
+@Composable
+private fun BoxQuestionChain(
+    answers: VerificationAnswers?,
+    suggestedSpecies: EggSpecies?,
+    actions: VerificationSheetActions,
+) {
+    QuestionSection(
+        title = stringResource(R.string.verify_q1),
+        tag = VerifyTestTags.QUESTION_Q1,
+        options = listOf(true to "Yes", false to "No"),
+        selected = answers?.isEgg,
+        onSelect = actions.onQ1Selected,
+    )
+    if (answers?.isEgg != true) return
+
+    QuestionSection(
+        title = stringResource(R.string.verify_q2),
+        tag = VerifyTestTags.QUESTION_Q2,
+        options = listOf(true to "Yes", false to "No"),
+        selected = answers.isBoxCorrect,
+        onSelect = actions.onQ2Selected,
+    )
+    if (answers.isBoxCorrect != true) return
+
+    if (suggestedSpecies != null) {
+        QuestionSection(
+            title = stringResource(R.string.verify_q3, suggestedSpecies.displayName),
+            tag = VerifyTestTags.QUESTION_Q3,
+            options = listOf(true to "Yes", false to "No"),
+            selected = answers.speciesConfirmed,
+            onSelect = actions.onSpeciesConfirmed,
+        )
+    }
+    if (suggestedSpecies == null || answers.speciesConfirmed == false) {
+        SpeciesDropdown(
+            selected = answers.species,
+            otherText = answers.otherSpeciesText,
+            onSpeciesSelected = actions.onSpeciesSelected,
+            onOtherTextChanged = actions.onOtherSpeciesChanged,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.SPECIES_DROPDOWN)
+                .padding(bottom = 14.dp),
+        )
+    }
+}
+
+/**
+ * Highlights what the model (or the medtech, for a manual capture) put in front of the
+ * reviewer: the species large, which box this is beneath it, and the provenance pill.
+ * A model frame carries a caution line under the card, because the name on it is a
+ * suggestion the medtech is about to confirm or correct — not a finding (C7).
+ */
+@Composable
+private fun DetectionCard(
+    speciesName: String,
+    detectionLabel: String,
+    source: FrameSource,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    // Maroon brand surface, like Session Detail's hero card: everything on it reads in
+    // onAccent tints, and the provenance pill becomes a light chip so it stays legible.
+    val onCard = colors.onAccent
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.DETECTION_CARD)
+                .background(colors.accent, RoundedCornerShape(14.dp))
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.verify_species_label),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = onCard.copy(alpha = 0.72f),
+                    letterSpacing = 0.5.sp,
+                )
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = speciesName,
+                    style = AppTypography.headlineSmall,
+                    color = onCard,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = detectionLabel,
+                    color = onCard.copy(alpha = 0.72f),
+                    fontSize = 12.sp,
+                    style = MonoDataStyle,
+                )
+            }
+            SourceBadge(source = source, onAccentSurface = true)
+        }
+        if (source == FrameSource.MODEL) {
+            Text(
+                text = stringResource(R.string.verify_ai_suggestion_note),
+                color = colors.textTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
+                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Provenance pill. On the maroon [DetectionCard] ([onAccentSurface]) it is a translucent
+ * light chip; elsewhere it keeps the tinted accent/warning treatment.
+ */
+@Composable
+private fun SourceBadge(source: FrameSource, onAccentSurface: Boolean = false) {
+    val colors = AgarthaTheme.colors
     val isModelSource = source == FrameSource.MODEL
+    val background = when {
+        onAccentSurface -> colors.onAccent.copy(alpha = 0.18f)
+        isModelSource -> colors.accentTint
+        else -> colors.warningTint
+    }
+    val textColor = when {
+        onAccentSurface -> colors.onAccent
+        isModelSource -> colors.accent
+        else -> colors.warningText
+    }
 
     Box(
         modifier = Modifier
             .testTag(VerifyTestTags.SOURCE_BADGE)
-            .background(
-                color = if (isModelSource) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.warningTint,
-                shape = RoundedCornerShape(999.dp),
-            )
+            .background(color = background, shape = RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp),
     ) {
         Text(
             text = if (isModelSource) "AI-suggested" else "Manual",
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = if (isModelSource) AgarthaTheme.colors.accent else AgarthaTheme.colors.warningText,
+            color = textColor,
         )
     }
 }
@@ -430,13 +531,8 @@ private fun <T> QuestionSection(
     selected: T?,
     onSelect: (T) -> Unit,
 ) {
-    Text(
+    SheetSectionLabel(
         text = title,
-        fontFamily = FontFamily.Monospace,
-        fontSize = 10.sp,
-        fontWeight = FontWeight.SemiBold,
-        color = AgarthaTheme.colors.textSecondary,
-        letterSpacing = 0.8.sp,
         modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
     )
     Row(

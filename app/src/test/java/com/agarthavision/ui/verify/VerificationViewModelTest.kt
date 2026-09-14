@@ -160,6 +160,69 @@ class VerificationViewModelTest {
             assertTrue(vm.state.value.canSubmit)
         }
 
+    // Confirming the suggested species
+
+    @Test
+    fun `agreeing with the suggested species records it as the answer and completes the detection`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesConfirmed(true)
+            advanceUntilIdle()
+
+            val answer = vm.state.value.answers[0]
+            assertEquals(true, answer.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, answer.species)
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `rejecting the suggested species clears it and waits for a pick`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onSpeciesConfirmed(false)
+            advanceUntilIdle()
+
+            val answer = vm.state.value.answers[0]
+            assertEquals(false, answer.speciesConfirmed)
+            assertEquals(null, answer.species)
+            assertFalse(vm.state.value.canSubmit)
+
+            vm.onSpeciesSelected(EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+            assertEquals(EggSpecies.HOOKWORM, vm.state.value.answers[0].species)
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `changing an earlier answer resets the species confirmation`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+            assertEquals(null, vm.state.value.answers[0].speciesConfirmed)
+            assertEquals(null, vm.state.value.answers[0].species)
+
+            vm.onSpeciesConfirmed(true)
+            vm.onQ1Selected(true)
+            advanceUntilIdle()
+            assertEquals(null, vm.state.value.answers[0].speciesConfirmed)
+            assertEquals(null, vm.state.value.answers[0].species)
+        }
+
     @Test
     fun `prev and next detection clamp to valid range`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {

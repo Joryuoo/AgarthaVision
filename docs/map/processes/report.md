@@ -57,9 +57,34 @@ that reports a successful generation, and tapping any report row on Session Deta
 ## Live EPG, without a report
 
 `SessionEggCountUseCase` runs the same aggregate and the same multiplier without writing
-anything (`domain/usecase/reports/SessionEggCountUseCase.kt:19-29`). It is what Session Detail
+anything (`domain/usecase/reports/SessionEggCountUseCase.kt`). It is what Session Detail
 displays before anyone generates a report. It returns empty when signed out
-(`domain/usecase/reports/SessionEggCountUseCase.kt:20`).
+(`domain/usecase/reports/SessionEggCountUseCase.kt`).
+
+## Non-diagnostic infectivity indicator
+
+`SessionEggCountUseCase` also computes a per-species EPG map keyed by the recognized
+`EggSpecies` (same alias normalization as report generation, via the shared
+`EggCount.canonicalEggSpecies()` in `domain/model/EggCount.kt`) and hands it to
+`InfectivityLevelCalculator.sessionLevel` (`domain/usecase/reports/
+InfectivityLevelCalculator.kt`), a pure domain object with no Android import.
+
+- Thresholds are WHO Kato-Katz **population-surveillance** EPG cutoffs (Ascaris, Trichuris,
+  Hookworm) — **pending clinical sign-off (Dr. Bayron)** before any diagnostic framing is
+  attached to them anywhere upstream. This inherits the same open citation gap as
+  `EpgCalculator.MULTIPLIER` (`core/util/EpgCalculator.kt:6`).
+- `EggSpecies.OTHER` and any unrecognized label have no WHO table entry and are excluded from
+  the tier computation entirely, not folded into a nearby tier.
+- A session's badge is the **highest tier reached by any single recognized species**; the
+  responsible species is threaded through as `SessionEggCounts.topSpecies` for the UI copy.
+- Zero confirmed eggs for a species (or for the whole session) yields `null`, not `LOW` — a true
+  negative is a neutral/absent state, never a badge.
+- `SessionDetailScreen` renders the result inside `EpgHeroCard`: `InfectivityTierBadge` for
+  Low/Moderate, `ExtremeParasitismAlert` for Extreme (`ui/records/InfectivityBadge.kt`), always
+  paired with the mandatory `session_detail_infectivity_disclaimer` string — shown for every
+  tier, not just Extreme. All copy is zero-diagnostic-terminology by design (no "infection" /
+  "diagnosis" / "you have"; "estimate" / "indicator" / "algorithmic" / "for reference" /
+  "requires confirmation" instead).
 
 ## Hits
 
