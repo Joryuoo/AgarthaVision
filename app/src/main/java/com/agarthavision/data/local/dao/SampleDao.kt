@@ -1,6 +1,8 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -20,7 +22,23 @@ interface SampleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSample(sample: SampleEntity)
 
-    @Query("UPDATE samples SET status = :status WHERE sample_id = :sampleId")
+    /**
+     * Moves a sample between the non-flagged statuses (verified / synced / sync_failed).
+     *
+     * **Verification is one-way.** Once a sample leaves `flagged` it never goes back, so this
+     * refuses to write `flagged` onto a sample that has already been verified - only the
+     * capture insert may set that status. Without the guard a careless caller could drop a
+     * verified sample back into the unverified bucket, which the medtech would read as their
+     * work having been thrown away.
+     */
+    @Query(
+        """
+        UPDATE samples
+        SET status = :status
+        WHERE sample_id = :sampleId
+          AND (:status != 'flagged' OR status = 'flagged')
+        """,
+    )
     suspend fun updateStatus(sampleId: String, status: String)
 
     @Query(
@@ -36,14 +54,36 @@ interface SampleDao {
         storagePath: String,
     )
 
-    @Query("SELECT * FROM samples WHERE user_id = :userId AND status != 'flagged' ORDER BY timestamp DESC LIMIT 1")
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId AND status != 'flagged' AND deleted_at is null
+        ORDER BY timestamp DESC LIMIT 1
+        """,
+    )
     fun observeLatestSample(userId: String): Flow<SampleEntity?>
 
-    @Query("SELECT * FROM samples WHERE user_id = :userId AND status != 'flagged' ORDER BY timestamp DESC")
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId AND status != 'flagged' AND deleted_at is null
+        ORDER BY timestamp DESC
+        """,
+    )
     fun observeAllSamples(userId: String): Flow<List<SampleEntity>>
 
-    @Query("SELECT * FROM samples WHERE sample_id = :sampleId LIMIT 1")
+    @Query("SELECT * FROM samples WHERE sample_id = :sampleId AND deleted_at is null LIMIT 1")
     suspend fun getSampleById(sampleId: String): SampleEntity?
+
+    /**
+     * Reads a sample whether or not it is tombstoned.
+     *
+     * Exempt from the `deleted_at is null` rule by name, per the convention `SoftDeleteGuardTest`
+     * enforces. Two callers need it: the delete path, which has to read a row in order to
+     * tombstone it, and the sync path, which has to push the tombstone itself.
+     */
+    @Query("SELECT * FROM samples WHERE sample_id = :sampleId LIMIT 1")
+    suspend fun getSampleByIdIncludingDeleted(sampleId: String): SampleEntity?
 
     @Query(
         """
@@ -51,6 +91,7 @@ interface SampleDao {
         WHERE session_id = :sessionId
           AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
+          AND deleted_at is null
         ORDER BY timestamp DESC
         """,
     )
@@ -62,6 +103,7 @@ interface SampleDao {
         WHERE session_id = :sessionId
           AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
+          AND deleted_at is null
         ORDER BY timestamp DESC
         """,
     )
@@ -73,6 +115,7 @@ interface SampleDao {
         WHERE session_id = :sessionId
           AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
+          AND deleted_at is null
         ORDER BY timestamp DESC
         """,
     )
@@ -84,16 +127,56 @@ interface SampleDao {
         WHERE session_id = :sessionId
           AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
+          AND deleted_at is null
         ORDER BY timestamp DESC
         """,
     )
     suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
-    @Query("UPDATE samples SET is_repeat = NOT is_repeat WHERE sample_id = :sampleId")
-    suspend fun toggleIsRepeat(sampleId: String)
+    /**
+     * Every live sample in a session, verified or not — the union the verification queue shows.
+     *
+     * Deliberately carries **no `status` predicate**: that is what makes it a union rather than
+     * one of the two halves. Verified samples stay in the queue and stay editable, so the
+     * medtech can correct a mistake instead of living with it.
+     *
+     * The confirmed-detection count is a correlated subquery rather than a join, so one row
+     * comes back per sample and the caller does not have to collapse duplicates.
+     */
+    @Query(
+        """
+        SELECT s.*,
+               (SELECT COUNT(*) FROM detections d
+                 WHERE d.sample_id = s.sample_id AND d.verdict != 'false_positive')
+                 AS confirmedDetections
+        FROM samples s
+        WHERE s.session_id = :sessionId
+          AND (:userId IS NULL OR s.user_id = :userId OR s.user_id IS NULL)
+          AND s.deleted_at is null
+        ORDER BY s.timestamp DESC
+        """,
+    )
+    fun observeQueueRowsForSession(sessionId: String, userId: String?): Flow<List<QueueSampleRow>>
 
     @Query("DELETE FROM samples WHERE sample_id = :sampleId")
     suspend fun deleteSample(sampleId: String)
+
+    /**
+     * Tombstones a verified sample.
+     *
+     * Hides it from every queue, count and report while its detections, its findings rows and
+     * its Storage object all stay exactly where they are - which is what keeps a delete inside
+     * C8. The status is reset alongside, so the row re-enters the pending-sync set and the
+     * tombstone itself reaches Supabase.
+     */
+    @Query(
+        """
+        UPDATE samples
+        SET deleted_at = :deletedAt, status = :status
+        WHERE sample_id = :sampleId
+        """,
+    )
+    suspend fun tombstoneSample(sampleId: String, deletedAt: Long, status: String)
 
     @Query(
         """
@@ -112,11 +195,9 @@ interface SampleDao {
             verified_at = :verifiedAt,
             needs_reannotation = :needsReannotation,
             user_note = :userNote,
-            is_repeat = :isRepeat,
             gps_latitude = :gpsLatitude,
             gps_longitude = :gpsLongitude,
-            gps_accuracy = :gpsAccuracy,
-            predictions_json = NULL
+            gps_accuracy = :gpsAccuracy
         WHERE sample_id = :sampleId
         """,
     )
@@ -130,7 +211,6 @@ interface SampleDao {
         verifiedAt: Long,
         needsReannotation: Boolean,
         userNote: String?,
-        isRepeat: Boolean,
         gpsLatitude: Double?,
         gpsLongitude: Double?,
         gpsAccuracy: Float?,
@@ -143,20 +223,26 @@ interface SampleDao {
         ORDER BY timestamp ASC
         """,
     )
-    suspend fun getSamplesPendingSync(userId: String): List<SampleEntity>
+    suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<SampleEntity>
 
     /**
      * Live count of owned samples still awaiting cloud upload (`verified` only, not
      * `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
      */
-    @Query("SELECT COUNT(*) FROM samples WHERE user_id = :userId AND status = 'verified'")
+    @Query(
+        "SELECT COUNT(*) FROM samples " +
+            "WHERE user_id = :userId AND status = 'verified' AND deleted_at is null",
+    )
     fun observePendingCount(userId: String): Flow<Int>
 
     /**
      * Live count of owned samples whose last sync attempt failed. Drives the Settings
      * Data & Sync section. Per ADR-007.
      */
-    @Query("SELECT COUNT(*) FROM samples WHERE user_id = :userId AND status = 'sync_failed'")
+    @Query(
+        "SELECT COUNT(*) FROM samples " +
+            "WHERE user_id = :userId AND status = 'sync_failed' AND deleted_at is null",
+    )
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
@@ -172,3 +258,9 @@ interface SampleDao {
     )
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
 }
+
+/** Projection for [SampleDao.observeQueueRowsForSession]: the sample plus its counted detections. */
+data class QueueSampleRow(
+    @Embedded val sample: SampleEntity,
+    @ColumnInfo(name = "confirmedDetections") val confirmedDetections: Int,
+)

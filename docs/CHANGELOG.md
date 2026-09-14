@@ -9,6 +9,73 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## refactor/never-ending-sessions — sessions stay open, the queue holds everything · 2026-09-14
+
+`86d4ab4vm` with `86d4ab4tq` and `86d4ad75y`. The session
+lifecycle, the verification queue model, and what "delete" means — from the 2026-09-07
+consultation with Dr. Bayron.
+
+**A session no longer ends.** One session is one fecal smear and the medtech keeps coming back
+to it, so `stopSession` is gone and nothing writes `sessions.ended_at`. The column stays
+nullable and `SessionRemoteDataSource.closeSession` stays with it, because sessions closed
+before this are real history; `resumeSession` still refuses to reopen one. Three things fell out
+of it: sign-out now detaches (`SessionManager.clearActive`) instead of being blocked forever,
+`NetworkMonitor` polls `/health` only while a capture screen is mounted instead of forever, and
+the active session id is persisted and restored at launch — without which a process restart
+would come back idle with a smear still open and render the queue empty.
+
+**The queue is the whole session, in two buckets.** Verified and Unverified; the AI/Manual split
+was dropped as unnecessary (revised 2026-09-12). Verified samples stay visible and reopen with
+the medtech's own previous answers, so an edit is a correction rather than a re-review. New
+`QueueSample` carries no `ByteArray` — the old row rendered from bytes re-read off disk on every
+emission, survivable while the queue drained and an OOM risk once it only grows.
+
+**Delete replaces the repeat flag.** Long-press for batch select; an unverified frame is
+hard-deleted, a verified sample is tombstoned via `samples.deleted_at`. `is_repeat` existed only
+because deletion was impossible, and it is removed entirely — including from the report CSV,
+which loses a column. The confirmation dialog states the split, because the two halves are
+irreversible in different ways.
+
+**One verification screen.** `ManualSheet`, `ManualCaptureViewModel` and
+`SubmitManualCaptureUseCase` are deleted (~1,150 lines). A manual capture is just a frame with
+no model output: no box means no box questions. Polyparasitism lands with it —
+`sample_species_findings` records several species and stages per frame with per-species counts,
+because WHO thresholds are species-specific and a combined per-field count cannot be graded.
+
+**Schema:** Room 9 → 12 (skipping two contested numbers), migrations `0012` and `0013`, and
+`AgarthaDatabaseSchemaTest` pinning the result so the collision that nearly shipped in September
+cannot recur silently.
+
+Two hazards worth knowing about, both fixed before they shipped: detection ids were random, so
+re-saving an edited sample would have appended a second full set and doubled every egg count
+with no error anywhere; and `updateSampleOnVerify` nulled `predictions_json`, which would have
+left a reopened sample with no boxes to draw.
+
+**Merged `staging` in on 2026-09-14**, which changed three of the decisions above.
+
+- The branch had cherry-picked `86d4a6jwy` (the egg-stage dropdown) before staging reverted it.
+  The merge did not raise that as a conflict — this branch had edited lines next to the reverted
+  ones, so git kept both sides — so the revert is **re-applied here by hand**: no `EggStage`, no
+  `detections.stage`, no stage in the CSV, and nothing in the UI asks for one.
+  `sample_species_findings.stage` stays as a dormant, always-null column, because `0012` is
+  applied and frozen under C6. Findings are keyed per species, not per species-and-stage.
+- The silent species pre-fill is **replaced by 86d4auj84's explicit confirm step**, which does
+  the same job better: the sheet asks "Is this egg *Ascaris lumbricoides*?" rather than filling
+  the answer in and hoping the medtech notices. `detections.species_touched` stays and is now
+  true on every row by construction — kept, and asserted, because a future path that writes a
+  species without asking would show up as a false rather than entering the corpus unremarked.
+- Two guards in the merged-in sheet were corrected. The question chain stopped at a misplaced
+  box, which drops a real countable egg from the per-species count and leaves the frame
+  unsubmittable, since `Finding.isComplete` asks for a species on a `BOX_INCORRECT` row; and
+  `onSpeciesConfirmed` read its suggestion from `frame.predictions[currentDetectionIndex]`,
+  which walks off the end of the list once a medtech appends a species the model never boxed.
+
+The Sessions list needed the same treatment. `86d4aprzc`'s date filter and pagination exempt
+"active" sessions from the filter as `ended_at IS NULL` — which matched every session once
+sessions stopped ending, so the filter would have matched everything while still looking right.
+The exemption is now pinned to the one active session id, and the header counts frames awaiting
+review instead of open sessions.
+
 ## feature/editable-report — verification sheet layout · 2026-09-13
 
 - The frame preview on both sheets fills the width between the side margins at the frame's

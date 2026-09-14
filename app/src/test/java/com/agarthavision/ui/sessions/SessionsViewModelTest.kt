@@ -2,6 +2,7 @@ package com.agarthavision.ui.sessions
 
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
+import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
@@ -32,6 +33,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
@@ -331,7 +333,9 @@ class SessionsViewModelTest {
     @Test
     fun `header counts are sourced from repository SessionsCounts`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val expected = SessionsCounts(totalCount = 7, activeCount = 3)
+            // Not summed from the loaded page: the list is paginated, so a local sum would
+            // report only what had been scrolled into view.
+            val expected = SessionsCounts(totalCount = 7, unverifiedCount = 3)
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { emptyList() },
@@ -342,7 +346,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertEquals(expected.totalCount, settled.totalCount)
-                assertEquals(expected.activeCount, settled.activeCount)
+                assertEquals(expected.unverifiedCount, settled.unverifiedCount)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -775,7 +779,11 @@ class SessionsViewModelTest {
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(identityFlow)
         }
-        val sessionManager = mock<SessionManager>()
+        // The VM reads the active session id off this flow to exempt the open smear from
+        // the date filter, so an unstubbed mock makes every test here NPE on collect.
+        val sessionManager = mock<SessionManager> {
+            on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+        }
         val setExempt = mock<SetSessionClaimExemptUseCase>()
         val claim = mock<ClaimLocalDataUseCase>()
         // Real use case over a mocked repository, as in SessionPickerViewModelTest; the
@@ -828,6 +836,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -840,6 +849,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -874,6 +884,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -883,6 +894,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -915,6 +927,7 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -924,6 +937,7 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,

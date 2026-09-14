@@ -26,9 +26,6 @@ internal object VerifyTestTags {
     const val DETECTION_PREV = "detection_prev"
     const val DETECTION_NEXT = "detection_next"
 
-    /** The repeat-sample flag in the AI sheet's top bar. */
-    const val REPEAT_TOGGLE = "repeat_toggle"
-
     /** Free-text observation field on both sheets. */
     const val NOTE_FIELD = "note_field"
 
@@ -67,6 +64,7 @@ internal object VerifyTestTags {
      */
     const val SPECIES_DROPDOWN = "species_dropdown"
 
+
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
@@ -79,7 +77,25 @@ internal object VerifyTestTags {
     /** AI-suggested vs Manual provenance pill. */
     const val SOURCE_BADGE = "source_badge"
 
+    /** The model-output panel. Present for every frame; its text differs by source. */
+    const val MODEL_OUTPUT_PANEL = "model_output_panel"
+
+    /** "Add species" button beneath the added-findings list. */
+    const val ADD_SPECIES = "add_species"
+
+    /** The live per-species summary of what submitting would write. */
+    const val FINDINGS_SUMMARY = "findings_summary"
+
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
+
+    /** Remove button on the added finding at [index]. */
+    fun removeFinding(index: Int): String = "remove_finding_" + index
+
+    /** Egg-count field on the added finding at [index]. */
+    fun countField(index: Int): String = "count_field_" + index
+
+    /** Species picker on the added finding at [index]. */
+    fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
 
     /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
     fun questionOption(question: String, label: String): String =

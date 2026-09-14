@@ -7,5 +7,11 @@ package com.agarthavision.domain.model
  */
 data class SessionsCounts(
     val totalCount: Int = 0,
-    val activeCount: Int = 0,
+    /**
+     * Frames still awaiting review across the counted sessions.
+     *
+     * Was `activeCount`, the number of sessions with no `ended_at`. Sessions do not end any
+     * more (86d4ab4vm), so that counted all of them and told the medtech nothing.
+     */
+    val unverifiedCount: Int = 0,
 )

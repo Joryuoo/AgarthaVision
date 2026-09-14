@@ -66,7 +66,7 @@ private class DetailSampleRepository(
     override suspend fun getSampleById(sampleId: String): Sample? = sample?.takeIf { it.id == sampleId }
     override fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> = flowOf(emptyList())
     override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> = emptyList()
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 }
 
 private class DetailDetectionRepository(

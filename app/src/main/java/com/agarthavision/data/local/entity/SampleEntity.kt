@@ -63,7 +63,7 @@ data class SampleEntity(
     val status: String,
 
     /**
-     * Free-form medtech notes captured in the VerificationSheet / ManualSheet
+     * Free-form medtech notes captured in the verification sheet's
      * input row. The Supabase `samples.user_note` column has existed since
      * `0001_init.sql` but was never wired client-side; per ADR-005 Sprint 2
      * lights it up. No Supabase migration needed.
@@ -80,15 +80,6 @@ data class SampleEntity(
     @ColumnInfo(name = "is_manual", defaultValue = "0")
     val isManual: Boolean = false,
 
-    /**
-     * `true` when the medtech has flagged this sample as a duplicate of an
-     * egg already counted on the same smear. **Room-only** flag — never
-     * synced to Supabase. Excluded from EPG counts. Workflow aid for the
-     * medtech to sift through model outputs. Per ADR-005.
-     */
-    @ColumnInfo(name = "is_repeat", defaultValue = "0")
-    val isRepeat: Boolean = false,
-
     @ColumnInfo(name = "predictions_json")
     val predictionsJson: String? = null,
 
@@ -97,4 +88,22 @@ data class SampleEntity(
 
     @ColumnInfo(name = "image_height")
     val imageHeight: Int? = null,
+
+    /**
+     * Tombstone instant (epoch millis), or null for a live sample.
+     *
+     * A **verified** sample is never hard-deleted (C8) — it is tombstoned, which hides it
+     * from every queue, count and report while its detections stay in the retraining corpus
+     * and its Storage object stays put. Unverified frames are hard-deleted instead, which is
+     * C8's existing local exception.
+     *
+     * **Every query that lists or counts samples must filter `deleted_at IS NULL`.** Miss one
+     * and a deleted duplicate reappears in a report. `SoftDeleteGuardTest` enforces this: a
+     * DAO method that SELECTs over `samples` must carry the predicate unless its name ends in
+     * `IncludingDeleted`.
+     *
+     * Syncs to Supabase via `0013_sample_soft_delete.sql`.
+     */
+    @ColumnInfo(name = "deleted_at")
+    val deletedAt: Long? = null,
 )

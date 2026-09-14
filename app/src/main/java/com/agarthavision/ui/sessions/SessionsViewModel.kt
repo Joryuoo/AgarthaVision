@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
+import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
@@ -45,7 +46,8 @@ data class SessionsState(
     val startDate: LocalDate? = null,
     val endDate: LocalDate? = null,
     val totalCount: Int = 0,
-    val activeCount: Int = 0,
+    /** Frames awaiting review across the filtered sessions. See [SessionsCounts]. */
+    val unverifiedCount: Int = 0,
     val canLoadMore: Boolean = false,
     /** Current text in the New Session sheet's barangay picker. */
     val barangayQuery: String = "",
@@ -112,15 +114,25 @@ class SessionsViewModel @Inject constructor(
     /** Bundled upstream inputs, re-emitted whenever any input changes. */
     private data class SessionsInputs(
         val userId: String?,
+        val activeSessionId: String?,
         val start: LocalDate?,
         val end: LocalDate?,
         val debouncedQuery: String,
         val limit: Int,
     )
 
+    /**
+     * The session the medtech is working in, or null. Exempt from the date filter so the
+     * open smear is never filtered out of the list it is reached from.
+     */
+    private val activeSessionIdFlow = sessionManager.state
+        .map { (it as? SessionState.Active)?.session?.sessionId }
+        .distinctUntilChanged()
+
     private val queryInputs = combine(
-        userIdFlow, startDate, endDate, debouncedSearch, limit,
-    ) { uid, st, en, q, lim -> SessionsInputs(uid, st, en, q, lim) }
+        combine(userIdFlow, activeSessionIdFlow) { uid, activeId -> uid to activeId },
+        startDate, endDate, debouncedSearch, limit,
+    ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
      * Observable UI state for the Sessions screen.
@@ -133,7 +145,7 @@ class SessionsViewModel @Inject constructor(
      * restarts and emits a fresh update.
      *
      * [searchQuery] is combined from the raw (un-debounced) flow so the text field
-     * reflects every keystroke immediately, while [sessions] and [totalCount]/[activeCount]
+     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
      * only update after the debounce window.
      */
     val state: StateFlow<SessionsState> = queryInputs
@@ -153,10 +165,12 @@ class SessionsViewModel @Inject constructor(
 
             combine(
                 sessionRepository.observeVisibleSessionsPage(
-                    inputs.userId, sinceMillis, startMillis, endMillis, escaped, inputs.limit,
+                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
+                    escaped, inputs.limit,
                 ),
                 sessionRepository.observeVisibleSessionsCounts(
-                    inputs.userId, sinceMillis, startMillis, endMillis, escaped,
+                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
+                    escaped,
                 ),
                 internalState,
                 searchQuery,
@@ -168,7 +182,7 @@ class SessionsViewModel @Inject constructor(
                     endDate = inputs.end,
                     searchQuery = rawSearch,
                     totalCount = counts.totalCount,
-                    activeCount = counts.activeCount,
+                    unverifiedCount = counts.unverifiedCount,
                     canLoadMore = sessions.size >= inputs.limit,
                 )
             }
@@ -323,21 +337,6 @@ class SessionsViewModel @Inject constructor(
                         it.copy(errorMessage = error.message ?: "Could not open session.")
                     }
                 }
-        }
-    }
-
-    fun onEndSession(sessionId: String) {
-        viewModelScope.launch {
-            runCatching {
-                val entity = sessionRepository.getSessionById(sessionId) ?: return@runCatching
-                if (entity.endedAt != null) return@runCatching
-                sessionManager.resumeSession(sessionId)
-                sessionManager.stopSession()
-            }.onFailure { error ->
-                internalState.update {
-                    it.copy(errorMessage = error.message ?: "Could not end session.")
-                }
-            }
         }
     }
 

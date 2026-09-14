@@ -85,11 +85,16 @@ interface SessionRepository {
      * Observes a paginated, filtered window of sessions for the Sessions screen.
      * When [userId] is null (never-signed-in device), observes all local sessions
      * without a date cap; otherwise applies the recent-window / date-range filter.
-     * Active sessions (`ended_at IS NULL`) are always included. Per ADR-007.
+     *
+     * [activeSessionId] is exempt from the filter so the smear currently being worked in is
+     * never hidden by a date range. Null when there is no active session. This used to be
+     * `ended_at IS NULL`, which stopped distinguishing anything when sessions stopped
+     * ending. Per ADR-007.
      */
     @Suppress("LongParameterList")
     fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -98,13 +103,14 @@ interface SessionRepository {
     ): Flow<List<SessionWithStats>>
 
     /**
-     * Live counts (total and active) for the Sessions screen header. Applies the same
-     * filter predicate as [observeVisibleSessionsPage] so the header and the list can
-     * never disagree. Per ADR-007.
+     * Live counts (sessions, and frames awaiting review) for the Sessions screen header.
+     * Applies the same filter predicate as [observeVisibleSessionsPage] so the header and
+     * the list can never disagree. Per ADR-007.
      */
     @Suppress("LongParameterList")
     fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,

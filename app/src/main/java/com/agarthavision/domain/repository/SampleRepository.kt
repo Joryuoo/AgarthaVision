@@ -40,5 +40,5 @@ interface SampleRepository {
     /**
      * Returns samples that haven't been successfully synced to Supabase for the given user.
      */
-    suspend fun getSamplesPendingSync(userId: String): List<Sample>
+    suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample>
 }

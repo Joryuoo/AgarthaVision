@@ -47,7 +47,10 @@ class GenerateSessionReportUseCaseTest {
         assertEquals("session-1", report.sessionId)
         assertEquals("user-1", report.userId)
         assertEquals(ReportType.SESSION, report.reportType)
-        assertEquals(1, report.totalSamples)
+        // Both samples count. This asserted 1 while is_repeat existed, because the second
+        // was marked a duplicate and excluded. Duplicates are deleted now, so a sample that
+        // is still here is a sample that counts.
+        assertEquals(2, report.totalSamples)
         assertEquals(3, report.totalEggsConfirmed)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
         assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
@@ -88,7 +91,7 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
                 samples = listOf(
-                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1", isRepeat = false),
+                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
                 ),
             ),
             detectionRepository = ReportDetectionRepository(
@@ -152,8 +155,8 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
                 samples = listOf(
-                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1", isRepeat = false),
-                    reportSample(id = "sample-2", sessionId = "session-1", userId = "user-1", isRepeat = true),
+                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
+                    reportSample(id = "sample-2", sessionId = "session-1", userId = "user-1"),
                 ),
             ),
             detectionRepository = ReportDetectionRepository(
@@ -221,6 +224,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -230,6 +234,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -250,7 +255,7 @@ private class ReportSampleRepository(
     override suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample> =
         samples.filter { it.sessionId == sessionId && it.userId == userId }
 
-    override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+    override suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample> = emptyList()
 }
 
 private class ReportDetectionRepository(
@@ -334,7 +339,7 @@ private fun reportSession(sessionId: String, userId: String): Session =
         label = "Session A",
     )
 
-private fun reportSample(id: String, sessionId: String, userId: String, isRepeat: Boolean): Sample =
+private fun reportSample(id: String, sessionId: String, userId: String): Sample =
     Sample(
         id = id,
         userId = userId,
@@ -346,7 +351,6 @@ private fun reportSample(id: String, sessionId: String, userId: String, isRepeat
         storagePath = "$userId/$id.jpg",
         inferenceModelVersion = "model-1",
         isManual = false,
-        isRepeat = isRepeat,
         latitude = 10.0,
         longitude = 20.0,
         accuracyMeters = 5f,

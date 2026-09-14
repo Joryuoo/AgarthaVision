@@ -16,6 +16,8 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -86,7 +88,7 @@ class VerificationViewModelTest {
             val frame = makeFrame(predictions = 3)
             vm.setFrame(frame)
             advanceUntilIdle()
-            assertEquals(3, vm.state.value.answers.size)
+            assertEquals(3, vm.state.value.findings.size)
         }
 
     @Test
@@ -101,8 +103,8 @@ class VerificationViewModelTest {
             vm.onQ1Selected(false)
             advanceUntilIdle()
 
-            assertEquals(true, vm.state.value.answers[0].isEgg)
-            assertEquals(false, vm.state.value.answers[1].isEgg)
+            assertEquals(true, vm.state.value.findings[0].answers.isEgg)
+            assertEquals(false, vm.state.value.findings[1].answers.isEgg)
         }
 
     @Test
@@ -122,7 +124,7 @@ class VerificationViewModelTest {
     @Test
     fun `successful submit removes frame and emits Dismiss`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(Result.success("sample-1"))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -173,7 +175,7 @@ class VerificationViewModelTest {
             vm.onSpeciesConfirmed(true)
             advanceUntilIdle()
 
-            val answer = vm.state.value.answers[0]
+            val answer = vm.state.value.findings[0].answers
             assertEquals(true, answer.speciesConfirmed)
             assertEquals(EggSpecies.ASCARIS, answer.species)
             assertTrue(vm.state.value.canSubmit)
@@ -191,14 +193,14 @@ class VerificationViewModelTest {
             vm.onSpeciesConfirmed(false)
             advanceUntilIdle()
 
-            val answer = vm.state.value.answers[0]
+            val answer = vm.state.value.findings[0].answers
             assertEquals(false, answer.speciesConfirmed)
             assertEquals(null, answer.species)
             assertFalse(vm.state.value.canSubmit)
 
             vm.onSpeciesSelected(EggSpecies.HOOKWORM)
             advanceUntilIdle()
-            assertEquals(EggSpecies.HOOKWORM, vm.state.value.answers[0].species)
+            assertEquals(EggSpecies.HOOKWORM, vm.state.value.findings[0].answers.species)
             assertTrue(vm.state.value.canSubmit)
         }
 
@@ -213,14 +215,14 @@ class VerificationViewModelTest {
 
             vm.onQ2Selected(true)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.answers[0].speciesConfirmed)
-            assertEquals(null, vm.state.value.answers[0].species)
+            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(null, vm.state.value.findings[0].answers.species)
 
             vm.onSpeciesConfirmed(true)
             vm.onQ1Selected(true)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.answers[0].speciesConfirmed)
-            assertEquals(null, vm.state.value.answers[0].species)
+            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(null, vm.state.value.findings[0].answers.species)
         }
 
     @Test
@@ -251,7 +253,7 @@ class VerificationViewModelTest {
     @Test
     fun `submit failure keeps isSubmitting false and emits ShowError`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull(), any()))
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
                 .thenReturn(Result.failure(RuntimeException("DB error")))
             val vm = viewModel()
             val frame = makeFrame(predictions = 1)
@@ -266,21 +268,6 @@ class VerificationViewModelTest {
                 assertEquals("DB error", (event as VerificationEvent.ShowError).message)
             }
             assertFalse(vm.state.value.isSubmitting)
-        }
-
-    @Test
-    fun `onToggleRepeat updates state and store`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
-            advanceUntilIdle()
-
-            vm.onToggleRepeat()
-            advanceUntilIdle()
-
-            assertTrue(vm.state.value.isRepeat)
-            verify(flaggedFrameStore).toggleRepeat(frame)
         }
 
     @Test
@@ -437,38 +424,32 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `store emission differing only in markedAsRepeat is not conflated away`() =
+    fun `a store emission that changed a frame is not conflated away`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // The regression: FlaggedFrame.equals compared sampleId alone, so a Room
-            // re-emission that only flipped is_repeat compared equal to the list already
-            // held. StateFlow conflated it, and the queue's Repeat filter went stale.
+            // re-emission carrying a changed frame compared equal to the list already held,
+            // StateFlow conflated it, and the queue silently went stale. The equality contract
+            // itself lives in FlaggedFrameTest; this asserts the collector still sees through.
             val frame = makeIdentifiedFrame("a")
             storeState.value = listOf(frame)
             val vm = viewModel()
             vm.setFrame(frame)
             advanceUntilIdle()
+            assertEquals(1, vm.state.value.queueSize)
 
-            val toggled = frame.copy(markedAsRepeat = true)
-            assertNotEquals(frame, toggled)
-            assertNotEquals(listOf(frame), listOf(toggled))
-
-            storeState.value = listOf(toggled)
+            storeState.value = listOf(frame, makeIdentifiedFrame("b"))
             advanceUntilIdle()
 
-            // The emission getting through is the whole point, and now it is visible twice
-            // over: a repeat leaves the AI cycle, so the size drops to zero and the open
-            // frame reports no position. Under the old sampleId-only equality this
-            // emission was swallowed and both would have stayed at 1.
-            assertEquals(0, vm.state.value.queueSize)
-            assertEquals(0, vm.state.value.frameIndexInQueue)
+            assertEquals(2, vm.state.value.queueSize)
         }
 
     @Test
-    fun `frame cycling skips manual frames`() =
+    fun `frame cycling pages onto manual frames too`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Manual captures belong to ManualSheet. The host picks a sheet from the frame
-            // it opened with and never re-evaluates, so paging onto a manual frame here
-            // would keep rendering the AI sheet against a frame with no detections.
+            // This used to skip them, because manual captures had their own sheet and the host
+            // picked a sheet from the frame it opened with and never re-evaluated - so paging
+            // onto one rendered the wrong screen. There is one screen now, so the cycle is the
+            // whole queue and a manual frame is simply a frame with no model output.
             val ai1 = makeIdentifiedFrame("ai-1")
             val manual = makeManualFrame("manual-1")
             val ai2 = makeIdentifiedFrame("ai-2")
@@ -477,20 +458,33 @@ class VerificationViewModelTest {
             vm.setFrame(ai1)
             advanceUntilIdle()
 
-            // Two AI frames in the cycle, not three entries in the store.
-            assertEquals(2, vm.state.value.queueSize)
+            assertEquals(3, vm.state.value.queueSize)
             assertEquals(1, vm.state.value.frameIndexInQueue)
 
             vm.onFrameNext()
             advanceUntilIdle()
 
-            assertEquals(ai2, vm.state.value.frame)
+            assertEquals(manual, vm.state.value.frame)
             assertEquals(2, vm.state.value.frameIndexInQueue)
-            assertFalse(vm.state.value.canGoNext)
+            assertTrue(vm.state.value.canGoNext)
         }
 
     @Test
-    fun `queueSize counts only AI frames`() =
+    fun `a manual frame opens with one finding and no box`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // No prediction means the isEgg / isBoxCorrect questions never render, and the
+            // medtech names a species and a count directly - the old ManualSheet flow.
+            val vm = viewModel()
+            vm.setFrame(makeManualFrame("manual-1"))
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(1, findings.size)
+            assertNull(findings[0].prediction)
+        }
+
+    @Test
+    fun `queueSize counts both sources`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             storeState.value = listOf(
                 makeIdentifiedFrame("ai-1"),
@@ -501,33 +495,16 @@ class VerificationViewModelTest {
             vm.setFrame(makeIdentifiedFrame("ai-1"))
             advanceUntilIdle()
 
-            assertEquals(1, vm.state.value.queueSize)
+            assertEquals(3, vm.state.value.queueSize)
         }
 
     @Test
-    fun `frame cycling skips repeat frames`() =
+    fun `a frame that leaves the queue stays on screen but loses its position`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val first = makeIdentifiedFrame("ai-1")
-            val repeat = makeIdentifiedFrame("ai-2").copy(markedAsRepeat = true)
-            val last = makeIdentifiedFrame("ai-3")
-            storeState.value = listOf(first, repeat, last)
-            val vm = viewModel()
-            vm.setFrame(first)
-            advanceUntilIdle()
-
-            // Two frames in the cycle, not the three in the store.
-            assertEquals(2, vm.state.value.queueSize)
-
-            vm.onFrameNext()
-            advanceUntilIdle()
-
-            assertEquals(last, vm.state.value.frame)
-            assertEquals(2, vm.state.value.frameIndexInQueue)
-        }
-
-    @Test
-    fun `marking the open frame repeat leaves it on screen but out of cycle`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // This used to be reached by marking the open frame repeat. Repeat is gone, but the
+            // sentinel still earns its keep: the frame can leave the queue underneath the
+            // medtech - deleted from the queue screen, or tombstoned - and showing "Frame 0/2"
+            // was the bug it exists to prevent.
             val open = makeIdentifiedFrame("ai-1")
             val other = makeIdentifiedFrame("ai-2")
             storeState.value = listOf(open, other)
@@ -537,15 +514,199 @@ class VerificationViewModelTest {
             assertEquals(1, vm.state.value.frameIndexInQueue)
             assertTrue(vm.state.value.canGoNext)
 
-            // What the store emits after onToggleRepeat writes is_repeat.
-            storeState.value = listOf(open.copy(markedAsRepeat = true), other)
+            storeState.value = listOf(other)
             advanceUntilIdle()
 
-            // Still showing it, so a mistap can be undone — but with no position, and
-            // both frame buttons disabled so it cannot page from here.
+            // Still showing it, but with no position and both frame buttons disabled, so it
+            // cannot page from a frame that is not there.
             assertEquals(open, vm.state.value.frame)
             assertEquals(0, vm.state.value.frameIndexInQueue)
             assertFalse(vm.state.value.canGoPrev)
             assertFalse(vm.state.value.canGoNext)
         }
+
+    // Polyparasitism: several species on one frame (86d4ab4tq)
+
+    @Test
+    fun `adding a species appends a finding with no prediction`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddFinding()
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(2, findings.size)
+            assertNotNull("The model box keeps its prediction.", findings[0].prediction)
+            assertNull("An added species has no box behind it.", findings[1].prediction)
+        }
+
+    @Test
+    fun `an added species is removable`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+
+            vm.onRemoveFinding(1)
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings.size)
+        }
+
+    @Test
+    fun `a model box cannot be removed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Constraint C8: the way to reject a box is to answer "not an egg", which keeps it
+            // as a labelled FALSE_POSITIVE row. Deleting it would drop it from the corpus.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+
+            vm.onRemoveFinding(0)
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertNotNull(vm.state.value.findings[0].prediction)
+        }
+
+    @Test
+    fun `a typed egg count lands on the added finding`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onEggCountChanged(1, "4")
+            advanceUntilIdle()
+
+            val added = vm.state.value.findings[1].answers
+            assertEquals(EggSpecies.HOOKWORM, added.species)
+            assertEquals(4, added.eggCount)
+            assertEquals(true, added.speciesTouched)
+        }
+
+    @Test
+    fun `a non-numeric egg count clears rather than crashing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddFinding()
+            vm.onEggCountChanged(1, "4")
+
+            vm.onEggCountChanged(1, "abc")
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.findings[1].answers.eggCount)
+        }
+
+    @Test
+    fun `re-picking the species already showing still counts as touched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Once the field is pre-filled from the model, this re-pick is the only signal
+            // separating "I agree" from "I never looked" - and detections is the corpus.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.findings[0].answers.speciesTouched)
+        }
+
+
+    // Where the species comes from, and the provenance it needs (86d4ab4tq / 86d4auj84)
+
+    @Test
+    fun `a box opens with no species filled in`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The sheet used to pre-fill the model's class here and flag it untouched. That
+            // was replaced by the explicit "is this egg <species>?" step, which solves the
+            // same problem - the medtech does not retype what the model got right - without
+            // ever putting an unreviewed model answer where a human answer is read from.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(null, answers.species)
+            assertFalse(answers.speciesTouched)
+        }
+
+    @Test
+    fun `confirming the model's species records it as a human answer`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesConfirmed(true)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertTrue(
+                "A yes is a deliberate assertion: the medtech read the suggestion and agreed " +
+                    "with it. detections doubles as the retraining corpus, so a species with " +
+                    "no human behind it must never look like one with.",
+                answers.speciesTouched,
+            )
+        }
+
+    @Test
+    fun `changing an earlier answer clears the species rather than re-seeding it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Re-seeding from the model here would answer the confirm question on the
+            // medtech's behalf - the one thing that step exists to stop.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onQ1Selected(true)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(null, answers.species)
+            assertEquals(null, answers.speciesConfirmed)
+            assertFalse(answers.speciesTouched)
+        }
+
+    @Test
+    fun `changing the species away and back still reads as touched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+
+            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertTrue("Landing back on the model's answer deliberately is still a choice.", answers.speciesTouched)
+        }
+
+    @Test
+    fun `an unrecognised model class pre-fills nothing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
+            // fill, so it would look answered while being incomplete.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1).copy(
+                predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
+            ))
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.findings[0].answers.species)
+        }
+
 }

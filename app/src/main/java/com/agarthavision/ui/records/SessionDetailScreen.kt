@@ -93,7 +93,6 @@ internal data class SampleUi(
     val species: String,
     val confidence: Int?,
     val filePath: String?,
-    val isRepeat: Boolean = false,
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -229,7 +228,6 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
             confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
-            isRepeat = item.sample.isRepeat,
         )
     }
 

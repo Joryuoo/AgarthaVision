@@ -545,6 +545,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -554,6 +555,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -594,6 +596,7 @@ private class LambdaSessionRepository(
     ): Flow<RecordsTotals> = flowOf(totals)
     override fun observeVisibleSessionsPage(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
@@ -602,6 +605,7 @@ private class LambdaSessionRepository(
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,

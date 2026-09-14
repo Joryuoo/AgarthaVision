@@ -55,6 +55,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
@@ -68,14 +69,22 @@ fun VerificationSheet(
     frame: FlaggedFrame,
     onDismiss: () -> Unit,
     viewModel: VerificationViewModel = hiltViewModel(),
+    /**
+     * What the medtech already said about this sample, when it has been verified before.
+     *
+     * Empty for a sample opened from capture, which has no history yet. Supplied by the queue,
+     * which loads it through `OpenVerificationTargetUseCase` - without it, reopening a verified
+     * sample would show a blank questionnaire and the edit would be a re-review.
+     */
+    prior: VerificationTarget? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
-    // like markedAsRepeat, so keying on the frame would re-seed the sheet — and wipe
+    // such as the answers already given, so keying on the frame would re-seed it — and wipe
     // the in-progress answers — every time the store re-emits.
     LaunchedEffect(frame.sampleId) {
-        viewModel.setFrame(frame)
+        viewModel.setFrame(frame, prior)
     }
 
     LaunchedEffect(viewModel) {
@@ -112,8 +121,12 @@ fun VerificationSheet(
                 onToggleBoundingBoxes = viewModel::onToggleBoundingBoxes,
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
-                onToggleRepeat = viewModel::onToggleRepeat,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
+                onAddFinding = viewModel::onAddFinding,
+                onRemoveFinding = viewModel::onRemoveFinding,
+                onEggCountChanged = viewModel::onEggCountChanged,
+                onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
+                onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
             ),
         )
     }
@@ -133,7 +146,7 @@ internal fun VerificationSheetContent(
             .format(frame.capturedAt)
     }
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
-    val currentAnswers = state.answers.getOrNull(state.currentDetectionIndex)
+    val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
     val speciesName = currentPrediction?.classLabel ?: "Unknown"
 
     Column(
@@ -157,33 +170,6 @@ internal fun VerificationSheetContent(
                 stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
             },
             onBack = actions.onCancel,
-            actions = {
-                // Repeat sample toggle (persists to Room via FlaggedFrameStore.toggleRepeat)
-                Box(
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (state.isRepeat) AgarthaTheme.colors.accentTint else Color.Transparent)
-                        .border(
-                            width = 0.5.dp,
-                            color = if (state.isRepeat) {
-                                AgarthaTheme.colors.accent.copy(alpha = 0.35f)
-                            } else {
-                                AgarthaTheme.colors.borderStrong
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                        )
-                        .clickable { actions.onToggleRepeat() }
-                        .testTag(VerifyTestTags.REPEAT_TOGGLE),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = if (state.isRepeat) Icons.Filled.Flag else Icons.Outlined.Flag,
-                        contentDescription = if (state.isRepeat) "Repeat sample (enabled)" else "Mark as repeat sample",
-                        tint = if (state.isRepeat) AgarthaTheme.colors.accent else AgarthaTheme.colors.textSecondary,
-                    )
-                }
-            },
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
@@ -212,47 +198,72 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
-            val detectionCount = state.answers.size.coerceAtLeast(1)
-            DetectionCard(
-                speciesName = speciesName,
-                detectionLabel = stringResource(
-                    R.string.verify_detection_counter,
-                    state.currentDetectionIndex + 1,
-                    detectionCount,
-                ),
-                source = frame.source,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
+            // Says what the model produced when it produced nothing to review. Returns
+            // without drawing when there are boxes - the card below is the model's output
+            // in that case.
+            ModelOutputPanel(frame = frame)
 
-            // Steps between the boxes on this frame. Only drawn when there is more than one
-            // box, and each side goes dead at its end of the range, so it cannot read as a
-            // way to leave the frame.
-            if (detectionCount > 1) {
-                NavPairRow(
-                    state = NavPairState(
-                        prevLabel = stringResource(R.string.verify_prev_egg),
-                        nextLabel = stringResource(R.string.verify_next_egg),
-                        prevTag = VerifyTestTags.DETECTION_PREV,
-                        nextTag = VerifyTestTags.DETECTION_NEXT,
-                        canGoPrev = state.currentDetectionIndex > 0,
-                        canGoNext = state.currentDetectionIndex < detectionCount - 1,
-                        onPrev = actions.onDetectionPrev,
-                        onNext = actions.onDetectionNext,
+            // Everything in this block is about a model box. A manual capture has none, and
+            // neither has a model frame the model called clean, so none of it is drawn: no
+            // card, no egg pager, no boxes toggle, and none of the per-box questions. What
+            // those frames get is the added-findings list below, which is the whole of the
+            // manual-capture experience.
+            val boxCount = frame.predictions.size
+            if (boxCount > 0) {
+                DetectionCard(
+                    speciesName = speciesName,
+                    detectionLabel = stringResource(
+                        R.string.verify_detection_counter,
+                        state.currentDetectionIndex + 1,
+                        boxCount,
                     ),
+                    source = frame.source,
                     modifier = Modifier.padding(bottom = 12.dp),
+                )
+
+                // Steps between the boxes on this frame. Only drawn when there is more than
+                // one box, and each side goes dead at its end of the range, so it cannot read
+                // as a way to leave the frame.
+                //
+                // Counted from `frame.predictions`, never from the answer list: the medtech
+                // can append a species the model never boxed, so the answer list is the longer
+                // of the two and paging by it would walk off the end of the boxes.
+                if (boxCount > 1) {
+                    NavPairRow(
+                        state = NavPairState(
+                            prevLabel = stringResource(R.string.verify_prev_egg),
+                            nextLabel = stringResource(R.string.verify_next_egg),
+                            prevTag = VerifyTestTags.DETECTION_PREV,
+                            nextTag = VerifyTestTags.DETECTION_NEXT,
+                            canGoPrev = state.currentDetectionIndex > 0,
+                            canGoNext = state.currentDetectionIndex < boxCount - 1,
+                            onPrev = actions.onDetectionPrev,
+                            onNext = actions.onDetectionNext,
+                        ),
+                        modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
+
+                BoundingBoxesToggle(
+                    checked = state.showBoundingBoxes,
+                    onToggle = actions.onToggleBoundingBoxes,
+                )
+
+                BoxQuestionChain(
+                    answers = currentAnswers,
+                    suggestedSpecies = currentPrediction
+                        ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                    actions = actions,
                 )
             }
 
-            BoundingBoxesToggle(
-                checked = state.showBoundingBoxes,
-                onToggle = actions.onToggleBoundingBoxes,
-            )
-
-            BoxQuestionChain(
-                answers = currentAnswers,
-                suggestedSpecies = currentPrediction?.let { EggSpecies.fromClassLabel(it.classLabel) },
+            AddedFindings(
+                findings = state.findings,
+                boxCount = boxCount,
                 actions = actions,
             )
+
+            FindingsSummary(findings = state.findings)
 
             QuestionSection(
                 title = stringResource(R.string.verify_q4),
@@ -400,7 +411,12 @@ private fun BoxQuestionChain(
         selected = answers.isBoxCorrect,
         onSelect = actions.onQ2Selected,
     )
-    if (answers.isBoxCorrect != true) return
+    // Deliberately `== null`, not `!= true`. A box in the wrong place still contains a real
+    // egg, and that egg still has to be named and counted - short-circuiting on a no dropped
+    // it from the low-power-field count, and left the frame permanently unsubmittable, because
+    // `Finding.isComplete` asks for a species on a BOX_INCORRECT row too. The verdict still
+    // records BOX_INCORRECT; see computeVerdict.
+    if (answers.isBoxCorrect == null) return
 
     if (suggestedSpecies != null) {
         QuestionSection(
@@ -524,7 +540,7 @@ private fun SourceBadge(source: FrameSource, onAccentSurface: Boolean = false) {
 }
 
 @Composable
-private fun <T> QuestionSection(
+internal fun <T> QuestionSection(
     title: String,
     tag: String,
     options: List<Pair<T, String>>,

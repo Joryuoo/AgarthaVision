@@ -131,8 +131,12 @@ fun SessionsScreen(
                     .widthIn(max = 480.dp)
                     .align(Alignment.TopCenter)
             ) {
-                // App Bar — counts come from the repository query, not local computation.
-                AppBar(activeCount = state.activeCount, totalCount = state.totalCount)
+                // App Bar. Counts come from the repository query, not from the loaded page:
+                // the list is paginated, so summing what is in `state.sessions` would report
+                // only what had been scrolled into view. Sessions do not end any more, so the
+                // count is of frames awaiting review rather than of open sessions - the
+                // latter would have counted every session and said nothing.
+                AppBar(unverifiedCount = state.unverifiedCount, totalCount = state.totalCount)
 
                 // Search + date filter row
                 SearchInput(
@@ -259,7 +263,7 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun AppBar(activeCount: Int, totalCount: Int) {
+private fun AppBar(unverifiedCount: Int, totalCount: Int) {
     val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
@@ -278,7 +282,12 @@ private fun AppBar(activeCount: Int, totalCount: Int) {
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "$totalCount sessions · $activeCount active",
+                text = pluralStringResource(
+                    R.plurals.sessions_subtitle,
+                    totalCount,
+                    totalCount,
+                    unverifiedCount,
+                ),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = colors.textSecondary

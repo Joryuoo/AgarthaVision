@@ -27,7 +27,7 @@ interface DetectionDao {
 
     /**
      * Aggregates confirmed detections per species for a session, excluding repeat
-     * samples (`samples.is_repeat = 0`). The `species` value resolves to
+     * samples. The `species` value resolves to
      * `expert_class` when present, otherwise `class_label`.
      */
     @Query(
@@ -36,10 +36,10 @@ interface DetectionDao {
              COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.session_id = :sessionId
+        WHERE s.deleted_at is null
+          AND s.session_id = :sessionId
           AND s.user_id = :userId
                     AND s.status != 'flagged'
-          AND s.is_repeat = 0
           AND d.verdict != 'false_positive'
         GROUP BY species
         ORDER BY species ASC
@@ -60,9 +60,9 @@ interface DetectionDao {
              COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.user_id = :userId
+        WHERE s.deleted_at is null
+          AND s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
-          AND s.is_repeat = 0
           AND d.verdict = 'confirmed'
         GROUP BY species
         ORDER BY eggCount DESC
@@ -81,9 +81,9 @@ interface DetectionDao {
          SELECT s.timestamp, COUNT(*) AS eggCount
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.user_id = :userId
+        WHERE s.deleted_at is null
+          AND s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
-          AND s.is_repeat = 0
           AND d.verdict = 'confirmed'
         GROUP BY s.sample_id
         ORDER BY s.timestamp ASC
@@ -95,9 +95,14 @@ interface DetectionDao {
     ): Flow<List<DailyEggCountRow>>
 
     /**
-     * Bulk-fetches distinct species labels for a set of sessions, excluding repeat
+     * Bulk-fetches distinct species labels for a set of sessions, excluding deleted
      * samples and false-positive detections. Used by the Records screen to avoid
      * per-session N+1 queries after the paginated session load.
+     *
+     * The exclusion used to read `s.is_repeat = 0`. That flag is gone (86d4ab4vm) — a
+     * duplicate is deleted now rather than marked — so the tombstone carries the same
+     * intent, and this query keeps reporting one species list per session rather than
+     * counting the same field twice.
      */
     @Query(
         """
@@ -106,7 +111,7 @@ interface DetectionDao {
         FROM detections d
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.session_id IN (:sessionIds)
-          AND s.is_repeat = 0
+          AND s.deleted_at is null
           AND d.verdict != 'false_positive'
           AND COALESCE(d.expert_class, d.class_label) IS NOT NULL
         GROUP BY s.session_id, species
