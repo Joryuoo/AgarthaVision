@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -35,17 +34,20 @@ internal fun StatRun(
     labelColor: Color = AgarthaTheme.colors.textSecondary,
     separatorColor: Color = AgarthaTheme.colors.textTertiary,
 ) {
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+    // Every element aligns on the shared text baseline so the tabular-figure values sit on
+    // the same line as their labels and the dot separators — not dropped below them, which
+    // is what Alignment.Bottom produced once `tnum` changed the value's font metrics.
+    Row(modifier = modifier) {
         stats.forEachIndexed { index, stat ->
-            if (index > 0) DotSeparator(separatorColor)
-            StatItem(stat, valueColor, labelColor)
+            if (index > 0) DotSeparator(separatorColor, Modifier.alignByBaseline())
+            StatItem(stat, valueColor, labelColor, Modifier.alignByBaseline())
         }
     }
 }
 
 @Composable
-private fun StatItem(stat: Stat, valueColor: Color, labelColor: Color) {
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Start) {
+private fun StatItem(stat: Stat, valueColor: Color, labelColor: Color, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, horizontalArrangement = Arrangement.Start) {
         Text(
             text = stat.value,
             fontSize = 13.sp,
@@ -53,22 +55,24 @@ private fun StatItem(stat: Stat, valueColor: Color, labelColor: Color) {
             color = valueColor,
             // Tabular numerals so the figures do not jitter as counts change.
             style = TextStyle(fontFeatureSettings = "tnum"),
+            modifier = Modifier.alignByBaseline(),
         )
         Spacer(Modifier.width(3.dp))
         Text(
             text = stat.label,
             fontSize = 13.sp,
             color = labelColor,
+            modifier = Modifier.alignByBaseline(),
         )
     }
 }
 
 @Composable
-private fun DotSeparator(color: Color) {
+private fun DotSeparator(color: Color, modifier: Modifier = Modifier) {
     Text(
         text = "·",
         fontSize = 13.sp,
         color = color,
-        modifier = Modifier.padding(horizontal = 7.dp),
+        modifier = modifier.padding(horizontal = 7.dp),
     )
 }
