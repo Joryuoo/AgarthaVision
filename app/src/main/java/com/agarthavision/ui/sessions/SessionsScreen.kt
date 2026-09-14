@@ -78,7 +78,10 @@ import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.navigation.Screen
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.ui.text.style.TextOverflow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.time.Instant
@@ -131,25 +134,41 @@ fun SessionsScreen(
                 AppBar(activeCount = activeCount, totalCount = state.sessions.size)
 
                 // Sessions List
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(state.sessions, key = { it.session.id }) { sessionData ->
-                        SessionCard(
-                            sessionData = sessionData,
-                            isActive = sessionData.session.endedAt == null,
-                            actions = SessionCardActions(
-                                onClick = {
-                                    if (sessionData.session.endedAt == null) {
-                                        viewModel.onResumeSession(sessionData.session.id)
-                                    } else {
-                                        onSessionSelected(sessionData.session.id)
-                                    }
-                                },
-                            )
+                when {
+                    state.isLoading -> Spacer(Modifier.weight(1f))
+                    state.sessions.isEmpty() -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            icon = Icons.Outlined.Inbox,
+                            title = stringResource(R.string.sessions_empty_title),
+                            body = stringResource(R.string.sessions_empty_body),
                         )
+                    }
+                    else -> LazyColumn(
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.sessions, key = { it.session.id }) { sessionData ->
+                            SessionCard(
+                                sessionData = sessionData,
+                                isActive = sessionData.session.endedAt == null,
+                                actions = SessionCardActions(
+                                    onClick = {
+                                        if (sessionData.session.endedAt == null) {
+                                            viewModel.onResumeSession(sessionData.session.id)
+                                        } else {
+                                            onSessionSelected(sessionData.session.id)
+                                        }
+                                    },
+                                )
+                            )
+                        }
                     }
                 }
 
