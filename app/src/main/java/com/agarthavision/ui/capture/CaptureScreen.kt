@@ -384,6 +384,11 @@ fun CaptureScreen(
     // the back button and shutter are already disabled via isBusy.
     BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
 
+    // Collapsed offline banner state, hoisted so the compact pill can live in the header row
+    // (level with the back button and session pill) while the full banner sits below. Resets
+    // to expanded each time the connection is freshly lost.
+    var bannerCollapsed by remember(state.isConnectionLost) { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -449,9 +454,14 @@ fun CaptureScreen(
                 )
             }
 
-            // Balances the back button so the session label stays centred. Records moved
-            // to the bottom row, where the three actions now sit together.
-            Spacer(modifier = Modifier.width(40.dp))
+            // Right slot: a dismissed "model unreachable" banner lives here as a compact pill,
+            // level with the back button and session label. Otherwise a spacer balances the
+            // back button so the session label stays centred.
+            if (state.isConnectionLost && bannerCollapsed) {
+                ConnectionLossPill(onExpand = { bannerCollapsed = false })
+            } else {
+                Spacer(modifier = Modifier.width(40.dp))
+            }
         }
 
         // The row beneath the top chrome. Banner and toast are stacked in one column rather
@@ -466,9 +476,10 @@ fun CaptureScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ConnectionLossBanner(
-                visible = state.isConnectionLost,
+                visible = state.isConnectionLost && !bannerCollapsed,
                 isProbing = state.isProbingConnection,
                 onResume = viewModel::resumeConnection,
+                onCollapse = { bannerCollapsed = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
