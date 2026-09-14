@@ -22,6 +22,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -50,6 +53,7 @@ import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -139,19 +143,7 @@ fun RecordsScreen(
                     RecordCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                 }
                 filteredRecords.isEmpty() -> item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .padding(horizontal = Spacing.xl),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.records_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AgarthaTheme.colors.textSecondary,
-                        )
-                    }
+                    RecordsEmptyState(narrowed = searchText.isNotBlank() || state.selectedSpecies != null)
                 }
                 else -> items(filteredRecords, key = { it.session.id }) { record ->
                     RecordCard(
@@ -165,6 +157,34 @@ fun RecordsScreen(
     }
 }
 
+
+/**
+ * Same empty block as the Sessions tab, with its own copy for "nothing matches the search
+ * or chip" versus "nothing has been recorded yet".
+ */
+@Composable
+private fun RecordsEmptyState(narrowed: Boolean) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xxxl),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (narrowed) {
+            EmptyState(
+                icon = Icons.Outlined.SearchOff,
+                title = stringResource(R.string.records_no_match_title),
+                body = stringResource(R.string.records_no_match_body),
+            )
+        } else {
+            EmptyState(
+                icon = Icons.Outlined.Inbox,
+                title = stringResource(R.string.records_empty_title),
+                body = stringResource(R.string.records_empty_body),
+            )
+        }
+    }
+}
 
 @Composable
 private fun SearchInput(

@@ -127,7 +127,10 @@
     <string name="records_scope_filtered">Filtered date range</string>
     <string name="records_subtitle_purpose">Search and review all logged results across sessions</string>
     <string name="records_back">Back to capture</string>
-    <string name="records_empty">No sessions found</string>
+    <string name="records_empty_title">No records yet</string>
+    <string name="records_empty_body">Records appear here once a session has verified samples.</string>
+    <string name="records_no_match_title">No matching records</string>
+    <string name="records_no_match_body">Try a different search or species filter.</string>
     <string name="records_filter_start">Start date</string>
     <string name="records_filter_end">End date</string>
     <string name="records_filter_hint">YYYY-MM-DD</string>
