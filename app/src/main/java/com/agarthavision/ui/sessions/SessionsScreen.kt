@@ -176,8 +176,6 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surface)
-                        .border(1.dp, colors.border) // Top hairline
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
