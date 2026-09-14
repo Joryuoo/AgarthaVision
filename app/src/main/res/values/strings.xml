@@ -26,6 +26,10 @@
     <string name="dashboard_syncing">Syncing…</string>
     <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
     <string name="dashboard_all_synced">All records synced</string>
+    <!-- Toasts for the header sync button -->
+    <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>
+    <string name="dashboard_sync_toast_offline">You\'re offline — sync will resume when you reconnect</string>
+    <string name="dashboard_sync_toast_started">Syncing your records…</string>
 
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
     <string name="session_not_linked">Not linked</string>

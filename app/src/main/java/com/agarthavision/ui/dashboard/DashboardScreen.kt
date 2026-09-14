@@ -1,5 +1,6 @@
 package com.agarthavision.ui.dashboard
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +38,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     Box(
         modifier = Modifier
@@ -49,11 +52,21 @@ fun DashboardScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = Spacing.md)
         ) {
-            // 1. App Header (with theme toggle)
+            // 1. App Header (with sync action)
             item {
                 com.agarthavision.ui.components.AppHeader(
-                    isDarkMode = state.isDarkMode,
-                    onToggleTheme = viewModel::onToggleTheme
+                    isSyncing = state.isSyncing,
+                    onSync = {
+                        val message = when {
+                            !state.isSignedIn -> R.string.dashboard_sync_toast_signed_out
+                            state.isOffline -> R.string.dashboard_sync_toast_offline
+                            state.isSyncing -> R.string.dashboard_syncing
+                            state.pendingUploadCount == 0 -> R.string.dashboard_all_synced
+                            else -> R.string.dashboard_sync_toast_started
+                        }
+                        Toast.makeText(context, context.getString(message), Toast.LENGTH_SHORT).show()
+                        viewModel.onSyncNow()
+                    }
                 )
             }
 
@@ -73,7 +86,7 @@ fun DashboardScreen(
                 item {
                     ActiveSessionHero(
                         sessionId    = session.label,
-                        elapsed      = session.startedAtAgo,
+                        elapsed      = session.updatedAtAgo,
                         frameCount   = session.totalFrames.toIntOrNull() ?: 0,
                         onResume     = { onNavigate(Screen.Capture.route) },
                         modifier     = Modifier.padding(horizontal = Spacing.xl)
@@ -135,16 +148,6 @@ fun DashboardScreen(
                 }
             }
 
-            // 7. Sync status row
-            item {
-                Spacer(Modifier.height(Spacing.md))
-                SyncStatusRow(
-                    allSynced      = state.allSynced,
-                    lastSyncLabel  = state.lastSyncLabel,
-                    samplesSynced  = state.syncedSamplesCount,
-                    modifier       = Modifier.padding(horizontal = Spacing.xl)
-                )
-            }
         }
     }
 }

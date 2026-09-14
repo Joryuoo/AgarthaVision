@@ -1,5 +1,10 @@
 package com.agarthavision.ui.components
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,8 +16,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -22,18 +29,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.DarkMode
-import com.agarthavision.ui.icons.LightMode
+import com.agarthavision.ui.icons.Sync
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
- * Branded top header: logo, wordmark, and an optional light/dark theme toggle
- * shown when [onToggleTheme] is provided.
+ * Branded top header: logo, wordmark, and an optional sync action shown when [onSync]
+ * is provided. The sync glyph spins while [isSyncing].
  */
 @Composable
 fun AppHeader(
-    isDarkMode: Boolean = false,
-    onToggleTheme: (() -> Unit)? = null,
+    isSyncing: Boolean = false,
+    onSync: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -59,15 +65,26 @@ fun AppHeader(
             letterSpacing = (-0.5).sp
         )
         Spacer(modifier = Modifier.weight(1f))
-        if (onToggleTheme != null) {
-            IconButton(onClick = onToggleTheme) {
+        if (onSync != null) {
+            // Transition is declared unconditionally (rules of composition); the angle is only
+            // applied to the glyph while a sync is actually running.
+            val spinTransition = rememberInfiniteTransition(label = "syncSpin")
+            val spin by spinTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 900, easing = LinearEasing)
+                ),
+                label = "syncAngle"
+            )
+            IconButton(onClick = onSync) {
                 Icon(
-                    imageVector = if (isDarkMode) AgarthaIcons.LightMode else AgarthaIcons.DarkMode,
-                    contentDescription = stringResource(
-                        if (isDarkMode) R.string.theme_toggle_to_light else R.string.theme_toggle_to_dark
-                    ),
+                    imageVector = AgarthaIcons.Sync,
+                    contentDescription = stringResource(R.string.dashboard_sync_now),
                     tint = AgarthaTheme.colors.textSecondary,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(20.dp)
+                        .rotate(if (isSyncing) spin else 0f)
                 )
             }
         }
@@ -77,5 +94,5 @@ fun AppHeader(
 @Preview(showBackground = true)
 @Composable
 private fun AppHeaderPreview() {
-    AppHeader(isDarkMode = false, onToggleTheme = {})
+    AppHeader(onSync = {})
 }
