@@ -175,11 +175,7 @@ fun SessionDetailScreen(
         topBar = {
             SessionDetailAppBar(
                 title = sessionDetail.label ?: "Session ${sessionDetail.id}",
-                subtitle = if (sessionDetail.patientIdOrNote.isNullOrBlank()) {
-                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}"
-                } else {
-                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
-                },
+                subtitle = "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}",
                 onBack = onBack,
                 showVerify = state.canOpenVerifyQueue,
                 onOpenVerifyQueue = onOpenVerifyQueue,
@@ -454,6 +450,10 @@ private fun SessionDetailPopulated(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
+                if (!session.patientIdOrNote.isNullOrBlank()) {
+                    SessionNoteCard(note = session.patientIdOrNote)
+                    Spacer(Modifier.height(Spacing.md))
+                }
                 EpgHeroCard(
                     epg = session.epg,
                     confirmedEggs = session.confirmedEggs,
@@ -494,6 +494,10 @@ private fun SessionDetailEmpty(
             .padding(top = Spacing.xs)
             .verticalScroll(rememberScrollState()),
     ) {
+        if (!session.patientIdOrNote.isNullOrBlank()) {
+            SessionNoteCard(note = session.patientIdOrNote)
+            Spacer(Modifier.height(Spacing.md))
+        }
         EpgHeroCard(
             epg = session.epg,
             confirmedEggs = session.confirmedEggs,
@@ -504,6 +508,32 @@ private fun SessionDetailEmpty(
         ReportsSection(state = state)
         Spacer(Modifier.height(60.dp))
         EmptyStateGraphic()
+    }
+}
+
+/**
+ * The session note in full, above the EPG card. It used to ride the app-bar subtitle after
+ * the date and time, where a note of any length either wrapped into a wall or got clipped;
+ * a card is the one place it can be read whole.
+ */
+@Composable
+internal fun SessionNoteCard(note: String, modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.session_detail_notes_label),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(text = note, fontSize = 14.sp, color = colors.textPrimary)
     }
 }
 
