@@ -77,6 +77,8 @@ import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
+import com.agarthavision.ui.sessions.SESSION_NOTE_MAX_LENGTH
+import com.agarthavision.ui.sessions.limitInput
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -559,7 +561,7 @@ private fun EndSessionConfirmDialog(
                     )
                     OutlinedTextField(
                         value = notes,
-                        onValueChange = { notes = it },
+                        onValueChange = { notes = limitInput(notes, it, SESSION_NOTE_MAX_LENGTH) },
                         placeholder = {
                             Text(stringResource(R.string.capture_end_session_notes_placeholder))
                         },
@@ -571,6 +573,15 @@ private fun EndSessionConfirmDialog(
                             unfocusedBorderColor = AppColors.Gray200,
                         ),
                         shape = RoundedCornerShape(12.dp),
+                        supportingText = {
+                            Text(
+                                stringResource(
+                                    R.string.session_new_char_counter,
+                                    notes.length,
+                                    SESSION_NOTE_MAX_LENGTH,
+                                )
+                            )
+                        },
                     )
                 }
             }

@@ -397,7 +397,6 @@ fun LiveDot() {
     )
 }
 
-
 /** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
 private data class BarangayPickerState(
     val selected: PsgcBarangay?,
@@ -489,7 +488,8 @@ private fun NewSessionSheet(
                     config = SheetInputConfig(
                         label = "Label",
                         placeholder = "e.g. 325",
-                        isError = showError && label.isBlank()
+                        isError = showError && label.isBlank(),
+                        maxLength = SESSION_LABEL_MAX_LENGTH
                     )
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -534,7 +534,8 @@ private fun NewSessionSheet(
                         placeholder = "Patient ID, clinical context, sample details...",
                         isError = false, // Note is never in error since it's optional
                         isTextArea = true,
-                        isRequired = false
+                        isRequired = false,
+                        maxLength = SESSION_NOTE_MAX_LENGTH
                     )
                 )
 
@@ -656,16 +657,17 @@ private fun NewSessionSheet(
 }
 
 /** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
-private data class SheetInputConfig(
+internal data class SheetInputConfig(
     val label: String,
     val placeholder: String,
     val isError: Boolean,
     val isTextArea: Boolean = false,
-    val isRequired: Boolean = true
+    val isRequired: Boolean = true,
+    val maxLength: Int = Int.MAX_VALUE
 )
 
 @Composable
-private fun SheetInput(
+internal fun SheetInput(
     value: String,
     onValueChange: (String) -> Unit,
     config: SheetInputConfig
@@ -710,7 +712,7 @@ private fun SheetInput(
 
         BasicTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { onValueChange(limitInput(value, it, config.maxLength)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
@@ -735,6 +737,13 @@ private fun SheetInput(
                 }
             }
         )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
+                fontSize = 11.sp,
+                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
+            )
+        }
     }
 }
 
