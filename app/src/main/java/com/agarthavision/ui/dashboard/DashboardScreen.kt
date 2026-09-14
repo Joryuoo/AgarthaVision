@@ -2,11 +2,8 @@ package com.agarthavision.ui.dashboard
 
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,11 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -56,6 +51,7 @@ fun DashboardScreen(
             item {
                 com.agarthavision.ui.components.AppHeader(
                     isSyncing = state.isSyncing,
+                    needsSync = state.isSignedIn && state.pendingUploadCount > 0 && !state.isSyncing,
                     onSync = {
                         val message = when {
                             !state.isSignedIn -> R.string.dashboard_sync_toast_signed_out
@@ -70,18 +66,7 @@ fun DashboardScreen(
                 )
             }
 
-            // 1b. Account / sync banner (ADR-007 offline access)
-            item {
-                Spacer(Modifier.height(Spacing.sm))
-                AccountSyncBanner(
-                    state = state,
-                    onSignIn = { onNavigate(Screen.Login.route) },
-                    onSyncNow = viewModel::onSyncNow,
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-
-            // 2. Active Session Hero (only when active)
+            // 2. Recent Session Hero (only when a session is active/recent)
             state.activeSession?.let { session ->
                 item {
                     ActiveSessionHero(
@@ -153,75 +138,6 @@ fun DashboardScreen(
 }
 
 // ─── Screen chrome ───────────────────────────────────────────────────────────
-
-/**
- * Account / sync banner (ADR-007). Signed-out shows a "Sign in" CTA; signed-in shows
- * pending-upload state with a "Sync now" action (disabled while offline or syncing).
- */
-@Composable
-private fun AccountSyncBanner(
-    state: DashboardUiState,
-    onSignIn: () -> Unit,
-    onSyncNow: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AgarthaTheme.colors
-    val hasPending = state.pendingUploadCount > 0
-    // Neutral surface when signed-out; amber when items await upload; quiet green when clear.
-    val (bg, border) = when {
-        !state.isSignedIn -> colors.surface to colors.border
-        hasPending -> colors.warningTint to colors.warning
-        else -> colors.successTint to colors.success
-    }
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(bg, RoundedCornerShape(12.dp))
-            .border(1.dp, border, RoundedCornerShape(12.dp))
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        val statusText = when {
-            !state.isSignedIn && hasPending ->
-                stringResource(R.string.dashboard_pending_upload, state.pendingUploadCount)
-            !state.isSignedIn -> stringResource(R.string.dashboard_signed_out)
-            state.isSyncing -> stringResource(R.string.dashboard_syncing)
-            hasPending -> stringResource(R.string.dashboard_pending_upload, state.pendingUploadCount)
-            else -> stringResource(R.string.dashboard_all_synced)
-        }
-        Text(
-            text = statusText,
-            color = colors.textPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.weight(1f),
-        )
-        if (!state.isSignedIn) {
-            BannerAction(text = stringResource(R.string.dashboard_sign_in), enabled = true, onClick = onSignIn)
-        } else {
-            BannerAction(
-                text = if (state.isSyncing) stringResource(R.string.dashboard_syncing)
-                       else stringResource(R.string.dashboard_sync_now),
-                enabled = state.canSyncNow,
-                onClick = onSyncNow,
-            )
-        }
-    }
-}
-
-@Composable
-private fun BannerAction(text: String, enabled: Boolean, onClick: () -> Unit) {
-    val colors = AgarthaTheme.colors
-    Text(
-        text = text,
-        color = if (enabled) colors.accent else colors.textTertiary,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
-        modifier = Modifier
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = Spacing.sm, vertical = Spacing.xs),
-    )
-}
 
 @Composable
 private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
