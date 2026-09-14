@@ -35,10 +35,31 @@ internal fun filterQueueFrames(
         }
     }
 
+/** Which empty-state variant to show when the filtered frame list is empty. */
+internal enum class QueueEmptyVariant { NEVER_HAD, FILTERED, ALL_DONE }
+
+/**
+ * Pure function: derive the correct empty-state variant from available counts.
+ *
+ * [filterActive] wins when a chip is hiding rows (even if frames were verified).
+ * If no filter is active, a non-zero [verified] count means the session is done.
+ * Otherwise the queue simply never had any items.
+ */
+internal fun queueEmptyVariant(
+    verified: Int,
+    filterActive: Boolean,
+): QueueEmptyVariant = when {
+    filterActive -> QueueEmptyVariant.FILTERED
+    verified > 0 -> QueueEmptyVariant.ALL_DONE
+    else -> QueueEmptyVariant.NEVER_HAD
+}
+
 data class VerificationQueueState(
     val flaggedFrames: List<FlaggedFrame> = emptyList(),
     val queueFilter: QueueFilter = QueueFilter.ALL,
     val verificationTarget: FlaggedFrame? = null,
+    val verifiedCount: Int = 0,
+    val activeSessionId: String? = null,
 )
 
 @HiltViewModel
@@ -53,6 +74,16 @@ class VerificationQueueViewModel @Inject constructor(
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
                 _state.update { it.copy(flaggedFrames = frames) }
+            }
+        }
+        viewModelScope.launch {
+            flaggedFrameStore.verifiedCount.collect { count ->
+                _state.update { it.copy(verifiedCount = count) }
+            }
+        }
+        viewModelScope.launch {
+            flaggedFrameStore.activeSessionId.collect { id ->
+                _state.update { it.copy(activeSessionId = id) }
             }
         }
     }

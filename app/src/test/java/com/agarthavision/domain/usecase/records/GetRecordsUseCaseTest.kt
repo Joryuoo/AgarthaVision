@@ -109,6 +109,9 @@ private class FakeSampleRepository(
         samplesBySession[sessionId].orEmpty().filter { it.userId == userId }
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+
+    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
+        flowOf(emptyList())
 }
 
 private class FakeDetectionRepository(

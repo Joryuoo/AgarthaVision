@@ -173,6 +173,9 @@ private class ReportSampleRepository(
         samples.filter { it.sessionId == sessionId && it.userId == userId }
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> = emptyList()
+
+    override fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>> =
+        flowOf(emptyList())
 }
 
 private class ReportDetectionRepository(

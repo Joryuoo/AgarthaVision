@@ -41,4 +41,10 @@ interface SampleRepository {
      * Returns samples that haven't been successfully synced to Supabase for the given user.
      */
     suspend fun getSamplesPendingSync(userId: String): List<Sample>
+
+    /**
+     * Observes flagged (pending-verification) samples in one session for the given user,
+     * newest first. Used to derive a pending-count for the Session Detail entry point.
+     */
+    fun observeFlaggedSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>>
 }

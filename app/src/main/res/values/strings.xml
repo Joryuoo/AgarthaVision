@@ -288,4 +288,14 @@
     <!-- Sessions empty state (86d4apzf5) -->
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
+    <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
+    <string name="verify_queue_empty_title">Queue is clear</string>
+    <string name="verify_queue_empty_body">Nothing to verify right now.</string>
+    <string name="verify_queue_filtered_title">No items match this filter</string>
+    <string name="verify_queue_filtered_body">Switch filters to see other frames.</string>
+    <string name="verify_queue_done_title">All items verified</string>
+    <string name="verify_queue_done_body">Every egg in this session has been checked.</string>
+    <string name="verify_queue_view_records">View session records</string>
+    <!-- Verify entry point from Session Detail (86d4ayefd) -->
+    <string name="session_detail_open_verify">Verify flagged frames</string>
 </resources>

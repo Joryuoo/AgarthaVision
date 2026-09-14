@@ -90,7 +90,7 @@ PK column is `report_id`. Differences:
 ## Surfaces
 
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
-(`ui/records/SessionDetailViewModel.kt:104`). Read by the Reports card on
+(`ui/records/SessionDetailViewModel.kt:148`). Read by the Reports card on
 `ui/records/SessionDetailScreen.kt` and by the Settings sync counters. Pushed by
 `data/supabase/SyncReportUseCase.kt:25-35` — row only, no file.
 

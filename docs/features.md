@@ -71,6 +71,12 @@ as working.
   (`domain/usecase/verify/SubmitVerificationUseCase.kt:38`).
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
+  The queue distinguishes three empty states: never-had-items (queue is clear), filtered
+  (a chip is hiding rows), and all-verified (every frame in this session has been checked).
+  The all-verified state surfaces a "View session records" CTA that navigates to the
+  session's detail screen. An `IconButton` on the Session Detail app bar opens the queue
+  directly when the session is active and has pending frames
+  (`ui/records/SessionDetailScreen.kt`, `ui/records/SessionDetailViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
 - **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced,
   and it does not block ending a session
@@ -89,7 +95,7 @@ as working.
 ### Records and reports
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
   `domain/usecase/records/GetRecordsUseCase.kt`).
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:63-79`).
+- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:119-124`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).

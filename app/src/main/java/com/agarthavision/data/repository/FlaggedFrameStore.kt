@@ -74,6 +74,30 @@ class FlaggedFrameStore @Inject constructor(
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /**
+     * The session ID of the currently active session, or null when no session is running.
+     */
+    val activeSessionId: StateFlow<String?> = sessionManager.state
+        .map { (it as? SessionState.Active)?.session?.sessionId }
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), null)
+
+    /**
+     * Count of verified (non-flagged) samples for the active session.
+     * Emits 0 when no session is active.
+     */
+    val verifiedCount: StateFlow<Int> = combine(
+        authRepository.observeLocalIdentity().map { it?.userId },
+        sessionManager.state,
+    ) { userId, sessionState ->
+        userId to (sessionState as? SessionState.Active)?.session?.sessionId
+    }
+        .flatMapLatest { (userId, sessionId) ->
+            if (sessionId == null) flowOf(0)
+            else sampleDao.observeSamplesForSession(sessionId, userId).map { it.size }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(scope, SharingStarted.WhileSubscribed(5_000), 0)
+
     suspend fun add(frame: FlaggedFrame) {
         persistFlaggedFrameUseCase(frame)
     }

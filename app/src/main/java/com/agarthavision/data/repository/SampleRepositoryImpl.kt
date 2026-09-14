@@ -42,4 +42,12 @@ class SampleRepositoryImpl @Inject constructor(
 
     override suspend fun getSamplesPendingSync(userId: String): List<Sample> =
         sampleDao.getSamplesPendingSync(userId).map { it.toDomain() }
+
+    override fun observeFlaggedSamplesForSession(
+        sessionId: String,
+        userId: String,
+    ): Flow<List<Sample>> =
+        sampleDao.observeFlaggedSamplesForSession(sessionId, userId).map { entities ->
+            entities.map { it.toDomain() }
+        }
 }

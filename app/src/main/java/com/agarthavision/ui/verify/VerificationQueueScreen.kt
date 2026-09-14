@@ -45,9 +45,18 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.FilterAltOff
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.TaskAlt
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.ui.res.stringResource
+import com.agarthavision.R
+import com.agarthavision.ui.components.EmptyState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
@@ -73,6 +82,7 @@ private val InterTabularStyle = TextStyle(
 fun VerificationQueueScreen(
     onBackClick: () -> Unit,
     onSampleDetailClick: (String) -> Unit,
+    onGoToRecords: (String) -> Unit,
     viewModel: VerificationQueueViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -186,21 +196,33 @@ fun VerificationQueueScreen(
                 }
             }
 
-            // Frame List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                // 24px bottom for home indicator
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(
-                    items = filteredFrames,
-                    key = { frame -> frame.sampleId }
-                ) { frame ->
-                    FrameRow(
-                        frame = frame,
-                        onClick = { viewModel.onQueueItemSelected(frame) }
+            // Frame List / empty state
+            if (filteredFrames.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    QueueEmptyState(
+                        variant = queueEmptyVariant(
+                            verified = state.verifiedCount,
+                            filterActive = state.queueFilter != QueueFilter.ALL,
+                        ),
+                        onViewRecords = { state.activeSessionId?.let(onGoToRecords) },
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    // 24px bottom for home indicator
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(
+                        items = filteredFrames,
+                        key = { frame -> frame.sampleId }
+                    ) { frame ->
+                        FrameRow(
+                            frame = frame,
+                            onClick = { viewModel.onQueueItemSelected(frame) }
+                        )
+                    }
                 }
             }
         }
@@ -218,6 +240,63 @@ fun VerificationQueueScreen(
                 frame = target,
                 onDismiss = viewModel::onVerificationDismissed,
             )
+        }
+    }
+}
+
+/**
+ * Body shown when the filtered queue has no rows. Three cases look alike from the list's
+ * point of view but mean different things to the medtech, so each gets its own copy; only
+ * the all-verified case offers a way onward, into the session's records.
+ */
+@Composable
+internal fun QueueEmptyState(
+    variant: QueueEmptyVariant,
+    onViewRecords: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val padded = modifier.padding(horizontal = 32.dp)
+    when (variant) {
+        QueueEmptyVariant.NEVER_HAD -> EmptyState(
+            icon = Icons.Outlined.Inbox,
+            title = stringResource(R.string.verify_queue_empty_title),
+            body = stringResource(R.string.verify_queue_empty_body),
+            modifier = padded,
+        )
+        QueueEmptyVariant.FILTERED -> EmptyState(
+            icon = Icons.Outlined.FilterAltOff,
+            title = stringResource(R.string.verify_queue_filtered_title),
+            body = stringResource(R.string.verify_queue_filtered_body),
+            modifier = padded,
+        )
+        QueueEmptyVariant.ALL_DONE -> EmptyState(
+            icon = Icons.Outlined.TaskAlt,
+            title = stringResource(R.string.verify_queue_done_title),
+            body = stringResource(R.string.verify_queue_done_body),
+            modifier = padded,
+        ) {
+            Button(
+                onClick = onViewRecords,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                ),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.verify_queue_view_records),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    style = InterBaseStyle,
+                )
+            }
         }
     }
 }

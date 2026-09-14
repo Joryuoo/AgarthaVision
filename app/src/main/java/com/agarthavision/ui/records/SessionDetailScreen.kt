@@ -27,7 +27,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -103,6 +106,7 @@ private const val SESSION_ID_SHORT_LENGTH = 4
 fun SessionDetailScreen(
     onBack: () -> Unit,
     onSampleClick: (String) -> Unit,
+    onOpenVerifyQueue: () -> Unit = {},
     viewModel: SessionDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -165,6 +169,8 @@ fun SessionDetailScreen(
                     "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
                 },
                 onBack = onBack,
+                showVerify = state.canOpenVerifyQueue,
+                onOpenVerifyQueue = onOpenVerifyQueue,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -311,6 +317,8 @@ private fun SessionDetailAppBar(
     title: String,
     subtitle: String,
     onBack: () -> Unit,
+    showVerify: Boolean = false,
+    onOpenVerifyQueue: () -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     Row(
@@ -337,6 +345,15 @@ private fun SessionDetailAppBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (showVerify) {
+            IconButton(onClick = onOpenVerifyQueue) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.FactCheck,
+                    contentDescription = stringResource(R.string.session_detail_open_verify),
+                    tint = colors.textPrimary,
+                )
+            }
         }
     }
 }

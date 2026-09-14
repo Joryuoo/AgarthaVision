@@ -13,7 +13,15 @@ The human-in-the-loop gate. Nothing counts until this runs.
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). Each sheet pages only through
+   (`data/repository/FlaggedFrameStore.kt:59-76`, `:126-144`). Two companion flows
+   (`FlaggedFrameStore.activeSessionId`, `FlaggedFrameStore.verifiedCount`) power the
+   queue's empty-state logic: when all frames are gone the screen shows one of three
+   variants — **never-had** (queue always empty), **filtered** (a chip is hiding rows),
+   or **all-done** (session has verified samples). The all-done variant includes a
+   "View session records" button linking to `SessionDetail`. Medtechs on an active session
+   can also reach the queue from the Session Detail app bar icon
+   (`ui/records/SessionDetailScreen.kt`, controlled by
+   `domain/usecase/records/ObserveSessionPendingCountUseCase`). Each sheet pages only through
    its own source: the AI sheet cycles `FrameSource.MODEL` frames **that are not marked
    repeat**, the manual sheet cycles `FrameSource.MANUAL`, and `Frame n/N` counts that subset
    rather than the whole queue. Marking the open frame repeat drops it from the cycle: it stays
