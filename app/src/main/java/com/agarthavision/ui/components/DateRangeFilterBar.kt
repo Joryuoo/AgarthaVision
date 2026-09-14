@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
@@ -28,6 +29,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.DateRange
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import java.time.Instant
@@ -120,11 +123,10 @@ private fun DateChip(
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Calendar icon — same SVG path convention as SessionsScreen / SvgIcon.kt
-        SvgIcon(
-            pathData = "M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z",
-            color = textColor,
-            strokeWidth = 1.5f,
+        Icon(
+            imageVector = AgarthaIcons.DateRange,
+            contentDescription = null,
+            tint = textColor,
             modifier = Modifier.size(14.dp),
         )
         Spacer(Modifier.width(6.dp))

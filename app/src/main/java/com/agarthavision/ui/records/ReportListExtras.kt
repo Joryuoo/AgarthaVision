@@ -14,12 +14,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ChevronLeft
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -40,7 +43,7 @@ internal fun ReportsPager(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         PagerButton(
-            iconRes = R.drawable.ic_chevron_left,
+            icon = AgarthaIcons.ChevronLeft,
             contentDescription = stringResource(R.string.report_pager_previous),
             enabled = currentPage > 0,
             onClick = onPrev,
@@ -52,7 +55,7 @@ internal fun ReportsPager(
             color = AgarthaTheme.colors.textSecondary,
         )
         PagerButton(
-            iconRes = R.drawable.ic_chevron_right,
+            icon = AgarthaIcons.ChevronRight,
             contentDescription = stringResource(R.string.report_pager_next),
             enabled = currentPage < totalPages - 1,
             onClick = onNext,
@@ -62,13 +65,13 @@ internal fun ReportsPager(
 
 @Composable
 private fun PagerButton(
-    iconRes: Int,
+    icon: ImageVector,
     contentDescription: String,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
     Icon(
-        painter = painterResource(iconRes),
+        imageVector = icon,
         contentDescription = contentDescription,
         tint = if (enabled) AgarthaTheme.colors.accent else AgarthaTheme.colors.textTertiary,
         modifier = Modifier

@@ -21,6 +21,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.DarkMode
+import com.agarthavision.ui.icons.LightMode
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -59,9 +62,7 @@ fun AppHeader(
         if (onToggleTheme != null) {
             IconButton(onClick = onToggleTheme) {
                 Icon(
-                    painter = painterResource(
-                        if (isDarkMode) R.drawable.ic_sun else R.drawable.ic_moon
-                    ),
+                    imageVector = if (isDarkMode) AgarthaIcons.LightMode else AgarthaIcons.DarkMode,
                     contentDescription = stringResource(
                         if (isDarkMode) R.string.theme_toggle_to_light else R.string.theme_toggle_to_dark
                     ),

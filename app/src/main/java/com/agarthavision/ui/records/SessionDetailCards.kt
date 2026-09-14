@@ -30,7 +30,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Download
+import com.agarthavision.ui.icons.RemoveCircle
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -187,7 +189,7 @@ private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) 
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_download),
+                imageVector = AgarthaIcons.Download,
                 contentDescription = stringResource(
                     if (isGenerating) R.string.report_generating else R.string.report_export
                 ),
@@ -317,7 +319,7 @@ internal fun EmptyStateGraphic() {
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_minus_circle),
+                imageVector = AgarthaIcons.RemoveCircle,
                 contentDescription = null,
                 tint = AgarthaTheme.colors.textTertiary,
                 modifier = Modifier.size(26.dp),

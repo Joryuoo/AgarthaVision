@@ -11,7 +11,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -22,6 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.BuildConfig
 import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.DarkMode
+import com.agarthavision.ui.icons.LightMode
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
@@ -53,7 +55,7 @@ internal fun AppearanceCard(isDarkMode: Boolean, onToggleTheme: () -> Unit) {
             // Same sun/moon glyph the dashboard header uses, so the two places you can
             // flip the theme look alike.
             Icon(
-                painter = painterResource(if (isDarkMode) R.drawable.ic_sun else R.drawable.ic_moon),
+                imageVector = if (isDarkMode) AgarthaIcons.LightMode else AgarthaIcons.DarkMode,
                 contentDescription = null,
                 tint = colors.textSecondary,
                 modifier = Modifier.size(20.dp),

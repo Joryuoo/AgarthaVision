@@ -44,12 +44,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.Inbox
-import androidx.compose.material.icons.outlined.TaskAlt
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -325,7 +325,7 @@ internal fun QueueEmptyState(
             modifier = padded,
         )
         QueueEmptyVariant.ALL_DONE -> EmptyState(
-            icon = Icons.Outlined.TaskAlt,
+            icon = AgarthaIcons.Verified,
             title = stringResource(R.string.verify_queue_done_title),
             body = stringResource(R.string.verify_queue_done_body),
             modifier = padded,

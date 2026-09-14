@@ -39,13 +39,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.CheckCircle
+import com.agarthavision.ui.icons.ChevronRight
+import com.agarthavision.ui.icons.PlayArrow
+import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -113,7 +116,7 @@ internal fun ActiveSessionHero(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_play),
+                imageVector = AgarthaIcons.PlayArrow,
                 contentDescription = "Resume",
                 tint = colors.accent,
                 modifier = Modifier.size(22.dp)
@@ -454,7 +457,7 @@ internal fun VerifyAlertRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_warning),
+                imageVector = AgarthaIcons.Warning,
                 contentDescription = null,
                 tint = colors.warning,
                 modifier = Modifier.size(18.dp)
@@ -477,7 +480,7 @@ internal fun VerifyAlertRow(
             )
         }
         Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
+            imageVector = AgarthaIcons.ChevronRight,
             contentDescription = null,
             tint = colors.textTertiary,
             modifier = Modifier.size(18.dp)
@@ -508,7 +511,7 @@ internal fun SyncStatusRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_check_circle),
+                imageVector = AgarthaIcons.CheckCircle,
                 contentDescription = null,
                 tint = colors.success,
                 modifier = Modifier.size(18.dp)

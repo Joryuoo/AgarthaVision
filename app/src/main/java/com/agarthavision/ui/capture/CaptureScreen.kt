@@ -14,8 +14,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ListAlt
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.LabProfile
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.agarthavision.ui.components.SvgIcon
@@ -498,7 +498,7 @@ fun CaptureScreen(
             ) {
                 val sessionId = state.activeSessionId
                 IconButtonGlass(
-                    icon = Icons.AutoMirrored.Outlined.ListAlt,
+                    icon = AgarthaIcons.LabProfile,
                     contentDescription = stringResource(R.string.capture_records_action_desc),
                     enabled = sessionId != null,
                     onClick = { sessionId?.let(onReportsClick) },

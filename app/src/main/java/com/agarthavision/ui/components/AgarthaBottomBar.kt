@@ -1,6 +1,5 @@
 package com.agarthavision.ui.components
 
-import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
@@ -32,24 +31,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.CardsStack
+import com.agarthavision.ui.icons.HomeAppLogo
+import com.agarthavision.ui.icons.Science
+import com.agarthavision.ui.icons.Settings
 import com.agarthavision.ui.theme.AgarthaTheme
 
 sealed class Tab(
     val route: String,
     @StringRes val labelRes: Int,
-    @DrawableRes val iconRes: Int
+    val icon: ImageVector
 ) {
-    data object Home     : Tab("dashboard", R.string.nav_tab_home,     R.drawable.ic_home)
-    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, R.drawable.ic_layers)
-    data object Records  : Tab("records",   R.string.nav_tab_records,  R.drawable.ic_chart)
-    data object Settings : Tab("settings",  R.string.settings_title,   R.drawable.ic_settings)
+    data object Home     : Tab("dashboard", R.string.nav_tab_home,     AgarthaIcons.HomeAppLogo)
+    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, AgarthaIcons.Science)
+    data object Records  : Tab("records",   R.string.nav_tab_records,  AgarthaIcons.CardsStack)
+    data object Settings : Tab("settings",  R.string.settings_title,   AgarthaIcons.Settings)
 }
 
 val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records, Tab.Settings)
@@ -132,7 +136,7 @@ fun AgarthaBottomBar(
                 ) {
                     Box {
                         Icon(
-                            painter = painterResource(tab.iconRes),
+                            imageVector = tab.icon,
                             contentDescription = label,
                             modifier = Modifier.size(22.dp),
                             tint = iconColor

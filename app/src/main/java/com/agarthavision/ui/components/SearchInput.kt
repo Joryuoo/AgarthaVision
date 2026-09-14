@@ -9,9 +9,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Search
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -39,7 +39,7 @@ fun SearchInput(
         },
         leadingIcon = {
             Icon(
-                painter = painterResource(R.drawable.ic_search),
+                imageVector = AgarthaIcons.Search,
                 contentDescription = null,
                 tint = AgarthaTheme.colors.textTertiary,
                 modifier = Modifier.size(18.dp),
