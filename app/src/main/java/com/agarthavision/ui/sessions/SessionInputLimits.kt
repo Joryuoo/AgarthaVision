@@ -1,7 +1,7 @@
 package com.agarthavision.ui.sessions
 
 /** Longest session label the New Session sheet accepts; sized for one line of the card title. */
-internal const val SESSION_LABEL_MAX_LENGTH = 40
+internal const val SESSION_LABEL_MAX_LENGTH = 20
 
 /** Longest session note accepted by the New Session sheet and the end-session dialog. */
 internal const val SESSION_NOTE_MAX_LENGTH = 200
