@@ -40,9 +40,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.RectangleShape
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.ui.image.SampleImageRef
@@ -242,7 +244,7 @@ internal fun SampleTile(
                     (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
             },
     ) {
-        AsyncImage(
+        SubcomposeAsyncImage(
             model = ImageRequest.Builder(LocalContext.current)
                 .data(SampleImageRef(sample.filePath, sample.storagePath))
                 .crossfade(true)
@@ -250,6 +252,8 @@ internal fun SampleTile(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
+            loading = { SkeletonBox(modifier = Modifier.fillMaxSize(), shape = RectangleShape) },
+            error = {},
         )
 
         sample.confidence?.let {
