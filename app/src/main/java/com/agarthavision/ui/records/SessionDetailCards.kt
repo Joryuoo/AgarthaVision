@@ -45,9 +45,9 @@ import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.ui.image.SampleImageRef
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -242,16 +242,15 @@ internal fun SampleTile(
                     (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
             },
     ) {
-        if (sample.filePath != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(File(sample.filePath))
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(SampleImageRef(sample.filePath, sample.storagePath))
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
 
         sample.confidence?.let {
             ConfidenceChip(

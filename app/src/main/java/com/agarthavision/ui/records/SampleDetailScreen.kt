@@ -255,7 +255,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .aspectRatio(1f) // Changed to 1f based on screenshot
-                .background(Color.Black, RoundedCornerShape(16.dp))
+                .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
         ) {
             when (imageSource) {
@@ -263,6 +263,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(File(imageSource.path))
+                            .crossfade(true)
                             .build(),
                         contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,
@@ -283,6 +284,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                             // re-downloads the same image.
                             .memoryCacheKey(imageSource.cacheKey)
                             .diskCacheKey(imageSource.cacheKey)
+                            .crossfade(true)
                             .build(),
                         contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,
