@@ -6,6 +6,7 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
+import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -64,6 +65,7 @@ class LoginViewModel @Inject constructor(
     private val connectivityObserver: ConnectivityObserver,
     private val claimLocalDataUseCase: ClaimLocalDataUseCase,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
+    private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LoginUiState(isOffline = !connectivityObserver.currentlyOnline()))
 
@@ -135,11 +137,14 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    /** Silently claims unowned local data for the account, then pushes pending rows. */
+    /** Silently claims unowned local data, pushes pending rows, then pulls remote rows. */
     private suspend fun claimAndSync() {
         val userId = authRepository.currentLocalUserId() ?: return
         claimLocalDataUseCase(userId)
         syncPendingDataUseCase()
+        fetchRemoteDataUseCase().onFailure { error ->
+            android.util.Log.e(TAG, "Post-login fetch failed", error)
+        }
     }
 
     private fun observeConnectivity() {
@@ -151,6 +156,7 @@ class LoginViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "LoginViewModel"
         val EMAIL_PATTERN = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")
     }
 }

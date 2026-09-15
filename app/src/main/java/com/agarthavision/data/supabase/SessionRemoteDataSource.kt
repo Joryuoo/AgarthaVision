@@ -1,9 +1,11 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.domain.model.SessionSyncStatus
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -60,6 +62,17 @@ class SessionRemoteDataSource @Inject constructor(
         }
     }
 
+    // ── Pull (read from server) ────────────────────────────────────────────────
+
+    /**
+     * Fetches all sessions owned by [userId], ordered by start time ascending.
+     */
+    suspend fun fetchSessions(userId: String): List<SessionEntity> =
+        supabase.postgrest[SESSIONS_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("started_at", Order.ASCENDING)
+        }.decodeList<SessionRow>().map { it.toEntity() }
+
     private fun SessionEntity.toInsertRow(): SessionInsertRow =
         SessionInsertRow(
             id = sessionId,
@@ -90,6 +103,33 @@ class SessionRemoteDataSource @Inject constructor(
         val label: String?,
         @SerialName("psgc_barangay_code")
         val psgcBarangayCode: String?,
+    )
+
+    // ── Select DTO (read path) ────────────────────────────────────────────────
+
+    @Serializable
+    private data class SessionRow(
+        @SerialName("id") val id: String,
+        @SerialName("user_id") val userId: String,
+        @SerialName("device_id") val deviceId: String,
+        @SerialName("started_at") val startedAt: String,
+        @SerialName("ended_at") val endedAt: String? = null,
+        @SerialName("notes") val notes: String? = null,
+        @SerialName("label") val label: String? = null,
+        @SerialName("psgc_barangay_code") val psgcBarangayCode: String? = null,
+    )
+
+    private fun SessionRow.toEntity(): SessionEntity = SessionEntity(
+        sessionId = id,
+        userId = userId,
+        deviceId = deviceId,
+        startedAt = Instant.parse(startedAt).toEpochMilli(),
+        endedAt = endedAt?.let { Instant.parse(it).toEpochMilli() },
+        notes = notes,
+        label = label,
+        psgcBarangayCode = psgcBarangayCode,
+        supabaseStatus = SessionSyncStatus.SYNCED.value,
+        claimExempt = false,
     )
 
     private companion object {

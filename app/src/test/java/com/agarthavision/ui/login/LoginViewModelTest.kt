@@ -5,6 +5,8 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
+import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
@@ -19,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -44,6 +47,9 @@ class LoginViewModelTest {
     private val syncPendingDataUseCase: SyncPendingDataUseCase = mock<SyncPendingDataUseCase>().also {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
+    private val fetchRemoteDataUseCase: FetchRemoteDataUseCase = mock<FetchRemoteDataUseCase>().also {
+        runBlocking { whenever(it.invoke()).thenReturn(Result.success(FetchSummary.Skipped)) }
+    }
 
     private fun viewModel() = LoginViewModel(
         signInUseCase = signInUseCase,
@@ -51,6 +57,7 @@ class LoginViewModelTest {
         connectivityObserver = connectivityObserver,
         claimLocalDataUseCase = claimLocalDataUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
+        fetchRemoteDataUseCase = fetchRemoteDataUseCase,
     )
 
     @Test
@@ -133,5 +140,45 @@ class LoginViewModelTest {
 
             verify(claimLocalDataUseCase).invoke("user-1", null)
             verify(syncPendingDataUseCase).invoke()
+            verify(fetchRemoteDataUseCase).invoke()
+        }
+
+    @Test
+    fun `post-login sequence is claim then push then pull in that order`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(signInUseCase.invoke("user@example.com", "secret123"))
+                .thenReturn(Result.success(Unit))
+            val viewModel = viewModel()
+
+            viewModel.events.test {
+                viewModel.onEmailChanged("user@example.com")
+                viewModel.onPasswordChanged("secret123")
+                viewModel.onSubmit()
+                advanceUntilIdle()
+                awaitItem() // consume NavigateBack
+            }
+
+            val order = inOrder(claimLocalDataUseCase, syncPendingDataUseCase, fetchRemoteDataUseCase)
+            order.verify(claimLocalDataUseCase).invoke("user-1", null)
+            order.verify(syncPendingDataUseCase).invoke()
+            order.verify(fetchRemoteDataUseCase).invoke()
+        }
+
+    @Test
+    fun `fetchRemoteDataUseCase is not called when sign-in fails`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(signInUseCase.invoke("user@example.com", "wrong"))
+                .thenReturn(Result.failure(IllegalStateException("Invalid credentials")))
+            val viewModel = viewModel()
+
+            viewModel.events.test {
+                viewModel.onEmailChanged("user@example.com")
+                viewModel.onPasswordChanged("wrong")
+                viewModel.onSubmit()
+                advanceUntilIdle()
+                awaitItem() // consume ShowLoginError
+            }
+
+            verify(fetchRemoteDataUseCase, never()).invoke()
         }
 }

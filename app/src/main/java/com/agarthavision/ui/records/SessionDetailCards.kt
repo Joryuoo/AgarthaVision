@@ -40,14 +40,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import androidx.compose.ui.graphics.RectangleShape
+import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.ui.image.SampleImageRef
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
-import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -242,16 +244,17 @@ internal fun SampleTile(
                     (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
             },
     ) {
-        if (sample.filePath != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(File(sample.filePath))
-                    .build(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        }
+        SubcomposeAsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(SampleImageRef(sample.filePath, sample.storagePath))
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+            loading = { SkeletonBox(modifier = Modifier.fillMaxSize(), shape = RectangleShape) },
+            error = {},
+        )
 
         sample.confidence?.let {
             ConfidenceChip(

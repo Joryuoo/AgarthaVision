@@ -4,9 +4,11 @@ import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.SampleStatus
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -15,8 +17,10 @@ import javax.inject.Inject
 import kotlin.time.Duration.Companion.minutes
 
 /**
- * Writes verified sample images and metadata to Supabase Storage and Postgres.
+ * Writes verified sample images and metadata to Supabase Storage and Postgres, and
+ * reads them back for the sync-down (initial fetch) path.
  */
+@Suppress("TooManyFunctions")
 class SampleRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
 ) {
@@ -66,6 +70,37 @@ class SampleRemoteDataSource @Inject constructor(
 
         return storagePath
     }
+
+    // ── Pull (read from server) ────────────────────────────────────────────────
+
+    /**
+     * Fetches a page of samples owned by [userId], ordered by capture time ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
+     */
+    suspend fun fetchSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
+        supabase.postgrest[SAMPLES_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("captured_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<SampleRow>().map { it.toEntity() }
+
+    /**
+     * Fetches all detections for the given [sampleIds].
+     * Callers must guard against an empty list — isIn with no values is undefined.
+     */
+    suspend fun fetchDetections(sampleIds: List<String>): List<DetectionEntity> =
+        supabase.postgrest[DETECTIONS_TABLE].select {
+            filter { isIn("sample_id", sampleIds) }
+        }.decodeList<DetectionRow>().map { it.toEntity() }
+
+    /**
+     * Fetches all findings for the given [sampleIds].
+     * Callers must guard against an empty list.
+     */
+    suspend fun fetchFindings(sampleIds: List<String>): List<SampleSpeciesFindingEntity> =
+        supabase.postgrest[FINDINGS_TABLE].select {
+            filter { isIn("sample_id", sampleIds) }
+        }.decodeList<FindingRow>().map { it.toEntity() }
 
     /**
      * Creates a short-lived URL for reading a private sample image from Storage.
@@ -194,6 +229,98 @@ class SampleRemoteDataSource @Inject constructor(
 
     private fun SampleSpeciesFindingEntity.toInsertRow(): FindingInsertRow = FindingInsertRow(
         id = findingId,
+        sampleId = sampleId,
+        species = species,
+        stage = stage,
+        eggCount = eggCount,
+    )
+
+    // ── Select DTOs (read path) ────────────────────────────────────────────────
+
+    @Serializable
+    private data class SampleRow(
+        @SerialName("id") val id: String,
+        @SerialName("session_id") val sessionId: String,
+        @SerialName("user_id") val userId: String,
+        @SerialName("captured_at") val capturedAt: String,
+        @SerialName("verified_at") val verifiedAt: String? = null,
+        @SerialName("gps_latitude") val gpsLatitude: Double? = null,
+        @SerialName("gps_longitude") val gpsLongitude: Double? = null,
+        @SerialName("gps_accuracy") val gpsAccuracy: Float? = null,
+        @SerialName("storage_path") val storagePath: String,
+        @SerialName("inference_model_version") val inferenceModelVersion: String,
+        @SerialName("needs_reannotation") val needsReannotation: Boolean,
+        @SerialName("is_manual") val isManual: Boolean,
+        @SerialName("user_note") val userNote: String? = null,
+        @SerialName("deleted_at") val deletedAt: String? = null,
+    )
+
+    @Serializable
+    private data class DetectionRow(
+        @SerialName("id") val id: String,
+        @SerialName("sample_id") val sampleId: String,
+        @SerialName("class_label") val classLabel: String,
+        @SerialName("confidence") val confidence: Float,
+        @SerialName("bbox_x") val bboxX: Float? = null,
+        @SerialName("bbox_y") val bboxY: Float? = null,
+        @SerialName("bbox_w") val bboxW: Float? = null,
+        @SerialName("bbox_h") val bboxH: Float? = null,
+        @SerialName("verdict") val verdict: String,
+        @SerialName("expert_class") val expertClass: String? = null,
+        @SerialName("species_touched") val speciesTouched: Boolean = false,
+    )
+
+    @Serializable
+    private data class FindingRow(
+        @SerialName("id") val id: String,
+        @SerialName("sample_id") val sampleId: String,
+        @SerialName("species") val species: String,
+        @SerialName("stage") val stage: String? = null,
+        @SerialName("egg_count") val eggCount: Int,
+    )
+
+    // ── DTO → Entity mappers (read path) ─────────────────────────────────────
+
+    private fun SampleRow.toEntity(): SampleEntity = SampleEntity(
+        sampleId = id,
+        sessionId = sessionId,
+        userId = userId,
+        deviceId = "",   // D2: device identity not stored in remote
+        timestamp = Instant.parse(capturedAt).toEpochMilli(),
+        verifiedAt = verifiedAt?.let { Instant.parse(it).toEpochMilli() } ?: 0L,
+        imagePath = "",  // D1: image is in Storage, not local disk
+        storagePath = storagePath,
+        inferenceModelVersion = inferenceModelVersion,
+        needsReannotation = needsReannotation,
+        isManual = isManual,
+        userNote = userNote,
+        gpsLatitude = gpsLatitude,
+        gpsLongitude = gpsLongitude,
+        gpsAccuracy = gpsAccuracy,
+        status = SampleStatus.SYNCED.value,
+        predictionsJson = null,
+        imageWidth = null,
+        imageHeight = null,
+        deletedAt = deletedAt?.let { Instant.parse(it).toEpochMilli() },
+    )
+
+    private fun DetectionRow.toEntity(): DetectionEntity = DetectionEntity(
+        detectionId = id,
+        sampleId = sampleId,
+        classLabel = classLabel,
+        confidence = confidence,
+        bboxX = bboxX,
+        bboxY = bboxY,
+        bboxW = bboxW,
+        bboxH = bboxH,
+        verdict = DetectionVerdict.fromValue(verdict).value,
+        expertClass = expertClass,
+        verifiedByUser = true,
+        speciesTouched = speciesTouched,
+    )
+
+    private fun FindingRow.toEntity(): SampleSpeciesFindingEntity = SampleSpeciesFindingEntity(
+        findingId = id,
         sampleId = sampleId,
         species = species,
         stage = stage,
