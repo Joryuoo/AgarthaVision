@@ -121,23 +121,35 @@ internal data class SyncCardState(
     val isSyncing: Boolean,
     val canSyncNow: Boolean,
     val unlinkedSessions: Int,
+    val initialFetchDone: Boolean = true,
+    val isFetching: Boolean = false,
 )
 
-internal enum class SyncBadge { FAILED, PENDING, ALL_SYNCED, NOT_LINKED, NOTHING_TO_SYNC }
+internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_SYNCED, NOT_LINKED, NOTHING_TO_SYNC }
 
 /**
- * Pure function that maps sign-in state + sync counts + unlinked session count to a
- * [SyncBadge] variant. When signed in, unlinked sessions are intentionally ignored:
- * the claim-on-login path will handle them at login time, and checking them here
- * would produce a distracting flash immediately after sign-in. Per ADR-007.
+ * Pure function that maps sign-in state + sync counts + fetch state to a [SyncBadge] variant.
+ *
+ * Precedence (highest first):
+ * - failed uploads always surface (medtech must act)
+ * - pending uploads next
+ * - actively fetching from server
+ * - initial fetch never ran (badge prompts a manual sync)
+ * - otherwise all synced
+ *
+ * When signed out, unlinked-session count drives the badge. Per ADR-007.
  */
 internal fun syncBadgeState(
     isSignedIn: Boolean,
     counts: PendingSyncCounts,
     unlinkedSessions: Int,
+    initialFetchDone: Boolean = true,
+    isFetching: Boolean = false,
 ): SyncBadge = when {
     isSignedIn && counts.failed > 0 -> SyncBadge.FAILED
     isSignedIn && counts.totalPending > 0 -> SyncBadge.PENDING
+    isSignedIn && isFetching -> SyncBadge.FETCHING
+    isSignedIn && !initialFetchDone -> SyncBadge.NOT_YET_SYNCED
     isSignedIn -> SyncBadge.ALL_SYNCED
     unlinkedSessions > 0 -> SyncBadge.NOT_LINKED
     else -> SyncBadge.NOTHING_TO_SYNC
@@ -232,7 +244,15 @@ private fun SyncStatusBadge(state: SyncCardState) {
     val colors = AgarthaTheme.colors
     val counts = state.counts
     val n = state.unlinkedSessions
-    val (bg, fg, text) = when (syncBadgeState(state.isSignedIn, counts, n)) {
+    val (bg, fg, text) = when (
+        syncBadgeState(
+            isSignedIn = state.isSignedIn,
+            counts = counts,
+            unlinkedSessions = n,
+            initialFetchDone = state.initialFetchDone,
+            isFetching = state.isFetching,
+        )
+    ) {
         SyncBadge.FAILED -> Triple(
             colors.dangerTint,
             colors.dangerText,
@@ -242,6 +262,16 @@ private fun SyncStatusBadge(state: SyncCardState) {
             colors.warningTint,
             colors.warningText,
             stringResource(R.string.settings_sync_pending, counts.totalPending),
+        )
+        SyncBadge.FETCHING -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            stringResource(R.string.settings_sync_fetching),
+        )
+        SyncBadge.NOT_YET_SYNCED -> Triple(
+            colors.warningTint,
+            colors.warningText,
+            stringResource(R.string.settings_sync_not_yet_synced),
         )
         SyncBadge.ALL_SYNCED -> Triple(
             colors.successTint,

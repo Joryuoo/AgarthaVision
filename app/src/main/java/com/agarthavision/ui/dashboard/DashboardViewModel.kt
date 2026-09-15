@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.repository.DetectionRepository
@@ -14,6 +15,7 @@ import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,7 +88,8 @@ data class PendingAndSync(
     val oldestPendingAgo: String,
     val allSynced: Boolean,
     val lastSyncLabel: String,
-    val syncedSamplesCount: Int
+    val syncedSamplesCount: Int,
+    val initialFetchDone: Boolean = true,
 )
 
 @Suppress("LongParameterList")
@@ -96,6 +99,8 @@ class DashboardViewModel @Inject constructor(
     observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val connectivityObserver: ConnectivityObserver,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
+    private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
+    private val initialFetchStateStore: InitialFetchStateStore,
     private val sessionManager: SessionManager,
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
@@ -147,12 +152,22 @@ class DashboardViewModel @Inject constructor(
     // Pending Reviews + Sync Status — null identity yields an empty (all-synced) state.
     private val pendingAndSyncFlow = userIdFlow.flatMapLatest { userId ->
         if (userId == null) {
-            flowOf(PendingAndSync(0, "", allSynced = true, lastSyncLabel = "never", syncedSamplesCount = 0))
+            flowOf(
+                PendingAndSync(
+                    0,
+                    "",
+                    allSynced = true,
+                    lastSyncLabel = "never",
+                    syncedSamplesCount = 0,
+                    initialFetchDone = true,
+                ),
+            )
         } else {
         combine(
             flow { emit(sampleRepository.getSamplesPendingSyncIncludingDeleted(userId)) },
-            sampleRepository.observeAllSamples(userId)
-        ) { pendingSamples, allSamples ->
+            sampleRepository.observeAllSamples(userId),
+            initialFetchStateStore.observeCompleted(userId),
+        ) { pendingSamples, allSamples, initialFetchDone ->
             val pendingCount = pendingSamples.size
 
             // Oldest pending: find the earliest timestamp among unverified flagged samples
@@ -167,14 +182,15 @@ class DashboardViewModel @Inject constructor(
                 }
             } else ""
 
-            // Sync status: all synced when no VERIFIED (unsynced) samples exist
+            // Sync status: all synced when no VERIFIED (unsynced) samples exist AND initial
+            // fetch has completed (per 3d: initialFetchDone && unsyncedCount == 0)
             val unsyncedCount = allSamples.count {
                 it.status == com.agarthavision.domain.model.SampleStatus.VERIFIED
             }
             val syncedSamples = allSamples.count {
                 it.status == com.agarthavision.domain.model.SampleStatus.SYNCED
             }
-            val allSynced = unsyncedCount == 0
+            val allSynced = initialFetchDone && unsyncedCount == 0
 
             // Last sync label: time since the most recently synced sample
             val lastSyncedMs = allSamples
@@ -191,11 +207,12 @@ class DashboardViewModel @Inject constructor(
             } else "never"
 
             PendingAndSync(
-                pendingCount    = pendingCount,
+                pendingCount     = pendingCount,
                 oldestPendingAgo = oldestPendingAgo,
-                allSynced       = allSynced,
-                lastSyncLabel   = lastSyncLabel,
-                syncedSamplesCount = syncedSamples
+                allSynced        = allSynced,
+                lastSyncLabel    = lastSyncLabel,
+                syncedSamplesCount = syncedSamples,
+                initialFetchDone = initialFetchDone,
             )
         }
         }
@@ -371,13 +388,16 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    /** Runs a manual pending-sync pass (the Dashboard "Sync now" action). Per ADR-007. */
+    /** Runs a manual pending-sync pass (push + pull). Per ADR-007. */
     fun onSyncNow() {
         if (!uiState.value.canSyncNow) return
         viewModelScope.launch {
             isSyncingFlow.value = true
             syncPendingDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync failed", error)
+                Log.e(TAG, "Manual sync (push) failed", error)
+            }
+            fetchRemoteDataUseCase().onFailure { error ->
+                Log.e(TAG, "Manual sync (fetch) failed", error)
             }
             isSyncingFlow.value = false
         }

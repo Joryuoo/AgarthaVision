@@ -131,6 +131,8 @@ private fun SettingsContent(
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
                             unlinkedSessions = state.unlinkedSessions,
+                            initialFetchDone = state.initialFetchDone,
+                            isFetching = state.isSyncing,
                         ),
                         onSyncNowClick = actions.onSyncNowClick,
                     )

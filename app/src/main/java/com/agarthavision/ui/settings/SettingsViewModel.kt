@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
@@ -13,6 +14,7 @@ import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -43,6 +45,7 @@ data class SettingsUiState(
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
     val isSyncing: Boolean = false,
     val unlinkedSessions: Int = 0,
+    val initialFetchDone: Boolean = true,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -64,8 +67,10 @@ class SettingsViewModel @Inject constructor(
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
+    private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val signOutUseCase: SignOutUseCase,
     private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase,
+    private val initialFetchStateStore: InitialFetchStateStore,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -84,13 +89,24 @@ class SettingsViewModel @Inject constructor(
 
     private val isSyncingFlow = MutableStateFlow(false)
 
+    // Emits true once the initial remote fetch has completed for the current user; true by
+    // default when signed out (nothing to wait for). Folded into the inner combine to keep
+    // the outer combine at the 5-arg limit.
+    private val initialFetchDoneFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { initialFetchStateStore.observeCompleted(it.userId) } ?: flowOf(true)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(isSyncingFlow, observeUnlinkedSessionCountUseCase()) { s, u -> s to u },
-    ) { identity, online, themeMode, pendingSync, (syncing, unlinked) ->
+        combine(
+            isSyncingFlow,
+            observeUnlinkedSessionCountUseCase(),
+            initialFetchDoneFlow,
+        ) { s, u, f -> Triple(s, u, f) },
+    ) { identity, online, themeMode, pendingSync, (syncing, unlinked, initialFetchDone) ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
@@ -100,6 +116,7 @@ class SettingsViewModel @Inject constructor(
             pendingSyncCounts = pendingSync,
             isSyncing = syncing,
             unlinkedSessions = unlinked,
+            initialFetchDone = initialFetchDone,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -117,13 +134,16 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    /** Runs a manual pending-sync pass. */
+    /** Runs a manual pending-sync pass (push + pull). */
     fun onSyncNow() {
         if (!uiState.value.canSyncNow) return
         viewModelScope.launch {
             isSyncingFlow.value = true
             syncPendingDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync failed", error)
+                Log.e(TAG, "Manual sync (push) failed", error)
+            }
+            fetchRemoteDataUseCase().onFailure { error ->
+                Log.e(TAG, "Manual sync (fetch) failed", error)
             }
             isSyncingFlow.value = false
         }

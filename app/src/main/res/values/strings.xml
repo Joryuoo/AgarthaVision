@@ -348,6 +348,8 @@
     <string name="settings_connectivity_online">Online</string>
     <string name="settings_connectivity_offline">Offline</string>
     <string name="settings_sync_all_synced">All synced</string>
+    <string name="settings_sync_fetching">Fetching…</string>
+    <string name="settings_sync_not_yet_synced">Not yet synced</string>
     <string name="settings_sync_pending">%1$d pending upload</string>
     <string name="settings_sync_failed">%1$d failed</string>
     <string name="settings_sync_sessions">Sessions</string>

@@ -2,6 +2,7 @@ package com.agarthavision.ui.settings
 
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
@@ -11,6 +12,8 @@ import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
@@ -58,11 +61,17 @@ class SettingsViewModelTest {
     private val syncPendingDataUseCase: SyncPendingDataUseCase = mock<SyncPendingDataUseCase>().also {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
+    private val fetchRemoteDataUseCase: FetchRemoteDataUseCase = mock<FetchRemoteDataUseCase>().also {
+        runBlocking { whenever(it.invoke()).thenReturn(Result.success(FetchSummary.Skipped)) }
+    }
     private val signOutUseCase: SignOutUseCase = mock()
     private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase =
         mock<ObserveUnlinkedSessionCountUseCase>().also {
             whenever(it.invoke()).thenReturn(MutableStateFlow(0))
         }
+    private val initialFetchStateStore: InitialFetchStateStore = mock<InitialFetchStateStore>().also {
+        whenever(it.observeCompleted(any())).thenReturn(MutableStateFlow(true))
+    }
 
     private fun viewModel() = SettingsViewModel(
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
@@ -71,8 +80,10 @@ class SettingsViewModelTest {
         observeThemeModeUseCase = observeThemeModeUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
+        fetchRemoteDataUseCase = fetchRemoteDataUseCase,
         signOutUseCase = signOutUseCase,
         observeUnlinkedSessionCountUseCase = observeUnlinkedSessionCountUseCase,
+        initialFetchStateStore = initialFetchStateStore,
     )
 
     @Test
