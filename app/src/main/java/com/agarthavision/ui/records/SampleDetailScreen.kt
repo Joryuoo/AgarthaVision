@@ -277,6 +277,12 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(imageSource.url)
+                            // Signed URLs expire (15 min) and carry a fresh token each time
+                            // they are generated, so key the cache on the stable storage path
+                            // instead of the URL — otherwise every open is a cache miss and
+                            // re-downloads the same image.
+                            .memoryCacheKey(imageSource.cacheKey)
+                            .diskCacheKey(imageSource.cacheKey)
                             .build(),
                         contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,
