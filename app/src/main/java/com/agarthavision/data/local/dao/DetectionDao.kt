@@ -38,8 +38,8 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.deleted_at is null
           AND s.session_id = :sessionId
-          AND s.user_id = :userId
-                    AND s.status != 'flagged'
+          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND s.status != 'flagged'
           AND d.verdict != 'false_positive'
         GROUP BY species
         ORDER BY species ASC
@@ -48,7 +48,7 @@ interface DetectionDao {
 
     suspend fun getConfirmedEggCountsForSession(
         sessionId: String,
-        userId: String,
+        userId: String?,
     ): List<SessionEggCountRow>
 
     /**

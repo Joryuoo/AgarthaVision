@@ -20,7 +20,7 @@ class DetectionRepositoryImpl @Inject constructor(
             entities.map { it.toDomain() }
         }
 
-    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount> =
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         detectionDao.getConfirmedEggCountsForSession(sessionId, userId).map { row ->
             EggCount(species = row.species, count = row.eggCount)
         }

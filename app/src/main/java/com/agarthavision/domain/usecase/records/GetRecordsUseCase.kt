@@ -78,11 +78,9 @@ class GetRecordsUseCase @Inject constructor(
     private val detectionRepository: DetectionRepository,
 ) {
     operator fun invoke(query: RecordsQuery): Flow<RecordsResult> = flow {
-        val userId = authRepository.getCurrentUserId()
-        if (userId == null) {
-            emit(RecordsResult(emptyList(), RecordsTotals()))
-            return@flow
-        }
+        // Cached identity, not the live Supabase session: signed-in-but-offline still owns
+        // its rows, and a signed-out device reads its unowned rows (deferred claim).
+        val userId = authRepository.currentLocalUserId()
 
         val zone = ZoneId.systemDefault()
         val startMillis = query.startDate

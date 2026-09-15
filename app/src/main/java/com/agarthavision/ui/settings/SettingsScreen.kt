@@ -2,14 +2,13 @@ package com.agarthavision.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,6 +28,7 @@ import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import kotlinx.coroutines.flow.collectLatest
 
@@ -96,30 +96,21 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Box(
+    Column(
         modifier = modifier
             .fillMaxSize()
             .background(colors.background),
     ) {
+        // AgarthaNavGraph zeroes contentWindowInsets app-wide; the header owns the status-bar
+        // inset and stays put, so nothing scrolls under the phone's status bar.
+        ScreenHeader(
+            title = stringResource(R.string.settings_title),
+            purpose = stringResource(R.string.settings_subtitle_purpose),
+        )
         LazyColumn(
-            // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
-            // its own. Without this the title draws under the status bar.
-            modifier = Modifier
-                .fillMaxSize()
-                .statusBarsPadding(),
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = Spacing.xl),
         ) {
-            item {
-                Text(
-                    text = stringResource(R.string.settings_title),
-                    color = colors.textPrimary,
-                    style = MaterialTheme.typography.headlineSmall,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.xl)
-                        .padding(top = Spacing.xl, bottom = Spacing.lg),
-                )
-            }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_account)) {
                     AccountCard(
@@ -139,6 +130,7 @@ private fun SettingsContent(
                             counts = state.pendingSyncCounts,
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
+                            unlinkedSessions = state.unlinkedSessions,
                         ),
                         onSyncNowClick = actions.onSyncNowClick,
                     )
@@ -217,6 +209,28 @@ private fun SettingsScreenPreview() {
             isOffline = false,
             isDarkMode = false,
             pendingSyncCounts = PendingSyncCounts(2, 5, 1, 0),
+        ),
+        actions = SettingsActions(
+            onSignInClick = {},
+            onSignOutClick = {},
+            onSyncNowClick = {},
+            onToggleTheme = {},
+        ),
+    )
+}
+
+@Preview(showBackground = true, name = "Settings - signed out with unlinked sessions")
+@Composable
+private fun SettingsScreenSignedOutPreview() {
+    SettingsContent(
+        state = SettingsUiState(
+            isLoading = false,
+            identity = null,
+            isSignedIn = false,
+            isOffline = false,
+            isDarkMode = false,
+            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+            unlinkedSessions = 3,
         ),
         actions = SettingsActions(
             onSignInClick = {},

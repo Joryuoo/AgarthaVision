@@ -87,6 +87,10 @@ class VerificationSheetContentTest {
         val removedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
+        var manualNoDetections = 0
+        val manualSpeciesToggled = mutableListOf<Pair<EggSpecies, Boolean>>()
+        val manualCounts = mutableListOf<Pair<EggSpecies, String>>()
+        val manualOtherNames = mutableListOf<String>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -110,6 +114,10 @@ class VerificationSheetContentTest {
         onEggCountChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onManualNoDetectionSelected = { r.manualNoDetections++ },
+        onManualSpeciesToggled = { species, checked -> r.manualSpeciesToggled += species to checked },
+        onManualCountChanged = { species, text -> r.manualCounts += species to text },
+        onManualOtherNameChanged = { r.manualOtherNames += it },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -574,11 +582,17 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SOURCE_BADGE).onChild().assertTextEquals("AI-suggested")
     }
 
+    /**
+     * SOURCE_BADGE lives inside DetectionCard, which is only rendered for AI frames with
+     * boxes. A manual frame renders the species checklist instead, so no badge is present.
+     * Coverage: the badge content and the manual checklist are each tested separately.
+     */
     @Test
-    fun `a manual frame is badged as manual`() {
-        setContent(state(frame = frame(source = FrameSource.MANUAL)))
+    fun `a manual frame does not render the detection card or its source badge`() {
+        setContent(state(frame = frame(source = FrameSource.MANUAL), answers = emptyList()))
 
-        sheetNode(VerifyTestTags.SOURCE_BADGE).onChild().assertTextEquals("Manual")
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_CARD).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.SOURCE_BADGE).assertDoesNotExist()
     }
 
     /**
@@ -595,10 +609,9 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `a manual frame shows the detection card without the AI-suggestion caution`() {
-        setContent(state(frame = frame(source = FrameSource.MANUAL)))
+    fun `a manual frame does not render the AI-suggestion caution`() {
+        setContent(state(frame = frame(source = FrameSource.MANUAL), answers = emptyList()))
 
-        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.AI_SUGGESTION_NOTE).assertDoesNotExist()
     }
 
@@ -693,5 +706,132 @@ class VerificationSheetContentTest {
         composeRule.onNodeWithContentDescription("Back").performClick()
 
         assertEquals(1, r.cancels)
+    }
+
+    // Manual capture — species checklist UI
+
+    /** A minimal state for a fresh manual frame with no selections. */
+    private fun manualState(
+        findings: List<Finding> = emptyList(),
+        noDetectionSelected: Boolean = false,
+    ) = VerificationUiState(
+        frame = frame(source = FrameSource.MANUAL, predictions = 0),
+        frameIndexInQueue = 1,
+        queueSize = 1,
+        findings = findings,
+        noDetectionSelected = noDetectionSelected,
+    )
+
+    @Test
+    fun `a manual frame shows the no-detection row and four species rows`() {
+        setContent(manualState())
+
+        sheetNode(VerifyTestTags.MANUAL_NO_DETECTION).assertIsDisplayed()
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.ASCARIS)).assertIsDisplayed()
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.TRICHURIS)).assertIsDisplayed()
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.HOOKWORM)).assertIsDisplayed()
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.OTHER)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a manual frame does not render Q4 or the added-findings or findings-summary sections`() {
+        setContent(manualState())
+
+        composeRule.onNodeWithTag(
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q4, "Yes"),
+        ).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.ADD_SPECIES).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.FINDINGS_SUMMARY).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a checked species row reveals its count field`() {
+        setContent(
+            manualState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.manualCountField(EggSpecies.ASCARIS)).assertIsDisplayed()
+        // Unchecked species must not show a count field.
+        composeRule.onNodeWithTag(VerifyTestTags.manualCountField(EggSpecies.HOOKWORM)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `checking OTHER reveals both the name field and the count field`() {
+        setContent(
+            manualState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.OTHER,
+                            speciesTouched = true,
+                            otherSpeciesText = "",
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.MANUAL_OTHER_NAME_FIELD).assertIsDisplayed()
+        sheetNode(VerifyTestTags.manualCountField(EggSpecies.OTHER)).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping the no-detection row fires onManualNoDetectionSelected`() {
+        val r = setContent(manualState())
+
+        sheetNode(VerifyTestTags.MANUAL_NO_DETECTION).performClick()
+
+        assertEquals(1, r.manualNoDetections)
+    }
+
+    @Test
+    fun `tapping a species checkbox fires onManualSpeciesToggled with the species and new state`() {
+        val r = setContent(manualState())
+
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.TRICHURIS)).performClick()
+
+        assertEquals(1, r.manualSpeciesToggled.size)
+        assertEquals(EggSpecies.TRICHURIS, r.manualSpeciesToggled[0].first)
+        // Compose Checkbox: clicking an unchecked box reports true.
+        assertEquals(true, r.manualSpeciesToggled[0].second)
+    }
+
+    @Test
+    fun `unchecking a checked species fires onManualSpeciesToggled with false`() {
+        val r = setContent(
+            manualState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.HOOKWORM,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.HOOKWORM)).performClick()
+
+        assertEquals(1, r.manualSpeciesToggled.size)
+        assertEquals(EggSpecies.HOOKWORM, r.manualSpeciesToggled[0].first)
+        assertEquals(false, r.manualSpeciesToggled[0].second)
+    }
+
+    @Test
+    fun `the title reads Label sample for a manual frame`() {
+        setContent(manualState())
+
+        // "Label sample" is the string resource verify_manual_title.
+        composeRule.onNodeWithText("Label sample").assertIsDisplayed()
     }
 }

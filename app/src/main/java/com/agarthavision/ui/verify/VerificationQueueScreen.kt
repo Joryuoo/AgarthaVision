@@ -44,9 +44,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.Inbox
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Verified
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -65,6 +70,7 @@ import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.QueueBucket
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import java.io.File
@@ -84,6 +90,7 @@ private val InterTabularStyle = TextStyle(
 fun VerificationQueueScreen(
     onBackClick: () -> Unit,
     onSampleDetailClick: (String) -> Unit,
+    onGoToRecords: (String) -> Unit,
     viewModel: VerificationQueueViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -110,10 +117,12 @@ fun VerificationQueueScreen(
             // App Bar. Swaps to a contextual bar while a selection is live, so the delete
             // affordance is only ever reachable with something selected.
             Row(
+                // Matches ScreenTopBar (the verification sheet's header) so the back arrow and
+                // title hold their position as you move queue -> sheet -> record.
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 2.dp, bottom = 12.dp),
+                    .padding(horizontal = 16.dp)
+                    .padding(vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (state.isSelecting) {
@@ -227,32 +236,41 @@ fun VerificationQueueScreen(
                 }
             }
 
-            // Frame List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                // 24px bottom for home indicator
-                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                items(
-                    items = visibleSamples,
-                    // Keyed by primary key, never by capturedAt: two frames captured in the
-                    // same millisecond once threw a duplicate-key exception.
-                    key = { sample -> sample.sampleId }
-                ) { sample ->
-                    FrameRow(
-                        sample = sample,
-                        isSelecting = state.isSelecting,
-                        isSelected = sample.sampleId in state.selectedIds,
-                        onClick = {
-                            if (state.isSelecting) {
-                                viewModel.onToggleSelected(sample)
-                            } else {
-                                viewModel.onQueueItemSelected(sample)
-                            }
-                        },
-                        onLongClick = { viewModel.onToggleSelected(sample) },
+            // Frame list, or why it is empty
+            if (visibleSamples.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    QueueEmptyState(
+                        variant = queueEmptyVariant(state.bucket, state.verifiedCount),
+                        onViewRecords = { state.activeSessionId?.let(onGoToRecords) },
                     )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    // 24px bottom for home indicator
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(
+                        items = visibleSamples,
+                        // Keyed by primary key, never by capturedAt: two frames captured in the
+                        // same millisecond once threw a duplicate-key exception.
+                        key = { sample -> sample.sampleId }
+                    ) { sample ->
+                        FrameRow(
+                            sample = sample,
+                            isSelecting = state.isSelecting,
+                            isSelected = sample.sampleId in state.selectedIds,
+                            onClick = {
+                                if (state.isSelecting) {
+                                    viewModel.onToggleSelected(sample)
+                                } else {
+                                    viewModel.onQueueItemSelected(sample)
+                                }
+                            },
+                            onLongClick = { viewModel.onToggleSelected(sample) },
+                        )
+                    }
                 }
             }
         }
@@ -279,6 +297,63 @@ fun VerificationQueueScreen(
             onDismiss = viewModel::onVerificationDismissed,
             prior = state.priorTarget,
         )
+    }
+}
+
+/**
+ * Body shown when the selected bucket has no rows. The cases look alike from the list's point
+ * of view but mean different things to the medtech, so each gets its own copy; only the
+ * all-verified case offers a way onward, into the session's records.
+ */
+@Composable
+internal fun QueueEmptyState(
+    variant: QueueEmptyVariant,
+    onViewRecords: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val padded = modifier.padding(horizontal = 32.dp)
+    when (variant) {
+        QueueEmptyVariant.NEVER_HAD -> EmptyState(
+            icon = Icons.Outlined.Inbox,
+            title = stringResource(R.string.verify_queue_empty_title),
+            body = stringResource(R.string.verify_queue_empty_body),
+            modifier = padded,
+        )
+        QueueEmptyVariant.NONE_VERIFIED -> EmptyState(
+            icon = Icons.Outlined.Inbox,
+            title = stringResource(R.string.verify_queue_none_verified_title),
+            body = stringResource(R.string.verify_queue_none_verified_body),
+            modifier = padded,
+        )
+        QueueEmptyVariant.ALL_DONE -> EmptyState(
+            icon = AgarthaIcons.Verified,
+            title = stringResource(R.string.verify_queue_done_title),
+            body = stringResource(R.string.verify_queue_done_body),
+            modifier = padded,
+        ) {
+            Button(
+                onClick = onViewRecords,
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.accent,
+                    contentColor = colors.onAccent,
+                ),
+            ) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    stringResource(R.string.verify_queue_view_records),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    style = InterBaseStyle,
+                )
+            }
+        }
     }
 }
 

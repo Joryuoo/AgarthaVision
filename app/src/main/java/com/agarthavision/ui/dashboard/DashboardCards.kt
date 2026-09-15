@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -39,13 +40,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ChevronRight
+import com.agarthavision.ui.icons.Science
+import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -71,17 +73,13 @@ internal fun ActiveSessionHero(
             .padding(18.dp)
     ) {
         Column(Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                PulsingDot(color = colors.onAccent, size = 6.dp)
-                Spacer(Modifier.width(6.dp))
-                Text(
-                    "LIVE SESSION",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onAccent.copy(alpha = 0.92f),
-                    letterSpacing = 1.2.sp
-                )
-            }
+            Text(
+                "RECENT SESSION",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.onAccent.copy(alpha = 0.92f),
+                letterSpacing = 1.2.sp
+            )
             Spacer(Modifier.height(8.dp))
             Text(
                 sessionId,
@@ -105,6 +103,18 @@ internal fun ActiveSessionHero(
             }
         }
 
+        // Idle "breathing" scale so the recent-session affordance feels alive without the
+        // old blinking dot, which read as a still-live recording indicator.
+        val idleTransition = rememberInfiniteTransition(label = "recentSessionIdle")
+        val iconScale by idleTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 1.12f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "recentSessionIdleScale"
+        )
         Box(
             modifier = Modifier
                 .size(56.dp)
@@ -113,32 +123,15 @@ internal fun ActiveSessionHero(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_play),
-                contentDescription = "Resume",
+                imageVector = AgarthaIcons.Science,
+                contentDescription = "Open session",
                 tint = colors.accent,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier
+                    .size(22.dp)
+                    .scale(iconScale)
             )
         }
     }
-}
-
-@Composable
-private fun PulsingDot(color: Color, size: Dp) {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val alpha by transition.animateFloat(
-        initialValue = 1f,
-        targetValue  = 0.4f,
-        animationSpec = infiniteRepeatable(
-            animation  = tween(durationMillis = 1600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse-alpha"
-    )
-    Box(
-        modifier = Modifier
-            .size(size)
-            .background(color.copy(alpha = alpha), CircleShape)
-    )
 }
 
 @Composable
@@ -454,7 +447,7 @@ internal fun VerifyAlertRow(
             contentAlignment = Alignment.Center
         ) {
             Icon(
-                painter = painterResource(R.drawable.ic_warning),
+                imageVector = AgarthaIcons.Warning,
                 contentDescription = null,
                 tint = colors.warning,
                 modifier = Modifier.size(18.dp)
@@ -477,7 +470,7 @@ internal fun VerifyAlertRow(
             )
         }
         Icon(
-            painter = painterResource(R.drawable.ic_chevron_right),
+            imageVector = AgarthaIcons.ChevronRight,
             contentDescription = null,
             tint = colors.textTertiary,
             modifier = Modifier.size(18.dp)
@@ -485,50 +478,3 @@ internal fun VerifyAlertRow(
     }
 }
 
-@Composable
-internal fun SyncStatusRow(
-    allSynced: Boolean,
-    lastSyncLabel: String,
-    samplesSynced: Int,
-    modifier: Modifier = Modifier
-) {
-    val colors = AgarthaTheme.colors
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(colors.successTint, RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_check_circle),
-                contentDescription = null,
-                tint = colors.success,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        Spacer(Modifier.width(Spacing.md))
-        Column(Modifier.weight(1f)) {
-            Text(
-                if (allSynced) "All samples synced" else "Sync pending",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textPrimary
-            )
-            Text(
-                "Last sync $lastSyncLabel · $samplesSynced samples",
-                fontSize = 11.sp,
-                color = colors.textSecondary,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                modifier = Modifier.padding(top = 1.dp)
-            )
-        }
-    }
-}

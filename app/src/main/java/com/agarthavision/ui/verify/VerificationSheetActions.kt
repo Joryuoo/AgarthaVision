@@ -25,4 +25,8 @@ data class VerificationSheetActions(
     val onEggCountChanged: (Int, String) -> Unit,
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
     val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
+    val onManualNoDetectionSelected: () -> Unit,
+    val onManualSpeciesToggled: (EggSpecies, Boolean) -> Unit,
+    val onManualCountChanged: (EggSpecies, String) -> Unit,
+    val onManualOtherNameChanged: (String) -> Unit,
 )

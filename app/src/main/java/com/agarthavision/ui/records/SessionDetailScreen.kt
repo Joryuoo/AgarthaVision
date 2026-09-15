@@ -1,9 +1,10 @@
-@file:Suppress("FunctionNaming", "LongMethod")
+@file:Suppress("FunctionNaming", "LongMethod", "CyclomaticComplexMethod", "ReturnCount")
 
 package com.agarthavision.ui.records
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,10 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
@@ -64,6 +68,7 @@ import com.agarthavision.domain.model.InfectivityLevel
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -107,6 +112,7 @@ private const val SESSION_ID_SHORT_LENGTH = 4
 fun SessionDetailScreen(
     onBack: () -> Unit,
     onSampleClick: (String) -> Unit,
+    onOpenVerifyQueue: () -> Unit = {},
     viewModel: SessionDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -154,6 +160,15 @@ fun SessionDetailScreen(
         }
     }
 
+    if (!state.sessionResolved) {
+        SessionDetailSkeleton(onBack = onBack)
+        return
+    }
+    val unavailable = state.unavailable
+    if (unavailable != null) {
+        SessionDetailUnavailableScreen(unavailable = unavailable, onBack = onBack)
+        return
+    }
     if (sessionDetail == null) {
         SessionDetailSkeleton(onBack = onBack)
         return
@@ -163,12 +178,10 @@ fun SessionDetailScreen(
         topBar = {
             SessionDetailAppBar(
                 title = sessionDetail.label ?: "Session ${sessionDetail.id}",
-                subtitle = if (sessionDetail.patientIdOrNote.isNullOrBlank()) {
-                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}"
-                } else {
-                    "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel} · ${sessionDetail.patientIdOrNote}"
-                },
+                subtitle = "${sessionDetail.dateLabel} · ${sessionDetail.timeLabel}",
                 onBack = onBack,
+                showVerify = state.canOpenVerifyQueue,
+                onOpenVerifyQueue = onOpenVerifyQueue,
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -259,7 +272,7 @@ private fun SessionDetailSkeleton(onBack: () -> Unit) {
                     .fillMaxWidth()
                     .background(colors.background)
                     .statusBarsPadding()
-                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 BackArrow(
                     onBack = onBack,
@@ -268,7 +281,7 @@ private fun SessionDetailSkeleton(onBack: () -> Unit) {
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = Spacing.xs),
+                        .padding(start = Spacing.sm),
                 ) {
                     SkeletonBox(modifier = Modifier.width(160.dp).height(22.dp))
                     Spacer(Modifier.height(4.dp))
@@ -317,6 +330,8 @@ private fun SessionDetailAppBar(
     title: String,
     subtitle: String,
     onBack: () -> Unit,
+    showVerify: Boolean = false,
+    onOpenVerifyQueue: () -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     Row(
@@ -331,7 +346,7 @@ private fun SessionDetailAppBar(
             onBack = onBack,
             contentDescription = stringResource(R.string.session_detail_back),
         )
-        Column(Modifier.weight(1f).padding(start = Spacing.xs)) {
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
             Text(title, style = MaterialTheme.typography.headlineSmall, color = colors.textPrimary)
             Text(
                 subtitle,
@@ -340,7 +355,18 @@ private fun SessionDetailAppBar(
                 color = colors.textSecondary,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 modifier = Modifier.padding(top = 2.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (showVerify) {
+            IconButton(onClick = onOpenVerifyQueue) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.FactCheck,
+                    contentDescription = stringResource(R.string.session_detail_open_verify),
+                    tint = colors.textPrimary,
+                )
+            }
         }
     }
 }
@@ -382,6 +408,10 @@ private fun SessionDetailPopulated(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
+                if (!session.patientIdOrNote.isNullOrBlank()) {
+                    SessionNoteCard(note = session.patientIdOrNote)
+                    Spacer(Modifier.height(Spacing.md))
+                }
                 EpgHeroCard(
                     session = session,
                     modifier = Modifier.semantics(mergeDescendants = true) {
@@ -419,6 +449,10 @@ private fun SessionDetailEmpty(
             .padding(top = Spacing.xs)
             .verticalScroll(rememberScrollState()),
     ) {
+        if (!session.patientIdOrNote.isNullOrBlank()) {
+            SessionNoteCard(note = session.patientIdOrNote)
+            Spacer(Modifier.height(Spacing.md))
+        }
         EpgHeroCard(session = session)
         Spacer(Modifier.height(Spacing.md))
         ReportsSection(state = state)

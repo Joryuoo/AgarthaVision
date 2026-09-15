@@ -38,8 +38,8 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val syncReportUseCase: SyncReportUseCase,
 ) {
     suspend operator fun invoke(sessionId: String, format: ReportFormat): Result<Report> = runCatching {
-        val userId = requireNotNull(authRepository.getCurrentUserId()) {
-            "A logged-in medtech is required to generate a report."
+        val userId = requireNotNull(authRepository.currentLocalUserId()) {
+            "Sign in to generate reports."
         }
         val session = requireNotNull(sessionRepository.getSessionById(sessionId)) {
             "Session $sessionId does not exist."

@@ -26,6 +26,11 @@
     <string name="dashboard_syncing">Syncing…</string>
     <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
     <string name="dashboard_all_synced">All records synced</string>
+    <!-- Toasts for the header sync button -->
+    <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>
+    <string name="dashboard_sync_toast_offline">You\'re offline — sync will resume when you reconnect</string>
+    <string name="dashboard_sync_toast_started">Syncing your records…</string>
+    <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
 
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
     <string name="session_not_linked">Not linked</string>
@@ -84,6 +89,10 @@
     <!-- Shown instead of a position when the open frame is no longer in the queue. -->
     <string name="verify_frame_meta_out_of_cycle">Not in queue · %1$s</string>
     <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
+    <string name="verify_manual_title">Label sample</string>
+    <string name="verify_select_species">Select species present in frame:</string>
+    <string name="verify_no_detection">No eggs / species detected</string>
+    <string name="verify_manual_count_label">Count</string>
     <string name="verify_species_label">SPECIES</string>
     <string name="verify_remarks_label">REMARKS</string>
     <string name="verify_remarks_placeholder">Remarks for this sample</string>
@@ -159,6 +168,7 @@
     <string name="capture_end_session">End Session</string>
     <string name="capture_end_session_title">End this session?</string>
     <string name="capture_end_session_body">The smear session will close and you will return to the session list. Verified samples are preserved.</string>
+    <string name="session_no_items_yet">No items yet</string>
     <string name="session_all_verified">All verified</string>
     <plurals name="session_unverified_count">
         <item quantity="one">%1$d to verify</item>
@@ -173,15 +183,23 @@
     <string name="capture_end_session_confirm">End session</string>
     <string name="capture_verify_action_desc">Verify flagged frames</string>
     <string name="capture_reports_action_desc">View session EPG</string>
-    <string name="capture_records_action_desc">View records</string>
+    <string name="capture_records_action_desc">View session records</string>
+    <string name="capture_shutter_desc">Capture sample</string>
+    <string name="capture_shutter_busy_desc">Capturing sample</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_frame_captured_message">Frame captured</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>
+    <string name="records_scope_all">All sessions</string>
+    <string name="records_scope_filtered">Filtered date range</string>
+    <string name="records_subtitle_purpose">Search and review all logged results across sessions</string>
     <string name="records_back">Back to capture</string>
-    <string name="records_empty">No sessions found</string>
+    <string name="records_empty_title">No records yet</string>
+    <string name="records_empty_body">Records appear here once a session has verified samples.</string>
+    <string name="records_no_match_title">No matching records</string>
+    <string name="records_no_match_body">Try a different search or species filter.</string>
     <string name="records_filter_start">Start date</string>
     <string name="records_filter_end">End date</string>
     <string name="records_filter_hint">YYYY-MM-DD</string>
@@ -214,6 +232,7 @@
     <string name="report_empty">No reports yet.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
+    <string name="records_status_pending_sync">Pending sync</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
     <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
@@ -283,6 +302,9 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <string name="sessions_title">Sessions</string>
+    <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
+    <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
     <string name="session_picker_title">Sessions</string>
     <string name="session_picker_empty_title">No recent sessions</string>
     <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
@@ -306,6 +328,7 @@
     <string name="nav_tab_records">Records</string>
 
     <string name="settings_title">Settings</string>
+    <string name="settings_subtitle_purpose">Manage your account, sync, and app preferences</string>
     <string name="settings_section_account">Account</string>
     <string name="settings_section_sync">Data &amp; Sync</string>
     <string name="settings_section_appearance">Appearance</string>
@@ -332,6 +355,15 @@
     <string name="settings_sync_reports">Reports</string>
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_syncing">Syncing…</string>
+    <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
+    <plurals name="settings_sync_not_linked">
+        <item quantity="one">%1$d not linked</item>
+        <item quantity="other">%1$d not linked</item>
+    </plurals>
+    <plurals name="settings_sync_sign_in_to_link">
+        <item quantity="one">Sign in to link and upload %1$d session.</item>
+        <item quantity="other">Sign in to link and upload %1$d sessions.</item>
+    </plurals>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>
@@ -346,4 +378,28 @@
     <string name="session_new_barangay_required">Please select the patient\'s barangay to continue.</string>
     <string name="session_new_sheet_subtitle">Set the label, barangay and a note before scanning</string>
     <string name="session_new_label_required">Please fill in the label field to continue.</string>
+    <string name="session_new_char_counter">%1$d / %2$d</string>
+    <!-- Sessions empty state (86d4apzf5) -->
+    <string name="sessions_empty_title">No sessions yet</string>
+    <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
+    <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
+    <string name="verify_queue_empty_title">Queue is clear</string>
+    <string name="verify_queue_empty_body">Nothing to verify right now.</string>
+    <string name="verify_queue_none_verified_title">No verified samples yet</string>
+    <string name="verify_queue_none_verified_body">Samples you verify will appear here.</string>
+    <string name="verify_queue_done_title">All items verified</string>
+    <string name="verify_queue_done_body">Every egg in this session has been checked.</string>
+    <string name="verify_queue_view_records">View session records</string>
+    <!-- Verify entry point from Session Detail (86d4ayefd) -->
+    <string name="session_detail_open_verify">Verify flagged frames</string>
+    <!-- Session/sample unavailable states (86d4b5uz7) -->
+    <string name="session_detail_notes_label">Notes</string>
+    <string name="session_detail_not_found_title">Session not found</string>
+    <string name="session_detail_not_found_body">This session isn\'t on this device.</string>
+    <string name="session_detail_not_visible_title">Not your session</string>
+    <string name="session_detail_not_visible_body">This session belongs to a different account.</string>
+    <string name="sample_detail_not_found_title">Sample not found</string>
+    <string name="sample_detail_not_found_body">This sample isn\'t on this device.</string>
+    <string name="sample_detail_not_visible_title">Not your sample</string>
+    <string name="sample_detail_not_visible_body">This sample belongs to a different account.</string>
 </resources>

@@ -18,7 +18,7 @@ import javax.inject.Inject
 class SessionRepositoryImpl @Inject constructor(
     private val sessionDao: SessionDao,
 ) : SessionRepository {
-    override fun observeAllSessions(userId: String): Flow<List<Session>> =
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> =
         sessionDao.observeAllSessions(userId).map { entities ->
             entities.map { it.toDomain() }
         }
@@ -61,7 +61,7 @@ class SessionRepositoryImpl @Inject constructor(
     }
 
     override fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -82,7 +82,7 @@ class SessionRepositoryImpl @Inject constructor(
             }
 
     override fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,

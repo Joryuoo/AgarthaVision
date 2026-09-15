@@ -127,6 +127,10 @@ fun VerificationSheet(
                 onEggCountChanged = viewModel::onEggCountChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
+                onManualNoDetectionSelected = viewModel::onManualNoDetectionSelected,
+                onManualSpeciesToggled = viewModel::onManualSpeciesToggled,
+                onManualCountChanged = viewModel::onManualCountChanged,
+                onManualOtherNameChanged = viewModel::onManualOtherNameChanged,
             ),
         )
     }
@@ -156,18 +160,35 @@ internal fun VerificationSheetContent(
             .verticalScroll(rememberScrollState()),
     ) {
         ScreenTopBar(
-            title = "Verify detection",
-            // A frame marked repeat leaves the cycle and has no position, so show what it
-            // is rather than "Frame 0/4".
-            metaText = if (state.frameIndexInQueue > 0) {
-                stringResource(
-                    R.string.verify_frame_meta,
-                    state.frameIndexInQueue,
-                    state.queueSize,
-                    timeLabel,
-                )
+            title = if (frame.source == FrameSource.MANUAL) {
+                stringResource(R.string.verify_manual_title)
             } else {
-                stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
+                "Verify detection"
+            },
+            // A frame marked repeat leaves the cycle and has no position, so show what it
+            // is rather than "Frame 0/4". Manual frames use a distinct meta format.
+            metaText = if (frame.source == FrameSource.MANUAL) {
+                if (state.frameIndexInQueue > 0) {
+                    stringResource(
+                        R.string.manual_frame_meta,
+                        state.frameIndexInQueue,
+                        state.queueSize,
+                        timeLabel,
+                    )
+                } else {
+                    stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
+                }
+            } else {
+                if (state.frameIndexInQueue > 0) {
+                    stringResource(
+                        R.string.verify_frame_meta,
+                        state.frameIndexInQueue,
+                        state.queueSize,
+                        timeLabel,
+                    )
+                } else {
+                    stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
+                }
             },
             onBack = actions.onCancel,
         )
@@ -198,80 +219,91 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
-            // Says what the model produced when it produced nothing to review. Returns
-            // without drawing when there are boxes - the card below is the model's output
-            // in that case.
-            ModelOutputPanel(frame = frame)
-
-            // Everything in this block is about a model box. A manual capture has none, and
-            // neither has a model frame the model called clean, so none of it is drawn: no
-            // card, no egg pager, no boxes toggle, and none of the per-box questions. What
-            // those frames get is the added-findings list below, which is the whole of the
-            // manual-capture experience.
-            val boxCount = frame.predictions.size
-            if (boxCount > 0) {
-                DetectionCard(
-                    speciesName = speciesName,
-                    detectionLabel = stringResource(
-                        R.string.verify_detection_counter,
-                        state.currentDetectionIndex + 1,
-                        boxCount,
-                    ),
-                    source = frame.source,
-                    modifier = Modifier.padding(bottom = 12.dp),
+            if (frame.source == FrameSource.MANUAL) {
+                // Manual-capture path: checklist UI, no model output, no detection chain.
+                ManualSpeciesChecklist(
+                    findings = state.findings,
+                    noDetectionSelected = state.noDetectionSelected,
+                    actions = actions,
                 )
+            } else {
+                // AI path (with or without detections).
 
-                // Steps between the boxes on this frame. Only drawn when there is more than
-                // one box, and each side goes dead at its end of the range, so it cannot read
-                // as a way to leave the frame.
-                //
-                // Counted from `frame.predictions`, never from the answer list: the medtech
-                // can append a species the model never boxed, so the answer list is the longer
-                // of the two and paging by it would walk off the end of the boxes.
-                if (boxCount > 1) {
-                    NavPairRow(
-                        state = NavPairState(
-                            prevLabel = stringResource(R.string.verify_prev_egg),
-                            nextLabel = stringResource(R.string.verify_next_egg),
-                            prevTag = VerifyTestTags.DETECTION_PREV,
-                            nextTag = VerifyTestTags.DETECTION_NEXT,
-                            canGoPrev = state.currentDetectionIndex > 0,
-                            canGoNext = state.currentDetectionIndex < boxCount - 1,
-                            onPrev = actions.onDetectionPrev,
-                            onNext = actions.onDetectionNext,
+                // Says what the model produced when it produced nothing to review. Returns
+                // without drawing when there are boxes - the card below is the model's output
+                // in that case.
+                ModelOutputPanel(frame = frame)
+
+                // Everything in this block is about a model box. A model frame the model
+                // called clean has no boxes, so none of it is drawn: no card, no egg pager,
+                // no boxes toggle, and none of the per-box questions. What those frames get
+                // is the added-findings list below, which carries the medtech's own additions.
+                val boxCount = frame.predictions.size
+                if (boxCount > 0) {
+                    DetectionCard(
+                        speciesName = speciesName,
+                        detectionLabel = stringResource(
+                            R.string.verify_detection_counter,
+                            state.currentDetectionIndex + 1,
+                            boxCount,
                         ),
+                        source = frame.source,
                         modifier = Modifier.padding(bottom = 12.dp),
+                    )
+
+                    // Steps between the boxes on this frame. Only drawn when there is more
+                    // than one box, and each side goes dead at its end of the range, so it
+                    // cannot read as a way to leave the frame.
+                    //
+                    // Counted from `frame.predictions`, never from the answer list: the
+                    // medtech can append a species the model never boxed, so the answer list
+                    // is the longer of the two and paging by it would walk off the end of the
+                    // boxes.
+                    if (boxCount > 1) {
+                        NavPairRow(
+                            state = NavPairState(
+                                prevLabel = stringResource(R.string.verify_prev_egg),
+                                nextLabel = stringResource(R.string.verify_next_egg),
+                                prevTag = VerifyTestTags.DETECTION_PREV,
+                                nextTag = VerifyTestTags.DETECTION_NEXT,
+                                canGoPrev = state.currentDetectionIndex > 0,
+                                canGoNext = state.currentDetectionIndex < boxCount - 1,
+                                onPrev = actions.onDetectionPrev,
+                                onNext = actions.onDetectionNext,
+                            ),
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
+                    }
+
+                    BoundingBoxesToggle(
+                        checked = state.showBoundingBoxes,
+                        onToggle = actions.onToggleBoundingBoxes,
+                    )
+
+                    BoxQuestionChain(
+                        answers = currentAnswers,
+                        suggestedSpecies = currentPrediction
+                            ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                        actions = actions,
                     )
                 }
 
-                BoundingBoxesToggle(
-                    checked = state.showBoundingBoxes,
-                    onToggle = actions.onToggleBoundingBoxes,
-                )
-
-                BoxQuestionChain(
-                    answers = currentAnswers,
-                    suggestedSpecies = currentPrediction
-                        ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                AddedFindings(
+                    findings = state.findings,
+                    boxCount = boxCount,
                     actions = actions,
                 )
+
+                FindingsSummary(findings = state.findings)
+
+                QuestionSection(
+                    title = stringResource(R.string.verify_q4),
+                    tag = VerifyTestTags.QUESTION_Q4,
+                    options = listOf(true to "Yes", false to "No"),
+                    selected = state.missedEgg,
+                    onSelect = actions.onQ4Selected,
+                )
             }
-
-            AddedFindings(
-                findings = state.findings,
-                boxCount = boxCount,
-                actions = actions,
-            )
-
-            FindingsSummary(findings = state.findings)
-
-            QuestionSection(
-                title = stringResource(R.string.verify_q4),
-                tag = VerifyTestTags.QUESTION_Q4,
-                options = listOf(true to "Yes", false to "No"),
-                selected = state.missedEgg,
-                onSelect = actions.onQ4Selected,
-            )
 
             SheetSectionLabel(
                 text = stringResource(R.string.verify_remarks_label),

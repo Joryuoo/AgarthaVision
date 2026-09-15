@@ -9,6 +9,7 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
+import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
@@ -58,6 +59,10 @@ class SettingsViewModelTest {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
     private val signOutUseCase: SignOutUseCase = mock()
+    private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase =
+        mock<ObserveUnlinkedSessionCountUseCase>().also {
+            whenever(it.invoke()).thenReturn(MutableStateFlow(0))
+        }
 
     private fun viewModel() = SettingsViewModel(
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
@@ -67,6 +72,7 @@ class SettingsViewModelTest {
         setThemeModeUseCase = setThemeModeUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
         signOutUseCase = signOutUseCase,
+        observeUnlinkedSessionCountUseCase = observeUnlinkedSessionCountUseCase,
     )
 
     @Test
@@ -175,6 +181,47 @@ class SettingsViewModelTest {
                 vm.onSignOut()
                 val event = awaitItem()
                 assertTrue(event is SettingsEvent.SignOutBlocked)
+            }
+        }
+
+    // ── unlinkedSessions propagation ─────────────────────────────────────────
+
+    @Test
+    fun `signed out with unlinked flow emitting 2 exposes unlinkedSessions 2 in uiState`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val unlinkedFlow = MutableStateFlow(0)
+            whenever(observeUnlinkedSessionCountUseCase.invoke()).thenReturn(unlinkedFlow)
+            identityFlow.value = null // signed out
+
+            val vm = viewModel()
+
+            vm.uiState.test {
+                // skip loading state(s)
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                // emit 2 from the unlinked flow
+                unlinkedFlow.value = 2
+                snapshot = awaitItem()
+                org.junit.Assert.assertEquals(2, snapshot.unlinkedSessions)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `unlinkedSessions is 0 by default when flow never emits non-zero`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            identityFlow.value = null
+            val vm = viewModel()
+
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                org.junit.Assert.assertEquals(0, snapshot.unlinkedSessions)
+                cancelAndIgnoreRemainingEvents()
             }
         }
 }

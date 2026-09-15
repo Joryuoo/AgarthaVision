@@ -8,11 +8,16 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.LabProfile
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -46,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
@@ -54,12 +60,17 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
@@ -78,6 +89,8 @@ import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
+import com.agarthavision.ui.sessions.SESSION_NOTE_MAX_LENGTH
+import com.agarthavision.ui.sessions.limitInput
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -117,6 +130,82 @@ private fun PulsingDot() {
     )
 }
 
+/** Fill of the capture chrome's glass buttons: near-black at 55%, mode-independent like the feed. */
+private val GlassFill = Color(28, 20, 18, (0.55f * 255).toInt())
+
+private val ShutterSize = 100.dp
+private val ShutterArcStroke = 3.dp
+private const val SHUTTER_BUSY_ALPHA = 0.6f
+private const val SHUTTER_ARC_SWEEP_DEGREES = 100f
+private const val SHUTTER_ARC_ROTATION_MS = 1_100
+private const val FULL_TURN_DEGREES = 360f
+
+/**
+ * The 100dp shutter. While a capture is in flight it shows that in its own bounds - dimmed,
+ * with an indeterminate arc travelling its circumference - instead of the app floating a
+ * spinner over the live field. The medtech keeps seeing the smear for the whole round
+ * trip, which on a slow link can be the full inference timeout.
+ */
+@Composable
+internal fun Shutter(
+    isBusy: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val description = stringResource(
+        if (isBusy) R.string.capture_shutter_busy_desc else R.string.capture_shutter_desc,
+    )
+    val arcStart = if (isBusy) {
+        rememberInfiniteTransition(label = "shutterArc").animateFloat(
+            initialValue = 0f,
+            targetValue = FULL_TURN_DEGREES,
+            animationSpec = infiniteRepeatable(
+                animation = tween(SHUTTER_ARC_ROTATION_MS, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "shutterArcStart",
+        ).value
+    } else {
+        0f
+    }
+    Box(
+        modifier = Modifier
+            .size(ShutterSize)
+            .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
+            // alpha only dims what follows it in the chain: keep it ahead of the fill and arc.
+            .alpha(if (isBusy) SHUTTER_BUSY_ALPHA else 1f)
+            .background(Color.White, CircleShape)
+            .drawBehind {
+                // Maroon reads on the white disc even dimmed; a white arc would vanish into it.
+                if (isBusy) {
+                    val stroke = ShutterArcStroke.toPx()
+                    drawArc(
+                        color = AppColors.Maroon,
+                        startAngle = arcStart,
+                        sweepAngle = SHUTTER_ARC_SWEEP_DEGREES,
+                        useCenter = false,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
+            }
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
+            .clickable(enabled = enabled, onClick = onClick),
+    )
+}
+
+/** The 40dp translucent circle shared by every glass button on the capture chrome. */
+private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifier = this
+    .size(40.dp)
+    .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+    .background(GlassFill, CircleShape)
+    .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+    .clickable(enabled = enabled) { onClick() }
+
 @Composable
 private fun IconButtonGlass(
     pathData: String,
@@ -124,21 +213,30 @@ private fun IconButtonGlass(
     enabled: Boolean = true,
     drawExtras: (DrawScope.() -> Unit)? = null,
 ) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-            .background(Color(28, 20, 18, (0.55f * 255).toInt()), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
-            .clickable(enabled = enabled) { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
         SvgIcon(
             pathData,
             color = Color.White,
             strokeWidth = 1.8f,
             modifier = Modifier.size(22.dp),
             drawExtras = drawExtras,
+        )
+    }
+}
+
+@Composable
+internal fun IconButtonGlass(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
         )
     }
 }
@@ -233,12 +331,15 @@ fun CaptureScreen(
     DisposableEffect(Unit) {
         val window = (context as? androidx.activity.ComponentActivity)?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, view) }
+        val previousLight = controller?.isAppearanceLightStatusBars
         controller?.let {
             it.hide(WindowInsetsCompat.Type.navigationBars())
             it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.isAppearanceLightStatusBars = false
         }
         onDispose {
             controller?.show(WindowInsetsCompat.Type.navigationBars())
+            controller?.isAppearanceLightStatusBars = previousLight ?: false
         }
     }
 
@@ -283,6 +384,11 @@ fun CaptureScreen(
     // the back button and shutter are already disabled via isBusy.
     BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
 
+    // Collapsed offline banner state, hoisted so the compact pill can live in the header row
+    // (level with the back button and session pill) while the full banner sits below. Resets
+    // to expanded each time the connection is freshly lost.
+    var bannerCollapsed by remember(state.isConnectionLost) { mutableStateOf(false) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -301,11 +407,6 @@ fun CaptureScreen(
                     cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
                 },
             )
-        }
-
-        // Busy overlay (keeps the old 77b5 layout, but prevents duplicate taps)
-        if (state.isBusy) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
 
         // Top chrome (77b5 style) - action shortcuts removed (records/reports are reachable outside capture)
@@ -353,9 +454,14 @@ fun CaptureScreen(
                 )
             }
 
-            // Balances the back button so the session label stays centred. Records moved
-            // to the bottom row, where the three actions now sit together.
-            Spacer(modifier = Modifier.width(40.dp))
+            // Right slot: a dismissed "model unreachable" banner lives here as a compact pill,
+            // level with the back button and session label. Otherwise a spacer balances the
+            // back button so the session label stays centred.
+            if (state.isConnectionLost && bannerCollapsed) {
+                ConnectionLossPill(onExpand = { bannerCollapsed = false })
+            } else {
+                Spacer(modifier = Modifier.width(40.dp))
+            }
         }
 
         // The row beneath the top chrome. Banner and toast are stacked in one column rather
@@ -370,9 +476,10 @@ fun CaptureScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             ConnectionLossBanner(
-                visible = state.isConnectionLost,
+                visible = state.isConnectionLost && !bannerCollapsed,
                 isProbing = state.isProbingConnection,
                 onResume = viewModel::resumeConnection,
+                onCollapse = { bannerCollapsed = true },
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp),
@@ -394,41 +501,38 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: records for this session.
+            // Left: the verification queue. Its badge counts unverified frames only - verified
+            // samples live in the queue too now, and including them would inflate a "needs
+            // review" number into a "how much is in here" number.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                val sessionId = state.activeSessionId
-                IconButtonGlass(
-                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
-                    enabled = sessionId != null,
-                    onClick = { sessionId?.let(onReportsClick) },
+                VerificationQueueButton(
+                    count = state.flaggedFrames.size,
+                    onClick = onVerifyQueueClick,
                 )
             }
 
             // Center: shutter
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
-                    .background(Color.White, CircleShape)
-                    .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                        viewModel.onCapture()
-                    },
+            Shutter(
+                isBusy = state.isBusy,
+                enabled = state.activeSessionId != null && !state.isBusy,
+                onClick = viewModel::onCapture,
             )
 
-            // Right: the verification queue, where End Session used to be. Its badge counts
-            // unverified frames only - verified samples live in the queue too now, and
-            // including them would inflate a "needs review" number into a "how much is in
-            // here" number.
+            // Right: records for this session. A lab-profile glyph, not the bar glyph, which
+            // read as signal strength next to the connection-loss banner (86d4ayef8).
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                VerificationQueueButton(
-                    count = state.flaggedFrames.size,
-                    onClick = onVerifyQueueClick,
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    icon = AgarthaIcons.LabProfile,
+                    contentDescription = stringResource(R.string.capture_records_action_desc),
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
                 )
             }
         }

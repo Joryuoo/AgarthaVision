@@ -29,8 +29,19 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE session_id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: String): SessionEntity?
 
-    @Query("SELECT * FROM sessions WHERE user_id = :userId ORDER BY started_at DESC")
-    fun observeAllSessions(userId: String): Flow<List<SessionEntity>>
+    /**
+     * Observes sessions visible to the caller: their own rows plus unowned rows recorded while
+     * signed out. A null owner (signed out) sees only the unowned rows - never another
+     * medtech's data left on a shared phone.
+     */
+    @Query(
+        """
+        SELECT * FROM sessions
+        WHERE (user_id = :userId OR user_id IS NULL)
+        ORDER BY started_at DESC
+        """,
+    )
+    fun observeAllSessions(userId: String?): Flow<List<SessionEntity>>
 
     @Query("UPDATE sessions SET label = :label WHERE session_id = :sessionId")
     suspend fun updateSessionLabel(sessionId: String, label: String)
@@ -142,6 +153,15 @@ interface SessionDao {
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
+     * Live count of unowned, non-exempt local sessions (user_id IS NULL AND claim_exempt = 0):
+     * recorded while signed out and still claimable at the next login. Drives the signed-out
+     * "not linked" badge in Settings. Session-level only - unowned samples always belong to
+     * an unowned session, so a session count fully describes the claim backlog. Per ADR-007.
+     */
+    @Query("SELECT COUNT(*) FROM sessions WHERE user_id IS NULL AND claim_exempt = 0")
+    fun observeUnlinkedCount(): Flow<Int>
+
+    /**
      * Observes sessions with their associated sample, verification, and EPG counts.
      */
     @Query(
@@ -192,7 +212,7 @@ interface SessionDao {
         " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT :limit"
     )
     fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -222,7 +242,7 @@ interface SessionDao {
         "  GROUP BY s.session_id) AS perSession"
     )
     fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -347,7 +367,7 @@ interface SessionDao {
  * without ESCAPE since species needles come from a fixed enum, not free text.
  */
 private const val RECORDS_FILTER = """
-  WHERE s.user_id = :userId
+  WHERE (s.user_id = :userId OR s.user_id IS NULL)
     AND (:startMillis IS NULL OR s.started_at >= :startMillis)
     AND (:endMillis   IS NULL OR s.started_at <= :endMillis)
     AND (:query = ''

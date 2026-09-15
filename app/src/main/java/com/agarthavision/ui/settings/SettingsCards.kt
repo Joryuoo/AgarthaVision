@@ -2,6 +2,7 @@ package com.agarthavision.ui.settings
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -46,13 +49,15 @@ internal fun SettingsSection(
 }
 
 @Composable
-internal fun SettingsCard(content: @Composable () -> Unit) {
+internal fun SettingsCard(onClick: (() -> Unit)? = null, content: @Composable () -> Unit) {
     val colors = AgarthaTheme.colors
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(colors.surface, RoundedCornerShape(12.dp))
             .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(Spacing.lg),
     ) {
         content()
@@ -115,7 +120,28 @@ internal data class SyncCardState(
     val counts: PendingSyncCounts,
     val isSyncing: Boolean,
     val canSyncNow: Boolean,
+    val unlinkedSessions: Int,
 )
+
+internal enum class SyncBadge { FAILED, PENDING, ALL_SYNCED, NOT_LINKED, NOTHING_TO_SYNC }
+
+/**
+ * Pure function that maps sign-in state + sync counts + unlinked session count to a
+ * [SyncBadge] variant. When signed in, unlinked sessions are intentionally ignored:
+ * the claim-on-login path will handle them at login time, and checking them here
+ * would produce a distracting flash immediately after sign-in. Per ADR-007.
+ */
+internal fun syncBadgeState(
+    isSignedIn: Boolean,
+    counts: PendingSyncCounts,
+    unlinkedSessions: Int,
+): SyncBadge = when {
+    isSignedIn && counts.failed > 0 -> SyncBadge.FAILED
+    isSignedIn && counts.totalPending > 0 -> SyncBadge.PENDING
+    isSignedIn -> SyncBadge.ALL_SYNCED
+    unlinkedSessions > 0 -> SyncBadge.NOT_LINKED
+    else -> SyncBadge.NOTHING_TO_SYNC
+}
 
 @Composable
 internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
@@ -137,7 +163,16 @@ internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Medium,
             )
-            SyncStatusBadge(counts = state.counts)
+            SyncStatusBadge(state = state)
+        }
+        if (!state.isSignedIn && state.unlinkedSessions > 0) {
+            val n = state.unlinkedSessions
+            Spacer(Modifier.height(Spacing.sm))
+            Text(
+                text = pluralStringResource(R.plurals.settings_sync_sign_in_to_link, n, n),
+                color = colors.textSecondary,
+                fontSize = 13.sp,
+            )
         }
         if (state.isSignedIn) {
             SyncCounts(counts = state.counts)
@@ -193,20 +228,36 @@ private fun SyncCountRow(label: String, count: Int) {
 }
 
 @Composable
-private fun SyncStatusBadge(counts: PendingSyncCounts) {
+private fun SyncStatusBadge(state: SyncCardState) {
     val colors = AgarthaTheme.colors
-    val (bg, fg, text) = when {
-        counts.failed > 0 -> Triple(
+    val counts = state.counts
+    val n = state.unlinkedSessions
+    val (bg, fg, text) = when (syncBadgeState(state.isSignedIn, counts, n)) {
+        SyncBadge.FAILED -> Triple(
             colors.dangerTint,
             colors.dangerText,
             stringResource(R.string.settings_sync_failed, counts.failed),
         )
-        counts.totalPending > 0 -> Triple(
+        SyncBadge.PENDING -> Triple(
             colors.warningTint,
             colors.warningText,
             stringResource(R.string.settings_sync_pending, counts.totalPending),
         )
-        else -> Triple(colors.successTint, colors.successText, stringResource(R.string.settings_sync_all_synced))
+        SyncBadge.ALL_SYNCED -> Triple(
+            colors.successTint,
+            colors.successText,
+            stringResource(R.string.settings_sync_all_synced),
+        )
+        SyncBadge.NOT_LINKED -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            pluralStringResource(R.plurals.settings_sync_not_linked, n, n),
+        )
+        SyncBadge.NOTHING_TO_SYNC -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            stringResource(R.string.settings_sync_nothing_to_sync),
+        )
     }
     Box(
         modifier = Modifier

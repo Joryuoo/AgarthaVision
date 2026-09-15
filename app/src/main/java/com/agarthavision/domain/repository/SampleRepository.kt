@@ -28,17 +28,25 @@ interface SampleRepository {
     suspend fun getSampleById(sampleId: String): Sample?
 
     /**
-     * Observes samples in one session for the given user, newest first.
+     * Observes samples in one session, newest first.
+     * null userId = own rows plus unowned rows; concrete userId = same scope.
      */
-    fun observeSamplesForSession(sessionId: String, userId: String): Flow<List<Sample>>
+    fun observeSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
 
     /**
-     * Loads samples in one session for the given user, newest first.
+     * Loads samples in one session, newest first.
+     * null userId = own rows plus unowned rows; concrete userId = same scope.
      */
-    suspend fun getSamplesForSession(sessionId: String, userId: String): List<Sample>
+    suspend fun getSamplesForSession(sessionId: String, userId: String?): List<Sample>
 
     /**
      * Returns samples that haven't been successfully synced to Supabase for the given user.
      */
     suspend fun getSamplesPendingSyncIncludingDeleted(userId: String): List<Sample>
+
+    /**
+     * Observes flagged (pending-verification) samples in one session, newest first.
+     * A concrete owner sees their own rows plus unowned ones; a null owner sees unowned only.
+     */
+    fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
 }

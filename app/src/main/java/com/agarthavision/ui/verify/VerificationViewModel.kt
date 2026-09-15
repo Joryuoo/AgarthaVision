@@ -57,6 +57,7 @@ data class VerificationUiState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
+    val noDetectionSelected: Boolean = false,
 ) {
     /**
      * A clean field — an AI capture the model returned no detections for — has no findings to
@@ -65,6 +66,9 @@ data class VerificationUiState(
      * then the entire content of the review, so it must be given rather than defaulting
      * through as null.
      */
+    val isManual: Boolean
+        get() = frame?.source == FrameSource.MANUAL
+
     val isCleanField: Boolean
         get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
 
@@ -72,6 +76,7 @@ data class VerificationUiState(
         get() = when {
             isSubmitting -> false
             frame == null -> false
+            isManual -> noDetectionSelected || (findings.isNotEmpty() && findings.all { it.isComplete })
             isCleanField -> missedEgg != null && findings.all { it.isComplete }
             else -> findings.isNotEmpty() && findings.all { it.isComplete }
         }
@@ -195,6 +200,7 @@ class VerificationViewModel @Inject constructor(
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = prior?.userNote.orEmpty(),
+                noDetectionSelected = prior != null && frame.source == FrameSource.MANUAL && prior.findings.isEmpty(),
             )
         }
     }
@@ -298,7 +304,7 @@ class VerificationViewModel @Inject constructor(
      */
     private fun FlaggedFrame.initialFindings(): List<Finding> = when {
         predictions.isNotEmpty() -> predictions.map { Finding(prediction = it) }
-        source == FrameSource.MANUAL -> listOf(Finding())
+        source == FrameSource.MANUAL -> emptyList()
         else -> emptyList()
     }
 
@@ -346,6 +352,48 @@ class VerificationViewModel @Inject constructor(
 
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
+    }
+
+    fun onManualNoDetectionSelected() {
+        _state.update { it.copy(noDetectionSelected = true, findings = emptyList()) }
+    }
+
+    fun onManualSpeciesToggled(species: EggSpecies, checked: Boolean) {
+        _state.update { current ->
+            val withoutSpecies = current.findings.filter { it.answers.species != species }
+            val newFindings = if (checked) {
+                withoutSpecies + Finding(answers = VerificationAnswers(species = species, speciesTouched = true))
+            } else {
+                withoutSpecies
+            }
+            current.copy(findings = newFindings, noDetectionSelected = false)
+        }
+    }
+
+    fun onManualCountChanged(species: EggSpecies, text: String) {
+        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
+        updateFindingForSpecies(species) { it.copy(eggCount = parsed) }
+    }
+
+    fun onManualOtherNameChanged(text: String) {
+        updateFindingForSpecies(EggSpecies.OTHER) { it.copy(otherSpeciesText = text) }
+    }
+
+    private fun updateFindingForSpecies(
+        species: EggSpecies,
+        transform: (VerificationAnswers) -> VerificationAnswers,
+    ) {
+        _state.update { current ->
+            current.copy(
+                findings = current.findings.map { finding ->
+                    if (finding.answers.species == species) {
+                        finding.copy(answers = transform(finding.answers))
+                    } else {
+                        finding
+                    }
+                },
+            )
+        }
     }
 
     fun onQ4Selected(missedEgg: Boolean) {

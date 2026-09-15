@@ -8,9 +8,11 @@ import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase
 import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
+import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
 import com.agarthavision.domain.usecase.records.SessionSamples
+import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -28,10 +30,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
+ * Reason why a session cannot be displayed on this device.
+ */
+enum class SessionUnavailable { NOT_FOUND, NOT_VISIBLE }
+
+/**
  * UI state for one session's verified samples + persisted reports.
  */
 data class SessionDetailState(
     val session: SessionSamples? = null,
+    val sessionResolved: Boolean = false,
+    val unavailable: SessionUnavailable? = null,
     val eggCounts: List<EggCountSummary> = emptyList(),
     val totalEggCount: Int = 0,
     val epg: Int = 0,
@@ -42,7 +51,15 @@ data class SessionDetailState(
     val currentPage: Int = 0,
     val isGenerating: Boolean = false,
     val generationError: String? = null,
-)
+    val pendingFlagged: Int = 0,
+) {
+    /**
+     * The Verify Queue always shows the *active* session, so the shortcut into it is only
+     * offered while this session is still running and actually has frames waiting.
+     */
+    val canOpenVerifyQueue: Boolean
+        get() = session != null && session.session.endedAt == null && pendingFlagged > 0
+}
 
 /** Reports shown per page; more than this paginate via the Prev/Next pager. */
 const val REPORTS_PER_PAGE: Int = 5
@@ -75,12 +92,16 @@ sealed interface SessionDetailEvent {
 /**
  * Loads session samples + reports and triggers report generation.
  */
+// Each parameter here is a separately tested, separately named use case — bundling would not
+// simplify the dependency graph; LongParameterList is the expected cost of composing 7 flows.
+@Suppress("LongParameterList")
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     getSessionSamplesUseCase: GetSessionSamplesUseCase,
     observeSessionReportsUseCase: ObserveSessionReportsUseCase,
     observeSessionReportCountUseCase: ObserveSessionReportCountUseCase,
+    observeSessionPendingCountUseCase: ObserveSessionPendingCountUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val generateSessionReportUseCase: GenerateSessionReportUseCase,
 ) : ViewModel() {
@@ -99,26 +120,39 @@ class SessionDetailViewModel @Inject constructor(
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
 
     val state: StateFlow<SessionDetailState> = combine(
-        getSessionSamplesUseCase(sessionId),
-        pagedReports,
-        observeSessionReportCountUseCase(sessionId),
-        generationState,
-        currentReportPage,
-    ) { session, reports, totalReports, generation, page ->
-        val eggCounts = sessionEggCountUseCase(sessionId)
-        SessionDetailState(
-            session = session,
-            eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
-            totalEggCount = eggCounts.totalEggCount,
-            epg = eggCounts.epg,
-            infectivityLevel = eggCounts.infectivityLevel,
-            infectivitySpeciesLabel = eggCounts.topSpecies?.displayName,
-            reports = reports,
-            totalReports = totalReports,
-            currentPage = page,
-            isGenerating = generation.isGenerating,
-            generationError = generation.error,
-        )
+        combine(
+            getSessionSamplesUseCase(sessionId),
+            pagedReports,
+            observeSessionReportCountUseCase(sessionId),
+            generationState,
+            currentReportPage,
+        ) { result, reports, totalReports, generation, page ->
+            val eggCounts = sessionEggCountUseCase(sessionId)
+            val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
+            val unavail = when (result) {
+                is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
+                is SessionSamplesResult.NotVisible -> SessionUnavailable.NOT_VISIBLE
+                else -> null
+            }
+            SessionDetailState(
+                session = resolvedSession,
+                sessionResolved = true,
+                unavailable = unavail,
+                eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
+                totalEggCount = eggCounts.totalEggCount,
+                epg = eggCounts.epg,
+                infectivityLevel = eggCounts.infectivityLevel,
+                infectivitySpeciesLabel = eggCounts.topSpecies?.displayName,
+                reports = reports,
+                totalReports = totalReports,
+                currentPage = page,
+                isGenerating = generation.isGenerating,
+                generationError = generation.error,
+            )
+        },
+        observeSessionPendingCountUseCase(sessionId),
+    ) { partial, pending ->
+        partial.copy(pendingFlagged = pending)
     }
         .mapLatest { it }
         .stateIn(

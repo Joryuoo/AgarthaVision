@@ -89,7 +89,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC
@@ -101,7 +101,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status != 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC
@@ -113,7 +113,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC
@@ -125,7 +125,7 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC
@@ -151,7 +151,7 @@ interface SampleDao {
                  AS confirmedDetections
         FROM samples s
         WHERE s.session_id = :sessionId
-          AND (:userId IS NULL OR s.user_id = :userId OR s.user_id IS NULL)
+          AND (s.user_id = :userId OR s.user_id IS NULL)
           AND s.deleted_at is null
         ORDER BY s.timestamp DESC
         """,
@@ -182,7 +182,7 @@ interface SampleDao {
         """
         DELETE FROM samples
         WHERE session_id = :sessionId
-          AND (:userId IS NULL OR user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL)
           AND status = 'flagged'
         """,
     )

@@ -54,6 +54,14 @@ data class VerificationQueueState(
     val visibleSamples: List<QueueSample>
         get() = samples.filter { it.bucket == bucket }
 
+    /** Verified rows across both buckets - what "all done" is judged against. */
+    val verifiedCount: Int
+        get() = samples.count { it.isVerified }
+
+    /** The session every row belongs to; null only while the queue is empty. */
+    val activeSessionId: String?
+        get() = samples.firstOrNull()?.sessionId
+
     /**
      * Counts per bucket, derived from the same list the rows come from.
      *
@@ -63,6 +71,22 @@ data class VerificationQueueState(
      */
     val counts: Map<QueueBucket, Int>
         get() = samples.groupingBy { it.bucket }.eachCount()
+}
+
+/** Which empty body to show when the selected bucket has no rows. */
+internal enum class QueueEmptyVariant { NEVER_HAD, ALL_DONE, NONE_VERIFIED }
+
+/**
+ * Pure: pick the empty-state copy for an empty [bucket].
+ *
+ * An empty unverified bucket means one of two very different things to the medtech - nothing
+ * has been captured yet, or every capture has been checked - and only the second deserves a
+ * completion message and a way onward. An empty verified bucket is simply "not yet".
+ */
+internal fun queueEmptyVariant(bucket: QueueBucket, verifiedCount: Int): QueueEmptyVariant = when {
+    bucket == QueueBucket.VERIFIED -> QueueEmptyVariant.NONE_VERIFIED
+    verifiedCount > 0 -> QueueEmptyVariant.ALL_DONE
+    else -> QueueEmptyVariant.NEVER_HAD
 }
 
 /**

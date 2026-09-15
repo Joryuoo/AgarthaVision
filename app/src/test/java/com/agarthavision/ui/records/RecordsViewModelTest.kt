@@ -514,7 +514,7 @@ private class RecordingSessionRepository(
     /** All query strings that reached observeSessionRecordsPage, in call order. */
     val capturedQueries = mutableListOf<String>()
 
-    override fun observeAllSessions(userId: String): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = null
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
@@ -524,7 +524,7 @@ private class RecordingSessionRepository(
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -536,7 +536,7 @@ private class RecordingSessionRepository(
     }
 
     override fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -571,7 +571,7 @@ private class LambdaSessionRepository(
     private val rowsByLimit: (Int) -> List<SessionWithStats>,
     private val totals: RecordsTotals = RecordsTotals(),
 ) : SessionRepository {
-    override fun observeAllSessions(userId: String): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = null
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
@@ -580,7 +580,7 @@ private class LambdaSessionRepository(
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -588,7 +588,7 @@ private class LambdaSessionRepository(
         limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(rowsByLimit(limit))
     override fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,

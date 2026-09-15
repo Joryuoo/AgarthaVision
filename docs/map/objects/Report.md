@@ -90,13 +90,14 @@ PK column is `report_id`. Differences:
 ## Surfaces
 
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
-(`ui/records/SessionDetailViewModel.kt:104`). Read by the Reports card on
+(`ui/records/SessionDetailViewModel.kt:148`). Read by the Reports card on
 `ui/records/SessionDetailScreen.kt` and by the Settings sync counters. Pushed by
 `data/supabase/SyncReportUseCase.kt:25-35` — row only, no file.
 
-**Note:** report generation is the one flow that still **requires** a signed-in user
-(`GenerateSessionReportUseCase.kt:38-46`), unlike capture and verification, which work
-offline. Generating a report while signed out fails.
+**Note:** report generation requires a **cached local identity** — it uses
+`currentLocalUserId()` (`GenerateSessionReportUseCase.kt:42`), so it works offline when a
+medtech is signed in but fails on a device that has never signed in. Unlike capture and
+verification, generating a report while the device has no cached identity fails.
 
 ## See
 

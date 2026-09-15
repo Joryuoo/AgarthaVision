@@ -14,10 +14,12 @@ import org.mockito.kotlin.whenever
 
 class SessionEggCountUseCaseTest {
     @Test
-    fun `returns empty counts when no user session`() = runTest {
+    fun `returns empty counts when no cached local identity`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn(null)
+        whenever(authRepository.currentLocalUserId()).thenReturn(null)
+        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", null))
+            .thenReturn(emptyList())
 
         val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
         val result = useCase("session-1")
@@ -34,7 +36,7 @@ class SessionEggCountUseCaseTest {
     fun `computes total eggs and epg from confirmed counts`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             listOf(EggCount("Ascaris", 2), EggCount("Trichuris", 1)),
         )
@@ -51,7 +53,7 @@ class SessionEggCountUseCaseTest {
     fun `low counts yield a low session tier and name the responsible species`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             listOf(EggCount("Ascaris", 2)),
         )
@@ -68,7 +70,7 @@ class SessionEggCountUseCaseTest {
     fun `unrecognized species is excluded from the tier and epgPerSpecies map`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             listOf(EggCount("Some Unknown Parasite", 500_000)),
         )
@@ -85,7 +87,7 @@ class SessionEggCountUseCaseTest {
     fun `alias rows for the same species fold into one epgPerSpecies entry`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             listOf(EggCount("Ascaris", 1), EggCount("Ascaris lumbricoides", 1)),
         )
@@ -105,7 +107,7 @@ class SessionEggCountUseCaseTest {
     fun `mixed species picks the higher tier not the higher raw epg for topSpecies`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         // Hookworm 1 egg -> epg 24 (Low). Ascaris 210 eggs -> epg 5,040 (Moderate). Moderate
         // beats Low even though it isn't the species with the fewest raw eggs either way.
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
@@ -123,7 +125,7 @@ class SessionEggCountUseCaseTest {
     fun `zero confirmed eggs yields no infectivity level`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.getCurrentUserId()).thenReturn("user-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
             emptyList(),
         )

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
@@ -259,4 +261,132 @@ private fun SectionLabel(text: String) {
         fontWeight = FontWeight.Bold,
         modifier = Modifier.padding(bottom = 6.dp),
     )
+}
+
+/**
+ * Manual-capture species selection UI.
+ *
+ * Replaces the AI-path Q1→Q2→Q3 chain and AddedFindings entirely for frames whose source
+ * is [FrameSource.MANUAL]. The medtech either asserts nothing was present (no-detection row)
+ * or checks off whichever species they observed and types a count per species. The "Other…"
+ * option reveals a free-text name field above its count field, reusing [EggSpecies.OTHER]
+ * and [com.agarthavision.domain.usecase.verify.VerificationAnswers.otherSpeciesText].
+ */
+@Composable
+internal fun ManualSpeciesChecklist(
+    findings: List<Finding>,
+    noDetectionSelected: Boolean,
+    actions: VerificationSheetActions,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SectionLabel(stringResource(R.string.verify_select_species))
+
+        // Radio-like no-detection row — mutually exclusive with any species selection.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+                .background(
+                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.surface,
+                    RoundedCornerShape(8.dp),
+                )
+                .border(
+                    1.dp,
+                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
+                    RoundedCornerShape(8.dp),
+                )
+                .clickable { actions.onManualNoDetectionSelected() }
+                .testTag(VerifyTestTags.MANUAL_NO_DETECTION)
+                .padding(vertical = 12.dp, horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.verify_no_detection),
+                color = if (noDetectionSelected) AgarthaTheme.colors.onAccent else AgarthaTheme.colors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+
+        listOf(EggSpecies.ASCARIS, EggSpecies.TRICHURIS, EggSpecies.HOOKWORM, EggSpecies.OTHER)
+            .forEach { species ->
+                val checked = findings.any { it.answers.species == species }
+                val finding = findings.find { it.answers.species == species }
+                ManualSpeciesRow(
+                    species = species,
+                    checked = checked,
+                    finding = finding,
+                    actions = actions,
+                )
+            }
+    }
+}
+
+@Composable
+private fun ManualSpeciesRow(
+    species: EggSpecies,
+    checked: Boolean,
+    finding: Finding?,
+    actions: VerificationSheetActions,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 8.dp)
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = { actions.onManualSpeciesToggled(species, it) },
+                modifier = Modifier.testTag(VerifyTestTags.manualSpeciesCheckbox(species)),
+            )
+            Text(
+                text = species.displayName,
+                color = AgarthaTheme.colors.textPrimary,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        if (checked) {
+            // For OTHER: reveal the free-text name field above the count field.
+            if (species == EggSpecies.OTHER) {
+                OutlinedTextField(
+                    value = finding?.answers?.otherSpeciesText.orEmpty(),
+                    onValueChange = actions.onManualOtherNameChanged,
+                    label = { Text(stringResource(R.string.verify_other_label)) },
+                    placeholder = {
+                        Text(
+                            stringResource(R.string.verify_other_hint),
+                            color = AgarthaTheme.colors.textTertiary,
+                            fontSize = 13.sp,
+                        )
+                    },
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(VerifyTestTags.MANUAL_OTHER_NAME_FIELD)
+                        .padding(bottom = 8.dp),
+                )
+            }
+
+            // Count field — starts empty, "0" as placeholder (D1).
+            OutlinedTextField(
+                value = finding?.answers?.eggCount?.toString().orEmpty(),
+                onValueChange = { actions.onManualCountChanged(species, it) },
+                label = { Text(stringResource(R.string.verify_manual_count_label)) },
+                placeholder = { Text("0", color = AgarthaTheme.colors.textTertiary) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier
+                    .width(180.dp)
+                    .testTag(VerifyTestTags.manualCountField(species)),
+            )
+        }
+    }
 }

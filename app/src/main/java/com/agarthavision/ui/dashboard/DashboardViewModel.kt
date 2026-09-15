@@ -61,7 +61,7 @@ data class DashboardUiState(
 
 data class ActiveSessionState(
     val label: String,
-    val startedAtAgo: String,
+    val updatedAtAgo: String,
     val totalFrames: String,
     val verifiedFrames: String,
     val totalEpg: String,
@@ -210,8 +210,14 @@ class DashboardViewModel @Inject constructor(
                 sampleRepository.observeSamplesForSession(state.session.sessionId, userId)
                     .map { samples ->
                         val now = Instant.now()
-                        val duration = Duration.between(state.startedAt, now)
-                        val minutes = duration.toMinutes()
+
+                        // "Updated" tracks the session's most recent activity - the latest
+                        // frame capture or verification - not when it started, since the card
+                        // now surfaces recent (not live) sessions. Falls back to the start time
+                        // when a session has no samples yet.
+                        val lastActivityMs = samples.maxOfOrNull { maxOf(it.timestamp, it.verifiedAt) }
+                        val lastUpdated = lastActivityMs?.let { Instant.ofEpochMilli(it) }
+                            ?: state.startedAt
 
                         // Calculate stats
                         val totalFrames = samples.size
@@ -221,7 +227,7 @@ class DashboardViewModel @Inject constructor(
 
                         ActiveSessionState(
                             label = state.session.label ?: "Active Session",
-                            startedAtAgo = "Started $minutes min ago",
+                            updatedAtAgo = updatedAgoLabel(lastUpdated, now),
                             totalFrames = totalFrames.toString(),
                             verifiedFrames = verifiedFrames.toString(),
                             totalEpg = totalEpg.toString(), // Mocked
@@ -348,6 +354,23 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Relative "Updated ..." label for the recent-session card: minutes under an hour, whole
+     * hours under a day, whole days beyond that.
+     */
+    private fun updatedAgoLabel(lastUpdated: Instant, now: Instant): String {
+        val elapsed = Duration.between(lastUpdated, now)
+        val minutes = elapsed.toMinutes()
+        val hours = elapsed.toHours()
+        val days = elapsed.toDays()
+        return when {
+            minutes < 1 -> "Updated just now"
+            minutes < MINUTES_PER_HOUR -> "Updated $minutes min ago"
+            hours < HOURS_PER_DAY -> "Updated $hours ${if (hours == 1L) "hr" else "hrs"} ago"
+            else -> "Updated $days ${if (days == 1L) "day" else "days"} ago"
+        }
+    }
+
     /** Runs a manual pending-sync pass (the Dashboard "Sync now" action). Per ADR-007. */
     fun onSyncNow() {
         if (!uiState.value.canSyncNow) return
@@ -366,6 +389,8 @@ class DashboardViewModel @Inject constructor(
         const val MILLIS_PER_MINUTE = 60_000L
         const val MILLIS_PER_HOUR = 3_600_000L
         const val MILLIS_PER_DAY = 86_400_000L
+        const val MINUTES_PER_HOUR = 60L
+        const val HOURS_PER_DAY = 24L
         const val HISTORICAL_DAYS = 7
         const val TOP_SPECIES_COUNT = 3
         const val SPARKLINE_LAST_INDEX = HISTORICAL_DAYS - 1

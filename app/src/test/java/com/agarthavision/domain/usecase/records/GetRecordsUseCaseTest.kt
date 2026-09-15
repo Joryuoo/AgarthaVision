@@ -7,6 +7,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
@@ -116,7 +117,7 @@ class GetRecordsUseCaseTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `records are empty when no user is authenticated`() = runTest {
+    fun `signed out passes a null owner through so unowned rows are read`() = runTest {
         val sessionRepo = FakeSessionRepository(
             listOf(sessionWithStats(session("session-1", "user-1"), totalSamples = 1, totalEpg = 0)),
         )
@@ -126,10 +127,30 @@ class GetRecordsUseCaseTest {
             detectionRepository = FakeDetectionRepository(emptyMap()),
         )
 
-        val result = useCase(RecordsQuery(limit = 20)).first()
-        assertEquals(emptyList<SessionRecordItem>(), result.items)
-        // observeSessionRecordsPage must NOT have been called for a null user
-        assertTrue(sessionRepo.observePageCallArgs.isEmpty())
+        useCase(RecordsQuery(limit = 20)).first()
+
+        // The owner predicate lives in SQL (user_id = :userId OR user_id IS NULL); the use
+        // case must not short-circuit, or a signed-out device never sees its own work.
+        assertEquals(null, sessionRepo.observePageCallArgs.single().userId)
+        assertEquals(null, sessionRepo.observeTotalsCallArgs.single().userId)
+    }
+
+    /**
+     * Offline-signed-in: the cached identity is "user-a" but the live token is gone. The
+     * use case must resolve the cached identity so the medtech still sees their records.
+     */
+    @Test
+    fun `offline signed-in user still reads records with the cached identity`() = runTest {
+        val sessionRepo = FakeSessionRepository(emptyList())
+        val useCase = GetRecordsUseCase(
+            authRepository = FakeOfflineAuthRepository(localUserId = "user-a"),
+            sessionRepository = sessionRepo,
+            detectionRepository = FakeDetectionRepository(emptyMap()),
+        )
+
+        useCase(RecordsQuery(limit = 20)).first()
+
+        assertEquals("user-a", sessionRepo.observePageCallArgs.single().userId)
     }
 
     // ---------------------------------------------------------------------------
@@ -482,7 +503,7 @@ class GetRecordsUseCaseTest {
 // ---------------------------------------------------------------------------
 
 data class ObservePageArgs(
-    val userId: String,
+    val userId: String?,
     val startMillis: Long?,
     val endMillis: Long?,
     val query: String,
@@ -491,7 +512,7 @@ data class ObservePageArgs(
 )
 
 data class ObserveTotalsArgs(
-    val userId: String,
+    val userId: String?,
     val startMillis: Long?,
     val endMillis: Long?,
     val query: String,
@@ -501,6 +522,18 @@ data class ObserveTotalsArgs(
 // ---------------------------------------------------------------------------
 // Fakes
 // ---------------------------------------------------------------------------
+
+/** Auth fake where the cached local identity differs from the live network identity (offline). */
+private class FakeOfflineAuthRepository(private val localUserId: String?) : AuthRepository {
+    override fun observeLocalIdentity(): Flow<LocalIdentity?> =
+        flowOf(localUserId?.let { LocalIdentity(userId = it, email = "user@example.com") })
+    override suspend fun currentLocalUserId(): String? = localUserId
+    override suspend fun isAuthenticated(): Boolean = false
+    override suspend fun signIn(email: String, password: String) = Unit
+    override suspend fun hasActiveSession(): Boolean = false
+    override suspend fun getCurrentUserId(): String? = null
+    override suspend fun signOut() = Unit
+}
 
 internal class FakeAuthRepository(private val userId: String?) : AuthRepository {
     override fun observeLocalIdentity(): Flow<com.agarthavision.domain.model.LocalIdentity?> =
@@ -520,8 +553,8 @@ internal class FakeSessionRepository(
     val observePageCallArgs = mutableListOf<ObservePageArgs>()
     val observeTotalsCallArgs = mutableListOf<ObserveTotalsArgs>()
 
-    override fun observeAllSessions(userId: String): Flow<List<Session>> =
-        flowOf(rows.map { it.session }.filter { it.userId == userId })
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> =
+        flowOf(rows.map { it.session }.filter { it.userId == null || it.userId == userId })
 
     override suspend fun getSessionById(sessionId: String): Session? =
         rows.map { it.session }.firstOrNull { it.id == sessionId }
@@ -531,12 +564,12 @@ internal class FakeSessionRepository(
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
-        flowOf(rows.map { it.session }.filter { it.userId == userId })
+        flowOf(rows.map { it.session }.filter { it.userId == null || it.userId == userId })
     override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -548,7 +581,7 @@ internal class FakeSessionRepository(
     }
 
     override fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -586,7 +619,7 @@ internal class FakeDetectionRepository(
     override fun observeDetectionsForSample(sampleId: String): Flow<List<Detection>> =
         flowOf(emptyList())
 
-    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String) =
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) =
         emptyList<EggCount>()
 
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
@@ -607,7 +640,7 @@ private class MultiEmitSessionRepository(
     private val pageEmissions: List<List<SessionWithStats>>,
     private val totalsEmissions: List<RecordsTotals>,
 ) : SessionRepository {
-    override fun observeAllSessions(userId: String): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = null
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
@@ -617,7 +650,7 @@ private class MultiEmitSessionRepository(
     override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -628,7 +661,7 @@ private class MultiEmitSessionRepository(
     }
 
     override fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,

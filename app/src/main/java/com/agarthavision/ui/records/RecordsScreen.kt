@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -24,6 +23,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -44,20 +47,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.usecase.records.SessionRecordItem
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private const val RECORDS_SKELETON_COUNT = 6
-
-enum class SyncStatus { Synced, PendingSync }
 
 @Composable
 fun RecordsScreen(
@@ -83,12 +88,16 @@ fun RecordsScreen(
 
     Scaffold(
         topBar = {
-            RecordsAppBar(
-                subtitle = if (state.startDate == null && state.endDate == null) {
-                    "All sessions"
-                } else {
-                    "Filtered date range"
-                },
+            ScreenHeader(
+                title = stringResource(R.string.records_title),
+                purpose = stringResource(R.string.records_subtitle_purpose),
+                status = stringResource(
+                    if (state.startDate == null && state.endDate == null) {
+                        R.string.records_scope_all
+                    } else {
+                        R.string.records_scope_filtered
+                    },
+                ),
             )
         },
         containerColor = AgarthaTheme.colors.background,
@@ -142,19 +151,7 @@ fun RecordsScreen(
                     RecordCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                 }
                 state.sessions.isEmpty() -> item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .padding(horizontal = Spacing.xl),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.records_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AgarthaTheme.colors.textSecondary,
-                        )
-                    }
+                    RecordsEmptyState(narrowed = state.isNarrowed)
                 }
                 else -> {
                     items(state.sessions, key = { it.session.id }) { record ->
@@ -185,27 +182,34 @@ fun RecordsScreen(
     }
 }
 
+
+/**
+ * Same empty block as the Sessions tab, with its own copy for "nothing matches the search
+ * or chip" versus "nothing has been recorded yet".
+ */
+/** True when a search, species chip or date range is hiding rows that exist. */
+private val RecordsState.isNarrowed: Boolean
+    get() = searchQuery.isNotBlank() || selectedSpecies != null || startDate != null || endDate != null
+
 @Composable
-private fun RecordsAppBar(subtitle: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+private fun RecordsEmptyState(narrowed: Boolean) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AgarthaTheme.colors.background)
-            .statusBarsPadding()
-            .padding(horizontal = Spacing.xl, vertical = 12.dp),
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xxxl),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Records",
-                style = MaterialTheme.typography.headlineSmall,
-                color = AgarthaTheme.colors.textPrimary,
+        if (narrowed) {
+            EmptyState(
+                icon = Icons.Outlined.SearchOff,
+                title = stringResource(R.string.records_no_match_title),
+                body = stringResource(R.string.records_no_match_body),
             )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = AgarthaTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 2.dp),
+        } else {
+            EmptyState(
+                icon = Icons.Outlined.Inbox,
+                title = stringResource(R.string.records_empty_title),
+                body = stringResource(R.string.records_empty_body),
             )
         }
     }
@@ -390,9 +394,11 @@ private fun RecordCard(
                     color = AgarthaTheme.colors.textSecondary,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                     modifier = Modifier.padding(top = 2.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            StatusPill(SyncStatus.Synced)
+            StatusPill(linkState = record.session.linkState)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -434,11 +440,27 @@ private fun RecordCardSkeleton(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatusPill(status: SyncStatus) {
+internal fun StatusPill(linkState: SessionLinkState) {
     val colors = AgarthaTheme.colors
-    val (bg, fg, text) = when (status) {
-        SyncStatus.Synced -> Triple(colors.successTint, colors.successText, "Synced")
-        SyncStatus.PendingSync -> Triple(colors.warningTint, colors.warningText, "Pending sync")
+    // Per ADR-007: UNOWNED/NOT_LINKED are local-only states — neutral, not a warning.
+    // Mirrors the Sessions tab "Not linked" badge (colors.surfaceMuted / colors.textSecondary).
+    val (bg, fg, text) = when (linkState) {
+        SessionLinkState.SYNCED -> Triple(
+            colors.successTint,
+            colors.successText,
+            stringResource(R.string.report_status_synced),
+        )
+        SessionLinkState.PENDING -> Triple(
+            colors.warningTint,
+            colors.warningText,
+            stringResource(R.string.records_status_pending_sync),
+        )
+        SessionLinkState.UNOWNED,
+        SessionLinkState.NOT_LINKED -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            stringResource(R.string.session_not_linked),
+        )
     }
     Box(
         modifier = Modifier

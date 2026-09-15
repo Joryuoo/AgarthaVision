@@ -21,7 +21,11 @@ as working.
   `data/repository/SupabaseAuthRepository.kt:64-71`.
 - **Deferred claim.** Work recorded while signed out is owned by nobody
   (`user_id = NULL`) and is claimed at the next login, cascading sessions → samples → reports
-  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`).
+  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`). Unowned rows are visible to every
+  caller on the device — Records, Sessions, and Verify all read them without a sign-in. The
+  records DAO predicate is `(user_id = :userId OR user_id IS NULL)`, so a signed-out caller
+  sees unowned rows only, never another medtech's data left on a shared phone
+  (`data/local/dao/SessionDao.kt:39`, `SampleDao.kt:52`, `DetectionDao.kt:40`).
 
 ### Sessions
 - **Session = one fecal smear, and it does not end.** Start with a label and optional notes;
@@ -81,6 +85,12 @@ as working.
   (`domain/usecase/verify/SubmitVerificationUseCase.kt:38`).
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
+  The queue distinguishes three empty states: never-had-items (queue is clear), filtered
+  (a chip is hiding rows), and all-verified (every frame in this session has been checked).
+  The all-verified state surfaces a "View session records" CTA that navigates to the
+  session's detail screen. An `IconButton` on the Session Detail app bar opens the queue
+  directly when the session is active and has pending frames
+  (`ui/records/SessionDetailScreen.kt`, `ui/records/SessionDetailViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
 - **Delete a duplicate** — a sample captured twice is removed rather than flagged. Unverified
   frames are hard-deleted; a verified sample is tombstoned via `samples.deleted_at`, which hides
@@ -104,11 +114,19 @@ as working.
   cleanly when signed out or offline (`domain/usecase/sync/SyncPendingDataUseCase.kt:60-81`).
 - **Pending / failed sync counts** surfaced in Settings
   (`data/local/dao/SampleDao.kt:137`, `:145`).
+- **Signed-out "N not linked" badge**: when signed out and unowned local sessions exist
+  (`user_id IS NULL AND claim_exempt = 0`), the sync badge shows "N not linked" and a
+  helper line prompts sign-in to link them; uses `SessionDao.observeUnlinkedCount()` via
+  `ObserveUnlinkedSessionCountUseCase` and `syncBadgeState()` in `ui/settings/SettingsCards.kt`.
 
 ### Records and reports
-- **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
-  `domain/usecase/records/GetRecordsUseCase.kt`).
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:63-79`).
+- **Records browser** over verified samples, including unowned local sessions
+  (`ui/records/RecordsScreen.kt`, `domain/usecase/records/GetRecordsUseCase.kt`).
+  Records reads unowned local data the same way Sessions and Verify do — no sign-in required.
+  Report generation still requires a cached local identity.
+- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt`).
+  Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
+  is absent or belongs to a different account.
 - **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
   an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
   `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against

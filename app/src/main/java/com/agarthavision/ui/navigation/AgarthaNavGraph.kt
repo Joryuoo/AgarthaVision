@@ -213,7 +213,12 @@ fun AgarthaNavHost(
                 onBackClick = { navController.popBackStack() },
                 onSampleDetailClick = { sampleId ->
                     navController.navigate(Screen.SampleDetail.createRoute(sampleId))
-                }
+                },
+                onGoToRecords = { sessionId ->
+                    navController.navigate(Screen.SessionDetail.createRoute(sessionId)) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
 
@@ -250,7 +255,13 @@ fun AgarthaNavHost(
                 onBack = { navController.popBackStack() },
                 onSampleClick = { sampleId ->
                     navController.navigate(Screen.SampleDetail.createRoute(sampleId))
-                }
+                },
+                onOpenVerifyQueue = {
+                    navController.navigate(Screen.VerificationQueue.route) {
+                        popUpTo(Screen.VerificationQueue.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
 

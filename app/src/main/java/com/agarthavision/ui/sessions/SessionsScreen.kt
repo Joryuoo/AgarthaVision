@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -83,6 +82,11 @@ import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.navigation.Screen
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.ui.text.style.TextOverflow
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -164,39 +168,57 @@ fun SessionsScreen(
                     if (shouldLoadMore) viewModel.onLoadMore()
                 }
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(state.sessions, key = { it.session.id }) { sessionData ->
-                        SessionCard(
-                            sessionData = sessionData,
-                            isActive = sessionData.session.endedAt == null,
-                            actions = SessionCardActions(
-                                onClick = {
-                                    if (sessionData.session.endedAt == null) {
-                                        viewModel.onResumeSession(sessionData.session.id)
-                                    } else {
-                                        onSessionSelected(sessionData.session.id)
-                                    }
-                                },
-                            )
+                // Sessions List
+                when {
+                    state.isLoading -> Spacer(Modifier.weight(1f))
+                    state.sessions.isEmpty() -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            icon = Icons.Outlined.Inbox,
+                            title = stringResource(R.string.sessions_empty_title),
+                            body = stringResource(R.string.sessions_empty_body),
                         )
                     }
-                    if (state.canLoadMore) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = Spacing.md),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                CircularProgressIndicator(
-                                    color = AgarthaTheme.colors.accent,
-                                    modifier = Modifier.size(24.dp),
+                    else ->
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.sessions, key = { it.session.id }) { sessionData ->
+                            SessionCard(
+                                sessionData = sessionData,
+                                isActive = sessionData.session.endedAt == null,
+                                actions = SessionCardActions(
+                                    onClick = {
+                                        if (sessionData.session.endedAt == null) {
+                                            viewModel.onResumeSession(sessionData.session.id)
+                                        } else {
+                                            onSessionSelected(sessionData.session.id)
+                                        }
+                                    },
                                 )
+                            )
+                        }
+                        if (state.canLoadMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = Spacing.md),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = AgarthaTheme.colors.accent,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -206,8 +228,6 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surface)
-                        .border(1.dp, colors.border) // Top hairline
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
@@ -264,42 +284,25 @@ fun SessionsScreen(
 
 @Composable
 private fun AppBar(unverifiedCount: Int, totalCount: Int) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = 14.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Sessions",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                letterSpacing = (-0.02).em
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = pluralStringResource(
-                    R.plurals.sessions_subtitle,
-                    totalCount,
-                    totalCount,
-                    unverifiedCount,
-                ),
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary
-            )
-        }
-    }
+    ScreenHeader(
+        title = stringResource(R.string.sessions_title),
+        purpose = stringResource(R.string.sessions_subtitle_purpose),
+        status = pluralStringResource(R.plurals.sessions_subtitle, totalCount, totalCount, unverifiedCount),
+    )
 }
 
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
 )
+
+internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
+
+internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueueBadge = when {
+    totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
+    unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
+    else -> SessionQueueBadge.PENDING
+}
 
 @Composable
 private fun SessionCard(
@@ -317,8 +320,11 @@ private fun SessionCard(
         "$date · $time · ${session.notes}"
     }
 
-    val bgColor = if (isActive) colors.accentTint2 else colors.surface
-    val borderColor = if (isActive) colors.accentTint else colors.border
+    val (bgColor, borderColor) = if (isActive) {
+        colors.accentTint2 to colors.accentTint
+    } else {
+        colors.surface to colors.border
+    }
     // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
     // regardless of active/ended state — local-only is a neutral state, not a warning.
     val linkState = session.linkState
@@ -346,7 +352,9 @@ private fun SessionCard(
                 text = meta,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = colors.accent.copy(alpha = 0.7f)
+                color = colors.accent.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (showNotLinkedBadge) {
                 Spacer(modifier = Modifier.height(6.dp))
@@ -373,29 +381,35 @@ private fun SessionCard(
                 // Frames still to review, repeats excluded — the same count that blocks
                 // ending the session, so this row and that dialog always agree.
                 val unverified = sessionData.unverifiedSamples
+                val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
+                val hasPending = unverified > 0
+                val (badgeBg, badgeTextColor) = if (hasPending) {
+                    colors.accent to colors.onAccent
+                } else {
+                    colors.surfaceMuted to colors.textSecondary
+                }
                 Row(
                     modifier = Modifier
-                        .background(
-                            if (unverified > 0) colors.accent else colors.surfaceMuted,
-                            CircleShape,
-                        )
+                        .background(badgeBg, CircleShape)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (unverified > 0) LiveDot()
+                    if (hasPending) LiveDot()
                     Text(
-                        // English has no `zero` plural, so 0 needs its own string.
-                        text = if (unverified == 0) {
-                            stringResource(R.string.session_all_verified)
-                        } else {
-                            pluralStringResource(
-                                R.plurals.session_unverified_count,
-                                unverified,
-                                unverified,
-                            )
+                        text = when (queueBadge) {
+                            SessionQueueBadge.NO_ITEMS ->
+                                stringResource(R.string.session_no_items_yet)
+                            SessionQueueBadge.ALL_VERIFIED ->
+                                stringResource(R.string.session_all_verified)
+                            SessionQueueBadge.PENDING ->
+                                pluralStringResource(
+                                    R.plurals.session_unverified_count,
+                                    unverified,
+                                    unverified,
+                                )
                         },
-                        color = if (unverified > 0) colors.onAccent else colors.textSecondary,
+                        color = badgeTextColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -434,7 +448,6 @@ fun LiveDot() {
             .background(AgarthaTheme.colors.onAccent.copy(alpha = alpha), CircleShape)
     )
 }
-
 
 /** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
 private data class BarangayPickerState(
@@ -527,7 +540,8 @@ private fun NewSessionSheet(
                     config = SheetInputConfig(
                         label = "Label",
                         placeholder = "e.g. 325",
-                        isError = showError && label.isBlank()
+                        isError = showError && label.isBlank(),
+                        maxLength = SESSION_LABEL_MAX_LENGTH
                     )
                 )
                 Spacer(modifier = Modifier.height(14.dp))
@@ -572,7 +586,8 @@ private fun NewSessionSheet(
                         placeholder = "Patient ID, clinical context, sample details...",
                         isError = false, // Note is never in error since it's optional
                         isTextArea = true,
-                        isRequired = false
+                        isRequired = false,
+                        maxLength = SESSION_NOTE_MAX_LENGTH
                     )
                 )
 
@@ -694,16 +709,17 @@ private fun NewSessionSheet(
 }
 
 /** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
-private data class SheetInputConfig(
+internal data class SheetInputConfig(
     val label: String,
     val placeholder: String,
     val isError: Boolean,
     val isTextArea: Boolean = false,
-    val isRequired: Boolean = true
+    val isRequired: Boolean = true,
+    val maxLength: Int = Int.MAX_VALUE
 )
 
 @Composable
-private fun SheetInput(
+internal fun SheetInput(
     value: String,
     onValueChange: (String) -> Unit,
     config: SheetInputConfig
@@ -748,7 +764,7 @@ private fun SheetInput(
 
         BasicTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { onValueChange(limitInput(value, it, config.maxLength)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
@@ -773,6 +789,13 @@ private fun SheetInput(
                 }
             }
         )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
+                fontSize = 11.sp,
+                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
+            )
+        }
     }
 }
 

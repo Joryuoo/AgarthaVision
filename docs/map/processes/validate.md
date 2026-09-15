@@ -13,7 +13,13 @@ The human-in-the-loop gate. Nothing counts until this runs.
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). **One screen handles both
+   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). When the selected bucket has
+   no rows the screen says which of three things is true — nothing captured yet, every capture
+   verified (with a "View session records" button into `SessionDetail`), or nothing verified
+   yet — chosen by the pure `queueEmptyVariant` in `ui/verify/VerificationQueueViewModel.kt`.
+   A running session with pending frames can also reach the queue from the Session Detail app
+   bar (`ui/records/SessionDetailScreen.kt`, gated by
+   `domain/usecase/records/ObserveSessionPendingCountUseCase`). **One screen handles both
    sources**, so the cycle is the whole queue and `Frame n/N` counts all of it. Frames marked
    repeat are the one exclusion: marking the open frame repeat drops it from the cycle, and it
    stays on screen so the mark can be undone but reports no position and both frame buttons

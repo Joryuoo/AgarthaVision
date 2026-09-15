@@ -12,9 +12,10 @@ import kotlinx.coroutines.flow.Flow
 @Suppress("TooManyFunctions")
 interface SessionRepository {
     /**
-     * Observes all sessions owned by [userId], newest first.
+     * Observes sessions visible to the caller, newest first.
+     * null owner = everything on the device; concrete owner = own rows plus unowned rows.
      */
-    fun observeAllSessions(userId: String): Flow<List<Session>>
+    fun observeAllSessions(userId: String?): Flow<List<Session>>
 
     /**
      * Loads a session by identifier.
@@ -57,7 +58,7 @@ interface SessionRepository {
      */
     @Suppress("LongParameterList")
     fun observeSessionRecordsPage(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
@@ -74,7 +75,7 @@ interface SessionRepository {
      */
     @Suppress("LongParameterList")
     fun observeSessionRecordsTotals(
-        userId: String,
+        userId: String?,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
