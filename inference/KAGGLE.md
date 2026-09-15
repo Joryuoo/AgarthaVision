@@ -58,20 +58,27 @@ also avoids the Android cleartext-traffic restriction.
 - **Keep `server.py` in sync.** The notebook's `%%writefile` cell is a verbatim copy of
   [`server.py`](server.py); if the server changes, update both.
 
-## Optional: stable URL with ngrok
+## Optional: stable URL with your custom domain (Cloudflare Tunnels)
 
-Replace the cloudflared cell with ngrok and a free static domain so the URL survives across
-sessions (claim the domain once at <https://dashboard.ngrok.com>):
+For a permanent, stable URL across sessions (e.g., `https://api.yourdomain.com`), you can use a **Named Cloudflare Tunnel** instead of the random `trycloudflare.com` URLs. Unlike ngrok, custom domains are completely free on Cloudflare.
+
+1. Add your domain to a free [Cloudflare Zero Trust](https://dash.cloudflare.com) account.
+2. Go to **Networks → Tunnels** and create a new tunnel, routing your domain to `http://localhost:8000`.
+3. Cloudflare will provide a token. **Do not hardcode this token in the notebook!**
+4. In Kaggle, go to **Add-ons → Secrets** and add a new secret named `CLOUDFLARE_TUNNEL_TOKEN` with your token.
+5. Replace the default `cloudflared` cell in the notebook with this Python snippet to securely start your tunnel:
 
 ```python
-!pip install -q pyngrok
-from pyngrok import ngrok
-ngrok.set_auth_token("<your-ngrok-authtoken>")
-public = ngrok.connect(8000, domain="<your-name>.ngrok-free.app")
-print(public.public_url)
-import time
-while True:
-    time.sleep(3600)  # keep the cell (and tunnel) alive
+import subprocess
+from kaggle_secrets import UserSecretsClient
+
+# Retrieve your secure token
+token = UserSecretsClient().get_secret("CLOUDFLARE_TUNNEL_TOKEN")
+
+# Download and start the tunnel
+!wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared && chmod +x cloudflared
+subprocess.Popen(["./cloudflared", "tunnel", "--no-autoupdate", "run", "--token", token])
+print("Tunnel started in background. Traffic to your domain is now routed here.")
 ```
 
-Then `INFERENCE_URL_DEV` stays `https://<your-name>.ngrok-free.app` every session.
+Your `INFERENCE_URL_DEV` will now stay stable every session.
