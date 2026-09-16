@@ -66,7 +66,7 @@ class SyncPendingDataUseCase @Inject constructor(
         val sessionsSynced = sessionDao.getSessionsPendingSync(userId).count { session ->
             syncSessionUseCase(session.sessionId).isSuccess
         }
-        val samplesSynced = sampleDao.getSamplesPendingSync(userId).count { sample ->
+        val samplesSynced = sampleDao.getSamplesPendingSyncIncludingDeleted(userId).count { sample ->
             syncSampleUseCase(sample.sampleId).isSuccess
         }
         val reportsSynced = reportDao.getReportsPendingSync(userId).count { report ->

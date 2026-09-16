@@ -21,10 +21,19 @@ import javax.inject.Singleton
  * **offline-first**: [startSession] always writes a local row (owner = cached identity or
  * null when never signed in) and pushes to Supabase best-effort — a remote failure leaves
  * the session [SessionSyncStatus.PENDING] rather than rolling it back. The pending row is
- * pushed later by the sync trigger. [stopSession] ends the session locally regardless of
- * connectivity.
+ * pushed later by the sync trigger.
  *
- * See CONTEXT.md.
+ * **A session does not end.** One session is one fecal smear, and the medtech keeps coming back
+ * to it - correcting a sample, generating a report from whatever is verified so far. There is
+ * no `stopSession`, and nothing in the app writes `sessions.ended_at` any more. The column and
+ * its nullability stay: sessions closed before this change are real history and must not be
+ * rewritten, `SessionRemoteDataSource.closeSession` still exists for them, and [resumeSession]
+ * still refuses to reopen one.
+ *
+ * What replaces ending is [clearActive], which detaches the app from a session without
+ * declaring it finished.
+ *
+ * See CONTEXT.md and ticket 86d4ab4vm.
  */
 @Singleton
 class SessionManager @Inject constructor(
@@ -32,6 +41,7 @@ class SessionManager @Inject constructor(
     private val remoteDataSource: SessionRemoteDataSource,
     private val authRepository: AuthRepository,
     private val deviceIdProvider: DeviceIdProvider,
+    private val activeSessionIdStore: ActiveSessionIdStore,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
 
@@ -49,10 +59,16 @@ class SessionManager @Inject constructor(
      * on a missing auth session or a failed remote push.
      *
      * @param label The fecal-smear name the medtech entered in the picker.
+     * @param psgcBarangayCode The patient's barangay as a zero-padded 10-digit PSGC code.
+     *   Null only for callers that predate the picker; the Sessions UI always supplies it.
      * @param notes Optional in-session observations (slide condition, prep quality, etc.).
      * @return The locally persisted session row.
      */
-    suspend fun startSession(label: String, notes: String? = null): SessionEntity {
+    suspend fun startSession(
+        label: String,
+        psgcBarangayCode: String? = null,
+        notes: String? = null,
+    ): SessionEntity {
         val now = Instant.now()
         val ownerId = authRepository.currentLocalUserId()
         val entity = SessionEntity(
@@ -63,12 +79,13 @@ class SessionManager @Inject constructor(
             endedAt = null,
             notes = notes,
             label = label,
+            psgcBarangayCode = psgcBarangayCode,
             supabaseStatus = SessionSyncStatus.PENDING.value,
             claimExempt = false,
         )
         sessionDao.insertSession(entity)
         val synced = pushSessionInsert(entity)
-        _state.value = SessionState.Active(synced, now, isInferenceRunning = true)
+        activate(synced, now)
         return synced
     }
 
@@ -80,63 +97,46 @@ class SessionManager @Inject constructor(
         val entity = sessionDao.getSessionById(sessionId)
             ?: error("Session $sessionId not found locally.")
         check(entity.endedAt == null) { "Cannot resume an already-ended session." }
-        _state.value = SessionState.Active(
-            session = entity,
-            startedAt = Instant.ofEpochMilli(entity.startedAt),
-            isInferenceRunning = true,
-        )
+        activate(entity, Instant.ofEpochMilli(entity.startedAt))
         return entity
     }
 
     /**
-     * Flips [SessionState.Active.isInferenceRunning] to true. No-op when [SessionState.Idle].
+     * Re-attaches to the session the medtech was last working in, if it is still open.
+     *
+     * Called once at app start. Without it a process restart would leave the app idle while a
+     * session is still live, and the verification queue would render empty - see
+     * [ActiveSessionIdStore].
+     *
+     * A stored id that no longer resolves, or resolves to a session ended before this change,
+     * clears itself rather than throwing: the pointer is a convenience, and failing to restore
+     * it must never stop the app launching.
      */
-    fun resumeInference() {
-        val current = _state.value
-        if (current is SessionState.Active && !current.isInferenceRunning) {
-            _state.value = current.copy(isInferenceRunning = true)
-        }
-    }
-
-    /**
-     * Flips [SessionState.Active.isInferenceRunning] to false. No-op when [SessionState.Idle].
-     */
-    fun pauseInference() {
-        val current = _state.value
-        if (current is SessionState.Active && current.isInferenceRunning) {
-            _state.value = current.copy(isInferenceRunning = false)
-        }
-    }
-
-    /**
-     * Ends the active session, if one exists. The local row is always updated with
-     * `ended_at`; the remote close is best-effort so ending works offline. A remote
-     * failure leaves the row [SessionSyncStatus.PENDING] for the next sync pass. Optional
-     * [notes] override lets the End-Session confirmation dialog save final observations.
-     */
-    suspend fun stopSession(notes: String? = null) {
-        val current = _state.value
-        if (current is SessionState.Active) {
-            val endedAt = Instant.now()
-            val resolvedNotes = notes ?: current.session.notes
-            val ended = current.session.copy(
-                endedAt = endedAt.toEpochMilli(),
-                notes = resolvedNotes,
-            )
-            sessionDao.updateSession(ended)
-            if (ended.userId != null && !ended.claimExempt) {
-                runCatching {
-                    remoteDataSource.closeSession(
-                        sessionId = ended.sessionId,
-                        endedAt = endedAt,
-                        notes = resolvedNotes,
-                    )
-                }.onFailure {
-                    sessionDao.updateSupabaseStatus(ended.sessionId, SessionSyncStatus.PENDING.value)
-                }
+    suspend fun restoreActiveSession(): SessionEntity? {
+        val storedId = activeSessionIdStore.read() ?: return null
+        return runCatching { resumeSession(storedId) }
+            .getOrElse {
+                activeSessionIdStore.write(null)
+                null
             }
-        }
+    }
+
+    /**
+     * Detaches from the active session **without ending it**.
+     *
+     * The session stays open and the medtech can come back to it; this only says the app is no
+     * longer working in it. Used by sign-out, where the alternative - blocking until the
+     * session ends - became impossible once sessions stopped ending. Deliberately writes no
+     * `ended_at`.
+     */
+    suspend fun clearActive() {
+        activeSessionIdStore.write(null)
         _state.value = SessionState.Idle
+    }
+
+    private suspend fun activate(session: SessionEntity, startedAt: Instant) {
+        activeSessionIdStore.write(session.sessionId)
+        _state.value = SessionState.Active(session, startedAt)
     }
 
     /**

@@ -17,12 +17,12 @@ class ObserveSessionReportsUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val reportRepository: ReportRepository,
 ) {
-    operator fun invoke(sessionId: String): Flow<List<Report>> = flow {
-        val userId = authRepository.getCurrentUserId()
+    operator fun invoke(sessionId: String, limit: Int, offset: Int): Flow<List<Report>> = flow {
+        val userId = authRepository.currentLocalUserId()
         if (userId == null) {
             emitAll(flowOf(emptyList()))
             return@flow
         }
-        emitAll(reportRepository.observeForSession(sessionId, userId))
+        emitAll(reportRepository.observeForSession(sessionId, userId, limit, offset))
     }
 }

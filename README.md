@@ -22,8 +22,10 @@
 
 - **No `TODO.md` in repository**: Do not create or re-introduce a `TODO.md` file in the project directory. All tasks and sprint items are managed in ClickUp.
 - **Commit Message Format**: Format all commit messages using the following structure:
-  `[type][ClickUp-ID][Lastname] Task title`
-  *(e.g. `[feat][CU-869234][Beansman] Implement settings screen account section` or `[chore][CU-869235][DMKuZu] Detekt cleanup chore`)*
+  `[type][ClickUp-ID][Lastname]: Task title`
+  *(e.g. `[feat][CU-869234][Beansman]: Implement settings screen account section` or `[chore][CU-869235][DMKuZu]: Detekt cleanup chore`)*
+  Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`.
+  Enforced by `.husky/commit-msg`; bypass an emergency with `git commit --no-verify`.
 - **Build Before Push**: Always build and test your branch locally (`bun run build` / `.\gradlew.bat assembleDebug` and `bun run test`) before pushing changes to the repository.
 
 ## Overview
@@ -182,7 +184,7 @@ disagree, the code wins - fix the document in the same change.
 This repository follows the documented GitHub Flow process:
 
 - Branch from `staging` for feature, fix, docs, test, and CI work.
-- Use conventional commits formatted as `[type][ClickUp-ID][Lastname] Task title`.
+- Format commits as `[type][ClickUp-ID][Lastname]: Task title`, enforced by `.husky/commit-msg`.
 - Run lint, tests, and build checks before opening a pull request.
 - Target `staging` for PRs (never `main` directly).
 - Keep source changes aligned with the relevant plan, ADR, or design-system document.

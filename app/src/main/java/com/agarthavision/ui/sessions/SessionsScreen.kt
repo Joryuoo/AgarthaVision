@@ -7,6 +7,11 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import com.agarthavision.ui.components.SearchableDropdown
+import com.agarthavision.ui.components.SearchableDropdownActions
+import com.agarthavision.ui.components.SearchableDropdownConfig
+import com.agarthavision.ui.components.SearchableDropdownState
+import com.agarthavision.ui.components.SearchableOption
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -23,11 +28,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -68,11 +75,21 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
+import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.navigation.Screen
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.ui.text.style.TextOverflow
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -118,30 +135,92 @@ fun SessionsScreen(
                     .widthIn(max = 480.dp)
                     .align(Alignment.TopCenter)
             ) {
-                // App Bar
-                val activeCount = state.sessions.count { it.session.endedAt == null }
-                AppBar(activeCount = activeCount, totalCount = state.sessions.size)
+                // App Bar. Counts come from the repository query, not from the loaded page:
+                // the list is paginated, so summing what is in `state.sessions` would report
+                // only what had been scrolled into view. Sessions do not end any more, so the
+                // count is of frames awaiting review rather than of open sessions - the
+                // latter would have counted every session and said nothing.
+                AppBar(unverifiedCount = state.unverifiedCount, totalCount = state.totalCount)
+
+                // Search + date filter row
+                SearchInput(
+                    value = state.searchQuery,
+                    onValueChange = viewModel::onSearchQueryChanged,
+                    placeholder = "Search sessions, notes...",
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+                DateRangeFilterBar(
+                    startDate = state.startDate,
+                    endDate = state.endDate,
+                    onRangeSelected = viewModel::onDateRangeSelected,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                )
+
+                // Sessions List with load-more pagination
+                val listState = rememberLazyListState()
+                val shouldLoadMore by remember {
+                    derivedStateOf {
+                        val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                        lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
+                    }
+                }
+                LaunchedEffect(shouldLoadMore) {
+                    if (shouldLoadMore) viewModel.onLoadMore()
+                }
 
                 // Sessions List
-                LazyColumn(
-                    modifier = Modifier.weight(1f),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(state.sessions, key = { it.session.id }) { sessionData ->
-                        SessionCard(
-                            sessionData = sessionData,
-                            isActive = sessionData.session.endedAt == null,
-                            actions = SessionCardActions(
-                                onClick = {
-                                    if (sessionData.session.endedAt == null) {
-                                        viewModel.onResumeSession(sessionData.session.id)
-                                    } else {
-                                        onSessionSelected(sessionData.session.id)
-                                    }
-                                },
-                            )
+                when {
+                    state.isLoading -> Spacer(Modifier.weight(1f))
+                    state.sessions.isEmpty() -> Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        EmptyState(
+                            icon = Icons.Outlined.Inbox,
+                            title = stringResource(R.string.sessions_empty_title),
+                            body = stringResource(R.string.sessions_empty_body),
                         )
+                    }
+                    else ->
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.sessions, key = { it.session.id }) { sessionData ->
+                            SessionCard(
+                                sessionData = sessionData,
+                                isActive = sessionData.session.endedAt == null,
+                                actions = SessionCardActions(
+                                    onClick = {
+                                        if (sessionData.session.endedAt == null) {
+                                            viewModel.onResumeSession(sessionData.session.id)
+                                        } else {
+                                            onSessionSelected(sessionData.session.id)
+                                        }
+                                    },
+                                )
+                            )
+                        }
+                        if (state.canLoadMore) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = Spacing.md),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        color = AgarthaTheme.colors.accent,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -149,8 +228,6 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(colors.surface)
-                        .border(1.dp, colors.border) // Top hairline
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
@@ -179,7 +256,22 @@ fun SessionsScreen(
 
     if (showCreateDialog) {
         NewSessionSheet(
-            onDismiss = { showCreateDialog = false },
+            barangay = BarangayPickerState(
+                selected = state.selectedBarangay,
+                query = state.barangayQuery,
+                results = state.barangayResults,
+                actions = SearchableDropdownActions(
+                    onQueryChange = viewModel::onBarangayQueryChanged,
+                    onSelect = { option -> viewModel.onBarangaySelected(option.key) },
+                    onClear = viewModel::onBarangayCleared,
+                ),
+            ),
+            onDismiss = {
+                // Leaving the sheet abandons the whole draft, so the picker resets too —
+                // label and note are local `remember` state and reset with it.
+                viewModel.onBarangayCleared()
+                showCreateDialog = false
+            },
             onSubmit = { label, note ->
                 viewModel.onCreateSession(label, note)
                 showCreateDialog = false
@@ -191,38 +283,26 @@ fun SessionsScreen(
 }
 
 @Composable
-private fun AppBar(activeCount: Int, totalCount: Int) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .statusBarsPadding()
-            .padding(top = 14.dp, bottom = 12.dp, start = 20.dp, end = 20.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "Sessions",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                letterSpacing = (-0.02).em
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = "$totalCount sessions · $activeCount active",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.textSecondary
-            )
-        }
-    }
+private fun AppBar(unverifiedCount: Int, totalCount: Int) {
+    ScreenHeader(
+        title = stringResource(R.string.sessions_title),
+        purpose = stringResource(R.string.sessions_subtitle_purpose),
+        status = pluralStringResource(R.plurals.sessions_subtitle, totalCount, totalCount, unverifiedCount),
+    )
 }
 
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
 )
+
+internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
+
+internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueueBadge = when {
+    totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
+    unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
+    else -> SessionQueueBadge.PENDING
+}
 
 @Composable
 private fun SessionCard(
@@ -240,8 +320,11 @@ private fun SessionCard(
         "$date · $time · ${session.notes}"
     }
 
-    val bgColor = if (isActive) colors.accentTint2 else colors.surface
-    val borderColor = if (isActive) colors.accentTint else colors.border
+    val (bgColor, borderColor) = if (isActive) {
+        colors.accentTint2 to colors.accentTint
+    } else {
+        colors.surface to colors.border
+    }
     // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
     // regardless of active/ended state — local-only is a neutral state, not a warning.
     val linkState = session.linkState
@@ -269,7 +352,9 @@ private fun SessionCard(
                 text = meta,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
-                color = colors.accent.copy(alpha = 0.7f)
+                color = colors.accent.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (showNotLinkedBadge) {
                 Spacer(modifier = Modifier.height(6.dp))
@@ -296,29 +381,35 @@ private fun SessionCard(
                 // Frames still to review, repeats excluded — the same count that blocks
                 // ending the session, so this row and that dialog always agree.
                 val unverified = sessionData.unverifiedSamples
+                val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
+                val hasPending = unverified > 0
+                val (badgeBg, badgeTextColor) = if (hasPending) {
+                    colors.accent to colors.onAccent
+                } else {
+                    colors.surfaceMuted to colors.textSecondary
+                }
                 Row(
                     modifier = Modifier
-                        .background(
-                            if (unverified > 0) colors.accent else colors.surfaceMuted,
-                            CircleShape,
-                        )
+                        .background(badgeBg, CircleShape)
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
-                    if (unverified > 0) LiveDot()
+                    if (hasPending) LiveDot()
                     Text(
-                        // English has no `zero` plural, so 0 needs its own string.
-                        text = if (unverified == 0) {
-                            stringResource(R.string.session_all_verified)
-                        } else {
-                            pluralStringResource(
-                                R.plurals.session_unverified_count,
-                                unverified,
-                                unverified,
-                            )
+                        text = when (queueBadge) {
+                            SessionQueueBadge.NO_ITEMS ->
+                                stringResource(R.string.session_no_items_yet)
+                            SessionQueueBadge.ALL_VERIFIED ->
+                                stringResource(R.string.session_all_verified)
+                            SessionQueueBadge.PENDING ->
+                                pluralStringResource(
+                                    R.plurals.session_unverified_count,
+                                    unverified,
+                                    unverified,
+                                )
                         },
-                        color = if (unverified > 0) colors.onAccent else colors.textSecondary,
+                        color = badgeTextColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -358,10 +449,21 @@ fun LiveDot() {
     )
 }
 
+/** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
+private data class BarangayPickerState(
+    val selected: PsgcBarangay?,
+    val query: String,
+    val results: List<PsgcBarangay>,
+    val actions: SearchableDropdownActions,
+)
+
+private fun PsgcBarangay.toOption(): SearchableOption =
+    SearchableOption(key = code, title = name, subtitle = parentPath)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
+    barangay: BarangayPickerState,
     onDismiss: () -> Unit,
     onSubmit: (label: String, note: String) -> Unit
 ) {
@@ -409,7 +511,7 @@ private fun NewSessionSheet(
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        "Set the label and a note before scanning",
+                        stringResource(R.string.session_new_sheet_subtitle),
                         fontSize = 12.sp,
                         color = colors.textSecondary,
                         fontWeight = FontWeight.Medium
@@ -438,8 +540,42 @@ private fun NewSessionSheet(
                     config = SheetInputConfig(
                         label = "Label",
                         placeholder = "e.g. 325",
-                        isError = showError && label.isBlank()
+                        isError = showError && label.isBlank(),
+                        maxLength = SESSION_LABEL_MAX_LENGTH
                     )
+                )
+                Spacer(modifier = Modifier.height(14.dp))
+                SearchableDropdown(
+                    state = SearchableDropdownState(
+                        selected = barangay.selected?.toOption(),
+                        query = barangay.query,
+                        options = barangay.results.map { it.toOption() },
+                    ),
+                    config = SearchableDropdownConfig(
+                        label = stringResource(R.string.session_new_barangay_label),
+                        placeholder = stringResource(R.string.session_new_barangay_placeholder),
+                        hint = stringResource(
+                            R.string.session_new_barangay_hint,
+                            SearchBarangaysUseCase.MIN_QUERY_LENGTH,
+                        ),
+                        noMatches = stringResource(R.string.session_new_barangay_no_matches),
+                        clearLabel = stringResource(R.string.session_new_barangay_clear),
+                        minQueryLength = SearchBarangaysUseCase.MIN_QUERY_LENGTH,
+                        badge = stringResource(R.string.session_new_required_badge),
+                        isError = showError && barangay.selected == null,
+                    ),
+                    actions = SearchableDropdownActions(
+                        onQueryChange = {
+                            showError = false
+                            barangay.actions.onQueryChange(it)
+                        },
+                        onSelect = {
+                            showError = false
+                            barangay.actions.onSelect(it)
+                        },
+                        onClear = barangay.actions.onClear,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(modifier = Modifier.height(14.dp))
                 SheetInput(
@@ -450,13 +586,16 @@ private fun NewSessionSheet(
                         placeholder = "Patient ID, clinical context, sample details...",
                         isError = false, // Note is never in error since it's optional
                         isTextArea = true,
-                        isRequired = false
+                        isRequired = false,
+                        maxLength = SESSION_NOTE_MAX_LENGTH
                     )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (showError && label.isBlank()) {
+                val missingLabel = showError && label.isBlank()
+                val missingBarangay = showError && barangay.selected == null
+                if (missingLabel || missingBarangay) {
                     val bannerDanger = colors.danger
                     Row(
                         modifier = Modifier
@@ -481,7 +620,11 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "Please fill in the label field to continue.",
+                            if (label.isBlank()) {
+                                stringResource(R.string.session_new_label_required)
+                            } else {
+                                stringResource(R.string.session_new_barangay_required)
+                            },
                             fontSize = 12.sp,
                             color = colors.dangerText,
                             fontWeight = FontWeight.Medium,
@@ -541,7 +684,7 @@ private fun NewSessionSheet(
                 }
                 Button(
                     onClick = {
-                        if (label.isBlank()) {
+                        if (label.isBlank() || barangay.selected == null) {
                             showError = true
                         } else {
                             onSubmit(label, note)
@@ -566,16 +709,17 @@ private fun NewSessionSheet(
 }
 
 /** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
-private data class SheetInputConfig(
+internal data class SheetInputConfig(
     val label: String,
     val placeholder: String,
     val isError: Boolean,
     val isTextArea: Boolean = false,
-    val isRequired: Boolean = true
+    val isRequired: Boolean = true,
+    val maxLength: Int = Int.MAX_VALUE
 )
 
 @Composable
-private fun SheetInput(
+internal fun SheetInput(
     value: String,
     onValueChange: (String) -> Unit,
     config: SheetInputConfig
@@ -620,7 +764,7 @@ private fun SheetInput(
 
         BasicTextField(
             value = value,
-            onValueChange = onValueChange,
+            onValueChange = { onValueChange(limitInput(value, it, config.maxLength)) },
             modifier = Modifier
                 .fillMaxWidth()
                 .onFocusChanged { isFocused = it.isFocused },
@@ -645,6 +789,13 @@ private fun SheetInput(
                 }
             }
         )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Text(
+                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
+                fontSize = 11.sp,
+                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
+            )
+        }
     }
 }
 

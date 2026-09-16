@@ -67,6 +67,7 @@ private fun entity(id: String, status: String = ReportSyncStatus.PENDING.value):
         positiveSpeciesJson = "[]",
         epgPerSpeciesJson = "{}",
         csvFilePath = "/downloads/report.csv",
+        pdfFilePath = "/downloads/report.pdf",
         supabaseStatus = status,
         createdAt = 1_000L,
     )
@@ -80,8 +81,21 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
         rows[report.reportId] = report
     }
 
-    override fun observeReportsForSession(sessionId: String, userId: String): Flow<List<ReportEntity>> =
-        flowOf(rows.values.filter { it.sessionId == sessionId && it.userId == userId })
+    override fun observeReportsForSession(
+        sessionId: String,
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>> =
+        flowOf(
+            rows.values
+                .filter { it.sessionId == sessionId && it.userId == userId }
+                .drop(offset)
+                .take(limit),
+        )
+
+    override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> =
+        flowOf(rows.values.count { it.sessionId == sessionId && it.userId == userId })
 
     override suspend fun getReportById(reportId: String): ReportEntity? = rows[reportId]
 

@@ -21,34 +21,62 @@ as working.
   `data/repository/SupabaseAuthRepository.kt:64-71`.
 - **Deferred claim.** Work recorded while signed out is owned by nobody
   (`user_id = NULL`) and is claimed at the next login, cascading sessions → samples → reports
-  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`).
+  (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`). Unowned rows are visible to every
+  caller on the device — Records, Sessions, and Verify all read them without a sign-in. The
+  records DAO predicate is `(user_id = :userId OR user_id IS NULL)`, so a signed-out caller
+  sees unowned rows only, never another medtech's data left on a shared phone
+  (`data/local/dao/SessionDao.kt:39`, `SampleDao.kt:52`, `DetectionDao.kt:40`).
 
 ### Sessions
-- **Session = one fecal smear.** Start with a label, optional notes; only an explicit End
-  Session writes `ended_at`. `core/session/SessionManager.kt:55-73`, `:117-140`.
+- **Session = one fecal smear, and it does not end.** Start with a label and optional notes;
+  it then stays open, because the medtech keeps coming back to the smear - correcting a sample,
+  generating a report from whatever is verified so far (86d4ab4vm).
+  `core/session/SessionManager.kt`.
+- **`ended_at` is legacy.** Nothing writes it any more. The column stays nullable and
+  `SessionRemoteDataSource.closeSession` stays with it, because sessions closed before this
+  change are real history; `resumeSession` still refuses to reopen one.
+- **Sign-out detaches rather than ends** (`SessionManager.clearActive`), and the open session is
+  restored at the next launch (`SessionManager.restoreActiveSession`) - without which a process
+  restart would render the verification queue empty while the smear was still open.
 - **Session picker and resume** for a still-open smear (`core/session/SessionManager.kt:79-89`).
 - **Per-session "link to account" opt-out** (`claim_exempt`), excluding a session from the
   login claim. `domain/usecase/sessions/SetSessionClaimExemptUseCase.kt`,
-  `data/local/entity/SessionEntity.kt:46-52`.
+  `data/local/entity/SessionEntity.kt:58-64`.
+- **Patient barangay, required at session start.** A PSGC-coded barangay is the unit the
+  surveillance map aggregates on; the capture-time GPS fix stays audit provenance and is
+  still read by nothing. `ui/sessions/SessionsViewModel.kt:195-207`,
+  `supabase/migrations/0010_session_psgc_barangay.sql`.
+- **Offline barangay picker** over all 42,010 barangays, type-to-filter with results in a
+  lazily-rendered list. The PSGC dataset ships in the APK (342 KB gzipped) and is Room-seeded
+  on first run, so it works with the radio off — there is no network path on this route.
+  `ui/components/SearchableDropdown.kt`, `data/local/psgc/PsgcSeeder.kt`,
+  `domain/usecase/sessions/SearchBarangaysUseCase.kt`. Vintage pin and privacy rule:
+  `docs/map/objects/PsgcBarangay.md`.
 
 ### Capture and inference
 - **Continuous microscope feed analysis.** CameraX `ImageAnalysis` only — there is no
-  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`).
-- **2-second frame sampling** with in-flight skip rather than queueing
-  (`core/camera/FrameSampler.kt:36`, `:66-68`).
+  `ImageCapture` use case (`core/camera/CameraManager.kt:43-136`). `FrameSampler` caches the
+  latest frame as JPEG bytes on every frame and no longer dispatches to inference
+  (`core/camera/FrameSampler.kt`).
+- **Manual-trigger capture, one frame per field.** The medtech taps the shutter; the cached
+  frame is snapshotted and run through inference once (`ui/capture/CaptureViewModel.kt`
+  `onCapture`, `domain/usecase/capture/CaptureFieldUseCase.kt`). There is no timer — the old
+  2-second auto-sampling was removed because a fecal smear is read by choosing ~10 likely
+  fields, not by sweeping the slide continuously.
+- **AI-vs-Manual by outcome.** Any inference response — zero detections included — records an
+  **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` records a **Manual
+  Capture** (`FrameSource.MANUAL`), so a lost connection never silently drops the tap
+  (`domain/usecase/capture/CaptureFieldUseCase.kt`).
 - **Synchronous inference** against the self-hosted FastAPI container, called through
   `RemoteInferenceEngine` behind the `InferenceEngine` interface
-  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`,
-  `domain/usecase/capture/InferFrameUseCase.kt`). Cloud is the only backend: on-device TFLite
-  was built, benchmarked at 20.8 s per frame against a 2-second capture cadence, and deferred
-  to `feat/offline-inference`.
-- **Connection-loss detection.** `GET /health` every 10 s while a session is active; two
-  consecutive failures flip to disconnected (`core/connectivity/NetworkMonitor.kt:59-79`) and
-  surface as `ui/capture/ConnectionLossBanner.kt`.
-- **Inference auto-pause** whenever a sheet or child screen is foregrounded
-  (`core/session/SessionManager.kt:94-109`, `ui/capture/CaptureViewModel.kt:161-172`).
-- **Manual capture** of the live frame with no AI involvement, for specimens the model missed
-  (`ui/capture/CaptureViewModel.kt:129-155`, `domain/usecase/verify/SubmitManualCaptureUseCase.kt`).
+  (`data/remote/InferenceApi.kt:19-25`, `data/inference/RemoteInferenceEngine.kt`). Cloud is the
+  only backend: on-device TFLite was built, benchmarked at 20.8 s per frame, and deferred to
+  `feat/offline-inference`.
+- **Connection-loss detection.** `GET /health` every 10 s **while a capture screen is
+  mounted**; two consecutive failures flip to disconnected
+  (`core/connectivity/NetworkMonitor.kt`) and surface as `ui/capture/ConnectionLossBanner.kt`.
+  Gated on the screen rather than the session since 86d4ab4vm: a session that never ends would
+  otherwise poll forever, to drive a banner nobody is looking at.
 
 ### Validation (human-in-the-loop)
 - **Per-box verdict questionnaire** producing `CONFIRMED` / `FALSE_POSITIVE` /
@@ -57,11 +85,26 @@ as working.
   (`domain/usecase/verify/SubmitVerificationUseCase.kt:38`).
 - **Verification queue** as a full screen with filtering
   (`ui/verify/VerificationQueueScreen.kt`, `ui/verify/VerificationQueueViewModel.kt`).
+  The queue distinguishes three empty states: never-had-items (queue is clear), filtered
+  (a chip is hiding rows), and all-verified (every frame in this session has been checked).
+  The all-verified state surfaces a "View session records" CTA that navigates to the
+  session's detail screen. An `IconButton` on the Session Detail app bar opens the queue
+  directly when the session is active and has pending frames
+  (`ui/records/SessionDetailScreen.kt`, `ui/records/SessionDetailViewModel.kt`).
 - **Bounding-box overlay** with a toggle (`ui/verify/FrameWithBoxes.kt`).
-- **Repeat flag** — mark a sample as an already-counted egg; excluded from EPG, never synced,
+- **Delete a duplicate** — a sample captured twice is removed rather than flagged. Unverified
+  frames are hard-deleted; a verified sample is tombstoned via `samples.deleted_at`, which hides
+  it from every queue, count and report while its detections stay in the retraining corpus (C8).
+  This replaced the **Repeat flag** (86d4ab4vm), which existed only because deletion was not
+  possible. That flag was excluded from EPG, never synced,
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
+- **No developmental-stage question.** 86d4a6jwy added one; staging reverted it (`9dcfd5d`)
+  because the four stages it shipped were never checked against literature — Ascaris could only
+  be tagged `UNFERTILIZED`, the one stage that is never infective — and the ticket is
+  deprioritised. `sample_species_findings.stage` survives as a dormant, always-null column
+  because `0012` is applied and frozen (C6).
 
 ### Sync
 - **Verify-time sync**: resize the JPEG to 640×640 at quality 80, upload to Storage, insert
@@ -71,25 +114,51 @@ as working.
   cleanly when signed out or offline (`domain/usecase/sync/SyncPendingDataUseCase.kt:60-81`).
 - **Pending / failed sync counts** surfaced in Settings
   (`data/local/dao/SampleDao.kt:137`, `:145`).
+- **Signed-out "N not linked" badge**: when signed out and unowned local sessions exist
+  (`user_id IS NULL AND claim_exempt = 0`), the sync badge shows "N not linked" and a
+  helper line prompts sign-in to link them; uses `SessionDao.observeUnlinkedCount()` via
+  `ObserveUnlinkedSessionCountUseCase` and `syncBadgeState()` in `ui/settings/SettingsCards.kt`.
 
 ### Records and reports
-- **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
-  `domain/usecase/records/GetRecordsUseCase.kt`).
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt:63-79`).
+- **Records browser** over verified samples, including unowned local sessions
+  (`ui/records/RecordsScreen.kt`, `domain/usecase/records/GetRecordsUseCase.kt`).
+  Records reads unowned local data the same way Sessions and Verify do — no sign-in required.
+  Report generation still requires a cached local identity.
+- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt`).
+  Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
+  is absent or belongs to a different account.
+- **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
+  an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
+  `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against
+  WHO Kato-Katz per-species EPG cutoffs — population-surveillance cutoffs, **pending clinical
+  sign-off (Dr. Bayron)**, not yet a validated diagnostic threshold. `EggSpecies.OTHER`/
+  unrecognized species are excluded from the tier (no WHO table exists for them); zero confirmed
+  eggs shows no badge at all (a true negative, not "Low"). The mandatory disclaimer
+  (`session_detail_infectivity_disclaimer`) renders alongside every tier, never just Extreme.
+  UI: `ui/records/InfectivityBadge.kt`, wired into `EpgHeroCard`
+  (`ui/records/SessionDetailScreen.kt`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
 - **EPG** = confirmed egg count × 24 (Kato-Katz multiplier), repeats excluded
-  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`).
+  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`). Pending
+  replacement by LPF (Low Power Field) density under ticket 86d4a6jxw — every report
+  surface below still reports EPG until that lands.
 - **Persisted session reports** in Room and Supabase, multiple per session, newest first.
-  Row-only sync — the CSV file itself stays on the device
+  Row-only sync — the CSV and PDF files themselves stay on the device
   (`domain/usecase/records/GenerateSessionReportUseCase.kt:37-97`,
   `data/supabase/SyncReportUseCase.kt:25-35`).
 - **CSV export** to `Documents/AgarthaVision/` with a comment-prefixed header block, then
   shared from the generation snackbar or a report row
   (`data/repository/DocumentsReportFileStore.kt:31-38`,
   `domain/usecase/records/ReportCsvBuilder.kt:14-34`,
-  `ui/records/ReportSharing.kt:30-37`).
+  `ui/records/ReportSharing.kt:30-37`). The row also emits a `stage` column
+  (`domain/usecase/records/ReportCsvBuilder.kt`).
+- **PDF export** — the patient-facing artifact. A report is generated in the single format the
+  medtech picks (PDF or CSV), so it carries one file, opened/shared in that format from the
+  generation snackbar and the Reports list (`domain/usecase/records/ReportPdfBuilder.kt`,
+  `domain/repository/ReportPdfRenderer.kt`, `data/repository/AndroidReportPdfRenderer.kt`,
+  `ui/records/ReportSharing.kt:shareReportPdf`).
 
 ### Shell and appearance
 - **Nine screens**: Login, Dashboard, Sessions, Capture, Verification Queue, Records, Session
@@ -106,7 +175,8 @@ as working.
   (`ui/settings/SettingsViewModel.kt:59-136`).
 
 ### Backend and inference service
-- Eight applied Postgres migrations, `0001`–`0008`, with owner-scoped RLS throughout.
+- Eleven numbered Postgres migrations, `0001`–`0011`, with owner-scoped RLS throughout.
+  `0010_session_psgc_barangay.sql` is the one not yet applied — see its header on apply order.
 - FastAPI container with `GET /health` and `POST /infer`, bearer-token auth, weights baked in
   (`inference/server.py:29`, `:34`, `inference/Dockerfile`).
 
@@ -114,11 +184,11 @@ as working.
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:397-421`, `schema.ts:538-553` | **Not implemented.** No migration through `0008` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
-| WorkManager sync queue | `app/build.gradle.kts:157` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
+| `validation_records` table | `schema.ts:463-487`, `schema.ts:605-622` | **Not implemented.** No migration through `0011` creates it; no Room mirror; nothing writes to it. Phase 2 audit trail |
+| WorkManager sync queue | `app/build.gradle.kts:164` | Dependency declared, **no `Worker` class exists**. Phase 1 sync is foreground and trigger-based |
 | `administrative` report type | `supabase/migrations/0008_reports.sql:9` | Reserved in a comment; the CHECK allows only `session` (`0008_reports.sql:17`) |
-| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:210-212`) |
-| `reports.supabase_status` in Postgres | `schema.ts:382-383` | Room-only column |
+| `samples.status` in Postgres | legacy ERD | Room/domain only — no migration creates it (`schema.ts:270-272`) |
+| `reports.supabase_status` in Postgres | `schema.ts:448-449` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | The `admin` role and `is_admin()` exist in SQL (`0001_init.sql:13`, `0004_fix_profiles_rls_recursion.sql:4-16`); no admin UI exists in the app |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path. Superseded by the self-hosted container; the response shape is kept compatible only |
 | In-app bounding-box editing | Verification design | Deferred to offline annotation tooling. `BOX_INCORRECT` records the problem; nothing fixes the box in-app |
@@ -128,7 +198,10 @@ as working.
 ## Phase 2 — deferred by decision, not oversight
 
 Self-hosted FastAPI + PostgreSQL + MinIO on owned hardware; a DOH-validated `prep_methods`
-table replacing the hardcoded EPG multiplier; DOH-formatted PDF reports; a durable offline
-sync queue with backoff; a per-account persistent flagged-frame queue; capture moving off the
-phone camera onto dedicated hardware over USB OTG, with the phone becoming a verification and
-reporting client only.
+table replacing the hardcoded EPG multiplier; a durable offline sync queue with backoff; a
+per-account persistent flagged-frame queue; capture moving off the phone camera onto dedicated
+hardware over USB OTG, with the phone becoming a verification and reporting client only.
+
+PDF report export is no longer deferred (ticket 86d4a6jyy) — see "Records and reports" above.
+Its per-species number still reports EPG rather than a DOH-validated density; that swap is
+ticket 86d4a6jxw's separate work.

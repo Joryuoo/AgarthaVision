@@ -15,9 +15,15 @@ interface ReportRepository {
     suspend fun insert(report: Report)
 
     /**
-     * Observes reports for [sessionId] / [userId] ordered by `generatedAt` DESC.
+     * Observes one page of reports for [sessionId] / [userId] ordered by `generatedAt` DESC —
+     * [limit] rows starting at [offset].
      */
-    fun observeForSession(sessionId: String, userId: String): Flow<List<Report>>
+    fun observeForSession(sessionId: String, userId: String, limit: Int, offset: Int): Flow<List<Report>>
+
+    /**
+     * Observes the total number of reports for [sessionId] / [userId], ignoring any page limit.
+     */
+    fun observeCountForSession(sessionId: String, userId: String): Flow<Int>
 
     /**
      * Loads a single report by id, or `null` if it doesn't exist.

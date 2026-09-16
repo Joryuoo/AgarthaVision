@@ -23,17 +23,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.ui.text.TextStyle
 import coil.compose.AsyncImage
+import com.agarthavision.R
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ArrowBackIosNew
+import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
+import com.agarthavision.ui.theme.MonoSmallStyle
 
 @Composable
 fun ScreenTopBar(
@@ -56,7 +58,7 @@ fun ScreenTopBar(
                 .clickable { onBack() },
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = colors.textPrimary)
+            Icon(AgarthaIcons.ArrowBackIosNew, contentDescription = "Back", tint = colors.textPrimary)
         }
         Spacer(modifier = Modifier.width(8.dp))
         Column {
@@ -65,13 +67,14 @@ fun ScreenTopBar(
                 style = AppTypography.headlineSmall,
                 color = colors.textPrimary,
             )
+            // MonoSmallStyle is the app-wide face for timestamps and counters (Inter + tnum);
+            // the platform monospace face this used to force is what made the sheets look
+            // different from every other screen.
             Text(
                 metaText.uppercase(),
-                fontSize = 11.sp,
                 color = colors.textSecondary,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Medium,
-                style = TextStyle(fontFeatureSettings = "tnum")
+                letterSpacing = 0.5.sp,
+                style = MonoSmallStyle,
             )
         }
         Spacer(modifier = Modifier.weight(1f))
@@ -81,7 +84,7 @@ fun ScreenTopBar(
 
 /**
  * Snapshot [SheetActionRow] renders from — bundled since this primary/secondary action pair
- * always travels together at both its call sites ([VerificationSheet], [ManualSheet]).
+ * always travels together wherever it is used.
  */
 data class SheetActionRowState(
     val primaryLabel: String,
@@ -101,31 +104,34 @@ fun SheetActionRow(state: SheetActionRowState) {
             .padding(top = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Secondary Button (Destructive Ghost)
+        // Secondary Button — neutral grey chip. Discard is a confirmed action (it opens a
+        // dialog), so it reads as secondary rather than as a red destructive control.
         Box(
             modifier = Modifier
                 .weight(1f)
-                .background(colors.dangerTint, RoundedCornerShape(14.dp))
-                .border(0.5.dp, colors.danger.copy(alpha = 0.16f), RoundedCornerShape(14.dp))
+                .testTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
+                .background(colors.surfaceVariant, RoundedCornerShape(14.dp))
+                .border(0.5.dp, colors.borderStrong, RoundedCornerShape(14.dp))
                 .clickable { state.onSecondaryClick() }
                 .padding(vertical = 16.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = state.secondaryLabel,
-                color = colors.dangerText,
+                color = colors.textPrimary,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp
             )
         }
 
-        // Primary Button — inverse surface (dark chip in light mode, light chip in dark)
+        // Primary Button — brand maroon, dimmed while the form is incomplete.
         Box(
             modifier = Modifier
                 .weight(2f)
+                .testTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
                 .background(
-                    if (state.primaryEnabled) colors.textPrimary else colors.textTertiary,
+                    if (state.primaryEnabled) colors.accent else colors.accent.copy(alpha = 0.4f),
                     RoundedCornerShape(14.dp),
                 )
                 .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() }
@@ -134,13 +140,112 @@ fun SheetActionRow(state: SheetActionRowState) {
         ) {
             Text(
                 text = if (state.primaryLoading) "Loading..." else state.primaryLabel,
-                color = colors.background,
+                color = colors.onAccent,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp
             )
         }
     }
+}
+
+/**
+ * Width/height the frame preview should be laid out at. Falls back to square — the
+ * capture pipeline emits 640x640 — when a frame carries no dimensions (older manual
+ * captures), so the preview never collapses to zero height.
+ */
+internal fun FlaggedFrame.previewAspectRatio(): Float {
+    val w = imageWidth ?: 0
+    val h = imageHeight ?: 0
+    return if (w > 0 && h > 0) w.toFloat() / h else 1f
+}
+
+/**
+ * Small uppercase section label ("SPECIES", "REMARKS", the verification questions), in the
+ * same face and weight the records screens use for their group titles.
+ */
+@Composable
+internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text = text,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AgarthaTheme.colors.textSecondary,
+        letterSpacing = 0.5.sp,
+        modifier = modifier,
+    )
+}
+
+/**
+ * Snapshot a [NavPairRow] renders from — bundled like [SheetActionRowState], since the two
+ * halves always travel together.
+ */
+internal data class NavPairState(
+    val prevLabel: String,
+    val nextLabel: String,
+    val prevTag: String,
+    val nextTag: String,
+    val canGoPrev: Boolean,
+    val canGoNext: Boolean,
+    val onPrev: () -> Unit,
+    val onNext: () -> Unit,
+)
+
+/**
+ * A full-width previous / next pair. Full-width on purpose: the medtech is working a
+ * microscope with one hand, so small arrow buttons are a miss waiting to happen.
+ */
+@Composable
+internal fun NavPairRow(state: NavPairState, modifier: Modifier = Modifier) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = modifier,
+    ) {
+        SmallToggle(
+            label = state.prevLabel,
+            selected = false,
+            onClick = state.onPrev,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(state.prevTag),
+            enabled = state.canGoPrev,
+        )
+        SmallToggle(
+            label = state.nextLabel,
+            selected = false,
+            onClick = state.onNext,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(state.nextTag),
+            enabled = state.canGoNext,
+        )
+    }
+}
+
+/**
+ * Previous / next frame pair, laid out under the frame preview on both sheets.
+ */
+@Composable
+internal fun FrameNavRow(
+    canGoPrev: Boolean,
+    canGoNext: Boolean,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    NavPairRow(
+        state = NavPairState(
+            prevLabel = stringResource(R.string.verify_prev_frame),
+            nextLabel = stringResource(R.string.verify_next_frame),
+            prevTag = VerifyTestTags.FRAME_PREV,
+            nextTag = VerifyTestTags.FRAME_NEXT,
+            canGoPrev = canGoPrev,
+            canGoNext = canGoNext,
+            onPrev = onPrev,
+            onNext = onNext,
+        ),
+        modifier = modifier,
+    )
 }
 
 /**

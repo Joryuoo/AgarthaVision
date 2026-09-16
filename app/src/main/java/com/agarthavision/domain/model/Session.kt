@@ -12,6 +12,12 @@ data class Session(
     val endedAt: Long?,
     val notes: String?,
     val label: String?,
+    /**
+     * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
+     * sessions created before the picker existed. The unit of analysis for surveillance
+     * mapping; the per-sample GPS fix is provenance only.
+     */
+    val psgcBarangayCode: String? = null,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */
     val supabaseStatus: SessionSyncStatus = SessionSyncStatus.SYNCED,
     /** `true` when opted out of being claimed at the next login. Per ADR-007. */

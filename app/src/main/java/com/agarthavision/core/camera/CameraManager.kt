@@ -31,8 +31,10 @@ import kotlin.coroutines.resumeWithException
  *
  * Per CONTEXT.md
  * [ImageAnalysis] — frames flow into the supplied [ImageAnalysis.Analyzer], which
- * the `FrameSampler` throttles to one frame every two seconds and dispatches to
- * `InferFrameUseCase`. There is no `ImageCapture` use case in Phase 1.
+ * is `FrameSampler`: it caches the latest frame as JPEG bytes on every analyzed
+ * frame, with no throttling. Capture is medtech-triggered (Track 2.13) — the
+ * shutter tap snapshots that cache and runs inference once. There is no
+ * `ImageCapture` use case in Phase 1.
  *
  * Both use cases are pinned to the same 4:3 aspect-ratio strategy so they share one
  * field of view. That is what lets the capture screen draw an honest boundary: what
@@ -57,12 +59,11 @@ class CameraManager @Inject constructor(
     /**
      * Where frame analysis runs by default.
      *
-     * Single-threaded on purpose. `FrameSampler.analyze` JPEG-encodes — and now rotates,
-     * crops and downscales — on every frame before any throttling, which is far too much
-     * for the main thread. Serialising also keeps `FrameSampler`'s `lastSentAt` and
-     * `inFlight` fields on one thread, as they were when this ran on the main executor,
-     * and `STRATEGY_KEEP_ONLY_LATEST` already drops frames rather than queueing them, so
-     * a pool would buy nothing.
+     * Single-threaded on purpose. `FrameSampler.analyze` JPEG-encodes — and rotates,
+     * crops and downscales — on every frame, which is far too much for the main thread.
+     * `STRATEGY_KEEP_ONLY_LATEST` already drops frames rather than queueing them, so a
+     * pool would buy nothing; a single dedicated thread is enough to keep the cache
+     * fresh for the next shutter tap.
      */
     private val analysisExecutor: Executor by lazy {
         Executors.newSingleThreadExecutor { runnable ->

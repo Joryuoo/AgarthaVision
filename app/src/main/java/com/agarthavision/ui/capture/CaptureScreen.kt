@@ -4,14 +4,20 @@ package com.agarthavision.ui.capture
 
 import android.Manifest
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.LabProfile
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,34 +51,36 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
@@ -80,11 +89,12 @@ import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
+import com.agarthavision.ui.sessions.SESSION_NOTE_MAX_LENGTH
+import com.agarthavision.ui.sessions.limitInput
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import com.agarthavision.ui.verify.ManualSheet
 import com.agarthavision.ui.verify.VerificationSheet
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -120,6 +130,82 @@ private fun PulsingDot() {
     )
 }
 
+/** Fill of the capture chrome's glass buttons: near-black at 55%, mode-independent like the feed. */
+private val GlassFill = Color(28, 20, 18, (0.55f * 255).toInt())
+
+private val ShutterSize = 100.dp
+private val ShutterArcStroke = 3.dp
+private const val SHUTTER_BUSY_ALPHA = 0.6f
+private const val SHUTTER_ARC_SWEEP_DEGREES = 100f
+private const val SHUTTER_ARC_ROTATION_MS = 1_100
+private const val FULL_TURN_DEGREES = 360f
+
+/**
+ * The 100dp shutter. While a capture is in flight it shows that in its own bounds - dimmed,
+ * with an indeterminate arc travelling its circumference - instead of the app floating a
+ * spinner over the live field. The medtech keeps seeing the smear for the whole round
+ * trip, which on a slow link can be the full inference timeout.
+ */
+@Composable
+internal fun Shutter(
+    isBusy: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val description = stringResource(
+        if (isBusy) R.string.capture_shutter_busy_desc else R.string.capture_shutter_desc,
+    )
+    val arcStart = if (isBusy) {
+        rememberInfiniteTransition(label = "shutterArc").animateFloat(
+            initialValue = 0f,
+            targetValue = FULL_TURN_DEGREES,
+            animationSpec = infiniteRepeatable(
+                animation = tween(SHUTTER_ARC_ROTATION_MS, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart,
+            ),
+            label = "shutterArcStart",
+        ).value
+    } else {
+        0f
+    }
+    Box(
+        modifier = Modifier
+            .size(ShutterSize)
+            .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
+            // alpha only dims what follows it in the chain: keep it ahead of the fill and arc.
+            .alpha(if (isBusy) SHUTTER_BUSY_ALPHA else 1f)
+            .background(Color.White, CircleShape)
+            .drawBehind {
+                // Maroon reads on the white disc even dimmed; a white arc would vanish into it.
+                if (isBusy) {
+                    val stroke = ShutterArcStroke.toPx()
+                    drawArc(
+                        color = AppColors.Maroon,
+                        startAngle = arcStart,
+                        sweepAngle = SHUTTER_ARC_SWEEP_DEGREES,
+                        useCenter = false,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
+            }
+            .semantics {
+                contentDescription = description
+                role = Role.Button
+            }
+            .clickable(enabled = enabled, onClick = onClick),
+    )
+}
+
+/** The 40dp translucent circle shared by every glass button on the capture chrome. */
+private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifier = this
+    .size(40.dp)
+    .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
+    .background(GlassFill, CircleShape)
+    .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
+    .clickable(enabled = enabled) { onClick() }
+
 @Composable
 private fun IconButtonGlass(
     pathData: String,
@@ -127,15 +213,7 @@ private fun IconButtonGlass(
     enabled: Boolean = true,
     drawExtras: (DrawScope.() -> Unit)? = null,
 ) {
-    Box(
-        modifier = Modifier
-            .size(40.dp)
-            .shadow(14.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.35f))
-            .background(Color(28, 20, 18, (0.55f * 255).toInt()), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), CircleShape)
-            .clickable(enabled = enabled) { onClick() },
-        contentAlignment = Alignment.Center,
-    ) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
         SvgIcon(
             pathData,
             color = Color.White,
@@ -146,10 +224,29 @@ private fun IconButtonGlass(
     }
 }
 
+@Composable
+internal fun IconButtonGlass(
+    icon: ImageVector,
+    contentDescription: String?,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
 /**
- * Shortcut into the verification queue, with a badge counting the frames still
- * awaiting review. Lives in the bottom-left of the capture chrome: the toast
- * renders top-center and used to sit on top of this button.
+ * Shortcut into the verification queue, badged with the frames still awaiting review.
+ *
+ * Sits bottom-right, where End Session used to be. The badge deliberately counts only the
+ * unverified frames: verified samples live in the queue too now, and including them would turn
+ * a "needs review" number into a "how much is in here" number.
  */
 @Composable
 private fun VerificationQueueButton(
@@ -202,21 +299,16 @@ fun CaptureScreen(
     viewModel: CaptureViewModel = hiltViewModel(),
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
-    onRecordsClick: () -> Unit,
     onReportsClick: (String) -> Unit,
     onVerifyQueueClick: () -> Unit,
-    onSessionEnded: () -> Unit,
     onNavigateBack: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val toastState = rememberAgarthaToastState()
     val context = LocalContext.current
     val view = LocalView.current
-    val detectionFallback = stringResource(R.string.capture_detection_fallback)
     val detectionView = stringResource(R.string.capture_detection_view)
-    val detectionMessage = stringResource(R.string.capture_detection_message)
-    val manualCaptureMessage = stringResource(R.string.capture_manual_capture_message)
-    var showEndConfirm by rememberSaveable { mutableStateOf(false) }
+    val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -239,36 +331,15 @@ fun CaptureScreen(
     DisposableEffect(Unit) {
         val window = (context as? androidx.activity.ComponentActivity)?.window
         val controller = window?.let { WindowInsetsControllerCompat(it, view) }
+        val previousLight = controller?.isAppearanceLightStatusBars
         controller?.let {
             it.hide(WindowInsetsCompat.Type.navigationBars())
             it.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.isAppearanceLightStatusBars = false
         }
         onDispose {
             controller?.show(WindowInsetsCompat.Type.navigationBars())
-        }
-    }
-
-    // Auto-pause inference whenever Capture leaves the foreground (back to picker,
-    // app backgrounded, etc.) and resume on return. Sheets/overlays handle their
-    // own pause/resume — see CaptureViewModel.resumeInferenceIfNoOverlay().
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_RESUME -> viewModel.resumeInferenceIfNoOverlay()
-                Lifecycle.Event.ON_PAUSE -> viewModel.pauseInference()
-                else -> Unit
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(viewModel) {
-        viewModel.events.collect { event ->
-            when (event) {
-                CaptureEvent.SessionEnded -> onSessionEnded()
-            }
+            controller?.isAppearanceLightStatusBars = previousLight ?: false
         }
     }
 
@@ -282,26 +353,41 @@ fun CaptureScreen(
                 if (sampleId == null) return@collect
                 val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
 
-                val message = if (frame.source == FrameSource.MODEL) {
-                    // Prefer the canonical binomial: the server emits whatever its class
-                    // list is named, which may be an alias like "Ascaris".
-                    val label = frame.predictions.firstOrNull()?.classLabel
-                    val species = label
-                        ?.let { EggSpecies.fromClassLabel(it)?.displayName ?: it }
-                        ?: detectionFallback
-                    detectionMessage.format(species)
-                } else {
-                    manualCaptureMessage
-                }
-
                 toastState.show(
-                    message = message,
+                    message = frameCapturedMessage,
                     variant = AgarthaToastVariant.Default,
                     actionLabel = detectionView,
                     onAction = { viewModel.onDetectionToastTap(frame) },
                 )
             }
     }
+
+    // Surface capture errors ("No active session", "Waiting for a live frame", or an
+    // unexpected inference/persist failure) as a destructive toast, then clear the latch
+    // so the same error can fire again on the next tap.
+    LaunchedEffect(viewModel) {
+        viewModel.state
+            .map { it.errorMessage }
+            .distinctUntilChanged()
+            .collect { errorMessage ->
+                if (errorMessage == null) return@collect
+                toastState.show(
+                    message = errorMessage,
+                    variant = AgarthaToastVariant.Destructive,
+                )
+                viewModel.clearErrorMessage()
+            }
+    }
+
+    // A capture runs on viewModelScope, so leaving the screen mid-inference would cancel it
+    // and drop the frame before it is persisted. Swallow system back while a tap is in flight;
+    // the back button and shutter are already disabled via isBusy.
+    BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
+
+    // Collapsed offline banner state, hoisted so the compact pill can live in the header row
+    // (level with the back button and session pill) while the full banner sits below. Resets
+    // to expanded each time the connection is freshly lost.
+    var bannerCollapsed by remember(state.isConnectionLost) { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -323,11 +409,6 @@ fun CaptureScreen(
             )
         }
 
-        // Busy overlay (keeps the old 77b5 layout, but prevents duplicate taps)
-        if (state.isBusy) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        }
-
         // Top chrome (77b5 style) - action shortcuts removed (records/reports are reachable outside capture)
         Row(
             modifier = Modifier
@@ -342,6 +423,7 @@ fun CaptureScreen(
             IconButtonGlass(
                 pathData = "M 15 18 L 9 12 L 15 6",
                 onClick = onNavigateBack,
+                enabled = !state.isBusy,
             )
 
             // Session pill
@@ -372,32 +454,43 @@ fun CaptureScreen(
                 )
             }
 
-            // Records shortcut for the active session. Reuses ic_chart's bar geometry so
-            // it reads the same as the Records tab in the bottom bar.
-            Box(
-                modifier = Modifier.width(40.dp),
-                contentAlignment = Alignment.CenterEnd,
-            ) {
-                val sessionId = state.activeSessionId
-                IconButtonGlass(
-                    pathData = "M3,11 H7 V21 H3 Z M10,6 H14 V21 H10 Z M17,3 H21 V21 H17 Z",
-                    enabled = sessionId != null,
-                    onClick = { sessionId?.let(onReportsClick) },
-                )
+            // Right slot: a dismissed "model unreachable" banner lives here as a compact pill,
+            // level with the back button and session label. Otherwise a spacer balances the
+            // back button so the session label stays centred.
+            if (state.isConnectionLost && bannerCollapsed) {
+                ConnectionLossPill(onExpand = { bannerCollapsed = false })
+            } else {
+                Spacer(modifier = Modifier.width(40.dp))
             }
         }
 
-        // Connection loss banner positioned under the top chrome (77b5 spacing)
-        ConnectionLossBanner(
-            visible = state.isConnectionLost,
-            isProbing = state.isProbingConnection,
-            onResume = viewModel::resumeConnection,
+        // The row beneath the top chrome. Banner and toast are stacked in one column rather
+        // than both being pinned to the same offset - they could previously occupy the same
+        // band at once, because a shutter tap still records a frame while the connection-loss
+        // banner is latched. That was acknowledged in a comment and deferred; this is it.
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 14.dp),
-        )
+                .padding(top = 108.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ConnectionLossBanner(
+                visible = state.isConnectionLost && !bannerCollapsed,
+                isProbing = state.isProbingConnection,
+                onResume = viewModel::resumeConnection,
+                onCollapse = { bannerCollapsed = true },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp),
+            )
+            AgarthaToastHost(
+                state = toastState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+            )
+        }
 
         // Bottom chrome (77b5 style)
         Row(
@@ -408,9 +501,9 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: verification queue shortcut. Its badge already counts the
-            // unverified frames, so the separate FRAMES pill that used to sit here
-            // was redundant.
+            // Left: the verification queue. Its badge counts unverified frames only - verified
+            // samples live in the queue too now, and including them would inflate a "needs
+            // review" number into a "how much is in here" number.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,
@@ -422,170 +515,41 @@ fun CaptureScreen(
             }
 
             // Center: shutter
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
-                    .background(Color.White, CircleShape)
-                    .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                        viewModel.onManualCapture()
-                    },
+            Shutter(
+                isBusy = state.isBusy,
+                enabled = state.activeSessionId != null && !state.isBusy,
+                onClick = viewModel::onCapture,
             )
 
-            // Right: end session
+            // Right: records for this session. A lab-profile glyph, not the bar glyph, which
+            // read as signal strength next to the connection-loss banner (86d4ayef8).
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterEnd,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .offset(x = (-30).dp)
-                        .shadow(
-                            14.dp,
-                            RoundedCornerShape(12.dp),
-                            spotColor = Color(0xFFDC2626).copy(alpha = 0.4f),
-                        )
-                        .background(Color(0xFFDC2626), RoundedCornerShape(12.dp))
-                        .clickable(enabled = state.activeSessionId != null && !state.isBusy) {
-                            showEndConfirm = true
-                        },
+                val sessionId = state.activeSessionId
+                IconButtonGlass(
+                    icon = AgarthaIcons.LabProfile,
+                    contentDescription = stringResource(R.string.capture_records_action_desc),
+                    enabled = sessionId != null,
+                    onClick = { sessionId?.let(onReportsClick) },
                 )
             }
         }
 
-        // Detection toast, below the back button and session pill rather than over them.
-        // Same band as ConnectionLossBanner, which cannot be showing at the same time:
-        // losing the connection stops recording, so no detections arrive.
-        AgarthaToastHost(
-            state = toastState,
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .padding(top = 108.dp)
-                .padding(horizontal = 20.dp),
-        )
     }
 
     val target = state.verificationTarget
     if (target != null) {
-        if (target.source == FrameSource.MANUAL) {
-            ManualSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        } else {
-            VerificationSheet(
-                frame = target,
-                onDismiss = viewModel::onVerificationDismissed,
-            )
-        }
-    }
-
-    if (showEndConfirm) {
-        EndSessionConfirmDialog(
-            initialNotes = "",
-            isBusy = state.isBusy,
-            // Repeat frames are duplicates the medtech already accounted for, so they
-            // do not hold a session open. Only unverified, non-repeat frames block.
-            blockedCount = state.flaggedFrames.count { !it.markedAsRepeat },
-            onConfirm = { notes ->
-                showEndConfirm = false
-                viewModel.endSession(notes)
-            },
-            onDismiss = { showEndConfirm = false },
+        // One screen for both sources. What makes a sample "AI" is simply that it has model
+        // output, which the sheet reads off the frame itself.
+        VerificationSheet(
+            frame = target,
+            onDismiss = viewModel::onVerificationDismissed,
         )
     }
 }
 
-@Composable
-private fun EndSessionConfirmDialog(
-    initialNotes: String,
-    isBusy: Boolean,
-    blockedCount: Int,
-    onConfirm: (notes: String?) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var notes by rememberSaveable { mutableStateOf(initialNotes) }
-    val isBlocked = blockedCount > 0
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = DialogShape,
-        confirmButton = {
-            AgarthaButton(
-                onClick = { onConfirm(notes.takeIf { it.isNotBlank() }) },
-                variant = AgarthaButtonVariant.Destructive,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy && !isBlocked,
-            ) {
-                if (isBusy) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        color = AppColors.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(stringResource(R.string.capture_end_session_confirm))
-                }
-            }
-        },
-        dismissButton = {
-            AgarthaButton(
-                onClick = onDismiss,
-                variant = AgarthaButtonVariant.Ghost,
-                size = AgarthaButtonSize.Default,
-                enabled = !isBusy,
-            ) {
-                Text(stringResource(R.string.verify_cancel))
-            }
-        },
-        title = { Text(stringResource(R.string.capture_end_session_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(AgarthaSpacing.sm)) {
-                if (isBlocked) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.capture_end_blocked_body,
-                            blockedCount,
-                            blockedCount,
-                        ),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    Text(
-                        text = stringResource(R.string.capture_end_session_body),
-                        color = AppColors.Gray500,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.capture_end_session_notes_label),
-                        color = AppColors.Gray900,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        placeholder = {
-                            Text(stringResource(R.string.capture_end_session_notes_placeholder))
-                        },
-                        singleLine = false,
-                        enabled = !isBusy,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = AgarthaTheme.colors.accent,
-                            unfocusedBorderColor = AppColors.Gray200,
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                    )
-                }
-            }
-        },
-        containerColor = AppColors.White,
-        titleContentColor = AppColors.Gray900,
-        textContentColor = AppColors.Gray900,
-    )
-}
 
 @Composable
 private fun CameraPermissionRequired(onRequestPermission: () -> Unit) {

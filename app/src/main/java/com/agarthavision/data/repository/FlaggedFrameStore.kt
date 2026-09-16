@@ -84,14 +84,11 @@ class FlaggedFrameStore @Inject constructor(
         }
     }
 
-    suspend fun toggleRepeat(frame: FlaggedFrame) {
-        if (frame.sampleId.isNotBlank()) {
-            sampleDao.toggleIsRepeat(frame.sampleId)
-        }
-    }
 
     suspend fun clear() {
-        val userId = authRepository.getCurrentUserId()
+        // Cached identity, like every other read here: the live Supabase id is null offline
+        // and would leave a signed-in medtech's own flagged rows behind.
+        val userId = authRepository.currentLocalUserId()
         val sessionId = (sessionManager.state.value as? SessionState.Active)?.session?.sessionId
             ?: return
         val samples = sampleDao.getFlaggedSamplesForSession(sessionId, userId)
@@ -112,7 +109,6 @@ class FlaggedFrameStore @Inject constructor(
             jpegBytes = jpegBytes,
             predictions = predictions,
             source = if (isManual) FrameSource.MANUAL else FrameSource.MODEL,
-            markedAsRepeat = isRepeat,
             inferenceModelVersion = inferenceModelVersion,
             imageWidth = imageWidth,
             imageHeight = imageHeight,

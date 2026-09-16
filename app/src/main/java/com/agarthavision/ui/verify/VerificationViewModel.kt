@@ -5,8 +5,11 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -32,12 +35,15 @@ import javax.inject.Inject
  * @property frame the frame currently being verified.
  * @property currentDetectionIndex which detection within [frame] is highlighted.
  * @property showBoundingBoxes toggle for the box overlay on the frame image.
- * @property answers per-detection answers (one entry per box in `frame.predictions`).
+ * @property findings what the medtech is asserting about this frame. The first
+ *   `frame.predictions.size` entries are the model's boxes, in order; anything after them
+ *   is a species the medtech added. An empty list on an AI frame is a clean field.
  * @property missedEgg frame-level Q4 answer — sets `samples.needs_reannotation`.
  * @property isSubmitting true while [SubmitVerificationUseCase] is in flight.
  * @property errorMessage submission failure message; surfaced inline.
- * @property canSubmit derived — true when every per-detection answer is complete
- *   and we're not already submitting.
+ * @property canSubmit derived — true when every finding is complete and we're not already
+ *   submitting. A clean field is the exception: it has no findings to complete, so the
+ *   missed-egg answer carries the review on its own.
  */
 data class VerificationUiState(
     val isVisible: Boolean = false,
@@ -46,15 +52,34 @@ data class VerificationUiState(
     val frame: FlaggedFrame? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
-    val answers: List<VerificationAnswers> = emptyList(),
+    val findings: List<Finding> = emptyList(),
     val missedEgg: Boolean? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    val isRepeat: Boolean = false,
+    val noDetectionSelected: Boolean = false,
 ) {
+    /**
+     * A clean field — an AI capture the model returned no detections for — has no findings to
+     * complete, and the old `answers.isNotEmpty()` gate made it permanently un-submittable.
+     * It is a normal negative result and has to be recordable. But the missed-egg answer is
+     * then the entire content of the review, so it must be given rather than defaulting
+     * through as null.
+     */
+    val isManual: Boolean
+        get() = frame?.source == FrameSource.MANUAL
+
+    val isCleanField: Boolean
+        get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
+
     val canSubmit: Boolean
-        get() = answers.isNotEmpty() && answers.all { it.isComplete } && !isSubmitting
+        get() = when {
+            isSubmitting -> false
+            frame == null -> false
+            isManual -> noDetectionSelected || (findings.isNotEmpty() && findings.all { it.isComplete })
+            isCleanField -> missedEgg != null && findings.all { it.isComplete }
+            else -> findings.isNotEmpty() && findings.all { it.isComplete }
+        }
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -108,7 +133,7 @@ class VerificationViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
-                val cycle = frames.aiFrames()
+                val cycle = frames
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
@@ -121,20 +146,15 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * The frames this sheet cycles through: model detections that still need review.
+     * The frames this sheet cycles through: all of them, both sources.
      *
-     * Manual captures are reviewed in [ManualSheet], which asks a different set of
-     * questions, so paging onto one from here would render the wrong sheet — the host
-     * picks the sheet from the frame it was opened with and never re-evaluates.
-     *
-     * Frames marked repeat are excluded too: they are duplicates the medtech has already
-     * accounted for, and paging onto one invites verifying it by accident.
+     * There used to be two exclusions. Manual captures were skipped because they had their own
+     * sheet and the host picked one from the frame it opened with, so paging onto a manual
+     * frame rendered the wrong questions (86d4ab4tq merged the screens). Repeat-marked frames
+     * were skipped because verifying a duplicate by accident was the hazard — duplicates are
+     * deleted now rather than flagged (86d4ab4vm), so there is nothing left to skip.
      */
-    private fun List<FlaggedFrame>.aiFrames(): List<FlaggedFrame> =
-        filter { it.source == FrameSource.MODEL && !it.markedAsRepeat }
-
-    /** The AI frames currently in the store, in queue order. */
-    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value.aiFrames()
+    private fun cycleFrames(): List<FlaggedFrame> = flaggedFrameStore.state.value
 
     /**
      * 1-based position of [frame] within [frames], or [OUT_OF_CYCLE] when the frame is
@@ -158,7 +178,15 @@ class VerificationViewModel @Inject constructor(
         return if (index >= 0) index + 1 else OUT_OF_CYCLE
     }
 
-    fun setFrame(frame: FlaggedFrame) {
+    /**
+     * Opens [frame] for review.
+     *
+     * [prior] carries what the medtech already said, when this sample has been verified before.
+     * A verified sample stays editable, and reopening it with a blank questionnaire would make
+     * every edit a full re-review - and would silently discard answers by resubmitting defaults
+     * over them. Absent it, the frame seeds from its own shape instead.
+     */
+    fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
         _state.update {
             it.copy(
@@ -166,27 +194,14 @@ class VerificationViewModel @Inject constructor(
                 frame = frame,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                answers = List(frame.predictions.size) { VerificationAnswers() },
-                missedEgg = null,
+                findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
+                    ?: frame.initialFindings(),
+                missedEgg = prior?.missedEgg,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = "",
-                isRepeat = frame.markedAsRepeat,
+                userNote = prior?.userNote.orEmpty(),
+                noDetectionSelected = prior != null && frame.source == FrameSource.MANUAL && prior.findings.isEmpty(),
             )
-        }
-    }
-
-    /**
-     * Toggles the Room-only `samples.is_repeat` flag (per ADR-005). Marks the
-     * sample as a duplicate of a previously-verified one; excluded from EPG.
-     */
-    fun onToggleRepeat() {
-        val frame = currentFrame
-        _state.update { it.copy(isRepeat = !it.isRepeat) }
-        if (frame != null) {
-            viewModelScope.launch {
-                flaggedFrameStore.toggleRepeat(frame)
-            }
         }
     }
 
@@ -199,19 +214,186 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onQ1Selected(isEgg: Boolean) {
-        updateCurrentAnswer { it.copy(isEgg = isEgg, isBoxCorrect = null, species = null, otherSpeciesText = "") }
+        updateCurrentAnswer {
+            it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
+        }
     }
 
     fun onQ2Selected(isBoxCorrect: Boolean) {
-        updateCurrentAnswer { it.copy(isBoxCorrect = isBoxCorrect, species = null, otherSpeciesText = "") }
+        updateCurrentAnswer {
+            it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+        }
     }
 
+    /**
+     * "Is this egg <model's species>?" Yes records the model's species as the medtech's answer
+     * in the same step; no clears it so the picker can take over (86d4auj84).
+     *
+     * The suggestion is read from **this finding's own prediction**, not from
+     * `frame.predictions[currentDetectionIndex]`. The two agreed while the answer list was one
+     * entry per box; once a medtech can append a species the model never boxed, the list is
+     * longer than `predictions` and the index would run off the end - or, worse, land on a
+     * different box and confirm a species nothing suggested.
+     */
+    fun onSpeciesConfirmed(confirmed: Boolean) {
+        updateCurrentFinding { finding ->
+            val suggested = finding.prediction?.classLabel?.let(EggSpecies::fromClassLabel)
+            finding.copy(
+                answers = finding.answers.copy(
+                    speciesConfirmed = confirmed,
+                    species = if (confirmed) suggested else null,
+                    otherSpeciesText = "",
+                    // A yes is a deliberate assertion, not a silent pass-through: the medtech
+                    // read the model's answer and agreed with it.
+                    speciesTouched = confirmed,
+                ),
+            )
+        }
+    }
+
+    /**
+     * Drops the species half of a row's answers.
+     *
+     * Changing an earlier answer clears the later ones, so a stale species cannot survive a
+     * change of mind about whether the box even holds an egg. This clears to **empty** rather
+     * than back to the model's class: 86d4auj84 replaced the silent pre-fill with an explicit
+     * "is this egg <species>?", and re-seeding here would answer that question on the
+     * medtech's behalf - the one thing the confirm step exists to stop.
+     *
+     * [VerificationAnswers.speciesConfirmed] and [VerificationAnswers.speciesTouched] go with
+     * it: whatever was asserted no longer applies to the question now being asked.
+     */
+    private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
+        eggCount = eggCount,
+    )
+
+    /**
+     * Records a deliberate species choice.
+     *
+     * [VerificationAnswers.speciesTouched] is set unconditionally. Under the confirm-first flow
+     * this is reached only after the medtech has said the model was wrong (or there was nothing
+     * to confirm), so it is a human judgement by construction — and the flag stays because
+     * `detections` doubles as the retraining corpus, where a species with no human behind it
+     * must never be indistinguishable from one with.
+     */
     fun onSpeciesSelected(species: EggSpecies) {
-        updateCurrentAnswer { it.copy(species = species, otherSpeciesText = "") }
+        updateCurrentAnswer {
+            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+        }
     }
 
     fun onOtherSpeciesChanged(text: String) {
         updateCurrentAnswer { it.copy(otherSpeciesText = text) }
+    }
+
+    /**
+     * What the screen opens with, for each of the three shapes a frame can take.
+     *
+     * A manual capture gets exactly one finding with no prediction: there is no box, so the
+     * isEgg and isBoxCorrect questions never render, and the medtech names a species and a
+     * count directly. An AI frame with boxes gets one empty finding per box, each carrying the
+     * prediction it is about. An AI frame with none gets an empty list — a clean field, which
+     * is a real result and is submittable on the missed-egg answer alone.
+     *
+     * **No answer is seeded.** The species used to be pre-filled from the model's class; that
+     * was replaced by the explicit confirm step (86d4auj84), which gets the same
+     * "correct what is wrong rather than retype what is right" benefit without ever putting an
+     * unreviewed model answer where a human answer is read from. isEgg, isBoxCorrect and
+     * missedEgg were never pre-filled and still are not: they are the active-judgment gates,
+     * and answering any of them would let a frame reach CONFIRMED with no engagement at all.
+     */
+    private fun FlaggedFrame.initialFindings(): List<Finding> = when {
+        predictions.isNotEmpty() -> predictions.map { Finding(prediction = it) }
+        source == FrameSource.MANUAL -> emptyList()
+        else -> emptyList()
+    }
+
+    /**
+     * Appends a species the model never boxed.
+     *
+     * The new row has no prediction, which is the same shape a manual capture has: a human
+     * assertion with no box. It is asked for a species and a count, and never for the
+     * isEgg / isBoxCorrect questions, which are questions about a box.
+     */
+    fun onAddFinding() {
+        _state.update { it.copy(findings = it.findings + Finding()) }
+    }
+
+    /**
+     * Removes a species the medtech added.
+     *
+     * Refused on a prediction-backed row. You cannot delete a box the model produced - the
+     * way to say it was wrong is to answer "not an egg", which persists it as a labelled
+     * FALSE_POSITIVE (constraint C8). Silently refusing rather than throwing because the UI
+     * does not offer the affordance on those rows in the first place; this is the backstop.
+     */
+    fun onRemoveFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index < boxCount || index !in current.findings.indices) {
+                current
+            } else {
+                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+            }
+        }
+    }
+
+    /** Eggs of this species the medtech counted in the field. */
+    fun onEggCountChanged(index: Int, text: String) {
+        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
+        updateAnswerAt(index) { it.copy(eggCount = parsed) }
+    }
+
+    fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
+        updateAnswerAt(index) {
+            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+        }
+    }
+
+    fun onAddedOtherSpeciesChanged(index: Int, text: String) {
+        updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
+    }
+
+    fun onManualNoDetectionSelected() {
+        _state.update { it.copy(noDetectionSelected = true, findings = emptyList()) }
+    }
+
+    fun onManualSpeciesToggled(species: EggSpecies, checked: Boolean) {
+        _state.update { current ->
+            val withoutSpecies = current.findings.filter { it.answers.species != species }
+            val newFindings = if (checked) {
+                withoutSpecies + Finding(answers = VerificationAnswers(species = species, speciesTouched = true))
+            } else {
+                withoutSpecies
+            }
+            current.copy(findings = newFindings, noDetectionSelected = false)
+        }
+    }
+
+    fun onManualCountChanged(species: EggSpecies, text: String) {
+        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
+        updateFindingForSpecies(species) { it.copy(eggCount = parsed) }
+    }
+
+    fun onManualOtherNameChanged(text: String) {
+        updateFindingForSpecies(EggSpecies.OTHER) { it.copy(otherSpeciesText = text) }
+    }
+
+    private fun updateFindingForSpecies(
+        species: EggSpecies,
+        transform: (VerificationAnswers) -> VerificationAnswers,
+    ) {
+        _state.update { current ->
+            current.copy(
+                findings = current.findings.map { finding ->
+                    if (finding.answers.species == species) {
+                        finding.copy(answers = transform(finding.answers))
+                    } else {
+                        finding
+                    }
+                },
+            )
+        }
     }
 
     fun onQ4Selected(missedEgg: Boolean) {
@@ -277,10 +459,9 @@ class VerificationViewModel @Inject constructor(
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                answers = snapshot.answers,
+                findings = snapshot.findings,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
-                isRepeat = snapshot.isRepeat,
             ).fold(
                 onSuccess = {
                     currentFrame = null
@@ -302,7 +483,7 @@ class VerificationViewModel @Inject constructor(
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
      * rather than equality keeps navigation working regardless of how `FlaggedFrame`
-     * defines equals, which now covers mutable fields such as `markedAsRepeat`.
+     * defines equals, which covers mutable fields such as the answers already given.
      */
     private fun List<FlaggedFrame>.indexOfSample(frame: FlaggedFrame): Int =
         indexOfFirst { it.sampleId == frame.sampleId }
@@ -313,11 +494,25 @@ class VerificationViewModel @Inject constructor(
     }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {
+        updateAnswerAt(_state.value.currentDetectionIndex, transform)
+    }
+
+    private fun updateCurrentFinding(transform: (Finding) -> Finding) {
         val index = _state.value.currentDetectionIndex
         _state.update { current ->
-            val updated = current.answers.toMutableList()
+            val updated = current.findings.toMutableList()
             if (index in updated.indices) updated[index] = transform(updated[index])
-            current.copy(answers = updated)
+            current.copy(findings = updated)
+        }
+    }
+
+    private fun updateAnswerAt(index: Int, transform: (VerificationAnswers) -> VerificationAnswers) {
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            if (index in updated.indices) {
+                updated[index] = updated[index].copy(answers = transform(updated[index].answers))
+            }
+            current.copy(findings = updated)
         }
     }
 }

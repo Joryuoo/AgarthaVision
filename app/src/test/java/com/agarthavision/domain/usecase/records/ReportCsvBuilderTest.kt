@@ -36,7 +36,6 @@ class ReportCsvBuilderTest {
                     inferenceModelVersion = "model-1",
                     userNote = "note,one",
                     isManual = false,
-                    isRepeat = false,
                     latitude = 10.0,
                     longitude = 20.0,
                     accuracyMeters = 5f,
@@ -50,7 +49,6 @@ class ReportCsvBuilderTest {
                     inferenceModelVersion = "model-2",
                     userNote = null,
                     isManual = true,
-                    isRepeat = true,
                     latitude = null,
                     longitude = null,
                     accuracyMeters = null,
@@ -108,9 +106,9 @@ class ReportCsvBuilderTest {
             # epg_trichuris_trichiura: 0
             # epg_hookworm: 0
 
-            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,gps_lat,gps_lng,gps_accuracy,is_manual,is_repeat,user_note,model_version
-            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,10.0,20.0,5.0,false,false,"note,one",model-1
-            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,,,,true,true,,model-2
+            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,gps_lat,gps_lng,gps_accuracy,is_manual,user_note,model_version
+            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,10.0,20.0,5.0,false,"note,one",model-1
+            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,,,,true,,model-2
 
         """.trimIndent() + "\n"
 
@@ -131,7 +129,6 @@ private data class SampleTestData(
     val inferenceModelVersion: String = "model-1",
     val userNote: String? = null,
     val isManual: Boolean = false,
-    val isRepeat: Boolean = false,
     val latitude: Double? = null,
     val longitude: Double? = null,
     val accuracyMeters: Float? = null,
@@ -150,7 +147,6 @@ private fun sample(data: SampleTestData): Sample =
         inferenceModelVersion = data.inferenceModelVersion,
         userNote = data.userNote,
         isManual = data.isManual,
-        isRepeat = data.isRepeat,
         latitude = data.latitude,
         longitude = data.longitude,
         accuracyMeters = data.accuracyMeters,

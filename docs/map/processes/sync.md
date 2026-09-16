@@ -52,14 +52,14 @@ first: unowned non-exempt sessions, cascading to their samples and reports, all 
 because only `user_id IS NULL` rows are touched
 (`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`, `data/local/dao/SampleDao.kt:151-158`).
 Only then does the sync pass run. Claim-exempt sessions are never pushed
-(`core/session/SessionManager.kt:147-149`).
+(`core/session/SessionManager.kt:133-135`).
 
 ## Hits
 
 - **The insert row is the contract.** A new column that is not added to `SampleInsertRow`,
   `SessionInsertRow`, or `ReportInsertRow` never reaches Postgres, with no error
   (`data/supabase/SampleRemoteDataSource.kt:100-152`,
-  `data/supabase/SessionRemoteDataSource.kt:74-90`,
+  `data/supabase/SessionRemoteDataSource.kt:76-93`,
   `data/supabase/ReportRemoteDataSource.kt:61-83`).
 - **RLS.** Every insert must satisfy `auth.uid() = user_id`
   (`supabase/migrations/0001_init.sql:99-117`), and detections are checked through the parent
@@ -74,11 +74,12 @@ Only then does the sync pass run. Claim-exempt sessions are never pushed
 
 - **Retries.** There are none. A `sync_failed` row waits for the next trigger; there is no
   backoff, no scheduler, and **no `Worker`** — WorkManager is a declared dependency with no
-  implementation (`app/build.gradle.kts:157`, and see `../../features.md`). The durable queue
+  implementation (`app/build.gradle.kts:164`, and see `../../features.md`). The durable queue
   is Phase 2.
 - **Recording.** Losing Supabase mid-session does not stop capture. Only losing the inference
   container does — see [`infer`](infer.md).
 - **Deletion.** Sync only inserts and upserts. Nothing here can remove a remote row or a
   Storage object (`../../constraints.md` C8).
-- **Repeat samples.** `is_repeat` has no Postgres column and is not in the insert row — the
+- **Repeat samples.** Gone as of 86d4ab4vm — duplicates are deleted, not flagged. While it
+  existed, `is_repeat` had no Postgres column and was not in the insert row — the
   flag stays local by design (`supabase/migrations/0006_sample_is_manual.sql:9-11`).

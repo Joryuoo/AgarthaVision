@@ -15,29 +15,29 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -47,15 +47,22 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.usecase.records.SessionRecordItem
+import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SearchInput
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
+import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-enum class SyncStatus { Synced, PendingSync }
+private const val RECORDS_SKELETON_COUNT = 6
 
 @Composable
 fun RecordsScreen(
@@ -67,35 +74,37 @@ fun RecordsScreen(
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    var searchText by remember { mutableStateOf("") }
 
-    val filteredRecords = remember(state.sessions, searchText) {
-        state.sessions.filter { item ->
-            searchText.isBlank() ||
-                item.session.id.contains(searchText, ignoreCase = true) ||
-                item.session.label?.contains(searchText, ignoreCase = true) == true ||
-                item.session.notes?.contains(searchText, ignoreCase = true) == true ||
-                item.speciesLabels.any { it.contains(searchText, ignoreCase = true) }
+    val listState = rememberLazyListState()
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
         }
     }
-
-    val totalEggs = state.sessions.sumOf { it.totalEpg }
-    val totalSamples = state.sessions.sumOf { it.sampleCount }
+    LaunchedEffect(shouldLoadMore) {
+        if (shouldLoadMore) viewModel.onLoadMore()
+    }
 
     Scaffold(
         topBar = {
-            RecordsAppBar(
-                subtitle = if (state.startDate == null && state.endDate == null) {
-                    "All sessions"
-                } else {
-                    "Filtered date range"
-                },
+            ScreenHeader(
+                title = stringResource(R.string.records_title),
+                purpose = stringResource(R.string.records_subtitle_purpose),
+                status = stringResource(
+                    if (state.startDate == null && state.endDate == null) {
+                        R.string.records_scope_all
+                    } else {
+                        R.string.records_scope_filtered
+                    },
+                ),
             )
         },
         containerColor = AgarthaTheme.colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner),
@@ -104,17 +113,18 @@ fun RecordsScreen(
             item {
                 Spacer(Modifier.height(Spacing.xs))
                 SearchInput(
-                    value = searchText,
-                    onValueChange = { searchText = it },
+                    value = state.searchQuery,
+                    onValueChange = viewModel::onSearchChanged,
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
+
             item {
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
-                    sessionsCount = state.sessions.size.toString(),
-                    eggsCount = totalEggs.toString(),
-                    samplesCount = totalSamples.toString(),
+                    sessionsCount = if (state.isLoading) "—" else state.totals.sessionCount.toString(),
+                    eggsCount = if (state.isLoading) "—" else state.totals.totalEpg.toString(),
+                    samplesCount = if (state.isLoading) "—" else state.totals.totalSamples.toString(),
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
@@ -125,111 +135,86 @@ fun RecordsScreen(
                     onSelect = viewModel::onSpeciesSelected,
                 )
             }
+            item {
+                Spacer(Modifier.height(Spacing.xs))
+                DateRangeFilterBar(
+                    startDate = state.startDate,
+                    endDate = state.endDate,
+                    onRangeSelected = viewModel::onDateRangeSelected,
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
+                )
+            }
             item { Spacer(Modifier.height(Spacing.xs)) }
 
             when {
-                state.isLoading -> item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CircularProgressIndicator(color = AgarthaTheme.colors.accent)
-                    }
+                state.isLoading -> items(RECORDS_SKELETON_COUNT) {
+                    RecordCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                 }
-                filteredRecords.isEmpty() -> item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(240.dp)
-                            .padding(horizontal = Spacing.xl),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.records_empty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = AgarthaTheme.colors.textSecondary,
+                state.sessions.isEmpty() -> item {
+                    RecordsEmptyState(narrowed = state.isNarrowed)
+                }
+                else -> {
+                    items(state.sessions, key = { it.session.id }) { record ->
+                        RecordCard(
+                            record = record,
+                            onClick = { onSessionClick(record.session.id) },
+                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
                         )
                     }
-                }
-                else -> items(filteredRecords, key = { it.session.id }) { record ->
-                    RecordCard(
-                        record = record,
-                        onClick = { onSessionClick(record.session.id) },
-                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
-                    )
+                    if (state.canLoadMore) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = Spacing.md),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    color = AgarthaTheme.colors.accent,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
 
+
+/**
+ * Same empty block as the Sessions tab, with its own copy for "nothing matches the search
+ * or chip" versus "nothing has been recorded yet".
+ */
+/** True when a search, species chip or date range is hiding rows that exist. */
+private val RecordsState.isNarrowed: Boolean
+    get() = searchQuery.isNotBlank() || selectedSpecies != null || startDate != null || endDate != null
+
 @Composable
-private fun RecordsAppBar(subtitle: String) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
+private fun RecordsEmptyState(narrowed: Boolean) {
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(AgarthaTheme.colors.background)
-            .statusBarsPadding()
-            .padding(horizontal = Spacing.xl, vertical = 12.dp),
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xxxl),
+        contentAlignment = Alignment.Center,
     ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                "Records",
-                style = MaterialTheme.typography.headlineSmall,
-                color = AgarthaTheme.colors.textPrimary,
+        if (narrowed) {
+            EmptyState(
+                icon = Icons.Outlined.SearchOff,
+                title = stringResource(R.string.records_no_match_title),
+                body = stringResource(R.string.records_no_match_body),
             )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = AgarthaTheme.colors.textSecondary,
-                modifier = Modifier.padding(top = 2.dp),
+        } else {
+            EmptyState(
+                icon = Icons.Outlined.Inbox,
+                title = stringResource(R.string.records_empty_title),
+                body = stringResource(R.string.records_empty_body),
             )
         }
     }
 }
 
-@Composable
-private fun SearchInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
-        placeholder = {
-            Text(
-                "Search sessions, notes, species...",
-                style = MaterialTheme.typography.bodyMedium,
-                color = AgarthaTheme.colors.textTertiary,
-            )
-        },
-        leadingIcon = {
-            Icon(
-                painter = painterResource(R.drawable.ic_search),
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(18.dp),
-            )
-        },
-        singleLine = true,
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedTextFieldDefaults.colors(
-            unfocusedContainerColor = AgarthaTheme.colors.surfaceVariant,
-            focusedContainerColor = AgarthaTheme.colors.surface,
-            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
-            focusedBorderColor = AgarthaTheme.colors.accent,
-            cursorColor = AgarthaTheme.colors.accent,
-            unfocusedTextColor = AgarthaTheme.colors.textPrimary,
-            focusedTextColor = AgarthaTheme.colors.textPrimary,
-        ),
-        textStyle = MaterialTheme.typography.bodyMedium,
-    )
-}
 
 @Composable
 private fun StatsRow(
@@ -409,9 +394,11 @@ private fun RecordCard(
                     color = AgarthaTheme.colors.textSecondary,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                     modifier = Modifier.padding(top = 2.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
-            StatusPill(SyncStatus.Synced)
+            StatusPill(linkState = record.session.linkState)
         }
 
         Spacer(Modifier.height(10.dp))
@@ -429,11 +416,51 @@ private fun RecordCard(
 }
 
 @Composable
-private fun StatusPill(status: SyncStatus) {
+private fun RecordCardSkeleton(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(AgarthaTheme.colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        SkeletonBox(modifier = Modifier.width(140.dp).height(20.dp))
+        Spacer(Modifier.height(4.dp))
+        SkeletonBox(modifier = Modifier.width(180.dp).height(12.dp))
+        Spacer(Modifier.height(10.dp))
+        HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 1.dp)
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+            SkeletonBox(modifier = Modifier.width(48.dp).height(28.dp))
+        }
+    }
+}
+
+@Composable
+internal fun StatusPill(linkState: SessionLinkState) {
     val colors = AgarthaTheme.colors
-    val (bg, fg, text) = when (status) {
-        SyncStatus.Synced -> Triple(colors.successTint, colors.successText, "Synced")
-        SyncStatus.PendingSync -> Triple(colors.warningTint, colors.warningText, "Pending sync")
+    // Per ADR-007: UNOWNED/NOT_LINKED are local-only states — neutral, not a warning.
+    // Mirrors the Sessions tab "Not linked" badge (colors.surfaceMuted / colors.textSecondary).
+    val (bg, fg, text) = when (linkState) {
+        SessionLinkState.SYNCED -> Triple(
+            colors.successTint,
+            colors.successText,
+            stringResource(R.string.report_status_synced),
+        )
+        SessionLinkState.PENDING -> Triple(
+            colors.warningTint,
+            colors.warningText,
+            stringResource(R.string.records_status_pending_sync),
+        )
+        SessionLinkState.UNOWNED,
+        SessionLinkState.NOT_LINKED -> Triple(
+            colors.surfaceMuted,
+            colors.textSecondary,
+            stringResource(R.string.session_not_linked),
+        )
     }
     Box(
         modifier = Modifier

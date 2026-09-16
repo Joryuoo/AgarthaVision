@@ -29,6 +29,7 @@ fun ReportEntity.toDomain(gson: Gson): Report {
         positiveSpecies = positives,
         epgPerSpecies = epg,
         csvFilePath = csvFilePath,
+        pdfFilePath = pdfFilePath,
         supabaseStatus = ReportSyncStatus.fromValue(supabaseStatus),
     )
 }
@@ -45,6 +46,7 @@ fun Report.toEntity(gson: Gson): ReportEntity =
         positiveSpeciesJson = gson.toJson(positiveSpecies),
         epgPerSpeciesJson = gson.toJson(epgPerSpecies),
         csvFilePath = csvFilePath,
+        pdfFilePath = pdfFilePath,
         supabaseStatus = supabaseStatus.value,
         createdAt = generatedAt.toEpochMilli(),
     )

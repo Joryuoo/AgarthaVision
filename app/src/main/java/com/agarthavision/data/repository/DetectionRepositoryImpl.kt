@@ -20,7 +20,7 @@ class DetectionRepositoryImpl @Inject constructor(
             entities.map { it.toDomain() }
         }
 
-    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount> =
+    override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         detectionDao.getConfirmedEggCountsForSession(sessionId, userId).map { row ->
             EggCount(species = row.species, count = row.eggCount)
         }
@@ -39,4 +39,10 @@ class DetectionRepositoryImpl @Inject constructor(
                 com.agarthavision.domain.repository.DailyEggCount(timestamp = it.timestamp, count = it.eggCount)
             }
         }
+
+    override suspend fun getSpeciesLabelsForSessions(
+        sessionIds: List<String>,
+    ): Map<String, List<String>> =
+        detectionDao.getSpeciesLabelsForSessions(sessionIds)
+            .groupBy({ it.sessionId }, { it.species })
 }

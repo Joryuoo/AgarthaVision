@@ -8,4 +8,13 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
     </style>
+
+    <!-- Launch theme applied by MainActivity via installSplashScreen(). Shows the
+         branded logo on the Bone background before Compose draws, then hands off to
+         Theme.AgarthaVision. -->
+    <style name="Theme.AgarthaVision.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.AgarthaVision</item>
+    </style>
 </resources>

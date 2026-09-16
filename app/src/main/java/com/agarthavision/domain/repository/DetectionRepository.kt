@@ -10,9 +10,9 @@ interface DetectionRepository {
 
     /**
      * Returns per-species confirmed egg counts for one session, excluding repeat
-     * samples.
+     * samples. null userId = counts for all ownership rows on the device.
      */
-    suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String): List<EggCount>
+    suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount>
 
     /**
      * Observes confirmed egg counts aggregated by species over a specific time window.
@@ -23,6 +23,12 @@ interface DetectionRepository {
      * Observes daily egg counts (grouped by sample locally) over a specific time window.
      */
     fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>>
+
+    /**
+     * Bulk-fetches distinct species labels for the given set of session IDs, grouped
+     * into a [Map] keyed by session ID. Species within each list are sorted ascending.
+     */
+    suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>>
 }
 
 data class DailyEggCount(

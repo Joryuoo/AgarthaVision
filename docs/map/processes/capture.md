@@ -11,46 +11,67 @@ Getting a frame off the microscope and into a state a human can review.
 ## Movement
 
 1. **Bind the camera.** `CaptureScreen` calls `CameraManager.bindAnalysis` with the
-   `FrameSampler` as analyzer (`ui/capture/CaptureScreen.kt:313`). Only `Preview` and
-   `ImageAnalysis` are bound — there is **no `ImageCapture` use case**, so there is no shutter
-   anywhere in Phase 1 (`core/camera/CameraManager.kt:63-116`). Both use cases are pinned to
-   the same 4:3 aspect-ratio strategy so they share one field of view; the analyzer asks for
-   640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which prefers a stream at or above
-   that size so the frame is only ever downscaled. Backpressure `KEEP_ONLY_LATEST`
-   (`core/camera/CameraManager.kt:84-101`).
-2. **Cache every frame.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG bytes and
-   stores them in `latestFrameBytes` on *every* frame, before any throttling
-   (`core/camera/FrameSampler.kt:57-62`). This cache is what manual capture snapshots. It runs
-   on a single background thread owned by `CameraManager`, not the main one — encoding every
-   frame on the UI thread was visible as preview jank.
+   `FrameSampler` as analyzer. Only `Preview` and `ImageAnalysis` are bound — there is **no
+   `ImageCapture` use case**, so there is no hardware shutter (`core/camera/CameraManager.kt`).
+   Both use cases are pinned to the same 4:3 aspect-ratio strategy so they share one field of
+   view; the analyzer asks for 640×640 with `FALLBACK_RULE_CLOSEST_HIGHER_THEN_LOWER`, which
+   prefers a stream at or above that size so the frame is only ever downscaled. Backpressure
+   `KEEP_ONLY_LATEST` (`core/camera/CameraManager.kt`).
+2. **Cache every frame, stamped.** `FrameSampler.analyze` converts the `ImageProxy` to JPEG
+   bytes and publishes them to `latestFrame` as a `CachedFrame(jpegBytes, elapsedRealtimeMs)`
+   on *every* frame (`core/camera/FrameSampler.kt`). The stamp is an `ElapsedClock` reading
+   taken as the frame is encoded (`core/util/ElapsedClock.kt`), and it is what lets the read
+   end tell a live frame from a leftover — see step 3. That is
+   all it does now — there is no timer, no session gate, and no auto-dispatch to inference. It
+   runs on a single background thread owned by `CameraManager`, not the main one — encoding
+   every frame on the UI thread was visible as preview jank.
    `toJpegBytes` rotates by `imageInfo.rotationDegrees`, centre-crops to a square, then
    downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
    geometry. Cropping before scaling is what keeps the image from stretching. A device that
    cannot supply 640 is encoded at its native square size rather than upscaled.
-3. **Gate on session state.** If the session is not `Active`, or inference is paused, the frame
-   is dropped here (`core/camera/FrameSampler.kt:64`). Pausing is driven by
-   `SessionManager.pauseInference()` whenever a sheet or child screen comes forward
-   (`core/session/SessionManager.kt:104-109`, `ui/capture/CaptureViewModel.kt:161-163`).
-4. **Throttle.** One frame per 2000 ms, and **skip rather than queue** if a request is already
-   in flight (`core/camera/FrameSampler.kt:36`, `:66-68`). A slow network reduces the sampling
-   rate; it never builds a backlog.
-5. **Dispatch to inference** on an IO scope, swallowing failures with a log so capture keeps
-   running (`core/camera/FrameSampler.kt:72-79`). What happens next is
-   [`infer`](infer.md).
-6. **Persist, if flagged.** `PersistFlaggedFrameUseCase` writes the JPEG under
+3. **Wait for the tap, and check the frame is live.** Capture is medtech-triggered, one frame
+   per field — a fecal smear is read by choosing ~10 likely fields, not by sweeping the slide
+   continuously, so the old 2-second timer was removed. The shutter calls
+   `CaptureViewModel.onCapture`, which snapshots `latestFrame` and hands the bytes to
+   `CaptureFieldUseCase` (`ui/capture/CaptureViewModel.kt`,
+   `domain/usecase/capture/CaptureFieldUseCase.kt`). No active session, no frame cached yet,
+   **or a frame older than `MAX_FRAME_AGE_MS` (1 s)** sets an error and returns without
+   capturing. The last of those is the one that matters: `FrameSampler` is process-scoped and
+   nothing resets it, so without the age check a tap arriving before the analyzer had delivered
+   a frame for the current binding would record the *previous* session's image under this
+   session's id (86d4au2n1). Stale and absent share one message — from the medtech's side both
+   mean "the camera isn't ready, tap again".
+4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls the
+   injected `InferenceEngine` (bound to the cloud `RemoteInferenceEngine`) a single time — what
+   happens inside is [`infer`](infer.md).
+   Capture source is decided by whether the server was *consulted*, not by what it found: any
+   response — **including zero detections** — builds a `FrameSource.MODEL` frame (JPEG,
+   predictions, model version, image dimensions). A clean field is a normal negative result and
+   must be recorded, not discarded. An `InferenceConnectionException` (container unreachable)
+   builds a `FrameSource.MANUAL` frame with no predictions, so a lost connection is a Manual
+   Capture rather than a silent failure.
+   (`domain/usecase/capture/CaptureFieldUseCase.kt`).
+5. **Persist.** A recorded frame (AI Capture or Manual Capture) goes to `FlaggedFrameStore.add`, which runs
+   `PersistFlaggedFrameUseCase`: it writes the JPEG under
    `filesDir/users/{owner}/samples/{sampleId}.jpg` and inserts a `SampleEntity` with
-   `status = flagged` (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:23-62`,
+   `status = flagged` (`data/repository/FlaggedFrameStore.kt:77-79`,
+   `domain/usecase/capture/PersistFlaggedFrameUseCase.kt:23-62`,
    `data/local/SampleImageStore.kt:15-20`). Owner is the cached identity or `null`; unowned
    frames go under a literal `local` folder
    (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:66-67`). The raw predictions are
    cached in `predictions_json`.
 
-## Manual capture — the second entrance
+## One entrance, two outcomes
 
-Same output, no model. `CaptureViewModel.onManualCapture` reads the cached
-`latestFrameBytes`, builds a `FlaggedFrame` with `source = MANUAL` and empty predictions, and
-pushes it through the same store (`ui/capture/CaptureViewModel.kt:129-155`). It requires an
-active session and at least one frame already seen; otherwise it sets an error and returns.
+There is no longer a separate no-model entrance. Every tap runs inference, and whether the
+server was reached decides what is recorded: any server response — zero detections included —
+is an **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` is a **Manual
+Capture** (`FrameSource.MANUAL`). A clean field is recorded like any other AI Capture, since a
+negative result is still a result. The `InferenceConnectionException` the call already throws on
+transport failure *is* the AI-vs-Manual classifier — there is no separate timeout or signal.
+`SubmitVerificationUseCase` handles both sources for turning a recorded frame into a verified
+sample downstream. Aggregating clean fields as an LPF-density denominator is a separate concern
+(86d4a6jxw).
 
 ## Discarding
 
@@ -70,8 +91,14 @@ nothing verified is deletable (`../../constraints.md` C8).
   every flagged DAO query filters on `user_id` (`data/local/dao/SampleDao.kt:69`, `:78`). Frames
   captured with no cached identity are written to Room but never appear in the queue — a real
   gap against the offline-first intent, not a design decision.
-- Changing the sampling interval changes inference cost directly. GPU droplets bill by the
-  second.
+- Inference now runs once per shutter tap, not on a timer. A field costs exactly one
+  inference call; there is no idle sampling burning the GPU droplet between taps.
+- **The frame cache outlives the camera binding, and that is handled at the read end.**
+  `FrameSampler` is a `@Singleton` with no session knowledge and no reset — by design. A new
+  session, leaving and re-entering the screen, any rebind: all of them leave the previous
+  frame resident. The freshness stamp is what makes every one of those paths fail closed,
+  including ones nobody enumerated. Adding a reset call instead would only cover the paths
+  someone remembered.
 - Changing the analysis resolution changes the coordinate space of every bounding box, since
   the server returns pixel coordinates.
 - Changing the crop, the aspect-ratio strategy, or `PreviewView.scaleType` breaks

@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod")
+@file:Suppress("FunctionNaming", "LongMethod", "TooManyFunctions")
 
 package com.agarthavision.ui.records
 
@@ -24,9 +24,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -40,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -64,8 +69,11 @@ import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleRecordItem
+import com.agarthavision.R
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.Spacing
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
 import java.io.File
@@ -84,37 +92,84 @@ fun SampleDetailScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Box(modifier = Modifier.fillMaxSize().background(AgarthaTheme.colors.surfaceVariant)) {
-        if (item == null) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AgarthaTheme.colors.accent)
-            }
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 80.dp) // Leave space for nav bar
-            ) {
-                // Segmented Control (Tabs)
-                SampleSegmentedControl(
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it }
-                )
-
-                // Tab Content
-                when (selectedTab) {
-                    0 -> ImageTab(item = item, imageSource = state.imageSource)
-                    1 -> DetectionsTab(detections = item.detections)
-                    else -> MetadataTab(sample = item.sample)
-                }
-            }
-        }
-
-        // Top Navigation Bar
-        if (item != null) {
-            SampleDetailNavBar(
-                title = "Sample #${item.sample.id.take(4)}",
-                onBack = onBack
+        val unavailable = state.unavailable
+        when {
+            !state.itemResolved -> SampleDetailSkeleton(onBack = onBack)
+            unavailable != null -> SampleDetailUnavailableScreen(
+                unavailable = unavailable,
+                onBack = onBack,
             )
+            item != null -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 80.dp) // Leave space for nav bar
+                ) {
+                    // Segmented Control (Tabs)
+                    SampleSegmentedControl(
+                        selectedTab = selectedTab,
+                        onTabSelected = { selectedTab = it }
+                    )
+
+                    // Tab Content
+                    when (selectedTab) {
+                        0 -> ImageTab(item = item, imageSource = state.imageSource)
+                        1 -> DetectionsTab(detections = item.detections)
+                        else -> MetadataTab(sample = item.sample)
+                    }
+                }
+
+                // Top Navigation Bar
+                SampleDetailNavBar(
+                    title = "Sample #${item.sample.id.take(4)}",
+                    onBack = onBack
+                )
+            }
+            else -> SampleDetailSkeleton(onBack = onBack)
+        }
+    }
+}
+
+@Composable
+private fun SampleDetailUnavailableScreen(
+    unavailable: SampleUnavailable,
+    onBack: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Scaffold(
+        topBar = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surfaceVariant)
+                    .statusBarsPadding()
+                    .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+            ) {
+                BackArrow(onBack = onBack)
+            }
+        },
+        containerColor = colors.surfaceVariant,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { inner ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner),
+            contentAlignment = Alignment.Center,
+        ) {
+            when (unavailable) {
+                SampleUnavailable.NOT_FOUND -> EmptyState(
+                    icon = Icons.Outlined.SearchOff,
+                    title = stringResource(R.string.sample_detail_not_found_title),
+                    body = stringResource(R.string.sample_detail_not_found_body),
+                )
+                SampleUnavailable.NOT_VISIBLE -> EmptyState(
+                    icon = Icons.Outlined.Lock,
+                    title = stringResource(R.string.sample_detail_not_visible_title),
+                    body = stringResource(R.string.sample_detail_not_visible_body),
+                )
+            }
         }
     }
 }
@@ -200,7 +255,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                 .fillMaxWidth()
                 .padding(horizontal = 18.dp)
                 .aspectRatio(1f) // Changed to 1f based on screenshot
-                .background(Color.Black, RoundedCornerShape(16.dp))
+                .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(16.dp))
                 .clip(RoundedCornerShape(16.dp))
         ) {
             when (imageSource) {
@@ -208,6 +263,7 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(File(imageSource.path))
+                            .crossfade(true)
                             .build(),
                         contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,
@@ -222,6 +278,13 @@ private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(imageSource.url)
+                            // Signed URLs expire (15 min) and carry a fresh token each time
+                            // they are generated, so key the cache on the stable storage path
+                            // instead of the URL — otherwise every open is a cache miss and
+                            // re-downloads the same image.
+                            .memoryCacheKey(imageSource.cacheKey)
+                            .diskCacheKey(imageSource.cacheKey)
+                            .crossfade(true)
                             .build(),
                         contentDescription = "Sample Image",
                         contentScale = ContentScale.Fit,

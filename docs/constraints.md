@@ -19,10 +19,11 @@ complexity, naming, and magic numbers — there is no import-boundary rule in it
 (`detekt.yml:1-49`).
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
-`retrofit2`, or `io.github.jan.*`. The spirit is bent in four ViewModels that inject the
+`retrofit2`, or `io.github.jan.*`. The spirit is bent in three ViewModels that inject the
 data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:9`,
-`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`,
-`ui/verify/ManualCaptureViewModel.kt:5`). The composable that once rendered a wire DTO no
+`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`). It was
+four until `ManualCaptureViewModel` was deleted by the one-verification-screen merge
+(86d4ab4tq). The composable that once rendered a wire DTO no
 longer does — `FrameWithBoxes` takes domain `Prediction` values
 (`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
 
@@ -30,6 +31,10 @@ longer does — `FrameWithBoxes` takes domain `Prediction` values
 
 Nothing under `domain/` may import an Android API. The domain layer must be unit-testable on
 the JVM without Robolectric.
+
+**Scope:** this constrains `domain/` only. It is not a repo-wide ban on Robolectric — the
+Compose UI tests under `app/src/test/java/com/agarthavision/ui/verify/` use it deliberately
+so they run in `:app:testDebugUnitTest` instead of needing a device. See `commands.md`.
 
 **Enforcement:** review only. **This one actually holds** — zero files under
 `app/src/main/java/com/agarthavision/domain/` import `android.*`.
@@ -45,7 +50,7 @@ and mappers convert between them.
 
 **Enforcement:** the Hilt binding module is the only mechanical check, and it only proves the
 bindings exist, not that the boundary is respected
-(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:70-107`).
+(`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:79-127`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
 eleven `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
@@ -60,12 +65,11 @@ deviation and defers the fix to Phase 2 (`domain/usecase/auth/ClaimLocalDataUseC
 A use case has one public entry point (`operator fun invoke` or `suspend fun execute`) and
 returns `Result<T>` so the caller handles both branches. Never swallow an exception.
 
-**Enforcement:** review only, and **it is not holding.** Seventeen of the roughly thirty
-files under `domain/usecase/` never mention `Result<` — including
-`domain/usecase/capture/InferFrameUseCase.kt:29`, which throws
-`InferenceConnectionException` instead, and `domain/usecase/reports/SessionEggCountUseCase.kt:19`,
-which returns a bare data class. Treat C4 as the target shape for new code, not a description
-of the existing code.
+**Enforcement:** review only, and **it is not holding.** Many of the roughly thirty
+files under `domain/usecase/` never mention `Result<` — for example
+`domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat
+C4 as the target shape for new code, not a description of the existing code. Newer capture code
+follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<FrameSource>`.
 
 ## C5 — `@Singleton` is a closed list
 
@@ -74,7 +78,7 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
 
 **Enforcement:** review only. The scoped set is visible at
-`core/di/DatabaseModule.kt:38-50`, `core/di/InferenceModule.kt:33-76`,
+`core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
 `core/di/SupabaseModule.kt:23-33`, and on the classes themselves
 (`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
 `data/repository/FlaggedFrameStore.kt:40`).
@@ -86,14 +90,14 @@ foreign keys, CHECKs, and RLS. Do not change schema behaviour without updating b
 migration SQL **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in
 the Supabase dashboard SQL editor — never applied programmatically
 (`supabase/migrations/0001_init.sql:2`). Room is a separate mirror: a Room-shape change means
-bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:34`).
+bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:46`).
 
 **Enforcement:** review only. There is no migration runner, no schema-diff test, and no CI.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).
 
 **Known drift, code wins:** `schema.ts` names `samples.timestamp`, `samples.image_path`,
 `samples.created_at`, `samples.gps_lat/gps_lng/gps_accuracy_m`, and `detections.created_at`
-(`schema.ts:224-282`, `schema.ts:330`). None of those columns exist in Postgres. The
+(`schema.ts:284-342`, `schema.ts:321`). None of those columns exist in Postgres. The
 migration creates `captured_at`, `gps_latitude`, `gps_longitude`, `gps_accuracy` and no
 `created_at` (`supabase/migrations/0001_init.sql:43-55`), and the insert row confirms it
 (`data/supabase/SampleRemoteDataSource.kt:100-127`). Those `schema.ts` names describe the
@@ -120,39 +124,76 @@ is no `REJECTED` sample state.
 
 **Enforcement:** structural, at the storage layer — `0003_storage_rls.sql` deliberately
 creates no DELETE policy for the `samples` bucket
-(`supabase/migrations/0003_storage_rls.sql:45-46`). Postgres rows are likewise
-insert-and-update only (`data/supabase/SampleRemoteDataSource.kt:40-43`).
+(`supabase/migrations/0003_storage_rls.sql:45-46`), and `0009_storage_admin_read.sql:32`
+restates the stance. That remains true and was not amended.
 
-**Local exception:** unverified flagged frames *can* be discarded on-device before
-submission (`data/repository/FlaggedFrameStore.kt:80-99`). Nothing that has been verified is
-deletable.
+**A verified sample can be tombstoned, and that is not a deletion.** A medtech who captured
+the same egg twice needs the duplicate out of the queue, the counts and the report. Setting
+`samples.deleted_at` (`supabase/migrations/0013_sample_soft_delete.sql`) does exactly that
+and nothing more: the detections stay, the findings rows stay, the local JPEG stays, and the
+Storage object stays. Every query that lists or counts samples filters `deleted_at is null`,
+enforced by a naming rule and `SoftDeleteGuardTest` rather than by memory. Do not read the
+queue filter as the whole story — the row is still there, on purpose.
+
+**Local exception:** unverified flagged frames *can* be hard-deleted on-device before
+submission. Nothing that has been *verified* is hard-deletable;
+`domain/usecase/verify/DeleteQueueItemsUseCase.kt` is the single place that decides which of
+the two a delete is, and it branches on `status`.
+
+**One softening, recorded rather than hidden.** Remote sample and detection writes are now
+upserts rather than inserts, because a verified sample is editable and syncs more than once
+(the citation that used to appear here, `SampleRemoteDataSource.kt:40-43`, described the old
+insert-only shape). So an edit overwrites a previously-synced label: correcting a
+`FALSE_POSITIVE` to `CONFIRMED` removes the old row from the corpus rather than adding beside
+it. That is the intended reading — the current expert opinion is the truth — but it is a real
+change to what C8 guarantees. Keeping both would need a `supersedes_detection_id` column and
+its own ticket.
+
+**Findings rows are replaced wholesale on edit**, so a species logged in error disappears. A
+count is a current statement, like `samples.user_note`, not evidence — and the things this
+constraint exists to protect are untouched by it.
 
 ## C9 — Commit and branch format
 
-Commits: `[type][ClickUp-ID][Lastname] Task title`, types
-`feat fix refactor docs style test ci chore`. Branches: cut from `staging` as
-`feat/<scope>-<desc>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`, `test/…`. PRs target
-`staging`, never `main`.
+Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
+Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
+cut from `staging` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+`test/…`. PRs target `staging`, never `main`.
 
-**Enforcement: nothing enforces this.** The `commit-msg` hook that once checked the format
-was removed (see commit `172ab4d`), and `.husky/` now contains only `pre-commit` and
-`pre-push`. `commitlint.config.js` is still committed and still extends
+**A branch name carries no ClickUp ID.** It describes the work, not the ticket — good:
+`feat/verified-findings-reporting`; bad: `feat/86d4a6jwy-verification-logging`. One branch
+can carry commits for several tickets, so an ID baked into the name is wrong the moment a
+second ticket lands on it, and the ID is already captured per commit by the subject format
+above. Nothing enforces this at push time; it is a review check.
+
+**Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
+above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
+because git writes those itself; only the first line is checked, so bodies are free-form.
+A rejected commit prints the format, the type list with a gloss for each, and the subject
+that failed.
+
+**History predates the colon.** Every commit before `12509f8` uses the older
+`[type][ClickUp-ID][Lastname] Task title` shape with no colon — the hook only sees new
+commits, so the log is mixed and that is expected, not drift.
+
+**Caveat:** `commitlint.config.js` is still committed and still extends
 `@commitlint/config-conventional` with a scope enum (`commitlint.config.js:1-16`) — a
 *conventional-commit* shape that contradicts the bracket format above and is wired to no
-hook. `lint-staged.config.js` is likewise unreferenced by either hook.
+hook. `lint-staged.config.js` is likewise unreferenced by any hook. Both are dead
+configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
 Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
 gitignored (`.gitignore:3`, `.gitignore:15`). They reach the app as `BuildConfig` fields read
-at build time (`app/build.gradle.kts:18-20`, `app/build.gradle.kts:46-92`). A missing property
+at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
 
 **Enforcement:** `.gitignore` plus review. There is no secret-scanning step, because there is
 no CI at all — no `.github/` directory exists in this repository.
 
-**Drift:** `app/build.gradle.kts:66` and `:89` read `INFERENCE_API_KEY_DEV` /
+**Drift:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
 `INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
 `INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
 wins.
@@ -165,7 +206,7 @@ palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather t
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
 immersive regardless of the toggle. No second theme and no charting library: small dataviz
 is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
-(`app/build.gradle.kts:115`) supplies utility glyphs inside screens (chevrons, back arrows,
+(`app/build.gradle.kts:122`) supplies utility glyphs inside screens (chevrons, back arrows,
 filter, flag), while the bottom bar, brand marks and anything read as house identity are
 hand-authored 1.7-stroke outline drawables in `res/drawable/`. Match the neighbours: a new
 tab or brand icon is drawn, a new in-screen affordance may come from Material.
@@ -180,8 +221,9 @@ Compile, unit tests, a debug APK, and lint must pass before a commit lands, and 
 build must pass again before a push.
 
 **Enforcement:** the strongest mechanical enforcement in the repo. `.husky/pre-commit` runs
-`:app:compileDebugKotlin`, `:app:testDebugUnitTest`, `assembleDebug`, then
-`:app:ktlintCheck :app:detekt`, aborting on any failure. `.husky/pre-push` runs
+`:app:compileDebugKotlin`, `:app:verifyRoborazziDebug`, `assembleDebug`, then
+`:app:ktlintCheck :app:detekt`, aborting on any failure. The second step is the full unit
+test suite with screenshot goldens compared, not a separate screenshot pass. `.husky/pre-push` runs
 `assembleDebug`. Both require a JDK and the Android SDK; both are bypassed by
 `git commit --no-verify`, which is the correct move for a docs-only change that touches no
 Kotlin, Gradle, or SQL.

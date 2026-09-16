@@ -6,8 +6,9 @@ The terse list. No explanation here — each line points at the constraint that 
 ## Clinical
 
 - **Never let a model output count as a finding without human confirmation.** → C7
-- **Never delete a verified sample, detection, or its Storage object.** A rejection is a
-  labelled `FALSE_POSITIVE` row, not a deletion. → C8
+- **Never hard-delete a verified sample, detection, or its Storage object.** A rejection is a
+  labelled `FALSE_POSITIVE` row, not a deletion. A `deleted_at` tombstone is not a delete: it
+  hides the sample everywhere a human looks while the corpus keeps everything. → C8
 - **Never add a server-side confidence filter.** The expert is the threshold. → C7
 
 ## Data

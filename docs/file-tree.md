@@ -14,6 +14,7 @@ AgarthaVision/
 ├── supabase/migrations/       Postgres schema + RLS. The authority for the remote shape
 ├── inference/                 The self-hosted FastAPI inference container
 ├── branding/                  Logo SVGs
+├── tools/psgc/                Generator for the bundled PSGC asset. Run by hand, output committed
 ├── gradle/                    Wrapper + version catalog
 └── .husky/                    Git hooks — the only mechanical rule enforcement in the repo
 ```
@@ -27,6 +28,7 @@ app/
 └── src/
     ├── main/
     │   ├── AndroidManifest.xml    Permissions, single Activity, FileProvider for CSV sharing
+    │   ├── assets/psgc/           Bundled PSGC barangay dataset, gzipped. Room-seeded on first run
     │   ├── res/                   Icons (hand-built stroke drawables), strings, themes
     │   └── java/com/agarthavision/
     │       ├── MainActivity.kt · MainViewModel.kt · AgarthaVisionApp.kt
@@ -34,8 +36,9 @@ app/
     │       ├── domain/        Pure Kotlin. Models, repository interfaces, use cases
     │       ├── data/          Room, Supabase, Retrofit, mappers, repository implementations
     │       └── ui/            Compose screens, ViewModels, navigation, theme
-    ├── test/                  JVM unit tests, mirroring the main package layout
-    ├── androidTest/           Instrumented tests
+    ├── test/                  JVM unit tests, mirroring the main package layout.
+    │                          ui/verify/ also holds Compose UI tests, run under Robolectric
+    ├── androidTest/           Instrumented tests. Generated stub only so far
     └── debug/                 Debug-variant manifest
 ```
 
@@ -43,12 +46,12 @@ app/
 
 | Folder | For |
 |---|---|
-| `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` throttles to one frame per 2 s and dispatches to inference |
+| `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` caches every analyzed frame as time-stamped JPEG bytes — no timer, no dispatch to inference (the shutter does that) |
 | `connectivity/` | `NetworkMonitor` polls inference `/health`; `ConnectivityObserver` reports device network state |
 | `database/` | `AgarthaDatabase` — the Room database declaration and its version number |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
 | `location/` | `FusedLocationProvider` — GPS behind a domain interface, returns null rather than throwing |
-| `session/` | `SessionManager` + `SessionState`. The app-scoped record of which smear is open |
+| `session/` | `SessionManager` + `SessionState` + `ActiveSessionIdStore`. The app-scoped record of which smear is open, and the pointer that survives process death |
 | `util/` | `EpgCalculator` (the multiplier), `DeviceIdProvider`, image conversion helpers |
 
 ### `domain/` — pure Kotlin
@@ -86,9 +89,9 @@ Contains no Android imports. Does import `data/` in eleven files — see `constr
 |---|---|
 | `navigation/` | `AgarthaNavGraph` — routes, start destination, bottom-bar visibility |
 | `theme/` | The design system. Raw hex exists here and nowhere else |
-| `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, hand-drawn icons |
+| `components/` | Shared composables: buttons, badges, bottom bar, toast, capture frame boundary, microscopy viewport, glass modifiers, hand-drawn icons, `EmptyState.kt` |
 | `capture/` | The dark immersive capture screen and its connection-loss banner |
-| `verify/` | Verification queue, verification sheet, manual sheet, box overlay, species dropdown |
+| `verify/` | Verification queue and its batch-select delete, the one verification sheet (both sources), findings UI, box overlay, species dropdown |
 | `records/` | Records list, session detail, sample detail, and their cards |
 | `dashboard/` `sessions/` `login/` `settings/` | The remaining screens |
 
@@ -106,6 +109,11 @@ Numbered, committed, applied by hand in the Supabase dashboard. Never run progra
 | `0006_sample_is_manual.sql` | `samples.is_manual` |
 | `0007_detection_bbox_nullable.sql` | Nullable bounding boxes for manual captures |
 | `0008_reports.sql` | The `reports` table, its indexes, and its RLS |
+| `0009_storage_admin_read.sql` | Admin read access to the `samples` bucket. Read-only by design — still no DELETE policy |
+| `0010_session_psgc_barangay.sql` | `sessions.psgc_barangay_code` and the `psgc_barangays` reference table |
+| `0011_reports_pdf_and_lpf.sql` | `reports.pdf_file_path` |
+| `0012_polyparasitism_findings.sql` | `sample_species_findings`, `detections.species_touched`, and the UPDATE policies an editable sample needs to re-sync |
+| `0013_sample_soft_delete.sql` | `samples.deleted_at` and the partial index over live rows |
 
 ## `inference/`
 

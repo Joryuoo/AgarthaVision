@@ -11,4 +11,10 @@ interface ReportFileStore {
      * Persists the CSV body and returns the absolute path to the written file.
      */
     suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String
+
+    /**
+     * Persists the PDF body and returns the absolute path (or `content://` URI) to the
+     * written file, mirroring [writeCsv].
+     */
+    suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String
 }

@@ -3,6 +3,7 @@ package com.agarthavision.data.local.mapper
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -49,7 +50,7 @@ class VerificationMapperTest {
             species = EggSpecies.TRICHURIS,
         )
         assertEquals(DetectionVerdict.WRONG_CLASS, computeVerdict(answers, "Ascaris"))
-        val entity = prediction.toDetectionEntity("sample-1", answers)
+        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
         assertEquals("Trichuris trichiura", entity.expertClass)
     }
 
@@ -61,7 +62,7 @@ class VerificationMapperTest {
             species = EggSpecies.OTHER,
             otherSpeciesText = "Enterobius",
         )
-        val entity = prediction.toDetectionEntity("sample-1", answers)
+        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
         assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
         assertEquals("Enterobius", entity.expertClass)
     }
@@ -73,7 +74,7 @@ class VerificationMapperTest {
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
         )
-        val entity = prediction.toDetectionEntity("sample-1", answers)
+        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
         assertNull(entity.expertClass)
         assertEquals(DetectionVerdict.CONFIRMED.value, entity.verdict)
     }

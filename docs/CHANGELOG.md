@@ -1,11 +1,181 @@
 # Changelog
 
 Reconstructed from `git log`. **This project has never cut a release** — there are no tags,
-no `versionName` bump beyond the initial `0.1.0-mvp` (`app/build.gradle.kts:36`), and no
+no `versionName` bump beyond the initial `0.1.0-mvp` (`app/build.gradle.kts:37`), and no
 release branch. What follows is grouped by the work that actually landed, dated from the
 commits themselves. Nothing here is invented.
 
 Verify any entry with `git log --oneline --reverse`.
+
+---
+
+## refactor/never-ending-sessions — sessions stay open, the queue holds everything · 2026-09-14
+
+`86d4ab4vm` with `86d4ab4tq` and `86d4ad75y`. The session
+lifecycle, the verification queue model, and what "delete" means — from the 2026-09-07
+consultation with Dr. Bayron.
+
+**A session no longer ends.** One session is one fecal smear and the medtech keeps coming back
+to it, so `stopSession` is gone and nothing writes `sessions.ended_at`. The column stays
+nullable and `SessionRemoteDataSource.closeSession` stays with it, because sessions closed
+before this are real history; `resumeSession` still refuses to reopen one. Three things fell out
+of it: sign-out now detaches (`SessionManager.clearActive`) instead of being blocked forever,
+`NetworkMonitor` polls `/health` only while a capture screen is mounted instead of forever, and
+the active session id is persisted and restored at launch — without which a process restart
+would come back idle with a smear still open and render the queue empty.
+
+**The queue is the whole session, in two buckets.** Verified and Unverified; the AI/Manual split
+was dropped as unnecessary (revised 2026-09-12). Verified samples stay visible and reopen with
+the medtech's own previous answers, so an edit is a correction rather than a re-review. New
+`QueueSample` carries no `ByteArray` — the old row rendered from bytes re-read off disk on every
+emission, survivable while the queue drained and an OOM risk once it only grows.
+
+**Delete replaces the repeat flag.** Long-press for batch select; an unverified frame is
+hard-deleted, a verified sample is tombstoned via `samples.deleted_at`. `is_repeat` existed only
+because deletion was impossible, and it is removed entirely — including from the report CSV,
+which loses a column. The confirmation dialog states the split, because the two halves are
+irreversible in different ways.
+
+**One verification screen.** `ManualSheet`, `ManualCaptureViewModel` and
+`SubmitManualCaptureUseCase` are deleted (~1,150 lines). A manual capture is just a frame with
+no model output: no box means no box questions. Polyparasitism lands with it —
+`sample_species_findings` records several species and stages per frame with per-species counts,
+because WHO thresholds are species-specific and a combined per-field count cannot be graded.
+
+**Schema:** Room 9 → 12 (skipping two contested numbers), migrations `0012` and `0013`, and
+`AgarthaDatabaseSchemaTest` pinning the result so the collision that nearly shipped in September
+cannot recur silently.
+
+Two hazards worth knowing about, both fixed before they shipped: detection ids were random, so
+re-saving an edited sample would have appended a second full set and doubled every egg count
+with no error anywhere; and `updateSampleOnVerify` nulled `predictions_json`, which would have
+left a reopened sample with no boxes to draw.
+
+**Merged `staging` in on 2026-09-14**, which changed three of the decisions above.
+
+- The branch had cherry-picked `86d4a6jwy` (the egg-stage dropdown) before staging reverted it.
+  The merge did not raise that as a conflict — this branch had edited lines next to the reverted
+  ones, so git kept both sides — so the revert is **re-applied here by hand**: no `EggStage`, no
+  `detections.stage`, no stage in the CSV, and nothing in the UI asks for one.
+  `sample_species_findings.stage` stays as a dormant, always-null column, because `0012` is
+  applied and frozen under C6. Findings are keyed per species, not per species-and-stage.
+- The silent species pre-fill is **replaced by 86d4auj84's explicit confirm step**, which does
+  the same job better: the sheet asks "Is this egg *Ascaris lumbricoides*?" rather than filling
+  the answer in and hoping the medtech notices. `detections.species_touched` stays and is now
+  true on every row by construction — kept, and asserted, because a future path that writes a
+  species without asking would show up as a false rather than entering the corpus unremarked.
+- Two guards in the merged-in sheet were corrected. The question chain stopped at a misplaced
+  box, which drops a real countable egg from the per-species count and leaves the frame
+  unsubmittable, since `Finding.isComplete` asks for a species on a `BOX_INCORRECT` row; and
+  `onSpeciesConfirmed` read its suggestion from `frame.predictions[currentDetectionIndex]`,
+  which walks off the end of the list once a medtech appends a species the model never boxed.
+
+The Sessions list needed the same treatment. `86d4aprzc`'s date filter and pagination exempt
+"active" sessions from the filter as `ended_at IS NULL` — which matched every session once
+sessions stopped ending, so the filter would have matched everything while still looking right.
+The exemption is now pinned to the one active session id, and the header counts frames awaiting
+review instead of open sessions.
+
+## feature/editable-report — verification sheet layout · 2026-09-13
+
+- The frame preview on both sheets fills the width between the side margins at the frame's
+  own aspect ratio (`previewAspectRatio()`, `ui/verify/ModalSheetComponents.kt`) instead of a
+  fixed-height strip that letterboxed a square field. Previous/Next frame moved beneath it
+  (`FrameNavRow`).
+- Submit is the brand maroon with white text; Discard is a neutral grey chip. It opens a
+  confirmation dialog, so it no longer needs to look destructive itself (`SheetActionRow`).
+- "Note" is now "Remarks" on both sheets, as a plain labelled field — the manual sheet's
+  enclosing card is gone. Labels and the top-bar meta line dropped the platform monospace
+  face for the app's Inter styles (`SheetSectionLabel`, `MonoSmallStyle`), matching the records
+  screens.
+- The AI sheet's species line is now a card — "SPECIES" small, the model's class large,
+  position and provenance pill inside — followed on model frames by a caution that the result
+  is AI-suggested and may be inaccurate (`DetectionCard`, `ui/verify/VerificationSheet.kt`).
+  Manual frames get the card without the caution. The old "Prev/Next detection" pills became
+  full-width "Previous egg / Next egg" buttons under the card, shown only when the frame has
+  more than one box, each side dead at its end of the range. The Boxes toggle moved up to sit
+  directly above the first question, which is about the highlighted box.
+- The species step now asks "Is this egg *Ascaris lumbricoides*?" before offering a list. Yes
+  records the model's species as the answer in one tap; only a no opens the "Which species is
+  it?" picker, and a class the app cannot map to a species skips straight to it
+  (`VerificationAnswers.speciesConfirmed`, `VerificationViewModel.onSpeciesConfirmed`).
+- Reverted the egg-stage classification (86d4a6jwy, deprioritised): Room back to staging's v10,
+  `detections.stage` and its migration gone. The species dropdown keeps type-to-search.
+
+## feat/86d4ab4xr-sample-geospatial — PSGC barangay on sessions · 2026-09-11
+
+Cut from `staging`. Serves the 4th general objective (DOH-compliant surveillance reports and
+geospatial maps) and the SRS adjustment "samples should have location to allow for geospatial
+mapping". The map itself belongs to the Admin Website (a separate project); this is the app's
+share — the schema, the dataset and the picker.
+
+**The GPS fix was never the answer.** Every sample has carried one since migration `0001` and
+nothing has ever read it. It is taken at the moment of capture — the medtech at the microscope
+— so it records where the smear was *read*, not where the infection came from; plotted, it
+maps laboratories. It stays as audit provenance. Sessions now carry the patient's barangay
+instead, which is also the unit STH surveillance actually decides on: prevalence per
+administrative unit against the WHO 10% / 20% thresholds, never individual pins.
+
+**Schema.** `sessions.psgc_barangay_code`, nullable, one column — a barangay code resolves
+upward to city/municipality, province and region by itself. Stored as the canonical
+zero-padded 10-digit PSGC with a `CHECK` to match, which is what keeps the Admin Website's
+boundary join from silently missing every unit in regions 01–09. Room 8 → 9.
+
+**Aggregation is an RPC, not a view,** because access has to be decided per row-owner and
+`GRANT` cannot tell an admin from a medtech — both hold `authenticated`. It counts smears
+rather than samples, and withholds figures below a minimum cell size: a barangay with one
+smear is effectively an identified patient. PostGIS stays off; with PSGC as the key the
+choropleth is a `GROUP BY`.
+
+**The dataset ships in the APK** (42,010 barangays, 342 KB gzipped) and is Room-seeded on
+first run, because medtechs collect where there is no signal. Pinned to **PSGC 2Q 2026**,
+PSA's current release, and the pin is load-bearing: the boundary GeoJSON the admin map will
+render has to join on the same vintage or it fails silently for the units that moved.
+
+**The first cut of this was built at 4Q 2023 and was wrong by 1,763 barangays** — 4.2% of the
+country. Its upstream stopped publishing in September 2024 and missed two reorganisations:
+the Negros Island Region (RA 12000, 2Q 2024) took Negros Occidental, Negros Oriental,
+Siquijor and Bacolod out of Regions VI and VII into region `18`, and Sulu left BARMM for
+Region IX after the Supreme Court ruling. Both roll up to the *region* a surveillance map
+aggregates on, and `sessions.psgc_barangay_code` is written once with nothing to backfill it.
+Two popular alternatives, `psgc.gitlab.io` and `psgc.cloud`, are 9-digit and also pre-NIR;
+9-digit is a different code system and does not join at all. Changing the vintage is a
+dataset swap plus four constants: the seeder re-seeds when `PsgcDataset.VINTAGE` changes.
+
+**Two things the real data forced.** Searching the dataset showed that matching the query as
+one string returns nothing for "cebu city" — PSA spells it "City of Cebu" — so search matches
+each term independently, which also narrows "lahug cebu" to a single barangay. And Manila's
+14 sub-municipalities turn out to live in the *barangay* file as parents of its 897
+barangays; they are rolled up to the chartered city for display and kept searchable.
+
+**Conventions recorded:** the vintage pin and the aggregate-before-display privacy rule, both
+in the new `docs/map/objects/PsgcBarangay.md` — the seventh object card, and the only one
+with no Supabase table.
+
+---
+
+## fix/framesampler-stale-cache — camera frames carry a freshness stamp · 2026-09-11
+
+`86d4au2n1`. A shutter tap landing before the analyzer delivered a frame for the *current*
+camera binding recorded the **previous session's image** under the current `sessionId`.
+`FrameSampler` is `@Singleton`, its cache was never reset, and `CaptureViewModel.onCapture`
+guarded only against `null` — a stale array is not null, so the guard passed and the frame was
+persisted. Reachable on a second session in one process, on re-entering the capture screen, and
+on any camera rebind. In this app a session is a patient, and C8 makes a misattributed frame
+permanent once it is verified.
+
+- `FrameSampler` now publishes `CachedFrame(jpegBytes, elapsedRealtimeMs)` from `latestFrame`
+  (was `latestFrameBytes`), stamped as the frame is encoded.
+- `CaptureViewModel.onCapture` rejects anything older than `MAX_FRAME_AGE_MS` (1 s) with the
+  existing "Waiting for a live frame" message. A bound analyzer delivers ~30 fps, so a live
+  frame is never more than ~33 ms old; every stale path leaves a far longer gap. Fails closed
+  with no lifecycle wiring to maintain, which is why this is a stamp and not a reset call.
+- New `core/util/ElapsedClock.kt`, bound unscoped in `core/di/ClockModule.kt`. A seam over
+  `SystemClock.elapsedRealtime()` so both classes stay unit-testable on the plain JVM —
+  `app/build.gradle.kts` does not set `returnDefaultValues`. Unscoped keeps C5's `@Singleton`
+  list closed.
+
+`FrameSampler` gained no session knowledge; it remains a camera-layer component.
 
 ---
 
@@ -152,7 +322,7 @@ Replaced the previous agent-documentation setup with a router plus a shelf.
   `pre-push` runs `assembleDebug`. `JAVA_HOME` auto-detection with an Android Studio JBR
   fallback.
 - **The `commit-msg` hook was added and then removed in the same day's work** — commit
-  format is no longer checked by anything. See `constraints.md` C9.
+  format went unchecked from then until `12509f8` restored it. See `constraints.md` C9.
 - Documentation consolidation: the previous multi-file documentation tree collapsed into two
   root files, `CONTEXT.md` and `schema.ts`.
 

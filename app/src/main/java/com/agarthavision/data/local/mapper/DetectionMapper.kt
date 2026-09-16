@@ -17,6 +17,7 @@ fun DetectionEntity.toDomain(): Detection =
         verdict = DetectionVerdict.fromValue(verdict),
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
+        speciesTouched = speciesTouched,
     )
 
 fun Detection.toEntity(): DetectionEntity =
@@ -32,4 +33,5 @@ fun Detection.toEntity(): DetectionEntity =
         verdict = verdict.value,
         expertClass = expertClass,
         verifiedByUser = verifiedByUser,
+        speciesTouched = speciesTouched,
     )

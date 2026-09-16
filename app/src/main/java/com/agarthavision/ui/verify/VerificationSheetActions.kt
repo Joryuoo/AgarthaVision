@@ -5,6 +5,7 @@ import com.agarthavision.domain.model.EggSpecies
 data class VerificationSheetActions(
     val onQ1Selected: (Boolean) -> Unit,
     val onQ2Selected: (Boolean) -> Unit,
+    val onSpeciesConfirmed: (Boolean) -> Unit,
     val onSpeciesSelected: (EggSpecies) -> Unit,
     val onOtherSpeciesChanged: (String) -> Unit,
     val onQ4Selected: (Boolean) -> Unit,
@@ -16,6 +17,16 @@ data class VerificationSheetActions(
     val onToggleBoundingBoxes: () -> Unit,
     val onSubmit: () -> Unit,
     val onCancel: () -> Unit,
-    val onToggleRepeat: () -> Unit,
     val onUserNoteChanged: (String) -> Unit,
+    /** Appends a species the model never boxed. */
+    val onAddFinding: () -> Unit,
+    /** Removes an added species. Never offered on a prediction-backed row. */
+    val onRemoveFinding: (Int) -> Unit,
+    val onEggCountChanged: (Int, String) -> Unit,
+    val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
+    val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
+    val onManualNoDetectionSelected: () -> Unit,
+    val onManualSpeciesToggled: (EggSpecies, Boolean) -> Unit,
+    val onManualCountChanged: (EggSpecies, String) -> Unit,
+    val onManualOtherNameChanged: (String) -> Unit,
 )

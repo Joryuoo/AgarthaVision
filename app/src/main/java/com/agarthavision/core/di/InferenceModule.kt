@@ -1,8 +1,11 @@
 package com.agarthavision.core.di
 
 import com.agarthavision.BuildConfig
+import com.agarthavision.data.inference.RemoteInferenceEngine
 import com.agarthavision.data.remote.InferenceApi
+import com.agarthavision.domain.inference.InferenceEngine
 import com.google.gson.Gson
+import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -19,9 +22,8 @@ import javax.inject.Singleton
  *
  * The base URL and bearer key come from [BuildConfig], which is populated from
  * `local.properties` at build time. Until DMKuZu's container is live, requests
- * will fail at runtime — which is fine, because `FrameSampler` and
- * `InferFrameUseCase` are built around the response *shape*, not against a live
- * server. See ADR-003.
+ * will fail at runtime — which is fine, because `CaptureFieldUseCase` is built
+ * around the response *shape*, not against a live server. See ADR-003.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -74,4 +76,15 @@ object InferenceModule {
     @Singleton
     fun provideInferenceApi(retrofit: Retrofit): InferenceApi =
         retrofit.create(InferenceApi::class.java)
+}
+
+/**
+ * Binds [InferenceEngine] to the cloud backend.
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class InferenceBindingModule {
+    @Binds
+    @Singleton
+    abstract fun bindInferenceEngine(impl: RemoteInferenceEngine): InferenceEngine
 }

@@ -1,11 +1,13 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.entity.ReportEntity
+import com.agarthavision.domain.model.ReportSyncStatus
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
+import io.github.jan.supabase.postgrest.query.Order
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.serialization.SerialName
@@ -24,7 +26,7 @@ open class ReportRemoteDataSource @Inject constructor(
     private val gson: Gson,
 ) {
     /**
-     * Inserts the report row matching `0008_reports.sql`.
+     * Inserts the report row matching `0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`.
      *
      * @throws IllegalStateException when no Supabase user session is available.
      */
@@ -52,8 +54,20 @@ open class ReportRemoteDataSource @Inject constructor(
             positiveSpecies = positives,
             epgPerSpecies = epg.toJsonObject(),
             csvFilePath = csvFilePath,
+            pdfFilePath = pdfFilePath,
         )
     }
+
+    // ── Pull (read from server) ────────────────────────────────────────────────
+
+    /**
+     * Fetches all reports owned by [userId], ordered by generated_at ascending.
+     */
+    open suspend fun fetchReports(userId: String): List<ReportEntity> =
+        supabase.postgrest[REPORTS_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("generated_at", Order.ASCENDING)
+        }.decodeList<ReportRow>().map { it.toEntity() }
 
     private fun Map<String, Int>.toJsonObject(): JsonObject =
         JsonObject(mapValues<String, Int, JsonElement> { (_, count) -> JsonPrimitive(count) })
@@ -80,7 +94,48 @@ open class ReportRemoteDataSource @Inject constructor(
         val epgPerSpecies: JsonObject,
         @SerialName("csv_file_path")
         val csvFilePath: String?,
+        @SerialName("pdf_file_path")
+        val pdfFilePath: String?,
     )
+
+    // ── Select DTO (read path) ────────────────────────────────────────────────
+
+    @Serializable
+    private data class ReportRow(
+        @SerialName("id") val id: String,
+        @SerialName("session_id") val sessionId: String,
+        @SerialName("user_id") val userId: String,
+        @SerialName("report_type") val reportType: String,
+        @SerialName("generated_at") val generatedAt: String,
+        @SerialName("total_samples") val totalSamples: Int,
+        @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
+        @SerialName("positive_species") val positiveSpecies: List<String>,
+        @SerialName("epg_per_species") val epgPerSpecies: JsonObject,
+        @SerialName("csv_file_path") val csvFilePath: String? = null,
+        @SerialName("pdf_file_path") val pdfFilePath: String? = null,
+    )
+
+    private fun ReportRow.toEntity(): ReportEntity {
+        val generatedAtMs = Instant.parse(generatedAt).toEpochMilli()
+        val positiveSpeciesJson = gson.toJson(positiveSpecies)
+        val epgMap = epgPerSpecies.mapValues { (_, v) -> (v as JsonPrimitive).content.toInt() }
+        val epgPerSpeciesJson = gson.toJson(epgMap)
+        return ReportEntity(
+            reportId = id,
+            sessionId = sessionId,
+            userId = userId,
+            reportType = reportType,
+            generatedAt = generatedAtMs,
+            totalSamples = totalSamples,
+            totalEggsConfirmed = totalEggsConfirmed,
+            positiveSpeciesJson = positiveSpeciesJson,
+            epgPerSpeciesJson = epgPerSpeciesJson,
+            csvFilePath = csvFilePath,
+            pdfFilePath = pdfFilePath,
+            supabaseStatus = ReportSyncStatus.SYNCED.value,
+            createdAt = generatedAtMs,
+        )
+    }
 
     private companion object {
         private const val REPORTS_TABLE = "reports"
