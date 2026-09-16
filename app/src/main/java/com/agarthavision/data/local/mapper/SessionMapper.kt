@@ -18,5 +18,4 @@ fun SessionEntity.toDomain(): Session =
         label = label,
         psgcBarangayCode = psgcBarangayCode,
         supabaseStatus = SessionSyncStatus.fromValue(supabaseStatus),
-        claimExempt = claimExempt,
     )

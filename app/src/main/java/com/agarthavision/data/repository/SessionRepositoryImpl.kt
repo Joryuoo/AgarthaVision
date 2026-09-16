@@ -52,14 +52,6 @@ class SessionRepositoryImpl @Inject constructor(
         return entities.map { list -> list.map { it.toDomain() } }
     }
 
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) {
-        sessionDao.setClaimExempt(sessionId, exempt)
-    }
-
-    override suspend fun claimSession(sessionId: String, userId: String) {
-        sessionDao.claimSession(sessionId, userId)
-    }
-
     override fun observeSessionRecordsPage(
         userId: String?,
         startMillis: Long?,

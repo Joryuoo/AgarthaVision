@@ -525,7 +525,6 @@ class FetchRemoteDataUseCaseTest {
         endedAt = null,
         notes = null,
         supabaseStatus = supabaseStatus,
-        claimExempt = false,
     )
 
     private fun fakeSample(

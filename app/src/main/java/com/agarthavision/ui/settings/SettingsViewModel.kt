@@ -12,7 +12,6 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
-import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -44,7 +43,6 @@ data class SettingsUiState(
     val isDarkMode: Boolean = false,
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
     val isSyncing: Boolean = false,
-    val unlinkedSessions: Int = 0,
     val initialFetchDone: Boolean = true,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
@@ -69,7 +67,6 @@ class SettingsViewModel @Inject constructor(
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val signOutUseCase: SignOutUseCase,
-    private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase,
     private val initialFetchStateStore: InitialFetchStateStore,
 ) : ViewModel() {
 
@@ -101,12 +98,8 @@ class SettingsViewModel @Inject constructor(
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(
-            isSyncingFlow,
-            observeUnlinkedSessionCountUseCase(),
-            initialFetchDoneFlow,
-        ) { s, u, f -> Triple(s, u, f) },
-    ) { identity, online, themeMode, pendingSync, (syncing, unlinked, initialFetchDone) ->
+        combine(isSyncingFlow, initialFetchDoneFlow) { s, f -> s to f },
+    ) { identity, online, themeMode, pendingSync, (syncing, initialFetchDone) ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
@@ -115,7 +108,6 @@ class SettingsViewModel @Inject constructor(
             isDarkMode = themeMode == ThemeMode.DARK,
             pendingSyncCounts = pendingSync,
             isSyncing = syncing,
-            unlinkedSessions = unlinked,
             initialFetchDone = initialFetchDone,
         )
     }.stateIn(

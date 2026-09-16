@@ -76,7 +76,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.PsgcBarangay
-import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.components.DateRangeFilterBar
@@ -325,11 +324,6 @@ private fun SessionCard(
     } else {
         colors.surface to colors.border
     }
-    // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
-    // regardless of active/ended state — local-only is a neutral state, not a warning.
-    val linkState = session.linkState
-    val showNotLinkedBadge = linkState == SessionLinkState.UNOWNED || linkState == SessionLinkState.NOT_LINKED
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -356,21 +350,6 @@ private fun SessionCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (showNotLinkedBadge) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, CircleShape)
-                        .padding(horizontal = 9.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.session_not_linked),
-                        color = colors.textSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
         }
 
         Row(

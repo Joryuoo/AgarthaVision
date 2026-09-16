@@ -68,7 +68,6 @@ import com.agarthavision.ui.theme.AppColors
 @Composable
 fun LoginScreen(
     onLoggedIn: () -> Unit,
-    onBack: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -96,7 +95,6 @@ fun LoginScreen(
             onEmailChanged = viewModel::onEmailChanged,
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
-            onBack = onBack,
         ),
         toastState = toastState,
     )
@@ -106,7 +104,6 @@ private data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
-    val onBack: () -> Unit,
 )
 
 @Composable
@@ -137,17 +134,6 @@ private fun LoginScreenContent(
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
-            Text(
-                text = stringResource(R.string.login_back),
-                color = colors.accent,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 16.dp, top = 20.dp)
-                    .clickable { actions.onBack() }
-                    .padding(8.dp),
-            )
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -192,16 +178,6 @@ private fun LoginScreenContent(
 
                     LoginForm(state = state, actions = actions)
 
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.login_claim_disclosure),
-                        color = colors.textTertiary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Normal,
-                        lineHeight = 17.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
                 }
 
                 Box(
@@ -448,7 +424,6 @@ private fun LoginScreenContentPreview() {
                 onEmailChanged = {},
                 onPasswordChanged = {},
                 onSubmit = {},
-                onBack = {},
             ),
             toastState = rememberAgarthaToastState(),
         )

@@ -15,9 +15,7 @@
     <string name="login_submit">Log in</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
-    <string name="login_back">Back</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
-    <string name="login_claim_disclosure">Unlinked local sessions on this device will be added to this account.</string>
 
     <!-- Dashboard account / sync banner (ADR-007 offline access) -->
     <string name="dashboard_signed_out">Not signed in</string>
@@ -33,9 +31,6 @@
     <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
 
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
-    <string name="session_not_linked">Not linked</string>
-    <string name="session_link_to_account">Link to account</string>
-    <string name="session_dont_link">Don\'t link to account</string>
 
     <string name="verify_title">Flagged Frame · %1$s</string>
     <string name="verify_detection_header">Detection %1$d of %2$d</string>
@@ -358,14 +353,6 @@
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_syncing">Syncing…</string>
     <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
-    <plurals name="settings_sync_not_linked">
-        <item quantity="one">%1$d not linked</item>
-        <item quantity="other">%1$d not linked</item>
-    </plurals>
-    <plurals name="settings_sync_sign_in_to_link">
-        <item quantity="one">Sign in to link and upload %1$d session.</item>
-        <item quantity="other">Sign in to link and upload %1$d sessions.</item>
-    </plurals>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>

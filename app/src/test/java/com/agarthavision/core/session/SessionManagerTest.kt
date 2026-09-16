@@ -160,7 +160,6 @@ class SessionManagerTest {
         notes = null,
         label = "Smear",
         supabaseStatus = SessionSyncStatus.SYNCED.value,
-        claimExempt = false,
     )
 
 }

@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -63,7 +62,6 @@ class LoginViewModel @Inject constructor(
     private val signInUseCase: SignInUseCase,
     private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
 ) : ViewModel() {
@@ -126,7 +124,7 @@ class LoginViewModel @Inject constructor(
             _state.update { it.copy(isSubmitting = true, emailError = false, passwordError = false) }
             signInUseCase(email, password)
                 .onSuccess {
-                    claimAndSync()
+                    syncAndFetch()
                     _state.update { it.copy(isSubmitting = false) }
                     _events.emit(LoginEvent.NavigateBack)
                 }
@@ -137,10 +135,14 @@ class LoginViewModel @Inject constructor(
         }
     }
 
-    /** Silently claims unowned local data, pushes pending rows, then pulls remote rows. */
-    private suspend fun claimAndSync() {
-        val userId = authRepository.currentLocalUserId() ?: return
-        claimLocalDataUseCase(userId)
+    /**
+     * Pushes pending rows, then pulls remote rows.
+     *
+     * There is no claim step any more: login is mandatory on first run, so nothing can have
+     * been created without an owner for this to adopt.
+     */
+    private suspend fun syncAndFetch() {
+        authRepository.currentLocalUserId() ?: return
         syncPendingDataUseCase()
         fetchRemoteDataUseCase().onFailure { error ->
             android.util.Log.e(TAG, "Post-login fetch failed", error)
