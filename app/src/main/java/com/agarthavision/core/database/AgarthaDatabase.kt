@@ -34,7 +34,8 @@ import com.agarthavision.data.local.entity.SessionEntity
  *
  * Version 12 adds the `sample_species_findings` table and `detections.species_touched`
  * (`0012_polyparasitism_findings.sql`) plus `samples.deleted_at`
- * (`0013_sample_soft_delete.sql`).
+ * (`0013_sample_soft_delete.sql`). Version 13 replaces `reports.epg_per_species_json` with
+ * `lpf_per_species_json` (ticket 86d4a6jxw).
  *
  * **The jump from 10 to 12 is deliberate: 11 is left free.** Three branches wanted version 10
  * at once — `feat/sample-geospatial-mapping` (`psgc_barangays`), which won it and is merged
@@ -60,7 +61,7 @@ import com.agarthavision.data.local.entity.SessionEntity
         SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

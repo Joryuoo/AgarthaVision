@@ -1,5 +1,7 @@
 package com.agarthavision.domain.usecase.records
 
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
@@ -53,8 +55,8 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(2, report.totalSamples)
         assertEquals(3, report.totalEggsConfirmed)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
-        assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
-        assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
+        assertEquals(1.0f, report.lpfPerSpecies["Ascaris lumbricoides"]!!.mean)
+        assertEquals(0.5f, report.lpfPerSpecies["Trichuris trichiura"]!!.mean)
         assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
         // CSV-format report carries no PDF, and the PDF renderer was never invoked.
         assertNull(report.pdfFilePath)
@@ -149,8 +151,19 @@ class GenerateSessionReportUseCaseTest {
     private fun standardUseCase(
         reportRepository: FakeReportRepository,
         reportFileStore: FakeReportFileStore,
-    ): GenerateSessionReportUseCase =
-        GenerateSessionReportUseCase(
+    ): GenerateSessionReportUseCase {
+        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
+        // Default mock behavior for 2 samples, one with Ascaris(2) + Trichuris(1), one clean.
+        // Mean Ascaris = (2+0)/2 = 1.0, Mean Trichuris = (1+0)/2 = 0.5
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2),
+            SampleSpeciesFindingEntity("f2", "sample-1", "Trichuris trichiura", null, 1),
+        )
+        kotlinx.coroutines.runBlocking {
+            org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
+                .thenReturn(findings)
+        }
+        return GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
@@ -168,6 +181,7 @@ class GenerateSessionReportUseCaseTest {
                     EggCount("Trichuris trichiura", 1),
                 ),
             ),
+            findingDao = findingDao,
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
@@ -175,6 +189,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
         )
+    }
 }
 
 /** null caller = sees everything; concrete caller = sees own rows plus unowned rows. */

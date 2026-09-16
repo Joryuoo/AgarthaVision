@@ -34,9 +34,9 @@ class GetRecordsUseCaseTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `records map sampleCount totalEpg and speciesLabels from bulk fetch`() = runTest {
+    fun `records map sampleCount totalEggs and speciesLabels from bulk fetch`() = runTest {
         val session = session(id = "session-1", userId = "user-1")
-        val row = sessionWithStats(session, totalSamples = 3, totalEpg = 42)
+        val row = sessionWithStats(session, totalSamples = 3, totalEggs = 42)
         val sessionRepo = FakeSessionRepository(listOf(row))
         val detectionRepo = FakeDetectionRepository(
             speciesMap = mapOf("session-1" to listOf("Ascaris lumbricoides", "Trichuris trichiura")),
@@ -53,14 +53,14 @@ class GetRecordsUseCaseTest {
         val item = result.items.single()
         assertEquals("session-1", item.session.id)
         assertEquals(3, item.sampleCount)
-        assertEquals(42, item.totalEpg)
+        assertEquals(42, item.totalEggs)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), item.speciesLabels)
     }
 
     @Test
     fun `speciesLabels come straight from the map keyed by session id`() = runTest {
         val session = session(id = "s1", userId = "u1")
-        val row = sessionWithStats(session, totalSamples = 1, totalEpg = 0)
+        val row = sessionWithStats(session, totalSamples = 1, totalEggs = 0)
         val detectionRepo = FakeDetectionRepository(
             speciesMap = mapOf("s1" to listOf("Hookworm", "Ascaris lumbricoides")),
         )
@@ -77,7 +77,7 @@ class GetRecordsUseCaseTest {
     @Test
     fun `speciesLabels are empty when session has no detections in bulk map`() = runTest {
         val session = session(id = "no-detections", userId = "u1")
-        val row = sessionWithStats(session, totalSamples = 0, totalEpg = 0)
+        val row = sessionWithStats(session, totalSamples = 0, totalEggs = 0)
         val detectionRepo = FakeDetectionRepository(speciesMap = emptyMap())
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = "u1"),
@@ -97,7 +97,7 @@ class GetRecordsUseCaseTest {
     fun `totals from repository are surfaced in RecordsResult`() = runTest {
         val sessionRepo = FakeSessionRepository(
             rows = emptyList(),
-            totals = RecordsTotals(sessionCount = 7, totalSamples = 42, totalEpg = 13),
+            totals = RecordsTotals(sessionCount = 7, totalSamples = 42, totalEggs = 13),
         )
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = "u1"),
@@ -109,7 +109,7 @@ class GetRecordsUseCaseTest {
 
         assertEquals(7, result.totals.sessionCount)
         assertEquals(42, result.totals.totalSamples)
-        assertEquals(13, result.totals.totalEpg)
+        assertEquals(13, result.totals.totalEggs)
     }
 
     // ---------------------------------------------------------------------------
@@ -119,7 +119,7 @@ class GetRecordsUseCaseTest {
     @Test
     fun `signed out passes a null owner through so unowned rows are read`() = runTest {
         val sessionRepo = FakeSessionRepository(
-            listOf(sessionWithStats(session("session-1", "user-1"), totalSamples = 1, totalEpg = 0)),
+            listOf(sessionWithStats(session("session-1", "user-1"), totalSamples = 1, totalEggs = 0)),
         )
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = null),
@@ -426,9 +426,9 @@ class GetRecordsUseCaseTest {
     @Test
     fun `when totals flow emits a second value result re-emits with updated totals and same items`() = runTest {
         val session = session("s1", "u1")
-        val row = sessionWithStats(session, totalSamples = 2, totalEpg = 5)
-        val totals1 = RecordsTotals(sessionCount = 1, totalSamples = 2, totalEpg = 5)
-        val totals2 = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEpg = 10)
+        val row = sessionWithStats(session, totalSamples = 2, totalEggs = 5)
+        val totals1 = RecordsTotals(sessionCount = 1, totalSamples = 2, totalEggs = 5)
+        val totals2 = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEggs = 10)
 
         val multiRepo = MultiEmitSessionRepository(
             pageEmissions = listOf(listOf(row)),
@@ -456,9 +456,9 @@ class GetRecordsUseCaseTest {
     fun `when page flow emits a second value result re-emits with updated items and preserved totals`() = runTest {
         val session1 = session("s1", "u1")
         val session2 = session("s2", "u1")
-        val row1 = sessionWithStats(session1, totalSamples = 1, totalEpg = 2)
-        val row2 = sessionWithStats(session2, totalSamples = 3, totalEpg = 6)
-        val totals = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEpg = 8)
+        val row1 = sessionWithStats(session1, totalSamples = 1, totalEggs = 2)
+        val row2 = sessionWithStats(session2, totalSamples = 3, totalEggs = 6)
+        val totals = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEggs = 8)
 
         val multiRepo = MultiEmitSessionRepository(
             pageEmissions = listOf(listOf(row1), listOf(row1, row2)),
@@ -705,11 +705,11 @@ private fun session(id: String, userId: String): Session =
         label = null,
     )
 
-private fun sessionWithStats(session: Session, totalSamples: Int, totalEpg: Int): SessionWithStats =
+private fun sessionWithStats(session: Session, totalSamples: Int, totalEggs: Int): SessionWithStats =
     SessionWithStats(
         session = session,
         totalSamples = totalSamples,
         verifiedSamples = 0,
         unverifiedSamples = 0,
-        totalEpg = totalEpg,
+        totalEggs = totalEggs,
     )

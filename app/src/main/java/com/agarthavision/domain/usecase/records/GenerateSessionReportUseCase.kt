@@ -1,6 +1,8 @@
 package com.agarthavision.domain.usecase.records
 
-import com.agarthavision.core.util.EpgCalculator
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
+import com.agarthavision.data.supabase.SyncReportUseCase
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportMetadata
@@ -13,7 +15,6 @@ import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.data.supabase.SyncReportUseCase
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
@@ -21,7 +22,7 @@ import javax.inject.Inject
 /**
  * Generates a persisted session report and writes the CSV + PDF to device storage.
  */
-// Composition-root use case wiring 10 distinct, non-overlapping DI dependencies (repositories,
+// Composition-root use case wiring 11 distinct, non-overlapping DI dependencies (repositories,
 // file store, CSV/PDF builders + renderer, sync use case); each is independently meaningful and
 // bundling would not simplify the real dependency graph.
 @Suppress("LongParameterList")
@@ -30,6 +31,7 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
     private val detectionRepository: DetectionRepository,
+    private val findingDao: SampleSpeciesFindingDao,
     private val reportRepository: ReportRepository,
     private val reportFileStore: ReportFileStore,
     private val reportCsvBuilder: ReportCsvBuilder,
@@ -49,20 +51,31 @@ class GenerateSessionReportUseCase @Inject constructor(
         }
 
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
+        val fieldCount = samples.size.coerceAtLeast(1)
         val detectionsBySample = samples.associate { sample ->
             sample.id to detectionRepository.getDetectionsForSample(sample.id)
         }
 
         val eggCounts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
-        val normalizedCounts = eggCounts.groupBy { it.canonicalSpecies() }.mapValues { entry ->
-            entry.value.sumOf { it.count }
+        val findings = findingDao.getFindingsForSession(sessionId, userId)
+
+        val lpfPerSpecies = findings.groupBy { it.species }.mapValues { (_, speciesFindings) ->
+            val countsByField = speciesFindings.groupBy { it.sampleId }
+                .mapValues { it.value.sumOf { f -> f.eggCount } }
+            
+            val totalEggs = countsByField.values.sum()
+            val maxEggs = countsByField.values.maxOrNull() ?: 0
+            val minEggs = if (countsByField.size < fieldCount) 0 else countsByField.values.minOrNull() ?: 0
+
+            LpfDensity(
+                mean = totalEggs.toFloat() / fieldCount,
+                min = minEggs,
+                max = maxEggs
+            )
         }
-        // TEMPORARY (86d4a6jxw): epgPerSpecies is the reported per-species number for both the
-        // CSV and PDF. It will be replaced by LPF (Low Power Field) density once that ticket's
-        // pipeline lands; until then every consumer of this map must keep labeling it "EPG".
-        val epgPerSpecies = normalizedCounts.mapValues { EpgCalculator.epg(it.value) }
-        val positiveSpecies = epgPerSpecies.filterValues { it > 0 }.keys.sorted()
-        val totalEggsConfirmed = normalizedCounts.values.sum()
+
+        val positiveSpecies = lpfPerSpecies.filterValues { it.mean > 0 }.keys.sorted()
+        val totalEggsConfirmed = eggCounts.sumOf { it.count }
         val totalSamples = samples.size
 
         val reportId = UUID.randomUUID().toString()
@@ -75,7 +88,7 @@ class GenerateSessionReportUseCase @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positiveSpecies,
-            epgPerSpecies = epgPerSpecies,
+            lpfPerSpecies = lpfPerSpecies,
         )
         // Generate only the format the medtech asked for, so the report carries a single file
         // and its format is unambiguous everywhere it's shown, opened, or shared.
@@ -111,7 +124,7 @@ class GenerateSessionReportUseCase @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positiveSpecies,
-            epgPerSpecies = epgPerSpecies,
+            lpfPerSpecies = lpfPerSpecies,
             csvFilePath = csvFilePath,
             pdfFilePath = pdfFilePath,
             supabaseStatus = ReportSyncStatus.PENDING,

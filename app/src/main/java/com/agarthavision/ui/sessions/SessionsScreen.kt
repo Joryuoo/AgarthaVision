@@ -416,7 +416,7 @@ private fun SessionCard(
                 }
 
             } else {
-                val eggs = sessionData.totalEpg
+                val eggs = sessionData.totalEggs
                 val badgeBg = if (eggs > 0) colors.successTint else colors.surfaceMuted
                 val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
                 Box(

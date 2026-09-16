@@ -43,20 +43,25 @@ class ReportPdfBuilder @Inject constructor() {
     }
 
     /**
-     * One row per recognized [EggSpecies] present in `metadata.epgPerSpecies`.
+     * One row per recognized [EggSpecies] present in `metadata.lpfPerSpecies`.
      *
      * Mucus, blood, and WBC findings aren't egg species — they have no [EggSpecies] entry — so
      * they can never surface here, matching this table's egg-only scope.
      *
-     * The reported number is EPG (eggs per gram), a temporary stand-in metric. Ticket 86d4a6jxw
-     * replaces it with LPF (Low Power Field) density once that pipeline lands; see
-     * [ReportPdfSpeciesRow] for the same note at the data-model level.
+     * The reported number is LPF (Low Power Field) density (mean and range).
      */
     private fun buildSpeciesRows(metadata: ReportMetadata): List<ReportPdfSpeciesRow> {
         val knownCanonicalSpecies = EggSpecies.entries.mapNotNull { it.canonicalClass }.toSet()
-        return metadata.epgPerSpecies
+        return metadata.lpfPerSpecies
             .filterKeys { it in knownCanonicalSpecies }
-            .map { (canonical, epg) -> ReportPdfSpeciesRow(speciesDisplayName = canonical, epg = epg) }
+            .map { (canonical, density) ->
+                ReportPdfSpeciesRow(
+                    speciesDisplayName = canonical,
+                    mean = density.mean,
+                    min = density.min,
+                    max = density.max
+                )
+            }
             .sortedBy { it.speciesDisplayName }
     }
 }

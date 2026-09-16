@@ -172,7 +172,7 @@ interface SessionDao {
                SUM(
                  CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END
                ) AS unverifiedSamples,
-               COUNT(d.detection_id) AS totalEpg
+               COUNT(d.detection_id) AS totalEggs
         FROM sessions s
         LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
         LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
@@ -202,7 +202,7 @@ interface SessionDao {
     @Query(
         "SELECT s.*, " +
         "  COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS totalSamples, " +
-        "  COUNT(d.detection_id) AS totalEpg " +
+        "  COUNT(d.detection_id) AS totalEggs " +
         "FROM sessions s " +
         "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.status != 'flagged' " +
         "     AND smp.deleted_at is null " +
@@ -229,7 +229,7 @@ interface SessionDao {
     @Query(
         "SELECT COUNT(*) AS sessionCount, " +
         "COALESCE(SUM(perSession.samples), 0) AS totalSamples, " +
-        "COALESCE(SUM(perSession.eggs), 0) AS totalEpg " +
+        "COALESCE(SUM(perSession.eggs), 0) AS totalEggs " +
         "FROM (SELECT s.session_id, " +
         "  COUNT(DISTINCT CASE WHEN smp.status != 'flagged' THEN smp.sample_id END) AS samples, " +
         "  COUNT(d.detection_id) AS eggs " +
@@ -271,7 +271,7 @@ interface SessionDao {
         "  COUNT(DISTINCT smp.sample_id) AS totalSamples, " +
         "  SUM(CASE WHEN smp.verified_at > 0 THEN 1 ELSE 0 END) AS verifiedSamples, " +
         "  SUM(CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END) AS unverifiedSamples, " +
-        "  COUNT(d.detection_id) AS totalEpg " +
+        "  COUNT(d.detection_id) AS totalEggs " +
         "FROM sessions s " +
         "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null " +
         "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'" +
@@ -452,7 +452,7 @@ data class SessionWithStats(
      * sessions — a number that stopped meaning anything when sessions stopped ending.
      */
     @androidx.room.ColumnInfo(name = "unverifiedSamples") val unverifiedSamples: Int,
-    @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int
+    @androidx.room.ColumnInfo(name = "totalEggs") val totalEggs: Int
 )
 
 /**
@@ -463,7 +463,7 @@ data class SessionWithStats(
 data class SessionRecordStatsRow(
     @Embedded val session: SessionEntity,
     @androidx.room.ColumnInfo(name = "totalSamples") val totalSamples: Int,
-    @androidx.room.ColumnInfo(name = "totalEpg") val totalEpg: Int,
+    @androidx.room.ColumnInfo(name = "totalEggs") val totalEggs: Int,
 )
 
 /**
@@ -473,5 +473,5 @@ data class SessionRecordStatsRow(
 data class RecordsTotalsRow(
     @ColumnInfo(name = "sessionCount") val sessionCount: Int,
     @ColumnInfo(name = "totalSamples") val totalSamples: Int,
-    @ColumnInfo(name = "totalEpg") val totalEpg: Int,
+    @ColumnInfo(name = "totalEggs") val totalEggs: Int,
 )

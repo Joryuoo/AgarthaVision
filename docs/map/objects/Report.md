@@ -1,7 +1,7 @@
 # Report
 
-**One sentence.** A snapshot of one session's findings at one moment — counts, EPG per species,
-and a pointer to a CSV file. Table and Room entity are both `reports`; the product calls the
+**One sentence.** A snapshot of one session's findings at one moment — counts, LPF density 
+per species, and a pointer to a CSV or PDF file. Table and Room entity are both `reports`; the product calls the
 artefact a "session report".
 
 ## Why this shape
@@ -11,59 +11,49 @@ first, because the underlying samples can change between generations and a clini
 be reproducible. That is why the aggregates are denormalised into columns rather than computed
 on read.
 
-The split matters: **the numbers sync, the file does not.** Row-only sync keeps the CSV on the
-device — a deliberate Phase 1 boundary that avoids uploading anything file-shaped to Storage
+The split matters: **the numbers sync, the file does not.** Row-only sync keeps the CSV and PDF 
+on the device — a deliberate Phase 1 boundary that avoids uploading anything file-shaped to Storage
 besides sample images.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0008_reports.sql:13-25`)
+**Postgres** (`supabase/migrations/0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`)
 
 | Field | Constraint |
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `session_id` | NOT NULL, FK → `sessions(id)`, CASCADE |
 | `user_id` | NOT NULL, FK → `profiles(id)` |
-| `report_type` | NOT NULL default `'session'`, **CHECK allows only `'session'`** (`0008_reports.sql:17`) |
+| `report_type` | NOT NULL default `'session'`, **CHECK allows only `'session'`** |
 | `generated_at` | NOT NULL, default `now()` |
-| `total_samples` | integer **NOT NULL, no default** (`0008_reports.sql:19`) |
+| `total_samples` | integer **NOT NULL, no default** |
 | `total_eggs_confirmed` | integer NOT NULL, no default |
 | `positive_species` | `text[]` NOT NULL default `'{}'` |
-| `epg_per_species` | `jsonb` NOT NULL default `'{}'` |
+| `lpf_per_species` | `jsonb` NOT NULL default `'{}'` (Replaces `epg_per_species`) |
 | `csv_file_path` | nullable text — a **device-local** path, meaningless to any other client |
 | `pdf_file_path` | nullable text — mirrors `csv_file_path`; added by `0011_reports_pdf_and_lpf.sql` |
 | `created_at` | NOT NULL, default `now()` |
 
-Indexes on `(session_id, generated_at desc)` and `(user_id, generated_at desc)` —
-`0008_reports.sql:27-30`.
+Indexes on `(session_id, generated_at desc)` and `(user_id, generated_at desc)`.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt:39-78`)
+**Room** (`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`)
 
 PK column is `report_id`. Differences:
 
-- `supabase_status` is **Room-only** — no Postgres column exists
-  (`ReportEntity.kt:73-74`, `domain/model/ReportSyncStatus.kt`, `schema.ts:101-115`).
+- `supabase_status` is **Room-only** — no Postgres column exists.
 - The two collection columns are stored as Gson strings, `positive_species_json` and
-  `epg_per_species_json` (`ReportEntity.kt:62-68`), and expanded back into `List<String>` and
-  `JsonObject` at the sync boundary (`data/supabase/ReportRemoteDataSource.kt:37-59`).
-- `generated_at` and `created_at` are epoch millis locally, ISO strings remotely
-  (`data/supabase/ReportRemoteDataSource.kt:49`).
-
-`schema.ts:424-425` claims `total_samples` defaults to 0. The migration gives it no default —
-`0008_reports.sql:19`. The migration wins.
+  `lpf_per_species_json`, and expanded back into `List<String>` and
+  `Map<String, LpfDensity>` at the sync boundary.
+- `generated_at` and `created_at` are epoch millis locally, ISO strings remotely.
 
 ## Connected to
 
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
-- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/` under a
-  name built from the session and report ids (`data/repository/DocumentsReportFileStore.kt`)
-  and are shared from `ui/records/ReportSharing.kt`. `csv_file_path` / `pdf_file_path` are
-  pointers that no other device can resolve — and their shape depends on the API level the
-  report was written on: a MediaStore `content://` URI on 29+, an absolute path on 26-28.
-  The PDF is the patient-facing artifact and the one the generation snackbar offers to share
-  (`ui/records/SessionDetailViewModel.kt`); the CSV stays a device-local data export.
+- **Aggregates** findings from `sample_species_findings` table into LPF density.
+- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/` 
+  and are shared from `ui/records/ReportSharing.kt`.
 
 ## If you change this
 
@@ -73,36 +63,14 @@ PK column is `report_id`. Differences:
 - `ReportInsertRow`, or your column never reaches Postgres
   (`data/supabase/ReportRemoteDataSource.kt`).
 - The two Gson serialisation points, if you touch either collection column.
-- The Settings pending/failed counts, which read `supabase_status`
-  (`data/local/dao/ReportDao.kt:46`, `:53`).
 - `ReportPdfBuilder` / `ReportPdfRenderer`, if you touch anything the PDF renders — the header
   block, the per-species table, or the units it reports.
-
-**Does not hit**
-- Already-generated CSV or PDF files. Files are written once and never rewritten; changing the
-  row leaves stale files on disk under their old names.
-- EPG itself. The multiplier lives in `core/util/EpgCalculator.kt:12` and the counting rule in
-  `data/local/dao/DetectionDao.kt:33-52`. A report stores the answer; it does not define it.
-  (Pending replacement by LPF density under ticket 86d4a6jxw.)
-- The `administrative` report type. It is named in a comment (`0008_reports.sql:9`) but the
-  CHECK rejects it — see the ghost list in `../../features.md`.
 
 ## Surfaces
 
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
-(`ui/records/SessionDetailViewModel.kt:148`). Read by the Reports card on
+(`ui/records/SessionDetailViewModel.kt`). Read by the Reports card on
 `ui/records/SessionDetailScreen.kt` and by the Settings sync counters. Pushed by
-`data/supabase/SyncReportUseCase.kt:25-35` — row only, no file.
+`data/supabase/SyncReportUseCase.kt` — row only, no file.
 
-**Note:** report generation requires a **cached local identity** — it uses
-`currentLocalUserId()` (`GenerateSessionReportUseCase.kt:42`), so it works offline when a
-medtech is signed in but fails on a device that has never signed in. Unlike capture and
-verification, generating a report while the device has no cached identity fails.
-
-## See
-
-`supabase/migrations/0008_reports.sql`, `supabase/migrations/0011_reports_pdf_and_lpf.sql`,
-`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`,
-`domain/usecase/records/GenerateSessionReportUseCase.kt`,
-`domain/usecase/records/ReportPdfBuilder.kt`, `domain/repository/ReportPdfRenderer.kt`,
-`schema.ts:408-450`.
+**Note:** report generation requires a **cached local identity**.

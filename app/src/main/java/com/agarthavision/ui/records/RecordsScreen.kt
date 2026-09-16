@@ -123,7 +123,7 @@ fun RecordsScreen(
                 Spacer(Modifier.height(Spacing.md))
                 StatsRow(
                     sessionsCount = if (state.isLoading) "—" else state.totals.sessionCount.toString(),
-                    eggsCount = if (state.isLoading) "—" else state.totals.totalEpg.toString(),
+                    eggsCount = if (state.isLoading) "—" else state.totals.totalEggs.toString(),
                     samplesCount = if (state.isLoading) "—" else state.totals.totalSamples.toString(),
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
@@ -407,7 +407,7 @@ private fun RecordCard(
 
         StatRun(
             listOf(
-                Stat(record.totalEpg.toString(), "eggs"),
+                Stat(record.totalEggs.toString(), "eggs"),
                 Stat(speciesCount, "species"),
                 Stat(record.sampleCount.toString(), "samples"),
             )
