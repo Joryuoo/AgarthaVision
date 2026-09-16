@@ -1,13 +1,16 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
+import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
+import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.ReportFileStore
@@ -58,25 +61,7 @@ class GenerateSessionReportUseCase @Inject constructor(
 
         val eggCounts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
         val findings = findingDao.getFindingsForSession(sessionId, userId)
-
-        val lpfPerSpecies = findings.groupBy { it.species }.mapValues { (_, speciesFindings) ->
-            val countsByField = speciesFindings.groupBy { it.sampleId }
-                .mapValues { it.value.sumOf { f -> f.eggCount } }
-            
-            val totalEggs = countsByField.values.sum()
-            val maxEggs = countsByField.values.maxOrNull() ?: 0
-            val minEggs = if (countsByField.size < fieldCount) 0 else countsByField.values.minOrNull() ?: 0
-
-            LpfDensity(
-                mean = totalEggs.toFloat() / fieldCount,
-                min = minEggs,
-                max = maxEggs
-            )
-        }
-
-        val positiveSpecies = lpfPerSpecies.filterValues { it.mean > 0 }.keys.sorted()
-        val totalEggsConfirmed = eggCounts.sumOf { it.count }
-        val totalSamples = samples.size
+        val lpfPerSpecies = computeLpfDensity(findings, fieldCount)
 
         val reportId = UUID.randomUUID().toString()
         val generatedAt = Instant.now()
@@ -85,35 +70,13 @@ class GenerateSessionReportUseCase @Inject constructor(
             session = session,
             generatedBy = userId,
             generatedAt = generatedAt,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpecies = positiveSpecies,
+            totalSamples = samples.size,
+            totalEggsConfirmed = eggCounts.sumOf { it.count },
+            positiveSpecies = lpfPerSpecies.filterValues { it.mean > 0 }.keys.sorted(),
             lpfPerSpecies = lpfPerSpecies,
         )
-        // Generate only the format the medtech asked for, so the report carries a single file
-        // and its format is unambiguous everywhere it's shown, opened, or shared.
-        var csvFilePath: String? = null
-        var pdfFilePath: String? = null
-        when (format) {
-            ReportFormat.CSV -> {
-                val csv = reportCsvBuilder.build(
-                    metadata = metadata,
-                    samples = samples,
-                    detectionsBySample = detectionsBySample,
-                )
-                csvFilePath = reportFileStore.writeCsv(reportId, sessionId, csv)
-            }
 
-            ReportFormat.PDF -> {
-                val pdfDocument = reportPdfBuilder.build(
-                    metadata = metadata,
-                    samples = samples,
-                    detectionsBySample = detectionsBySample,
-                )
-                val pdfBytes = reportPdfRenderer.render(pdfDocument)
-                pdfFilePath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
-            }
-        }
+        val (csvPath, pdfPath) = generateFiles(format, metadata, samples, detectionsBySample)
 
         val report = Report(
             id = reportId,
@@ -121,16 +84,56 @@ class GenerateSessionReportUseCase @Inject constructor(
             userId = userId,
             reportType = ReportType.SESSION,
             generatedAt = generatedAt,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpecies = positiveSpecies,
+            totalSamples = metadata.totalSamples,
+            totalEggsConfirmed = metadata.totalEggsConfirmed,
+            positiveSpecies = metadata.positiveSpecies,
             lpfPerSpecies = lpfPerSpecies,
-            csvFilePath = csvFilePath,
-            pdfFilePath = pdfFilePath,
+            csvFilePath = csvPath,
+            pdfFilePath = pdfPath,
             supabaseStatus = ReportSyncStatus.PENDING,
         )
         reportRepository.insert(report)
         syncReportUseCase(reportId)
         report
+    }
+
+    private fun computeLpfDensity(
+        findings: List<SampleSpeciesFindingEntity>,
+        fieldCount: Int,
+    ): Map<String, LpfDensity> = findings.groupBy { it.species }.mapValues { (_, speciesFindings) ->
+        val countsByField = speciesFindings.groupBy { it.sampleId }
+            .mapValues { it.value.sumOf { f -> f.eggCount } }
+
+        val totalEggs = countsByField.values.sum()
+        val maxEggs = countsByField.values.maxOrNull() ?: 0
+        val minEggs = if (countsByField.size < fieldCount) 0 else countsByField.values.minOrNull() ?: 0
+
+        LpfDensity(
+            mean = totalEggs.toFloat() / fieldCount,
+            min = minEggs,
+            max = maxEggs
+        )
+    }
+
+    private suspend fun generateFiles(
+        format: ReportFormat,
+        metadata: ReportMetadata,
+        samples: List<Sample>,
+        detectionsBySample: Map<String, List<Detection>>,
+    ): Pair<String?, String?> {
+        var csvFilePath: String? = null
+        var pdfFilePath: String? = null
+        when (format) {
+            ReportFormat.CSV -> {
+                val csv = reportCsvBuilder.build(metadata, samples, detectionsBySample)
+                csvFilePath = reportFileStore.writeCsv(metadata.reportId, metadata.session.id, csv)
+            }
+            ReportFormat.PDF -> {
+                val pdfDoc = reportPdfBuilder.build(metadata, samples, detectionsBySample)
+                val pdfBytes = reportPdfRenderer.render(pdfDoc)
+                pdfFilePath = reportFileStore.writePdf(metadata.reportId, metadata.session.id, pdfBytes)
+            }
+        }
+        return csvFilePath to pdfFilePath
     }
 }

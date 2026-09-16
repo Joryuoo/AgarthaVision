@@ -88,6 +88,13 @@ class GenerateSessionReportUseCaseTest {
     fun `carries the verified species into the generated csv without re-entry`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
+        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2)
+        )
+        org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
+            .thenReturn(findings)
+
         val useCase = GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
@@ -109,6 +116,7 @@ class GenerateSessionReportUseCaseTest {
                 ),
                 eggCounts = listOf(EggCount("Ascaris lumbricoides", 2)),
             ),
+            findingDao = findingDao,
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
@@ -135,6 +143,7 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = null),
             sampleRepository = ReportSampleRepository(samples = emptyList()),
             detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
+            findingDao = org.mockito.kotlin.mock(),
             reportRepository = FakeReportRepository(),
             reportFileStore = FakeReportFileStore(),
             reportCsvBuilder = ReportCsvBuilder(),

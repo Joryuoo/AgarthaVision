@@ -8,6 +8,7 @@ import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -29,7 +30,7 @@ class SessionEggCountUseCaseTest {
         val result = useCase("session-1").getOrThrow()
 
         assertEquals(0, result.totalEggCount)
-        assertEquals(0, result.fieldCount)
+        assertEquals(1, result.fieldCount) // coerceAtLeast(1)
         assertEquals(0, result.lpfPerSpecies.size)
     }
 
@@ -41,6 +42,8 @@ class SessionEggCountUseCaseTest {
         val findingDao: SampleSpeciesFindingDao = mock()
 
         whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1"))
+            .thenReturn(emptyList())
         
         // 3 fields examined
         val samples = listOf(
@@ -65,12 +68,14 @@ class SessionEggCountUseCaseTest {
         assertEquals(3, result.fieldCount)
         
         // Ascaris: mean (2+4+0)/3 = 2.0, min 0, max 4
+        assertTrue("Ascaris should be in results", result.lpfPerSpecies.containsKey("Ascaris"))
         val ascaris = result.lpfPerSpecies["Ascaris"]!!
         assertEquals(2.0f, ascaris.mean, 0.01f)
         assertEquals(0, ascaris.min)
         assertEquals(4, ascaris.max)
 
         // Hookworm: mean (0+1+0)/3 = 0.33, min 0, max 1
+        assertTrue("Hookworm should be in results", result.lpfPerSpecies.containsKey("Hookworm"))
         val hookworm = result.lpfPerSpecies["Hookworm"]!!
         assertEquals(0.33f, hookworm.mean, 0.01f)
         assertEquals(0, hookworm.min)
