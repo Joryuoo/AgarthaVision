@@ -18,9 +18,6 @@ fun Sample.toEntity(): SampleEntity =
         needsReannotation = needsReannotation,
         userNote = userNote,
         isManual = isManual,
-        gpsLatitude = latitude,
-        gpsLongitude = longitude,
-        gpsAccuracy = accuracyMeters,
         status = status.value,
     )
 
@@ -38,8 +35,5 @@ fun SampleEntity.toDomain(): Sample =
         needsReannotation = needsReannotation,
         userNote = userNote,
         isManual = isManual,
-        latitude = gpsLatitude,
-        longitude = gpsLongitude,
-        accuracyMeters = gpsAccuracy,
         status = SampleStatus.entries.firstOrNull { it.value == status } ?: SampleStatus.FLAGGED,
     )

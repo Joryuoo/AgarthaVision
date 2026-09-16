@@ -122,9 +122,6 @@ class SampleRemoteDataSource @Inject constructor(
             userId = userId,
             capturedAt = Instant.ofEpochMilli(timestamp).toString(),
             verifiedAt = Instant.ofEpochMilli(verifiedAtMillis).toString(),
-            gpsLatitude = gpsLatitude,
-            gpsLongitude = gpsLongitude,
-            gpsAccuracy = gpsAccuracy,
             storagePath = storagePath,
             inferenceModelVersion = inferenceModelVersion.ifBlank { UNKNOWN_MODEL_VERSION },
             needsReannotation = needsReannotation,
@@ -166,12 +163,6 @@ class SampleRemoteDataSource @Inject constructor(
         val capturedAt: String,
         @SerialName("verified_at")
         val verifiedAt: String,
-        @SerialName("gps_latitude")
-        val gpsLatitude: Double?,
-        @SerialName("gps_longitude")
-        val gpsLongitude: Double?,
-        @SerialName("gps_accuracy")
-        val gpsAccuracy: Float?,
         @SerialName("storage_path")
         val storagePath: String,
         @SerialName("inference_model_version")
@@ -244,9 +235,6 @@ class SampleRemoteDataSource @Inject constructor(
         @SerialName("user_id") val userId: String,
         @SerialName("captured_at") val capturedAt: String,
         @SerialName("verified_at") val verifiedAt: String? = null,
-        @SerialName("gps_latitude") val gpsLatitude: Double? = null,
-        @SerialName("gps_longitude") val gpsLongitude: Double? = null,
-        @SerialName("gps_accuracy") val gpsAccuracy: Float? = null,
         @SerialName("storage_path") val storagePath: String,
         @SerialName("inference_model_version") val inferenceModelVersion: String,
         @SerialName("needs_reannotation") val needsReannotation: Boolean,
@@ -294,9 +282,6 @@ class SampleRemoteDataSource @Inject constructor(
         needsReannotation = needsReannotation,
         isManual = isManual,
         userNote = userNote,
-        gpsLatitude = gpsLatitude,
-        gpsLongitude = gpsLongitude,
-        gpsAccuracy = gpsAccuracy,
         status = SampleStatus.SYNCED.value,
         predictionsJson = null,
         imageWidth = null,

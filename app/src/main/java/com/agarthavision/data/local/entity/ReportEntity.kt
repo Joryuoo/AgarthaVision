@@ -20,10 +20,9 @@ import androidx.room.PrimaryKey
  * `supabaseStatus` is Room-only and follows the same pattern as samples
  * (`pending` → `synced`, with `sync_failed` branch).
  *
- * `positiveSpeciesJson` and `epgPerSpeciesJson` are Gson-serialized strings
- * because Room doesn't natively store collection types; the canonical
- * representations are `List<String>` and `Map<String, Int>` respectively at
- * the domain layer.
+ * `positiveSpeciesJson` is a Gson-serialized string because Room doesn't natively
+ * store collection types; the canonical representation is `List<String>` at the
+ * domain layer.
  */
 @Entity(
     tableName = "reports",
@@ -64,9 +63,9 @@ data class ReportEntity(
     @ColumnInfo(name = "positive_species_json")
     val positiveSpeciesJson: String,
 
-    /** JSON object: canonical species name → EPG integer. */
-    @ColumnInfo(name = "epg_per_species_json")
-    val epgPerSpeciesJson: String,
+    // `epg_per_species_json` is gone as of Room 13. EPG is eggs-per-gram via Kato-Katz;
+    // Philippine medtechs use direct smear, so the ×24 multiplier was wrong for the
+    // method in use. The per-species min–max LPF range replaces it.
 
     @ColumnInfo(name = "csv_file_path")
     val csvFilePath: String?,

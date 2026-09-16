@@ -8,7 +8,6 @@ import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.repository.LocationProvider
 import java.time.Instant
 import javax.inject.Inject
 
@@ -29,7 +28,6 @@ class SubmitVerificationUseCase @Inject constructor(
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
-    private val locationProvider: LocationProvider,
     private val syncSampleUseCase: SyncSampleUseCase,
 ) {
     suspend operator fun invoke(
@@ -42,7 +40,6 @@ class SubmitVerificationUseCase @Inject constructor(
         // its existing owner (cached identity or null) and is claimed at the next login.
         val sampleId = frame.sampleId
         require(sampleId.isNotBlank()) { "Flagged sample id is required." }
-        val location = locationProvider.getCurrentLocation()
         val verifiedAt = Instant.now()
 
         // Setting status back to VERIFIED is what re-arms sync on an edit: an already-SYNCED
@@ -54,9 +51,6 @@ class SubmitVerificationUseCase @Inject constructor(
             verifiedAt = verifiedAt.toEpochMilli(),
             needsReannotation = missedEgg == true,
             userNote = userNote?.takeIf { it.isNotBlank() },
-            gpsLatitude = location?.latitude,
-            gpsLongitude = location?.longitude,
-            gpsAccuracy = location?.accuracyMeters,
         )
 
         // A rejected box still persists, as a labelled FALSE_POSITIVE row — that is what makes

@@ -213,8 +213,6 @@
     <string name="records_session_time">%1$s → %2$s</string>
     <string name="records_session_active">active</string>
     <string name="records_session_open">Open</string>
-    <string name="records_no_gps">No GPS</string>
-    <string name="records_gps">%1$.5f, %2$.5f</string>
 
     <string name="session_detail_title">Session Detail</string>
     <string name="session_detail_empty">No verified samples in this session</string>
@@ -294,7 +292,6 @@
     <string name="sample_detail_status">Status</string>
     <string name="sample_detail_captured_at">Captured at</string>
     <string name="sample_detail_verified_at">Verified at</string>
-    <string name="sample_detail_gps">GPS</string>
     <string name="sample_detail_storage_path">Storage path</string>
     <string name="sample_detail_model_version">Model version</string>
     <string name="sample_detail_needs_reannotation">Needs reannotation</string>

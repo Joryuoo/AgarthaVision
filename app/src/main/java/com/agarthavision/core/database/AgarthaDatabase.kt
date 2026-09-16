@@ -3,12 +3,15 @@ package com.agarthavision.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.PsgcBarangayEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
@@ -30,13 +33,24 @@ import com.agarthavision.data.local.entity.SessionEntity
  *
  * `psgc_barangays` is the one table here with no Supabase mirror: it is reference data
  * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the
- * surveillance map joins on the code a session stores rather than on this table.
+ * surveillance map joins on the code a patient stores rather than on this table.
  *
  * Version 12 adds the `sample_species_findings` table and `detections.species_touched`
  * (`0012_polyparasitism_findings.sql`) plus `samples.deleted_at`
  * (`0013_sample_soft_delete.sql`).
  *
- * **The jump from 10 to 12 is deliberate: 11 is left free.** Three branches wanted version 10
+ * Version 13 is the patient-based schema (`0001_init.sql` on the new `agarthavision`
+ * project). It adds `patients` and the `patient_users` join, gives `sessions` a
+ * `patient_id`, and drops five columns: `sessions.ended_at`, `sessions.notes`,
+ * `sessions.psgc_barangay_code`, `sessions.claim_exempt` and all three `samples.gps_*`,
+ * plus `reports.epg_per_species_json`.
+ *
+ * **Version 13 owns the whole shape.** `claim_exempt` is dropped here rather than in the
+ * mandatory-login change that makes it dead, because a second schema change at the same
+ * version is precisely the collision described below — the login work removes Kotlin, not
+ * columns.
+ *
+ * **The jump from 10 to 12 was deliberate, and 11 is still left free.** Three branches wanted version 10
  * at once — `feat/sample-geospatial-mapping` (`psgc_barangays`), which won it and is merged
  * above; `feature/editable-report` (`detections.stage`), which lost it and was reverted on
  * staging with 86d4a6jwy deprioritised; and this one. Room only falls back destructively on a
@@ -55,17 +69,20 @@ import com.agarthavision.data.local.entity.SessionEntity
     entities = [
         SampleEntity::class,
         SessionEntity::class,
+        PatientEntity::class,
+        PatientUserEntity::class,
         DetectionEntity::class,
         ReportEntity::class,
         SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleDao(): SampleDao
     abstract fun sessionDao(): SessionDao
+    abstract fun patientDao(): PatientDao
     abstract fun detectionDao(): DetectionDao
     abstract fun reportDao(): ReportDao
     abstract fun psgcBarangayDao(): PsgcBarangayDao
