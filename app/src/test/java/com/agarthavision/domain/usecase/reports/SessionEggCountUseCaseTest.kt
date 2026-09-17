@@ -1,139 +1,101 @@
 package com.agarthavision.domain.usecase.reports
 
-import com.agarthavision.domain.model.EggCount
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.InfectivityLevel
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
 class SessionEggCountUseCaseTest {
     @Test
-    fun `returns empty counts when no cached local identity`() = runTest {
+    fun `returns empty payload when no data available`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn(null)
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", null))
-            .thenReturn(emptyList())
+        val sampleRepository: SampleRepository = mock()
+        val findingDao: SampleSpeciesFindingDao = mock()
 
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+        whenever(sampleRepository.getSamplesForSession("session-1", "user-1")).thenReturn(emptyList())
+        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(emptyList())
+        whenever(findingDao.getFindingsForSession("session-1", "user-1")).thenReturn(emptyList())
+
+        val useCase = SessionEggCountUseCase(authRepository, detectionRepository, sampleRepository, findingDao)
+        val result = useCase("session-1").getOrThrow()
 
         assertEquals(0, result.totalEggCount)
-        assertEquals(0, result.epg)
-        assertEquals(emptyList<EggCount>(), result.counts)
-        assertEquals(emptyMap<EggSpecies, Int>(), result.epgPerSpecies)
-        assertNull(result.infectivityLevel)
-        assertNull(result.topSpecies)
+        assertEquals(1, result.fieldCount) // coerceAtLeast(1)
+        assertEquals(0, result.lpfPerSpecies.size)
     }
 
     @Test
-    fun `computes total eggs and epg from confirmed counts`() = runTest {
+    fun `computes lpf density correctly across multiple fields`() = runTest {
         val authRepository: AuthRepository = mock()
         val detectionRepository: DetectionRepository = mock()
+        val sampleRepository: SampleRepository = mock()
+        val findingDao: SampleSpeciesFindingDao = mock()
+
         whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            listOf(EggCount("Ascaris", 2), EggCount("Trichuris", 1)),
+        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1"))
+            .thenReturn(emptyList())
+        
+        // 3 fields examined
+        val samples = listOf(
+            mockSample("s1"), mockSample("s2"), mockSample("s3")
         )
+        whenever(sampleRepository.getSamplesForSession("session-1", "user-1")).thenReturn(samples)
 
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
+        // Findings:
+        // s1: Ascaris 2
+        // s2: Ascaris 4, Hookworm 1
+        // s3: clean (0 eggs)
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "s1", "Ascaris", null, 2),
+            SampleSpeciesFindingEntity("f2", "s2", "Ascaris", null, 4),
+            SampleSpeciesFindingEntity("f3", "s2", "Hookworm", null, 1),
+        )
+        whenever(findingDao.getFindingsForSession("session-1", "user-1")).thenReturn(findings)
 
-        assertEquals(3, result.totalEggCount)
-        assertEquals(72, result.epg)
-        assertEquals(2, result.counts.size)
+        val useCase = SessionEggCountUseCase(authRepository, detectionRepository, sampleRepository, findingDao)
+        val result = useCase("session-1").getOrThrow()
+
+        assertEquals(3, result.fieldCount)
+        
+        // Ascaris: mean (2+4+0)/3 = 2.0, min 0, max 4
+        assertTrue("Ascaris should be in results", result.lpfPerSpecies.containsKey("Ascaris"))
+        val ascaris = result.lpfPerSpecies["Ascaris"]!!
+        assertEquals(2.0f, ascaris.mean, 0.01f)
+        assertEquals(0, ascaris.min)
+        assertEquals(4, ascaris.max)
+
+        // Hookworm: mean (0+1+0)/3 = 0.33, min 0, max 1
+        assertTrue("Hookworm should be in results", result.lpfPerSpecies.containsKey("Hookworm"))
+        val hookworm = result.lpfPerSpecies["Hookworm"]!!
+        assertEquals(0.33f, hookworm.mean, 0.01f)
+        assertEquals(0, hookworm.min)
+        assertEquals(1, hookworm.max)
     }
 
-    @Test
-    fun `low counts yield a low session tier and name the responsible species`() = runTest {
-        val authRepository: AuthRepository = mock()
-        val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            listOf(EggCount("Ascaris", 2)),
-        )
-
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
-
-        assertEquals(48, result.epgPerSpecies[EggSpecies.ASCARIS])
-        assertEquals(InfectivityLevel.LOW, result.infectivityLevel)
-        assertEquals(EggSpecies.ASCARIS, result.topSpecies)
-    }
-
-    @Test
-    fun `unrecognized species is excluded from the tier and epgPerSpecies map`() = runTest {
-        val authRepository: AuthRepository = mock()
-        val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            listOf(EggCount("Some Unknown Parasite", 500_000)),
-        )
-
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
-
-        assertEquals(emptyMap<EggSpecies, Int>(), result.epgPerSpecies)
-        assertNull(result.infectivityLevel)
-        assertNull(result.topSpecies)
-    }
-
-    @Test
-    fun `alias rows for the same species fold into one epgPerSpecies entry`() = runTest {
-        val authRepository: AuthRepository = mock()
-        val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            listOf(EggCount("Ascaris", 1), EggCount("Ascaris lumbricoides", 1)),
-        )
-
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
-
-        // Both rows are the same canonical species, so they must fold into a single
-        // epgPerSpecies entry keyed on EggSpecies.ASCARIS, not two separate counts.
-        assertEquals(1, result.epgPerSpecies.size)
-        assertEquals(48, result.epgPerSpecies[EggSpecies.ASCARIS])
-        assertEquals(InfectivityLevel.LOW, result.infectivityLevel)
-        assertEquals(EggSpecies.ASCARIS, result.topSpecies)
-    }
-
-    @Test
-    fun `mixed species picks the higher tier not the higher raw epg for topSpecies`() = runTest {
-        val authRepository: AuthRepository = mock()
-        val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        // Hookworm 1 egg -> epg 24 (Low). Ascaris 210 eggs -> epg 5,040 (Moderate). Moderate
-        // beats Low even though it isn't the species with the fewest raw eggs either way.
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            listOf(EggCount("Hookworm", 1), EggCount("Ascaris", 210)),
-        )
-
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
-
-        assertEquals(InfectivityLevel.MODERATE, result.infectivityLevel)
-        assertEquals(EggSpecies.ASCARIS, result.topSpecies)
-    }
-
-    @Test
-    fun `zero confirmed eggs yields no infectivity level`() = runTest {
-        val authRepository: AuthRepository = mock()
-        val detectionRepository: DetectionRepository = mock()
-        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
-        whenever(detectionRepository.getConfirmedEggCountsForSession("session-1", "user-1")).thenReturn(
-            emptyList(),
-        )
-
-        val useCase = SessionEggCountUseCase(authRepository, detectionRepository)
-        val result = useCase("session-1")
-
-        assertNull(result.infectivityLevel)
-        assertNull(result.topSpecies)
-    }
+    private fun mockSample(id: String) = Sample(
+        id = id,
+        sessionId = "session-1",
+        userId = "user-1",
+        timestamp = 0,
+        verifiedAt = 0,
+        deviceId = "device-1",
+        filePath = "path/to/file",
+        status = com.agarthavision.domain.model.SampleStatus.VERIFIED,
+        latitude = null,
+        longitude = null,
+        accuracyMeters = null,
+        isManual = false,
+        userNote = null,
+        inferenceModelVersion = "v1"
+    )
 }

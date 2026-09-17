@@ -1,6 +1,7 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.entity.ReportEntity
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -12,23 +13,28 @@ import java.time.Instant
 import javax.inject.Inject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Writes persisted session reports to Supabase Postgres. Row-only sync — the
  * CSV file stays local on the device; only the metadata + aggregate stats are
  * mirrored to `public.reports`.
  *
- * **`epg_per_species` is gone from both sides.** `0001_init.sql:309-328` does not declare it
- * and `ReportEntity` no longer stores it, so the insert was sending a column the table does
- * not have. A stored EPG is a derived figure that goes stale the moment a finding is
- * corrected; the report files carry the figures computed at generation time instead.
+ * **`epg_per_species` is gone from both sides,** and `lpf_per_species` took its place on
+ * both at once. `0001_init.sql` declares `lpf_per_species jsonb not null default '{}'` and
+ * [ReportEntity] stores `lpf_per_species_json`; neither side carries EPG any more. The pair
+ * has to move together — an insert naming a column the table lacks fails at runtime, not at
+ * compile time, and only once a report is actually generated online.
  */
 open class ReportRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
     private val gson: Gson,
 ) {
     /**
-     * Inserts the report row matching `0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`.
+     * Inserts the report row matching `public.reports` in `0001_init.sql`.
      *
      * @throws IllegalStateException when no Supabase user session is available.
      */
@@ -42,6 +48,9 @@ open class ReportRemoteDataSource @Inject constructor(
         val positives: List<String> = runCatching {
             gson.fromJson<List<String>>(positiveSpeciesJson, stringListType)
         }.getOrNull().orEmpty()
+        val lpf: Map<String, LpfDensity> = runCatching {
+            gson.fromJson<Map<String, LpfDensity>>(lpfPerSpeciesJson, stringLpfDensityMapType)
+        }.getOrNull().orEmpty()
         return ReportInsertRow(
             id = reportId,
             sessionId = sessionId,
@@ -51,6 +60,7 @@ open class ReportRemoteDataSource @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positives,
+            lpfPerSpecies = lpf.toJsonObject(),
             csvFilePath = csvFilePath,
             pdfFilePath = pdfFilePath,
         )
@@ -66,6 +76,17 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
         }.decodeList<ReportRow>().map { it.toEntity() }
+
+    private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
+        buildJsonObject {
+            forEach { (species, density) ->
+                put(species, buildJsonObject {
+                    put("mean", density.mean)
+                    put("min", density.min)
+                    put("max", density.max)
+                })
+            }
+        }
 
     @Serializable
     private data class ReportInsertRow(
@@ -85,6 +106,8 @@ open class ReportRemoteDataSource @Inject constructor(
         val totalEggsConfirmed: Int,
         @SerialName("positive_species")
         val positiveSpecies: List<String>,
+        @SerialName("lpf_per_species")
+        val lpfPerSpecies: JsonObject,
         @SerialName("csv_file_path")
         val csvFilePath: String?,
         @SerialName("pdf_file_path")
@@ -103,6 +126,7 @@ open class ReportRemoteDataSource @Inject constructor(
         @SerialName("total_samples") val totalSamples: Int,
         @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
         @SerialName("positive_species") val positiveSpecies: List<String>,
+        @SerialName("lpf_per_species") val lpfPerSpecies: JsonObject,
         @SerialName("csv_file_path") val csvFilePath: String? = null,
         @SerialName("pdf_file_path") val pdfFilePath: String? = null,
     )
@@ -110,6 +134,15 @@ open class ReportRemoteDataSource @Inject constructor(
     private fun ReportRow.toEntity(): ReportEntity {
         val generatedAtMs = Instant.parse(generatedAt).toEpochMilli()
         val positiveSpeciesJson = gson.toJson(positiveSpecies)
+        val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
+            val obj = v as JsonObject
+            LpfDensity(
+                mean = (obj["mean"] as JsonPrimitive).content.toFloat(),
+                min = (obj["min"] as JsonPrimitive).content.toInt(),
+                max = (obj["max"] as JsonPrimitive).content.toInt()
+            )
+        }
+        val lpfPerSpeciesJson = gson.toJson(lpfMap)
         return ReportEntity(
             reportId = id,
             sessionId = sessionId,
@@ -119,6 +152,7 @@ open class ReportRemoteDataSource @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpeciesJson = positiveSpeciesJson,
+            lpfPerSpeciesJson = lpfPerSpeciesJson,
             csvFilePath = csvFilePath,
             pdfFilePath = pdfFilePath,
             supabaseStatus = ReportSyncStatus.SYNCED.value,
@@ -129,5 +163,6 @@ open class ReportRemoteDataSource @Inject constructor(
     private companion object {
         private const val REPORTS_TABLE = "reports"
         private val stringListType = object : TypeToken<List<String>>() {}.type
+        private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>>() {}.type
     }
 }

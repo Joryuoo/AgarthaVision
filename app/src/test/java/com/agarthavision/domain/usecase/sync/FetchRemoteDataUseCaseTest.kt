@@ -718,6 +718,7 @@ class FetchRemoteDataUseCaseTest {
         totalSamples = 0,
         totalEggsConfirmed = 0,
         positiveSpeciesJson = "[]",
+        lpfPerSpeciesJson = "{}",
         csvFilePath = null,
         pdfFilePath = null,
         supabaseStatus = ReportSyncStatus.SYNCED.value,

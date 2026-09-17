@@ -27,6 +27,20 @@ interface SampleSpeciesFindingDao {
     )
     suspend fun getFindingsForSample(sampleId: String): List<SampleSpeciesFindingEntity>
 
+    @Query(
+        """
+        SELECT f.* FROM sample_species_findings f
+        JOIN samples s ON s.sample_id = f.sample_id
+        WHERE s.session_id = :sessionId
+          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND s.deleted_at is null
+        """,
+    )
+    suspend fun getFindingsForSession(
+        sessionId: String,
+        userId: String?,
+    ): List<SampleSpeciesFindingEntity>
+
     @Query("DELETE FROM sample_species_findings WHERE sample_id = :sampleId")
     suspend fun deleteFindingsForSample(sampleId: String)
 

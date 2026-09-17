@@ -260,6 +260,6 @@ this rule is checkable.
 **Live examples of documents losing:** the `schema.ts` column names in C6; the
 `INFERENCE_API_KEY` name in C10; the "flagged frames are transient / in-memory" claim, which
 is wrong — `FlaggedFrameStore` is Room-backed
-(`data/repository/FlaggedFrameStore.kt:33-34`, `:58-74`); and the EPG counting rule, where the
-prose says "confirmed detections" but the query counts everything that is not a false
-positive (`data/local/dao/DetectionDao.kt:43`).
+(`data/repository/FlaggedFrameStore.kt:33-34`, `:58-74`); and the LPF counting rule, where the
+query counts everything that is not a false positive
+(`data/local/dao/DetectionDao.kt:43`).

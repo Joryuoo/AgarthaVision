@@ -65,7 +65,11 @@ data class ReportEntity(
 
     // `epg_per_species_json` is gone as of Room 13. EPG is eggs-per-gram via Kato-Katz;
     // Philippine medtechs use direct smear, so the ×24 multiplier was wrong for the
-    // method in use. The per-species min–max LPF range replaces it.
+    // method in use. The per-species min–max LPF range below replaces it.
+
+    /** JSON object: canonical species name → LpfDensity object. */
+    @ColumnInfo(name = "lpf_per_species_json")
+    val lpfPerSpeciesJson: String,
 
     @ColumnInfo(name = "csv_file_path")
     val csvFilePath: String?,

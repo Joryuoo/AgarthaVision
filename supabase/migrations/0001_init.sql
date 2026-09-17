@@ -18,7 +18,7 @@
 -- Each omission is commented at its table so nobody "restores" it:
 --   * samples.gps_latitude / gps_longitude / gps_accuracy
 --   * sessions.notes, sessions.ended_at, sessions.psgc_barangay_code
---   * reports.epg_per_species
+--   * reports.epg_per_species  (replaced by reports.lpf_per_species)
 --   * a Storage DELETE policy on the `samples` bucket
 --
 -- See schema.ts, docs/constraints.md C6 and C8, and tickets PB-02 (86d4be3hn) and
@@ -315,6 +315,7 @@ create table public.reports (
     total_samples        integer not null,
     total_eggs_confirmed integer not null,
     positive_species     text[] not null default '{}',
+    lpf_per_species      jsonb not null default '{}'::jsonb,
     csv_file_path        text,
     pdf_file_path        text,
     created_at           timestamptz not null default now()
@@ -326,6 +327,12 @@ create table public.reports (
 -- heavy bands are defined only against EPG — there is no published intensity table for
 -- direct smear to rescale them to. The per-species min–max LPF range replaces it
 -- (PB-17 / PB-18). Do not add an epg column back without clinical sign-off.
+--
+-- `lpf_per_species` is that replacement, carried in from 86d4a6jxw (legacy-dev/0011) when
+-- staging merged into this branch. Shape: {"<canonical species>": {"mean": 1.5, "min": 0,
+-- "max": 4}}. It is stored rather than derived because a report records what was found at
+-- generation time; correcting a finding later does not rewrite a report already issued.
+-- PB-17 owns the definition of the range itself — reconcile there, not here.
 
 create index reports_session_generated_idx on public.reports(session_id, generated_at desc);
 create index reports_user_generated_idx    on public.reports(user_id, generated_at desc);

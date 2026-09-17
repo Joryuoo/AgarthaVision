@@ -142,7 +142,7 @@ fun DashboardScreen(
             item {
                 Spacer(Modifier.height(Spacing.lg))
                 SparklineCard(
-                    values = if (state.epgSparklineData.size == 7) state.epgSparklineData
+                    values = if (state.eggsSparklineData.size == 7) state.eggsSparklineData
                              else List(7) { 0f },
                     delta  = "+38%",
                     modifier = Modifier.padding(horizontal = Spacing.xl)

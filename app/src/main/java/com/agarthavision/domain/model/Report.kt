@@ -23,11 +23,11 @@ data class Report(
     /** Canonical species names (per [EggSpecies.canonicalClass]) with at least one confirmed egg. */
     val positiveSpecies: List<String>,
     /**
-     * Canonical species name → EPG integer. Sourced from EpgCalculator × per-species counts.
+     * Canonical species name → LPF density metrics.
      *
-     * Temporary metric: ticket 86d4a6jxw replaces EPG with LPF density once that pipeline lands.
+     * Replaces EPG (86d4a6jxw): Direct Smear density is the primary reported unit.
      */
-    val epgPerSpecies: Map<String, Int>,
+    val lpfPerSpecies: Map<String, LpfDensity>,
     val csvFilePath: String?,
     /** Local path (or `content://` URI) to the patient-facing PDF, mirroring [csvFilePath]. */
     val pdfFilePath: String?,

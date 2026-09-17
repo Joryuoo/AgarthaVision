@@ -3,7 +3,7 @@ package com.agarthavision.ui.records
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.agarthavision.domain.model.InfectivityLevel
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase
@@ -14,6 +14,7 @@ import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
+import com.agarthavision.domain.usecase.reports.SessionEggCounts
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -43,9 +44,8 @@ data class SessionDetailState(
     val unavailable: SessionUnavailable? = null,
     val eggCounts: List<EggCountSummary> = emptyList(),
     val totalEggCount: Int = 0,
-    val epg: Int = 0,
-    val infectivityLevel: InfectivityLevel? = null,
-    val infectivitySpeciesLabel: String? = null,
+    val fieldCount: Int = 0,
+    val lpfPerSpecies: Map<String, LpfDensity> = emptyMap(),
     val reports: List<Report> = emptyList(),
     val totalReports: Int = 0,
     val currentPage: Int = 0,
@@ -127,7 +127,7 @@ class SessionDetailViewModel @Inject constructor(
             generationState,
             currentReportPage,
         ) { result, reports, totalReports, generation, page ->
-            val eggCounts = sessionEggCountUseCase(sessionId)
+            val eggCounts = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
             val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
             val unavail = when (result) {
                 is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
@@ -140,9 +140,8 @@ class SessionDetailViewModel @Inject constructor(
                 unavailable = unavail,
                 eggCounts = eggCounts.counts.map { EggCountSummary(it.species, it.count) },
                 totalEggCount = eggCounts.totalEggCount,
-                epg = eggCounts.epg,
-                infectivityLevel = eggCounts.infectivityLevel,
-                infectivitySpeciesLabel = eggCounts.topSpecies?.displayName,
+                fieldCount = eggCounts.fieldCount,
+                lpfPerSpecies = eggCounts.lpfPerSpecies,
                 reports = reports,
                 totalReports = totalReports,
                 currentPage = page,

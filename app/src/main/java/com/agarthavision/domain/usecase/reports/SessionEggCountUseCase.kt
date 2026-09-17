@@ -1,56 +1,64 @@
 package com.agarthavision.domain.usecase.reports
 
-import com.agarthavision.core.util.EpgCalculator
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.domain.model.EggCount
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.InfectivityLevel
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.SampleRepository
 import javax.inject.Inject
 
 /**
- * Computes per-session egg counts and EPG from confirmed detections.
+ * Computes per-session Low Power Field (LPF) density from medtech findings.
+ *
+ * Philippine medtechs use Direct Smear rather than Kato-Katz, so EPG is retired (86d4a6jxw) in
+ * favour of LPF density.
  */
 class SessionEggCountUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val detectionRepository: DetectionRepository,
+    private val sampleRepository: SampleRepository,
+    private val findingDao: SampleSpeciesFindingDao,
 ) {
     /**
-     * Returns per-species counts, total egg count, EPG, and the WHO infectivity tier for a
-     * session.
+     * Returns per-species counts, total egg count, and LPF density for a session.
      */
-    suspend operator fun invoke(sessionId: String): SessionEggCounts {
+    suspend operator fun invoke(sessionId: String): Result<SessionEggCounts> = runCatching {
         val userId = authRepository.currentLocalUserId()
-        val counts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
-        val total = counts.sumOf { it.count }
-        val epg = EpgCalculator.epg(total)
+        
+        // The denominator is the total number of fields (samples) examined in the session,
+        // including clean fields (zero eggs).
+        val samples = sampleRepository.getSamplesForSession(sessionId, userId)
+        val fieldCount = samples.size.coerceAtLeast(1)
 
-        // Same normalization the report path uses (alias -> EggSpecies), but keyed by the
-        // recognized EggSpecies itself rather than its display string, since the WHO tier
-        // table is keyed on the enum. Unrecognized/"Other" labels have no WHO table entry and
-        // are excluded here rather than silently folded into a tier they don't have.
-        val epgPerSpecies: Map<EggSpecies, Int> = counts
-            .mapNotNull { count -> count.canonicalEggSpecies()?.let { it to count.count } }
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, speciesCounts) -> EpgCalculator.epg(speciesCounts.sum()) }
+        val confirmedCounts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
+        val total = confirmedCounts.sumOf { it.count }
 
-        val infectivityLevel = InfectivityLevelCalculator.sessionLevel(epgPerSpecies)
-        val topSpecies = infectivityLevel?.let { level ->
-            epgPerSpecies.entries
-                .filter { (species, speciesEpg) ->
-                    InfectivityLevelCalculator.classify(species, speciesEpg) == level
-                }
-                .maxByOrNull { it.value }
-                ?.key
+        val findings = findingDao.getFindingsForSession(sessionId, userId)
+        
+        // Density is per species: sum of eggs of that species divided by fields examined.
+        // We also track the min/max egg count seen in any single field for the range.
+        val lpfPerSpecies = findings.groupBy { it.species }.mapValues { (_, speciesFindings) ->
+            val countsByField = speciesFindings.groupBy { it.sampleId }
+                .mapValues { it.value.sumOf { f -> f.eggCount } }
+            
+            val totalEggs = countsByField.values.sum()
+            val maxEggs = countsByField.values.maxOrNull() ?: 0
+            // If any field in the session had zero eggs of this species, min is 0.
+            val minEggs = if (countsByField.size < fieldCount) 0 else countsByField.values.minOrNull() ?: 0
+
+            LpfDensity(
+                mean = totalEggs.toFloat() / fieldCount,
+                min = minEggs,
+                max = maxEggs
+            )
         }
 
-        return SessionEggCounts(
-            counts = counts,
+        SessionEggCounts(
+            counts = confirmedCounts,
             totalEggCount = total,
-            epg = epg,
-            epgPerSpecies = epgPerSpecies,
-            infectivityLevel = infectivityLevel,
-            topSpecies = topSpecies,
+            lpfPerSpecies = lpfPerSpecies,
+            fieldCount = fieldCount
         )
     }
 }
@@ -61,15 +69,13 @@ class SessionEggCountUseCase @Inject constructor(
 data class SessionEggCounts(
     val counts: List<EggCount>,
     val totalEggCount: Int,
-    val epg: Int,
-    val epgPerSpecies: Map<EggSpecies, Int> = emptyMap(),
-    val infectivityLevel: InfectivityLevel? = null,
-    val topSpecies: EggSpecies? = null,
+    val lpfPerSpecies: Map<String, LpfDensity> = emptyMap(),
+    val fieldCount: Int = 0,
 ) {
     companion object {
         /**
          * Empty default when no user session is available.
          */
-        fun empty(): SessionEggCounts = SessionEggCounts(emptyList(), 0, 0)
+        fun empty(): SessionEggCounts = SessionEggCounts(emptyList(), 0)
     }
 }
