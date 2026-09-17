@@ -12,8 +12,10 @@ import androidx.room.PrimaryKey
  * owns many [SessionEntity] rows; a session is one fecal smear.
  *
  * [birthdate] is stored rather than an age so the age shown on a report is recomputed per
- * encounter and cannot go stale. It is epoch millis at UTC midnight, matching how the rest
- * of the Room schema stores dates.
+ * encounter and cannot go stale. It is epoch millis at midnight in `Asia/Manila`
+ * (`CLINICAL_ZONE`, in `domain/model/Patient.kt`) — surveillance is Philippine, so a
+ * birthdate is a calendar fact in Philippine time. `PatientMapper` owns that conversion
+ * and is the only place that does it.
  *
  * [psgcBarangayCode] is the canonical zero-padded 10-digit PSGC (`0102801001`). It lives on
  * the patient rather than the session because it is the unit surveillance aggregates on and
@@ -52,7 +54,7 @@ data class PatientEntity(
     @ColumnInfo(name = "sex")
     val sex: String,
 
-    /** Epoch millis at UTC midnight. Never a future date — the picker rejects them. */
+    /** Epoch millis at Philippine midnight. Never a future date — the picker rejects them. */
     @ColumnInfo(name = "birthdate")
     val birthdate: Long,
 

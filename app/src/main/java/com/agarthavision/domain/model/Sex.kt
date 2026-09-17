@@ -14,14 +14,15 @@ enum class Sex(val remoteValue: String) {
 
     companion object {
         /**
-         * Reads a stored value back, **totally**.
+         * Reads a stored value back, returning null when it is not one of the two.
          *
          * A row hand-edited in the Supabase dashboard can carry anything, and the patient
-         * list must still render. An unrecognised value falls back to [MALE] rather than
-         * throwing — a wrong glyph on one row is recoverable, a crashing list is not.
-         * Matching is case-insensitive so `'m'` survives the round trip.
+         * list must still render — but an unreadable value is **not** evidence of either
+         * sex, and guessing one would print a clinical fact the record does not support.
+         * Null means "unknown", and [Patient.sex] is nullable to carry it. Matching is
+         * case-insensitive so `'m'` survives the round trip.
          */
-        fun fromRemote(value: String): Sex =
-            entries.firstOrNull { it.remoteValue.equals(value, ignoreCase = true) } ?: MALE
+        fun fromRemote(value: String): Sex? =
+            entries.firstOrNull { it.remoteValue.equals(value, ignoreCase = true) }
     }
 }

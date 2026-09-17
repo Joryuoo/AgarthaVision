@@ -1,17 +1,20 @@
 package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class PatientMapperTest {
 
     private val birthdateMillis =
-        LocalDate.of(1998, 7, 30).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        LocalDate.of(1998, 7, 30).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
 
     private fun entity(
         sex: String = "M",
@@ -66,8 +69,26 @@ class PatientMapperTest {
     }
 
     @Test
-    fun `an unrecognised stored sex does not throw`() {
-        assertEquals(Sex.MALE, entity(sex = "?").toDomain().sex)
+    fun `an unrecognised stored sex reads as null rather than a guess`() {
+        assertNull(entity(sex = "?").toDomain().sex)
+    }
+
+    @Test
+    fun `a patient with no readable sex refuses to be written back`() {
+        val unreadable = entity(sex = "?").toDomain()
+        assertThrows(IllegalArgumentException::class.java) { unreadable.toEntity() }
+    }
+
+    @Test
+    fun `birthdate is stored at Philippine midnight, not UTC midnight`() {
+        // Philippine midnight is 16:00 UTC the previous day. Storing at UTC midnight
+        // instead would read back as 29 July for a patient born on the 30th.
+        val domain = entity().toDomain()
+        val utcMidnight = LocalDate.of(1998, 7, 30)
+            .atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+        assertEquals(birthdateMillis, domain.toEntity().birthdate)
+        assertEquals(LocalDate.of(1998, 7, 30), domain.birthdate)
+        assertEquals(utcMidnight - 8 * 60 * 60 * 1000, birthdateMillis)
     }
 
     @Test

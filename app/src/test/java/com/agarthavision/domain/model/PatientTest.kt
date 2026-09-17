@@ -2,7 +2,6 @@ package com.agarthavision.domain.model
 
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -26,8 +25,8 @@ class PatientTest {
         updatedAt = Instant.EPOCH,
     )
 
-    /** UTC midnight on [date] — the frame `ageYears` resolves against. */
-    private fun at(date: LocalDate): Instant = date.atStartOfDay(ZoneOffset.UTC).toInstant()
+    /** Philippine midnight on [date] — the frame `ageYears` resolves against. */
+    private fun at(date: LocalDate): Instant = date.atStartOfDay(CLINICAL_ZONE).toInstant()
 
     // ── displayName ───────────────────────────────────────────────────────────
 
@@ -88,6 +87,19 @@ class PatientTest {
     fun `a newborn is zero`() {
         val p = patient(birthdate = LocalDate.of(2026, 9, 17))
         assertEquals(0, p.ageYears(at(LocalDate.of(2026, 9, 17))))
+    }
+
+    @Test
+    fun `age is resolved in Philippine time, not UTC`() {
+        // 2026-03-15T00:30+08:00 is still 2026-03-14 in UTC. The patient's birthday is
+        // 03-15, so a UTC-resolved age would read one year low for the first eight hours
+        // of every Philippine day.
+        val p = patient(birthdate = LocalDate.of(2000, 3, 15))
+        val justAfterPhilippineMidnight = LocalDate.of(2026, 3, 15)
+            .atStartOfDay(CLINICAL_ZONE)
+            .plusMinutes(30)
+            .toInstant()
+        assertEquals(26, p.ageYears(justAfterPhilippineMidnight))
     }
 
     @Test

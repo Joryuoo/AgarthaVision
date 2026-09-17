@@ -3,7 +3,17 @@ package com.agarthavision.domain.model
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
-import java.time.ZoneOffset
+import java.time.ZoneId
+
+/**
+ * The clinical locale every patient date is resolved in.
+ *
+ * Surveillance is Philippine, so a patient's birthdate and their age are calendar facts in
+ * Philippine time, not UTC. Resolving them in UTC would tick an age over at 08:00 local
+ * rather than at midnight, and would shift a birthdate entered between midnight and 08:00
+ * back a day. `Asia/Manila` has no DST, so this is a fixed +08:00 in practice.
+ */
+val CLINICAL_ZONE: ZoneId = ZoneId.of("Asia/Manila")
 
 /**
  * Domain model for a patient — the unit the medtech works from.
@@ -14,6 +24,10 @@ import java.time.ZoneOffset
  * [birthdate] is the stored field rather than an age. An age is wrong the day after it is
  * written, and a clinical report that prints a stale age is a defect nothing downstream
  * catches. [ageYears] recomputes it per encounter instead.
+ *
+ * [sex] is nullable only to survive reading a row whose stored value is neither `'M'` nor
+ * `'F'` — the form requires one, and `patients.sex` is `not null` with a CHECK, so null
+ * here means the value on disk was unreadable, never that a medtech left it blank.
  *
  * [psgcBarangayCode] lives here rather than on the session because it is the unit
  * surveillance aggregates on, and it does not change from one smear to the next.
@@ -29,7 +43,8 @@ data class Patient(
     val firstname: String,
     /** Nullable on purpose — many patients do not supply one. */
     val middleName: String? = null,
-    val sex: Sex,
+    /** Null only when the stored value was unreadable. See the class doc. */
+    val sex: Sex?,
     val birthdate: LocalDate,
     val psgcBarangayCode: String,
     val createdBy: String,
@@ -55,17 +70,15 @@ data class Patient(
     /**
      * Completed years of age at [asOf] — computed, never stored.
      *
-     * [asOf] is resolved at [ZoneOffset.UTC] because that is the frame [birthdate] is
-     * stored in: `PatientEntity.birthdate` is epoch millis at UTC midnight, and
-     * `PatientMapper` reads it back the same way. Resolving the two in different zones is
-     * exactly the off-by-one that prints a wrong age on a clinical report, so both ends of
-     * the comparison stay in one frame.
+     * [asOf] is resolved in [CLINICAL_ZONE], the same frame [birthdate] is stored and read
+     * in. Resolving the two ends of the comparison in different zones is exactly the
+     * off-by-one that prints a wrong age on a clinical report, so both stay in one frame.
      *
      * A birthdate in the future yields `0` rather than a negative age; the form rejects
      * future dates, so this only guards a hand-edited row.
      */
     fun ageYears(asOf: Instant): Int {
-        val today = asOf.atZone(ZoneOffset.UTC).toLocalDate()
+        val today = asOf.atZone(CLINICAL_ZONE).toLocalDate()
         if (birthdate.isAfter(today)) return 0
         return Period.between(birthdate, today).years
     }

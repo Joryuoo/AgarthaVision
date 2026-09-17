@@ -1,6 +1,7 @@
 package com.agarthavision.domain.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class SexTest {
@@ -23,8 +24,8 @@ class SexTest {
     }
 
     @Test
-    fun `fromRemote is total so a hand-edited row cannot crash the patient list`() {
-        assertEquals(Sex.MALE, Sex.fromRemote("X"))
-        assertEquals(Sex.MALE, Sex.fromRemote(""))
+    fun `an unreadable value is null rather than a guessed sex`() {
+        assertNull(Sex.fromRemote("X"))
+        assertNull(Sex.fromRemote(""))
     }
 }
