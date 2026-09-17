@@ -3,16 +3,21 @@ package com.agarthavision.domain.usecase.sync
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.PatientSyncStatus
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
@@ -46,9 +51,11 @@ class FetchRemoteDataUseCaseTest {
 
     private val authRepository: AuthRepository = mock()
     private val connectivityObserver: ConnectivityObserver = mock()
+    private val patientRemoteDataSource: PatientRemoteDataSource = mock()
     private val sampleRemoteDataSource: SampleRemoteDataSource = mock()
     private val sessionRemoteDataSource: SessionRemoteDataSource = mock()
     private val reportRemoteDataSource: ReportRemoteDataSource = mock()
+    private val patientDao: PatientDao = mock()
     private val sessionDao: SessionDao = mock()
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
@@ -59,9 +66,11 @@ class FetchRemoteDataUseCaseTest {
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
+        patientRemoteDataSource = patientRemoteDataSource,
         sampleRemoteDataSource = sampleRemoteDataSource,
         sessionRemoteDataSource = sessionRemoteDataSource,
         reportRemoteDataSource = reportRemoteDataSource,
+        patientDao = patientDao,
         sessionDao = sessionDao,
         sampleDao = sampleDao,
         detectionDao = detectionDao,
@@ -82,6 +91,7 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
+        verify(patientRemoteDataSource, never()).fetchPatients()
         verify(sessionRemoteDataSource, never()).fetchSessions(any())
     }
 
@@ -95,6 +105,7 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
+        verify(patientRemoteDataSource, never()).fetchPatients()
         verify(sessionRemoteDataSource, never()).fetchSessions(any())
     }
 
@@ -108,6 +119,7 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
+        verify(patientRemoteDataSource, never()).fetchPatients()
         verify(sessionRemoteDataSource, never()).fetchSessions(any())
     }
 
@@ -132,10 +144,97 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals(0, summary.patientsFetched)
         assertEquals(1, summary.sessionsFetched)
         assertEquals(1, summary.samplesFetched)
         assertEquals(1, summary.reportsFetched)
         verify(initialFetchStateStore).markCompleted("user-1")
+    }
+
+    // ── Patients (PB-05d) ────────────────────────────────────────────────────
+
+    @Test
+    fun `a local PENDING patient is not overwritten by a remote pull of the same id`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        whenever(patientDao.getPatientById("pat-1"))
+            .thenReturn(fakePatient("pat-1", PatientSyncStatus.PENDING.value))
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        // That row is a patient the medtech typed in offline. Clobbering it loses them.
+        verify(patientDao, never()).upsertPatient(any())
+        assertEquals(0, (result.getOrThrow() as FetchSummary.Ran).patientsFetched)
+    }
+
+    @Test
+    fun `a local SYNC_FAILED patient is not overwritten either`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        whenever(patientDao.getPatientById("pat-1"))
+            .thenReturn(fakePatient("pat-1", PatientSyncStatus.SYNC_FAILED.value))
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        verify(patientDao, never()).upsertPatient(any())
+    }
+
+    @Test
+    fun `an absent patient is inserted along with its link rows`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        whenever(patientDao.getPatientById("pat-1")).thenReturn(null)
+        whenever(patientRemoteDataSource.fetchPatientLinks())
+            .thenReturn(listOf(PatientUserEntity("pat-1", "user-1", 1_700_000_000_000)))
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        verify(patientDao).upsertPatient(any())
+        // Without the link row the patient is on the device and invisible to every read.
+        verify(patientDao).linkPatientsToUsers(any())
+        assertEquals(1, (result.getOrThrow() as FetchSummary.Ran).patientsFetched)
+    }
+
+    @Test
+    fun `a failed patient pull leaves markCompleted unset`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenThrow(RuntimeException("boom"))
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        // E2: a partial pull must leave the badge honest rather than claim a cache the
+        // device does not have. The medtech finds out where there is no signal.
+        assertTrue(result.isSuccess)
+        verify(initialFetchStateStore, never()).markCompleted(any())
+    }
+
+    @Test
+    fun `fetches patients before sessions (FK-safe order)`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        // A session arriving before its patient violates the local FK on sessions.patient_id.
+        inOrder(patientRemoteDataSource, sessionRemoteDataSource) {
+            verify(patientRemoteDataSource).fetchPatients()
+            verify(sessionRemoteDataSource).fetchSessions("user-1")
+        }
     }
 
     // ── FK-safe order: sessions before samples ───────────────────────────────
@@ -503,7 +602,30 @@ class FetchRemoteDataUseCaseTest {
         whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(authRepository.isAuthenticated()).thenReturn(true)
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
+        // Patients default to an empty pull. Leaving them unstubbed would make
+        // pullPatients throw on a null List, which runCatching swallows into
+        // patientsOk = false — and that silently suppresses markCompleted in every
+        // test below rather than failing the one that is actually wrong.
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
     }
+
+    private fun fakePatient(
+        id: String,
+        supabaseStatus: String = PatientSyncStatus.SYNCED.value,
+    ) = PatientEntity(
+        patientId = id,
+        lastname = "Cruz",
+        firstname = "Gerald",
+        middleName = null,
+        sex = "M",
+        birthdate = 0L,
+        psgcBarangayCode = "0102801001",
+        createdBy = "user-1",
+        createdAt = 1_700_000_000_000,
+        updatedAt = 1_700_000_000_000,
+        supabaseStatus = supabaseStatus,
+    )
 
     /** Configures the minimal stubs for a fetch pass with provided samples; sessions and reports are empty. */
     private suspend fun setupMinimalFetch(samples: List<SampleEntity>) {
