@@ -316,8 +316,8 @@
     <string name="manual_sheet_close_desc">Close manual capture sheet</string>
 
     <string name="nav_tab_home">Home</string>
-    <string name="nav_tab_sessions">Sessions</string>
-    <string name="nav_tab_records">Records</string>
+    <string name="nav_tab_patients">Patients</string>
+    <string name="nav_tab_reports">Reports</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_subtitle_purpose">Manage your account, sync, and app preferences</string>
