@@ -19,6 +19,10 @@ data class InferenceResponseDto(
      * from network round-trip so it can be compared fairly against on-device compute.
      */
     @SerializedName("inference_ms") val inferenceMs: Float? = null,
+    /**
+     * Egg counts per class, if the container pre-aggregated them.
+     */
+    @SerializedName("counts") val counts: Map<String, Int>? = null,
 )
 
 data class PredictionDto(

@@ -458,7 +458,7 @@ class RecordsViewModelTest {
     @Test
     fun `state totals reflect repository totals`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val expectedTotals = RecordsTotals(sessionCount = 5, totalSamples = 30, totalEpg = 12)
+            val expectedTotals = RecordsTotals(sessionCount = 5, totalSamples = 30, totalEggs = 12)
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { emptyList() },
@@ -471,7 +471,7 @@ class RecordsViewModelTest {
                 assertFalse(settled.isLoading)
                 assertEquals(expectedTotals.sessionCount, settled.totals.sessionCount)
                 assertEquals(expectedTotals.totalSamples, settled.totals.totalSamples)
-                assertEquals(expectedTotals.totalEpg, settled.totals.totalEpg)
+                assertEquals(expectedTotals.totalEggs, settled.totals.totalEggs)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -634,5 +634,5 @@ private fun sessionWithStats(session: Session): SessionWithStats =
         totalSamples = 1,
         verifiedSamples = 1,
         unverifiedSamples = 0,
-        totalEpg = 0,
+        totalEggs = 0,
     )

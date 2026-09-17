@@ -259,7 +259,7 @@ class SessionPickerViewModelTest {
             totalSamples = 0,
             verifiedSamples = 0,
             unverifiedSamples = 0,
-            totalEpg = 0,
+            totalEggs = 0,
         )
 
     private fun makeSessionEntity(id: String): SessionEntity = SessionEntity(

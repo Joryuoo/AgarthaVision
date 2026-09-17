@@ -64,9 +64,9 @@ data class ReportEntity(
     @ColumnInfo(name = "positive_species_json")
     val positiveSpeciesJson: String,
 
-    /** JSON object: canonical species name → EPG integer. */
-    @ColumnInfo(name = "epg_per_species_json")
-    val epgPerSpeciesJson: String,
+    /** JSON object: canonical species name → LpfDensity object. */
+    @ColumnInfo(name = "lpf_per_species_json")
+    val lpfPerSpeciesJson: String,
 
     @ColumnInfo(name = "csv_file_path")
     val csvFilePath: String?,

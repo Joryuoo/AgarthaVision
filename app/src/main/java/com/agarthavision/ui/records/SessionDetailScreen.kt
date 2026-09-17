@@ -64,12 +64,13 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
-import com.agarthavision.domain.model.InfectivityLevel
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.HeroDensityStyle
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
@@ -81,12 +82,10 @@ internal data class SessionDetailUi(
     val dateLabel: String,
     val timeLabel: String,
     val patientIdOrNote: String?,
-    val epg: Int,
     val confirmedEggs: Int,
     val speciesCount: Int,
     val samplesTotal: Int,
-    val infectivityLevel: InfectivityLevel?,
-    val infectivitySpeciesLabel: String?,
+    val lpfPerSpecies: Map<String, LpfDensity>,
     /** Every distinct species confirmed this session, custom "Other" names included. */
     val detectedSpecies: List<String>,
     val verifiedSamples: List<SampleUi>,
@@ -252,12 +251,10 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         dateLabel = startedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
         timeLabel = startedAt.format(DateTimeFormatter.ofPattern("HH:mm")),
         patientIdOrNote = sessionRecord.notes,
-        epg = state.epg,
         confirmedEggs = state.totalEggCount,
         speciesCount = state.eggCounts.size,
         samplesTotal = sessionData.samples.size,
-        infectivityLevel = state.infectivityLevel,
-        infectivitySpeciesLabel = state.infectivitySpeciesLabel,
+        lpfPerSpecies = state.lpfPerSpecies,
         detectedSpecies = state.eggCounts.map { it.species },
         verifiedSamples = samples,
     )
@@ -414,13 +411,12 @@ private fun SessionDetailPopulated(
                     SessionNoteCard(note = session.patientIdOrNote)
                     Spacer(Modifier.height(Spacing.md))
                 }
-                EpgHeroCard(
+                LpfHeroCard(
                     session = session,
                     modifier = Modifier.semantics(mergeDescendants = true) {
-                        contentDescription = "Eggs per gram: ${session.epg}, " +
-                            "${session.confirmedEggs} confirmed, " +
+                        contentDescription = "Total confirmed: ${session.confirmedEggs}, " +
                             "${session.speciesCount} species, " +
-                            "${session.samplesTotal} samples"
+                            "${session.samplesTotal} fields"
                     },
                 )
                 Spacer(Modifier.height(Spacing.md))
@@ -455,7 +451,7 @@ private fun SessionDetailEmpty(
             SessionNoteCard(note = session.patientIdOrNote)
             Spacer(Modifier.height(Spacing.md))
         }
-        EpgHeroCard(session = session)
+        LpfHeroCard(session = session)
         Spacer(Modifier.height(Spacing.md))
         ReportsSection(state = state)
         Spacer(Modifier.height(60.dp))
@@ -464,21 +460,16 @@ private fun SessionDetailEmpty(
 }
 
 @Composable
-internal fun EpgHeroCard(
+internal fun LpfHeroCard(
     session: SessionDetailUi,
     modifier: Modifier = Modifier,
 ) {
-    val epg = session.epg
     val confirmedEggs = session.confirmedEggs
     val speciesCount = session.speciesCount
     val samplesTotal = session.samplesTotal
-    val infectivityLevel = session.infectivityLevel
-    val infectivitySpeciesLabel = session.infectivitySpeciesLabel
     val themeColors = AgarthaTheme.colors
-    // The hero card is the maroon brand surface; all text reads in onAccent tints.
     val onCard = themeColors.onAccent
     val onCardMuted = onCard.copy(alpha = 0.72f)
-    val onCardFaint = onCard.copy(alpha = 0.6f)
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -499,124 +490,62 @@ internal fun EpgHeroCard(
                 },
         )
         Column(modifier = Modifier.padding(20.dp)) {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Text(
+                "TOTAL EGGS CONFIRMED",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = onCardMuted,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                confirmedEggs.toString(),
+                color = onCard,
+                style = HeroDensityStyle,
+            )
+            Spacer(Modifier.height(12.dp))
+            LpfMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
+            
+            if (session.lpfPerSpecies.isNotEmpty()) {
+                Spacer(Modifier.height(16.dp))
                 Text(
-                    "EGGS PER GRAM",
+                    "LPF DENSITY",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = onCardMuted,
                     letterSpacing = 1.sp,
-                    modifier = Modifier.weight(1f).padding(top = 2.dp),
                 )
-                // Red area: the infectivity severity indicator sits in the top-right corner.
-                if (infectivityLevel != null) {
-                    InfectivityTierBadge(level = infectivityLevel)
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                epg.toString(),
-                fontSize = 56.sp,
-                lineHeight = 56.sp,
-                fontWeight = FontWeight.Bold,
-                color = onCard,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
-            )
-            Spacer(Modifier.height(12.dp))
-            EpgMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
-            // Blue area: the species detected this session, custom "Other" names included.
-            if (session.detectedSpecies.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                DetectedSpecies(species = session.detectedSpecies, labelColor = onCardMuted)
-            }
-            // Zero eggs found is a neutral/absent state, not "Low" — infectivityLevel is
-            // already null then, so no consult message or disclaimer renders.
-            if (infectivityLevel != null) {
-                if (infectivityLevel == InfectivityLevel.EXTREME) {
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.session_detail_infectivity_extreme_body,
-                            infectivitySpeciesLabel ?: "",
-                        ),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = onCard,
-                    )
-                }
                 Spacer(Modifier.height(8.dp))
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(onCard.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.session_detail_infectivity_disclaimer),
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        color = onCardFaint,
-                    )
+                session.lpfPerSpecies.forEach { (species, density) ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            species,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = onCard,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            "%.2f/LPF (%d-%d)".format(density.mean, density.min, density.max),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = onCard,
+                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
                 }
             }
         }
     }
 }
 
-/**
- * Blue area of the hero card: the distinct species confirmed this session (custom "Other"
- * names included), each in a gold pill. Shows at most four, then a "+N more" pill so a
- * polyparasitism-heavy field does not overflow the card.
- */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DetectedSpecies(species: List<String>, labelColor: Color) {
-    val colors = AgarthaTheme.colors
-    val maxShown = 4
-    val shown = species.take(maxShown)
-    val remaining = species.size - shown.size
-    Column {
-        Text(
-            text = stringResource(R.string.session_detail_species_detected),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = labelColor,
-            letterSpacing = 1.sp,
-        )
-        Spacer(Modifier.height(6.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            shown.forEach { name ->
-                SpeciesPill(text = name, background = colors.goldTint, textColor = colors.goldText)
-            }
-            if (remaining > 0) {
-                SpeciesPill(
-                    text = stringResource(R.string.session_detail_species_more, remaining),
-                    background = labelColor.copy(alpha = 0.18f),
-                    textColor = labelColor,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SpeciesPill(text: String, background: Color, textColor: Color) {
-    Text(
-        text = text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Medium,
-        color = textColor,
-        modifier = Modifier
-            .background(background, RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    )
-}
-
-@Composable
-private fun EpgMeta(
+private fun LpfMeta(
     confirmedEggs: Int,
     speciesCount: Int,
     samplesTotal: Int,
@@ -624,13 +553,12 @@ private fun EpgMeta(
 ) {
     val labelColor = contentColor.copy(alpha = 0.72f)
     if (confirmedEggs == 0) {
-        Text("No confirmed eggs yet", fontSize = 13.sp, color = labelColor)
+        Text("No confirmed eggs in $samplesTotal fields", fontSize = 13.sp, color = labelColor)
     } else {
         StatRun(
             listOf(
-                Stat(confirmedEggs.toString(), "confirmed"),
                 Stat(speciesCount.toString(), "species"),
-                Stat(samplesTotal.toString(), "samples"),
+                Stat(samplesTotal.toString(), "fields"),
             ),
             valueColor = contentColor,
             labelColor = labelColor,

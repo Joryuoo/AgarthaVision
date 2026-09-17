@@ -25,7 +25,7 @@ data class SessionRecordItem(
     val session: Session,
     val sampleCount: Int,
     val speciesLabels: List<String>,
-    val totalEpg: Int = 0,
+    val totalEggs: Int = 0,
 )
 
 /**
@@ -112,7 +112,7 @@ class GetRecordsUseCase @Inject constructor(
                     session = row.session,
                     sampleCount = row.totalSamples,
                     speciesLabels = labels[row.session.id].orEmpty(),
-                    totalEpg = row.totalEpg,
+                    totalEggs = row.totalEggs,
                 )
             }
         }

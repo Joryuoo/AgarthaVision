@@ -36,12 +36,12 @@ data class ReportPdfHeader(
 /**
  * One row of the per-species findings table.
  *
- * [epg] is EPG (eggs per gram; count × [com.agarthavision.core.util.EpgCalculator.MULTIPLIER]),
- * NOT a density measurement. This is a temporary stand-in metric — ticket 86d4a6jxw replaces it
- * with LPF (Low Power Field) density once that pipeline lands. Do not treat this column as
- * final; every renderer of this row must label it "EPG" until that ticket lands.
+ * Density is reported per Low Power Field (LPF), calculated as the mean egg count across all 
+ * fields examined in a session, alongside the observed range (min-max).
  */
 data class ReportPdfSpeciesRow(
     val speciesDisplayName: String,
-    val epg: Int,
+    val mean: Float,
+    val min: Int,
+    val max: Int,
 )

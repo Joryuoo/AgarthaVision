@@ -6,6 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
+@Suppress("DEPRECATION")
 class InfectivityLevelCalculatorTest {
 
     // --- Ascaris: Low 1-4,999 / Moderate 5,000-49,999 / Extreme >=50,000 ---
