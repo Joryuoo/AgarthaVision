@@ -375,6 +375,18 @@ fun AgarthaNavHost(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onSignInClick = { navController.navigate(Screen.Login.route) },
+                // The whole graph is popped, not just this tab. Login "cannot be dismissed"
+                // on first run and the same has to hold here — leaving Settings on the stack
+                // would put a signed-out medtech one back-gesture away from patient data.
+                //
+                // Popping the graph id rather than a tab route on purpose: `popUpTo(tab)` is
+                // a no-op when that tab is saved rather than present, which is the footgun
+                // documented on `navigateToTab` below and the one that bit 86d4ad75y.
+                onSignedOut = {
+                    navController.navigate(Screen.Login.route) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                },
             )
         }
     }

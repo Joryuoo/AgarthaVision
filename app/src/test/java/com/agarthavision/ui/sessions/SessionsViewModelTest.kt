@@ -312,6 +312,9 @@ class SessionsViewModelTest {
     @Test
     fun `null identity passes null userId to repository`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The VM forwards the null rather than deciding anything with it. What a
+            // signed-out reader is allowed to see is settled one layer down — see
+            // SessionRepositoryImplTest, where the answer is "nothing".
             val recording = RecordingSessionRepository()
             val vm = viewModelWithRecording(recording, userId = null)
 
