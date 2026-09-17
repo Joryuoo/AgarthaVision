@@ -40,7 +40,7 @@ import com.agarthavision.R
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.CardsStack
 import com.agarthavision.ui.icons.HomeAppLogo
-import com.agarthavision.ui.icons.Science
+import com.agarthavision.ui.icons.LabProfile
 import com.agarthavision.ui.icons.Settings
 import com.agarthavision.ui.theme.AgarthaTheme
 
@@ -50,23 +50,28 @@ sealed class Tab(
     val icon: ImageVector
 ) {
     data object Home     : Tab("dashboard", R.string.nav_tab_home,     AgarthaIcons.HomeAppLogo)
-    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, AgarthaIcons.Science)
-    data object Records  : Tab("records",   R.string.nav_tab_records,  AgarthaIcons.CardsStack)
+    // PLACEHOLDER GLYPH. LabProfile is an existing Material Symbols export from the house
+    // set; it reads as a clinical record rather than as people. Replace it with the
+    // `groups` (or `person`) export from the same set — Rounded, fill 0, to match its
+    // neighbours. Export it, do not draw it: every glyph in ui/icons/ is an export.
+    data object Patients : Tab("patients",  R.string.nav_tab_patients, AgarthaIcons.LabProfile)
+    data object Reports  : Tab("reports",   R.string.nav_tab_reports,  AgarthaIcons.CardsStack)
     data object Settings : Tab("settings",  R.string.settings_title,   AgarthaIcons.Settings)
 }
 
-val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records, Tab.Settings)
+val tabs: List<Tab> = listOf(Tab.Home, Tab.Patients, Tab.Reports, Tab.Settings)
 
 /**
- * Screens that should show the bottom bar.
- * Only the main root level screens have the bottom navigation.
+ * Routes that show the bottom bar — the four root destinations, and nothing else.
+ *
+ * **Derived from [tabs], never written out again.** This used to be a second,
+ * hand-maintained set of the same string literals, and `AgarthaNavGraph` checks *this* one
+ * to decide whether to draw the bar. Renaming a tab's route in one place and not the other
+ * made the bar silently stop appearing on that screen — no crash, no warning, and nothing
+ * to grep for, because both spellings were valid strings. Deriving it means the two cannot
+ * drift.
  */
-val bottomBarRoutes: Set<String> = setOf(
-    "dashboard",
-    "sessions",
-    "records",
-    "settings"
-)
+val bottomBarRoutes: Set<String> = tabs.map { it.route }.toSet()
 
 /**
  * Custom bottom navigation bar built from basic Compose primitives.

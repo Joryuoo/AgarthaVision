@@ -1,4 +1,4 @@
-package com.agarthavision.ui.sessions
+package com.agarthavision.ui.components
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf

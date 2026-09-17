@@ -4,6 +4,7 @@ import android.app.Application
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.agarthavision.data.local.psgc.PsgcSeeder
+import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.domain.repository.SampleImageRepository
 import com.agarthavision.ui.image.SampleImageFetcher
 import com.agarthavision.ui.image.SampleImageKeyer
@@ -19,6 +20,9 @@ import kotlinx.coroutines.launch
 class AgarthaVisionApp : Application(), ImageLoaderFactory {
     @Inject
     lateinit var psgcSeeder: PsgcSeeder
+
+    @Inject
+    lateinit var speciesSuggestionSeeder: SpeciesSuggestionSeeder
 
     // Lazy so the Supabase-backed graph is built only when Coil first needs an image,
     // not during Application.onCreate. Field-injecting the repository eagerly forced the
@@ -40,6 +44,11 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory {
         // so a failed or slow seed must never delay launch. PsgcSeeder is re-entrant and
         // no-ops once the device holds the current vintage.
         applicationScope.launch { psgcSeeder.seedIfNeeded() }
+        // Same shape and the same reasoning: the species index is offline reference data,
+        // nothing on screen waits for it, and a failure degrades the "Other species" field
+        // to plain free text rather than blocking a submission. Gated on the table being
+        // empty, so it re-seeds after the destructive migration a version bump causes.
+        applicationScope.launch { speciesSuggestionSeeder.seedIfNeeded() }
     }
 
     /**

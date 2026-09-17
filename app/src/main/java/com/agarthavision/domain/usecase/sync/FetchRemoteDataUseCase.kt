@@ -4,13 +4,17 @@ import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.PatientSyncStatus
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
@@ -28,6 +32,7 @@ sealed interface FetchSummary {
      * Ran the pass. Counts are rows inserted or updated locally from the remote.
      */
     data class Ran(
+        val patientsFetched: Int,
         val sessionsFetched: Int,
         val samplesFetched: Int,
         val reportsFetched: Int,
@@ -36,30 +41,40 @@ sealed interface FetchSummary {
 
 /**
  * Pulls all remote rows from Supabase into the local Room database for the signed-in
- * medtech. Run in FK-safe order (sessions → samples+detections+findings → reports).
+ * medtech. Run in FK-safe order (patients → sessions → samples+detections+findings →
+ * reports).
+ *
+ * Patients come first because `sessions.patient_id` is a foreign key onto `patients`: a
+ * session row arriving before the patient it belongs to violates it locally, and Room does
+ * enforce this one.
  *
  * Per the additive-only policy (D4): rows present only on the server are inserted locally;
  * locally-VERIFIED or SYNC_FAILED rows are never overwritten by a server pull (E4 guard).
  * Deleted samples (deleted_at not null) become tombstoned local rows, which existing
  * `deleted_at IS NULL` guards already hide from all lists and counts.
  *
- * [InitialFetchStateStore.markCompleted] is called only when all three entity types
+ * [InitialFetchStateStore.markCompleted] is called only when **all four** entity types
  * succeeded; a partial failure leaves the flag unset so the badge stays NOT_YET_SYNCED
- * and the medtech can retry via "Sync now". Per E2.
+ * and the medtech can retry via "Sync now". Per E2. Claiming a complete offline cache the
+ * device does not have is the failure this guards: the medtech finds out in a barangay
+ * with no signal.
  */
 @Suppress("LongParameterList")
 class FetchRemoteDataUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,
+    private val patientRemoteDataSource: PatientRemoteDataSource,
     private val sampleRemoteDataSource: SampleRemoteDataSource,
     private val sessionRemoteDataSource: SessionRemoteDataSource,
     private val reportRemoteDataSource: ReportRemoteDataSource,
+    private val patientDao: PatientDao,
     private val sessionDao: SessionDao,
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao,
     private val reportDao: ReportDao,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
 ) {
     /**
      * Runs one fetch pass.
@@ -76,13 +91,18 @@ class FetchRemoteDataUseCase @Inject constructor(
 
         // Each type runs under its own runCatching so one failing type does not abort the
         // others; the *Ok flags gate markCompleted so a partial failure stays NOT_YET_SYNCED.
-        // FK-safe order: sessions (root) → samples (+children) → reports.
+        // FK-safe order: patients (root) → sessions → samples (+children) → reports.
+        var patientsOk = false
         var sessionsOk = false
         var samplesOk = false
         var reportsOk = false
+        var patientsFetched = 0
         var sessionsFetched = 0
         var samplesFetched = 0
         var reportsFetched = 0
+
+        runCatching { patientsFetched = pullPatients(); patientsOk = true }
+            .onFailure { error -> Log.e(TAG, "Fetch patients failed", error) }
 
         runCatching { sessionsFetched = pullSessions(userId); sessionsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch sessions failed", error) }
@@ -93,19 +113,60 @@ class FetchRemoteDataUseCase @Inject constructor(
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
 
-        // Mark completed only when all three types succeeded (E2)
-        if (sessionsOk && samplesOk && reportsOk) {
+        // Mark completed only when all four types succeeded (E2). Listed rather than chained
+        // so a fifth entity type is one entry, not a longer boolean expression.
+        val everyTypeSucceeded = listOf(patientsOk, sessionsOk, samplesOk, reportsOk).all { it }
+        if (everyTypeSucceeded) {
             initialFetchStateStore.markCompleted(userId)
         }
 
+        // Fold any species that arrived with this pass into the offline suggestion index, so
+        // the two reference caches stay in step (PB-08a). Ungated on purpose: the seeder
+        // re-derives from rows the device already holds, so a pass where only samples failed
+        // still has work for it, and it never throws, so it cannot fail the pass. The
+        // offline/unauthenticated returns are above, which makes this "every pass that ran".
+        speciesSuggestionSeeder.refresh()
+
         FetchSummary.Ran(
+            patientsFetched = patientsFetched,
             sessionsFetched = sessionsFetched,
             samplesFetched = samplesFetched,
             reportsFetched = reportsFetched,
         )
     }
 
-    /** Sessions are the FK root — pull them before samples and reports. Returns rows inserted. */
+    /**
+     * Patients are the FK root — pull them before sessions. Returns rows inserted.
+     *
+     * The `patient_users` link rows come down in the same pass and are **not** optional:
+     * `PatientDao` resolves visibility through that join, so a patient whose link is
+     * missing sits on the device invisible to every query that reads it. Links are
+     * inserted after the patients they reference, and with `OnConflictStrategy.IGNORE`, so
+     * a re-pull is a no-op rather than a duplicate-key failure.
+     *
+     * E4 guard: only insert when the local row is absent or already SYNCED. A local
+     * PENDING or SYNC_FAILED patient is unsynced work the medtech typed in offline, and
+     * overwriting it with the server's copy loses a patient by hand.
+     */
+    private suspend fun pullPatients(): Int {
+        var fetched = 0
+        val patients = patientRemoteDataSource.fetchPatients()
+        for (remote in patients) {
+            val local = patientDao.getPatientById(remote.patientId)
+            if (local == null || local.supabaseStatus == PatientSyncStatus.SYNCED.value) {
+                patientDao.upsertPatient(remote)
+                fetched++
+            }
+        }
+
+        val links = patientRemoteDataSource.fetchPatientLinks()
+        if (links.isNotEmpty()) {
+            patientDao.linkPatientsToUsers(links)
+        }
+        return fetched
+    }
+
+    /** Sessions are pulled after patients, before samples and reports. Returns rows inserted. */
     private suspend fun pullSessions(userId: String): Int {
         var fetched = 0
         val sessions = sessionRemoteDataSource.fetchSessions(userId)

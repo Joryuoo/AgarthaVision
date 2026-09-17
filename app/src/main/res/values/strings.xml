@@ -294,6 +294,57 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <!-- Patient form (PB-07c) -->
+    <string name="patient_form_new_title">New patient</string>
+    <string name="patient_form_edit_title">Edit patient</string>
+    <string name="patient_form_lastname">Lastname</string>
+    <string name="patient_form_lastname_placeholder">e.g. Cruz</string>
+    <string name="patient_form_firstname">Firstname</string>
+    <string name="patient_form_firstname_placeholder">e.g. Gerald</string>
+    <string name="patient_form_middle_name">Middle name</string>
+    <string name="patient_form_middle_name_placeholder">Optional</string>
+    <string name="patient_form_sex">Sex</string>
+    <string name="patient_form_birthdate">Birthdate</string>
+    <string name="patient_form_birthdate_placeholder">Select a date</string>
+    <string name="patient_form_barangay">Barangay</string>
+    <string name="patient_form_barangay_placeholder">Search barangay, city or province</string>
+    <string name="patient_form_barangay_hint">Type at least %1$d characters</string>
+    <string name="patient_form_barangay_no_matches">No barangay matches</string>
+    <string name="patient_form_barangay_clear">Clear</string>
+    <string name="patient_form_required_badge">REQUIRED</string>
+    <string name="patient_form_save">Save</string>
+    <string name="patient_form_cancel">Cancel</string>
+    <!-- Shown on the edit form. Without it, correcting a name and finding the old one still
+         on a report reads as a bug rather than as the intended behaviour. -->
+    <string name="patient_form_edit_note">Editing these details does not change session labels already created or reports already generated. Generate a new report to pick up the change.</string>
+    <string name="patient_form_error_lastname">Lastname is required.</string>
+    <string name="patient_form_error_firstname">Firstname is required.</string>
+    <string name="patient_form_error_sex">Select a sex.</string>
+    <string name="patient_form_error_birthdate">Select a birthdate.</string>
+    <string name="patient_form_error_birthdate_future">A birthdate cannot be in the future.</string>
+    <string name="patient_form_error_barangay">Select a barangay.</string>
+    <string name="patient_form_error_save">Could not save. Try again.</string>
+
+    <!-- Patients (PB-06b) -->
+    <string name="patients_title">Patients</string>
+    <string name="patients_subtitle_purpose">The people whose smears you have read</string>
+    <string name="patients_status_counts">%1$d patients</string>
+    <string name="patients_search_placeholder">Search name or barangay…</string>
+    <string name="patients_empty_title">No patients yet</string>
+    <string name="patients_empty_body">Add a patient to start recording their smears.</string>
+    <string name="patients_empty_search_title">No matches</string>
+    <string name="patients_empty_search_body">No patient matches that name or barangay.</string>
+    <string name="patients_new">New patient</string>
+    <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
+    <string name="patients_edit_desc">Edit %1$s</string>
+    <!-- Row meta: sex · age · barangay. -->
+    <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
+    <string name="patients_age_years">%1$d yrs</string>
+    <string name="patients_sex_male">Male</string>
+    <string name="patients_sex_female">Female</string>
+    <!-- Shown when a stored sex is neither M nor F, which only a hand-edited row produces. -->
+    <string name="patients_sex_unknown">Sex not recorded</string>
+
     <string name="sessions_title">Sessions</string>
     <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
     <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
@@ -316,8 +367,8 @@
     <string name="manual_sheet_close_desc">Close manual capture sheet</string>
 
     <string name="nav_tab_home">Home</string>
-    <string name="nav_tab_sessions">Sessions</string>
-    <string name="nav_tab_records">Records</string>
+    <string name="nav_tab_patients">Patients</string>
+    <string name="nav_tab_reports">Reports</string>
 
     <string name="settings_title">Settings</string>
     <string name="settings_subtitle_purpose">Manage your account, sync, and app preferences</string>
@@ -344,6 +395,7 @@
     <string name="settings_sync_not_yet_synced">Not yet synced</string>
     <string name="settings_sync_pending">%1$d pending upload</string>
     <string name="settings_sync_failed">%1$d failed</string>
+    <string name="settings_sync_patients">Patients</string>
     <string name="settings_sync_sessions">Sessions</string>
     <string name="settings_sync_samples">Samples</string>
     <string name="settings_sync_reports">Reports</string>
@@ -355,14 +407,10 @@
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>
     <string name="settings_about_environment_prod">Production</string>
-    <string name="session_new_required_badge">REQUIRED</string>
-    <string name="session_new_barangay_label">Patient barangay</string>
-    <string name="session_new_barangay_placeholder">Search barangay, city or province</string>
-    <string name="session_new_barangay_hint">Type at least %1$d characters to search</string>
-    <string name="session_new_barangay_no_matches">No barangay matches that search</string>
-    <string name="session_new_barangay_clear">Clear the selected barangay</string>
-    <string name="session_new_barangay_required">Please select the patient\'s barangay to continue.</string>
-    <string name="session_new_sheet_subtitle">Set the label, barangay and a note before scanning</string>
+    <!-- The New Session sheet's barangay picker and note field are gone: the barangay lives
+         on the patient and the note was an ad-hoc patient identifier the patient record
+         replaces. Only the label is left. -->
+    <string name="session_new_sheet_subtitle">Name this smear before scanning</string>
     <string name="session_new_label_required">Please fill in the label field to continue.</string>
     <string name="session_new_char_counter">%1$d / %2$d</string>
     <!-- Sessions empty state (86d4apzf5) -->

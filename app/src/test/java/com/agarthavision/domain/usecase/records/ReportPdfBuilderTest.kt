@@ -42,7 +42,6 @@ class ReportPdfBuilderTest {
             deviceId = "device-1",
             startedAt = SESSION_STARTED_AT,
             endedAt = SESSION_ENDED_AT,
-            notes = null,
             label = "Smear A",
         )
         val samples = listOf(
@@ -57,9 +56,6 @@ class ReportPdfBuilderTest {
                 storagePath = "user-1/sample-1.jpg",
                 inferenceModelVersion = "model-1",
                 isManual = false,
-                latitude = null,
-                longitude = null,
-                accuracyMeters = null,
                 status = SampleStatus.SYNCED,
             ),
         )
@@ -135,7 +131,6 @@ class ReportPdfBuilderTest {
                 deviceId = "device-1",
                 startedAt = SESSION_STARTED_AT,
                 endedAt = SESSION_ENDED_AT,
-                notes = null,
                 label = null,
             ),
             generatedBy = "user-1",

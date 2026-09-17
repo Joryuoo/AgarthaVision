@@ -18,4 +18,7 @@ class PsgcRepositoryImpl @Inject constructor(
         barangayDao
             .search(terms = PsgcSearchQuery.terms(query), limit = limit)
             .map { it.toDomain() }
+
+    override suspend fun getBarangay(code: String): PsgcBarangay? =
+        barangayDao.getByCode(code)?.toDomain()
 }

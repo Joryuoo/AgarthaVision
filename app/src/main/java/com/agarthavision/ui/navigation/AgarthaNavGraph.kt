@@ -35,6 +35,8 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
+import com.agarthavision.ui.patients.PatientFormScreen
+import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
@@ -42,9 +44,40 @@ import com.agarthavision.ui.verify.VerificationQueueScreen
 sealed class Screen(val route: String) {
     data object Login : Screen("login")
     data object Dashboard : Screen("dashboard")
-    data object Sessions : Screen("sessions")
+    data object Patients : Screen("patients")
+
+    /**
+     * One patient's session list. PB-09c builds what it shows; today it is the sessions
+     * list, unscoped.
+     */
+    data object PatientSessions : Screen("patients/{patientId}") {
+        fun createRoute(patientId: String) = "patients/$patientId"
+    }
+
+    /**
+     * The New / Edit Patient form. Omitting `patientId` means a blank form.
+     *
+     * Deliberately **not** under `patients/`. A literal `patients/form` would also match
+     * [PatientSessions]'s `patients/{patientId}` pattern, and which one wins is a matter
+     * of registration order rather than intent — the kind of ambiguity that resolves
+     * correctly in testing and wrongly after an unrelated reorder.
+     */
+    data object PatientForm : Screen("patient-form?patientId={patientId}") {
+        fun createRoute(patientId: String? = null) =
+            if (patientId == null) "patient-form" else "patient-form?patientId=$patientId"
+    }
+
     data object Capture : Screen("capture")
-    data object Records : Screen("records")
+
+    /**
+     * The Reports tab. Renamed from `records` with the tab itself: the Records *screen*
+     * becomes session-scoped in PB-19, and two things called Records would confuse
+     * everyone. What this tab lists is PB-22; today it still shows [RecordsScreen].
+     *
+     * The `records/...` drill-down routes below are a separate namespace and keep their
+     * spelling — they address a session or a sample, not the tab.
+     */
+    data object Reports : Screen("reports")
     data object SessionDetail : Screen("records/session/{sessionId}") {
         fun createRoute(sessionId: String) = "records/session/$sessionId"
     }
@@ -146,8 +179,39 @@ fun AgarthaNavHost(
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
-        composable(Screen.Sessions.route) {
+        composable(Screen.Patients.route) {
+            PatientsScreen(
+                onPatientSelected = { patientId ->
+                    navController.navigate(Screen.PatientSessions.createRoute(patientId))
+                },
+                onEditPatient = { patientId ->
+                    navController.navigate(Screen.PatientForm.createRoute(patientId))
+                },
+                onCreatePatient = {
+                    navController.navigate(Screen.PatientForm.createRoute())
+                },
+            )
+        }
+
+        composable(
+            route = Screen.PatientForm.route,
+            arguments = listOf(
+                navArgument("patientId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
+            PatientFormScreen(onDone = { navController.popBackStack() })
+        }
+
+        // One patient's session list. PB-09c scopes it to the patient; until then it is
+        // the existing unscoped list, reachable so the capture and detail flows below it
+        // do not become orphaned by the tab rename.
+        composable(Screen.PatientSessions.route) {
             SessionsScreen(
+                onBack = { navController.popBackStack() },
                 onNavigate = { route -> navController.navigate(route) },
                 onNavigateToCapture = {
                     navController.navigate(Screen.Capture.route)
@@ -157,7 +221,7 @@ fun AgarthaNavHost(
                 }
             )
         }
-        composable(Screen.Records.route) {
+        composable(Screen.Reports.route) {
             RecordsScreen(
                 onNavigate = { route -> navController.navigate(route) },
                 onSessionClick = { sessionId ->
@@ -166,7 +230,7 @@ fun AgarthaNavHost(
             )
         }
 
-        // === Drill-downs from Sessions (slide horizontal) ===
+        // === Drill-downs from Patients (slide horizontal) ===
         composable(
             route = Screen.Capture.route,
             enterTransition = {
@@ -237,7 +301,7 @@ fun AgarthaNavHost(
             )
         }
 
-        // === Drill-downs from Records (slide horizontal) ===
+        // === Drill-downs from Reports (slide horizontal) ===
         composable(
             route = Screen.SessionDetail.route,
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
@@ -325,9 +389,9 @@ fun AgarthaNavHost(
  * **Use this for every navigation whose destination is a tab route, not just the bar taps.**
  * Mixing this multi-back-stack pattern with an ad-hoc `popUpTo(someRoute)` elsewhere in the
  * same graph is a known Navigation-Compose footgun, and it has bitten this app once: ending a
- * session used to navigate to Sessions with `popUpTo(Screen.Sessions.route)`, which is a no-op
- * when Sessions is only *saved* rather than present, so a second Sessions entry was pushed
- * alongside the saved one and the Home tab stopped responding (86d4ad75y).
+ * session used to navigate to the sessions tab with `popUpTo` on its route, which is a no-op
+ * when that tab is only *saved* rather than present, so a second entry was pushed alongside
+ * the saved one and the Home tab stopped responding (86d4ad75y).
  *
  * That path is gone - sessions no longer end - but the hazard is structural, so the convention
  * has a name here rather than being copied by hand at each call site. A destination that is not

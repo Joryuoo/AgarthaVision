@@ -198,29 +198,28 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the barangay picker's half of the schema survived the merge`() {
+    fun `the barangay reference table survived the merge`() {
         assertTrue(
             "psgc_barangays is missing from v$EXPECTED_VERSION — the picker has no data.",
             tables().contains("psgc_barangays"),
         )
-        assertTrue(
-            "sessions.psgc_barangay_code is missing — the picker would write to nothing.",
-            columnsOf("sessions").contains("psgc_barangay_code"),
-        )
     }
 
-    @Test
-    fun `the barangay code is nullable so sessions predating the picker survive`() {
-        // Nothing backfills older rows, and the destructive migration means a device may hold
-        // sessions created before the column existed. A NOT NULL here would be unrecoverable.
-        assertFalse(isNotNull("sessions", "psgc_barangay_code"))
-    }
+    // There is deliberately no assertion that `sessions` carries a barangay code. Two tests
+    // here used to make one, contradicting `sessions no longer carry notes, ended_at,
+    // psgc_barangay_code or claim_exempt` a few cases above. Room 13 moved the code to the
+    // patient — it is the unit surveillance aggregates on and it does not change from one
+    // smear to the next — and `patients and the visibility join exist` pins it there.
 
     @Test
     fun `the tables the earlier versions added are still present`() {
         // If one of these goes missing, a merge dropped a side.
         val tables = tables()
-        listOf("samples", "sessions", "detections", "reports").forEach { table ->
+        listOf(
+            "samples", "sessions", "detections", "reports",
+            // v13 and v14's own additions, so a later merge cannot quietly drop them either.
+            "patients", "patient_users", "species_suggestions",
+        ).forEach { table ->
             assertTrue("$table is missing from v$EXPECTED_VERSION", tables.contains(table))
         }
         assertTrue(
@@ -261,6 +260,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 13
+        private const val EXPECTED_VERSION = 14
     }
 }

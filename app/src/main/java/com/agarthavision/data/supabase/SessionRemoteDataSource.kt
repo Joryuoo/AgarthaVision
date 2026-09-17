@@ -34,33 +34,16 @@ class SessionRemoteDataSource @Inject constructor(
 
     /**
      * Upserts the session row (insert or update on primary-key conflict). Idempotent so a
-     * pending session can be re-pushed safely, carrying any `ended_at`/`notes` set while
-     * offline. Per ADR-007.
+     * pending session can be re-pushed safely. Per ADR-007.
      */
     suspend fun upsertSession(session: SessionEntity) {
         supabase.postgrest[SESSIONS_TABLE].upsert(session.toInsertRow())
     }
 
-    /**
-     * Marks the matching Supabase `sessions` row as ended. Persists [notes] when
-     * provided so the End-Session confirmation dialog's final observations sync.
-     */
-    suspend fun closeSession(
-        sessionId: String,
-        endedAt: Instant,
-        notes: String? = null,
-    ) {
-        supabase.postgrest[SESSIONS_TABLE].update(
-            {
-                set("ended_at", endedAt.toString())
-                if (notes != null) set("notes", notes)
-            },
-        ) {
-            filter {
-                eq("id", sessionId)
-            }
-        }
-    }
+    // `closeSession` is gone. It set `ended_at` and `notes`, and `0001_init.sql:152-176`
+    // carries neither — the update would have been rejected by PostgREST as unknown columns.
+    // Sessions do not end (86d4ab4vm) and the note was an ad-hoc patient identifier that
+    // PatientEntity replaces, so there is nothing left for it to write.
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
@@ -73,16 +56,20 @@ class SessionRemoteDataSource @Inject constructor(
             order("started_at", Order.ASCENDING)
         }.decodeList<SessionRow>().map { it.toEntity() }
 
+    /**
+     * `patient_id` is not optional on either side. `0001_init.sql:152-176` declares it
+     * `not null references patients(id)`, matching the local Room foreign key, so a session
+     * pushed ahead of its patient is rejected — which is why `SyncPendingDataUseCase` pushes
+     * patients first and `FetchRemoteDataUseCase` pulls them first.
+     */
     private fun SessionEntity.toInsertRow(): SessionInsertRow =
         SessionInsertRow(
             id = sessionId,
             userId = requireNotNull(userId) { "Session user id is required for Supabase sync." },
+            patientId = patientId,
             deviceId = deviceId,
             startedAt = Instant.ofEpochMilli(startedAt).toString(),
-            endedAt = endedAt?.let { Instant.ofEpochMilli(it).toString() },
-            notes = notes,
             label = label,
-            psgcBarangayCode = psgcBarangayCode,
         )
 
     @Serializable
@@ -91,18 +78,14 @@ class SessionRemoteDataSource @Inject constructor(
         val id: String,
         @SerialName("user_id")
         val userId: String,
+        @SerialName("patient_id")
+        val patientId: String,
         @SerialName("device_id")
         val deviceId: String,
         @SerialName("started_at")
         val startedAt: String,
-        @SerialName("ended_at")
-        val endedAt: String?,
-        @SerialName("notes")
-        val notes: String?,
         @SerialName("label")
         val label: String?,
-        @SerialName("psgc_barangay_code")
-        val psgcBarangayCode: String?,
     )
 
     // ── Select DTO (read path) ────────────────────────────────────────────────
@@ -111,23 +94,19 @@ class SessionRemoteDataSource @Inject constructor(
     private data class SessionRow(
         @SerialName("id") val id: String,
         @SerialName("user_id") val userId: String,
+        @SerialName("patient_id") val patientId: String,
         @SerialName("device_id") val deviceId: String,
         @SerialName("started_at") val startedAt: String,
-        @SerialName("ended_at") val endedAt: String? = null,
-        @SerialName("notes") val notes: String? = null,
         @SerialName("label") val label: String? = null,
-        @SerialName("psgc_barangay_code") val psgcBarangayCode: String? = null,
     )
 
     private fun SessionRow.toEntity(): SessionEntity = SessionEntity(
         sessionId = id,
         userId = userId,
+        patientId = patientId,
         deviceId = deviceId,
         startedAt = Instant.parse(startedAt).toEpochMilli(),
-        endedAt = endedAt?.let { Instant.parse(it).toEpochMilli() },
-        notes = notes,
         label = label,
-        psgcBarangayCode = psgcBarangayCode,
         supabaseStatus = SessionSyncStatus.SYNCED.value,
     )
 

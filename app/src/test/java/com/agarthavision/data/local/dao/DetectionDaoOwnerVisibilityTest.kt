@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.test.runTest
@@ -29,6 +30,7 @@ class DetectionDaoOwnerVisibilityTest {
     private lateinit var detectionDao: DetectionDao
     private lateinit var sessionDao: SessionDao
     private lateinit var sampleDao: SampleDao
+    private lateinit var patientDao: PatientDao
 
     @Before
     fun setUp() {
@@ -39,6 +41,7 @@ class DetectionDaoOwnerVisibilityTest {
         detectionDao = db.detectionDao()
         sessionDao = db.sessionDao()
         sampleDao = db.sampleDao()
+        patientDao = db.patientDao()
     }
 
     @After
@@ -49,17 +52,21 @@ class DetectionDaoOwnerVisibilityTest {
     /**
      * Seeds one session containing three samples (owner a, owner b, unowned), each with one
      * confirmed detection. Returns the session id used.
+     *
+     * The patient goes in first: `sessions.patient_id` is NOT NULL with a foreign key onto
+     * `patients` and Room enforces it, so an unseeded patient fails the insert before any
+     * assertion below runs.
      */
     private suspend fun seedData(): String {
+        seedPatient()
         val sessionId = "session-1"
         sessionDao.insertSession(
             SessionEntity(
                 sessionId = sessionId,
                 userId = "user-a",
+                patientId = PATIENT_ID,
                 deviceId = "device-1",
                 startedAt = 1_000L,
-                endedAt = null,
-                notes = null,
             ),
         )
 
@@ -118,6 +125,21 @@ class DetectionDaoOwnerVisibilityTest {
         val rows = detectionDao.getConfirmedEggCountsForSession("no-session", null)
         assertEquals(0, rows.size)
     }
+
+    private suspend fun seedPatient() = patientDao.upsertPatient(
+        PatientEntity(
+            patientId = PATIENT_ID,
+            lastname = "Cruz",
+            firstname = "Gerald",
+            middleName = null,
+            sex = "M",
+            birthdate = 0L,
+            psgcBarangayCode = "0102801001",
+            createdBy = "user-a",
+            createdAt = 1_000L,
+            updatedAt = 1_000L,
+        ),
+    )
 }
 
 // ─────────────────────────────── helpers ─────────────────────────────────────
@@ -131,9 +153,6 @@ private fun confirmedSample(id: String, sessionId: String, userId: String?) = Sa
     verifiedAt = 2_000L,
     imagePath = "/tmp/$id.jpg",
     storagePath = null,
-    gpsLatitude = 10.0,
-    gpsLongitude = 20.0,
-    gpsAccuracy = 5f,
     status = "synced",
 )
 
@@ -150,3 +169,5 @@ private fun confirmedDetection(id: String, sampleId: String) = DetectionEntity(
     expertClass = null,
     verifiedByUser = true,
 )
+
+private const val PATIENT_ID = "patient-1"

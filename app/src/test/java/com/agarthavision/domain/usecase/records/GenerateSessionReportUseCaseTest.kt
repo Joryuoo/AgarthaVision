@@ -342,7 +342,6 @@ private fun reportSession(sessionId: String, userId: String): Session =
         deviceId = "device-1",
         startedAt = 1_000L,
         endedAt = 2_000L,
-        notes = null,
         label = "Session A",
     )
 
@@ -358,9 +357,6 @@ private fun reportSample(id: String, sessionId: String, userId: String): Sample 
         storagePath = "$userId/$id.jpg",
         inferenceModelVersion = "model-1",
         isManual = false,
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
 

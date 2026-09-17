@@ -140,6 +140,12 @@ class LoginViewModel @Inject constructor(
      *
      * There is no claim step any more: login is mandatory on first run, so nothing can have
      * been created without an owner for this to adopt.
+     *
+     * Patients arrive here, ahead of sessions, because [FetchRemoteDataUseCase] pulls them
+     * first — this call site does not order anything itself and must not try to. **This is
+     * the moment that matters** (PB-08a): a medtech signs in at the clinic and drives to a
+     * barangay with no signal, and has to arrive with their patient list already on the
+     * device. The same pass refreshes the offline species index.
      */
     private suspend fun syncAndFetch() {
         authRepository.currentLocalUserId() ?: return

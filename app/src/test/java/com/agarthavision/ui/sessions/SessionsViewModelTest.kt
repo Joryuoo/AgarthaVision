@@ -1,5 +1,6 @@
 package com.agarthavision.ui.sessions
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
@@ -597,7 +598,7 @@ class SessionsViewModelTest {
                 assertEquals(3, initial.sessions.size)
 
                 // Trigger error via blank label.
-                vm.onCreateSession("", notes = null)
+                vm.onCreateSession("")
                 advanceUntilIdle()
                 val withError = expectMostRecentItem()
                 assertEquals("Label is required.", withError.errorMessage)
@@ -634,7 +635,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 expectMostRecentItem()
 
-                vm.onCreateSession("", notes = null)
+                vm.onCreateSession("")
                 advanceUntilIdle()
                 val withError = expectMostRecentItem()
                 assertEquals("Label is required.", withError.errorMessage)
@@ -782,14 +783,13 @@ class SessionsViewModelTest {
         val sessionManager = mock<SessionManager> {
             on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
         }
-        // Real use case over a mocked repository, as in SessionPickerViewModelTest; the
-        // barangay picker is out of scope here but the VM wires it up in init.
-        val searchBarangays = SearchBarangaysUseCase(mock<PsgcRepository>())
+        // The screen is reached at `patients/{patientId}`, so the VM reads the patient it
+        // creates sessions for straight off the route.
         return SessionsViewModel(
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
-            searchBarangaysUseCase = searchBarangays,
+            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
 }
@@ -945,7 +945,6 @@ private fun makeSession(id: String, userId: String): SessionWithStats =
             deviceId = "device-1",
             startedAt = Instant.EPOCH.toEpochMilli(),
             endedAt = null,
-            notes = null,
             label = "Smear $id",
         ),
         totalSamples = 0,

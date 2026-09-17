@@ -80,10 +80,9 @@ class CaptureViewModelTest {
         val entity = SessionEntity(
             sessionId = "session-1",
             userId = "user-1",
+            patientId = "patient-1",
             deviceId = "device-1",
             startedAt = Instant.EPOCH.toEpochMilli(),
-            endedAt = null,
-            notes = null,
             label = "Smear 042",
         )
         return SessionState.Active(
