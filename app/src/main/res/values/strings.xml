@@ -405,14 +405,10 @@
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>
     <string name="settings_about_environment_prod">Production</string>
-    <string name="session_new_required_badge">REQUIRED</string>
-    <string name="session_new_barangay_label">Patient barangay</string>
-    <string name="session_new_barangay_placeholder">Search barangay, city or province</string>
-    <string name="session_new_barangay_hint">Type at least %1$d characters to search</string>
-    <string name="session_new_barangay_no_matches">No barangay matches that search</string>
-    <string name="session_new_barangay_clear">Clear the selected barangay</string>
-    <string name="session_new_barangay_required">Please select the patient\'s barangay to continue.</string>
-    <string name="session_new_sheet_subtitle">Set the label, barangay and a note before scanning</string>
+    <!-- The New Session sheet's barangay picker and note field are gone: the barangay lives
+         on the patient and the note was an ad-hoc patient identifier the patient record
+         replaces. Only the label is left. -->
+    <string name="session_new_sheet_subtitle">Name this smear before scanning</string>
     <string name="session_new_label_required">Please fill in the label field to continue.</string>
     <string name="session_new_char_counter">%1$d / %2$d</string>
     <!-- Sessions empty state (86d4apzf5) -->

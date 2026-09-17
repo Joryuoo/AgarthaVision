@@ -686,10 +686,9 @@ class FetchRemoteDataUseCaseTest {
     ) = SessionEntity(
         sessionId = id,
         userId = "user-1",
+        patientId = "patient-1",
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = null,
-        notes = null,
         supabaseStatus = supabaseStatus,
     )
 
@@ -706,9 +705,6 @@ class FetchRemoteDataUseCaseTest {
         imagePath = "",
         storagePath = "$id.jpg",
         status = status,
-        gpsLatitude = null,
-        gpsLongitude = null,
-        gpsAccuracy = null,
     )
 
     private fun fakeReport(id: String, sessionId: String) = ReportEntity(
@@ -719,7 +715,6 @@ class FetchRemoteDataUseCaseTest {
         totalSamples = 0,
         totalEggsConfirmed = 0,
         positiveSpeciesJson = "[]",
-        epgPerSpeciesJson = "{}",
         csvFilePath = null,
         pdfFilePath = null,
         supabaseStatus = ReportSyncStatus.SYNCED.value,

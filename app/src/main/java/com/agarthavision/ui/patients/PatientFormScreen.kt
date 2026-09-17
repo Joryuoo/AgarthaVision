@@ -387,7 +387,7 @@ private fun EditNote() {
             fontSize = 12.sp,
         )
     }
-    Spacer(modifier = Modifier.height(Spacing.xxs))
+    Spacer(modifier = Modifier.height(Spacing.xs))
 }
 
 /** Both birthdate failures light the same field. */

@@ -364,11 +364,8 @@ private fun RecordCard(
     val timeLabel = Instant.ofEpochMilli(record.session.startedAt)
         .atZone(ZoneId.systemDefault())
         .format(DateTimeFormatter.ofPattern("HH:mm"))
-    val metaText = if (record.session.notes.isNullOrBlank()) {
-        "$dateLabel · $timeLabel"
-    } else {
-        "$dateLabel · $timeLabel · ${record.session.notes}"
-    }
+    // Date and time only — see SessionCard: the trailing note is gone with the column.
+    val metaText = "$dateLabel · $timeLabel"
     val speciesCount = if (record.speciesLabels.isEmpty()) "-" else record.speciesLabels.size.toString()
 
     Column(

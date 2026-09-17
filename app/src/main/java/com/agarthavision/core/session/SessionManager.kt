@@ -25,10 +25,9 @@ import javax.inject.Singleton
  *
  * **A session does not end.** One session is one fecal smear, and the medtech keeps coming back
  * to it - correcting a sample, generating a report from whatever is verified so far. There is
- * no `stopSession`, and nothing in the app writes `sessions.ended_at` any more. The column and
- * its nullability stay: sessions closed before this change are real history and must not be
- * rewritten, `SessionRemoteDataSource.closeSession` still exists for them, and [resumeSession]
- * still refuses to reopen one.
+ * no `stopSession`, and as of Room 13 there is no `sessions.ended_at` column either, so
+ * [resumeSession] has nothing left to refuse and `closeSession` is gone from the remote data
+ * source — it wrote two columns the table no longer has.
  *
  * What replaces ending is [clearActive], which detaches the app from a session without
  * declaring it finished.
@@ -59,15 +58,15 @@ class SessionManager @Inject constructor(
      * on a missing auth session or a failed remote push.
      *
      * @param label The fecal-smear name the medtech entered in the picker.
-     * @param psgcBarangayCode The patient's barangay as a zero-padded 10-digit PSGC code.
-     *   Null only for callers that predate the picker; the Sessions UI always supplies it.
-     * @param notes Optional in-session observations (slide condition, prep quality, etc.).
+     * @param patientId The patient this smear belongs to. Required, and a real foreign key:
+     *   `sessions.patient_id` is NOT NULL and references `patients`, so an id that does not
+     *   resolve fails the insert rather than stranding an orphan smear. The Sessions list is
+     *   reached at `patients/{patientId}`, which is where the caller gets it.
      * @return The locally persisted session row.
      */
     suspend fun startSession(
         label: String,
-        psgcBarangayCode: String? = null,
-        notes: String? = null,
+        patientId: String,
     ): SessionEntity {
         val now = Instant.now()
         // Never null: login is mandatory on first run, so an identity is cached before any
@@ -81,12 +80,10 @@ class SessionManager @Inject constructor(
         val entity = SessionEntity(
             sessionId = UUID.randomUUID().toString(),
             userId = ownerId,
+            patientId = patientId,
             deviceId = deviceIdProvider.id,
             startedAt = now.toEpochMilli(),
-            endedAt = null,
-            notes = notes,
             label = label,
-            psgcBarangayCode = psgcBarangayCode,
             supabaseStatus = SessionSyncStatus.PENDING.value,
         )
         sessionDao.insertSession(entity)
@@ -102,7 +99,6 @@ class SessionManager @Inject constructor(
     suspend fun resumeSession(sessionId: String): SessionEntity {
         val entity = sessionDao.getSessionById(sessionId)
             ?: error("Session $sessionId not found locally.")
-        check(entity.endedAt == null) { "Cannot resume an already-ended session." }
         activate(entity, Instant.ofEpochMilli(entity.startedAt))
         return entity
     }
@@ -114,9 +110,8 @@ class SessionManager @Inject constructor(
      * session is still live, and the verification queue would render empty - see
      * [ActiveSessionIdStore].
      *
-     * A stored id that no longer resolves, or resolves to a session ended before this change,
-     * clears itself rather than throwing: the pointer is a convenience, and failing to restore
-     * it must never stop the app launching.
+     * A stored id that no longer resolves clears itself rather than throwing: the pointer is a
+     * convenience, and failing to restore it must never stop the app launching.
      */
     suspend fun restoreActiveSession(): SessionEntity? {
         val storedId = activeSessionIdStore.read() ?: return null

@@ -1,16 +1,14 @@
 package com.agarthavision.ui.sessions
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
-import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
-import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.ui.components.BarangayPickerDelegate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -45,12 +43,6 @@ data class SessionsState(
     /** Frames awaiting review across the filtered sessions. See [SessionsCounts]. */
     val unverifiedCount: Int = 0,
     val canLoadMore: Boolean = false,
-    /** Current text in the New Session sheet's barangay picker. */
-    val barangayQuery: String = "",
-    /** Matches for [barangayQuery], capped by [SearchBarangaysUseCase.RESULT_LIMIT]. */
-    val barangayResults: List<PsgcBarangay> = emptyList(),
-    /** The barangay chosen for the session being created. Required before it can start. */
-    val selectedBarangay: PsgcBarangay? = null,
 )
 
 sealed interface SessionsEvent {
@@ -79,7 +71,7 @@ class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
-    private val searchBarangaysUseCase: SearchBarangaysUseCase,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val internalState = MutableStateFlow(SessionsState())
@@ -87,18 +79,14 @@ class SessionsViewModel @Inject constructor(
     val events = eventChannel.receiveAsFlow()
 
     /**
-     * The barangay picker, shared with the patient form (PB-07c) rather than copied into
-     * it. This ViewModel's own surface is unchanged — [SessionsState] still carries the
-     * three flat fields and the three callbacks below still exist — so
-     * `SessionPickerViewModelTest` remains the regression net for behaviour that did not
-     * change.
+     * The patient whose smears this screen lists, read from the `patients/{patientId}` route.
+     *
+     * Every session created here belongs to that patient: `sessions.patient_id` is NOT NULL
+     * with a foreign key onto `patients`, so a session without one cannot be inserted. The
+     * *list* is still unscoped — PB-09c makes it show only this patient's sessions. This only
+     * settles what a newly created session is attributed to.
      */
-    private val barangayPicker = BarangayPickerDelegate(searchBarangaysUseCase)
-
-    init {
-        barangayPicker.start(viewModelScope)
-        mirrorBarangayPickerState()
-    }
+    private val patientId: String? = savedStateHandle["patientId"]
 
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
@@ -222,62 +210,32 @@ class SessionsViewModel @Inject constructor(
     }
 
     /**
-     * Keeps [SessionsState]'s barangay fields in step with the delegate.
+     * Starts a smear for the patient this screen belongs to.
      *
-     * The delegate owns the pipeline; the flat fields stay on the state because the sheet
-     * and its tests already read them, and changing that shape would be a second,
-     * unrelated change riding on a behaviour-preserving refactor.
+     * **The sheet no longer asks for a barangay or a note.** The barangay lives on the
+     * patient — it is the unit surveillance aggregates on, it is what the admin site's
+     * geospatial mapping tracks, and it does not change from one smear to the next. The note
+     * was only ever an ad-hoc patient identifier, which the patient record now is properly.
      */
-    private fun mirrorBarangayPickerState() {
-        viewModelScope.launch {
-            barangayPicker.state.collect { picker ->
-                internalState.update {
-                    it.copy(
-                        barangayQuery = picker.query,
-                        barangayResults = picker.results,
-                        selectedBarangay = picker.selected,
-                    )
-                }
-            }
-        }
-    }
-
-    fun onBarangayQueryChanged(query: String) = barangayPicker.onQueryChanged(query)
-
-    fun onBarangaySelected(code: String) = barangayPicker.onSelected(code)
-
-    /** Clears the picker — on the clear button, on sheet dismissal, and after a session starts. */
-    fun onBarangayCleared() = barangayPicker.onCleared()
-
-    fun onCreateSession(label: String, notes: String?) {
+    fun onCreateSession(label: String) {
         if (internalState.value.isCreating) return
-        // The barangay is what makes a smear mappable, so a new session has to carry one.
-        // Sessions predating the picker keep a null code; nothing backfills them.
-        val barangay = internalState.value.selectedBarangay
-        if (label.isBlank() || barangay == null) {
-            // Both guards are defence in depth — SessionsScreen blocks submit before it gets
-            // here. The barangay wording is kept identical to `session_new_barangay_required`
-            // so the two paths cannot drift into two different messages for one rule.
-            val reason = if (label.isBlank()) LABEL_REQUIRED else BARANGAY_REQUIRED
+        // Defence in depth on both. SessionsScreen blocks submit on a blank label, and no
+        // navigation reaches this screen without a patient id — a null here would mean a
+        // route that does not carry one, which would fail the foreign key anyway.
+        val patient = patientId
+        if (label.isBlank() || patient.isNullOrBlank()) {
+            val reason = if (label.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
             internalState.update { it.copy(errorMessage = reason) }
             return
         }
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
             runCatching {
-                sessionManager.startSession(
-                    label = label.trim(),
-                    psgcBarangayCode = barangay.code,
-                    notes = notes?.takeIf { it.isNotBlank() },
-                )
+                sessionManager.startSession(label = label.trim(), patientId = patient)
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
-                barangayPicker.onCleared()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
-                // The sheet has already closed and its label/note state has gone with it, so
-                // leaving the selection behind would reopen a half-filled sheet.
-                barangayPicker.onCleared()
                 internalState.update {
                     it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
                 }
@@ -344,7 +302,7 @@ class SessionsViewModel @Inject constructor(
         // seam across every screen state, which is a wider change than this ticket.
         private const val LABEL_REQUIRED = "Label is required."
 
-        /** Must stay word-for-word identical to `R.string.session_new_barangay_required`. */
-        private const val BARANGAY_REQUIRED = "Please select the patient's barangay to continue."
+        /** Unreachable through the UI: every route that opens this screen carries a patient. */
+        private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."
     }
 }

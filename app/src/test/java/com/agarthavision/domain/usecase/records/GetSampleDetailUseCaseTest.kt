@@ -130,9 +130,6 @@ private fun detailSample(userId: String?): Sample =
         sessionId = "session-1",
         filePath = "/tmp/sample-1.jpg",
         storagePath = userId?.let { "$it/sample-1.jpg" },
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
 

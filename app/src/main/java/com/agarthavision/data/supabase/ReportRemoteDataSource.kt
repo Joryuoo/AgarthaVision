@@ -12,14 +12,16 @@ import java.time.Instant
 import javax.inject.Inject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 
 /**
  * Writes persisted session reports to Supabase Postgres. Row-only sync — the
  * CSV file stays local on the device; only the metadata + aggregate stats are
  * mirrored to `public.reports`.
+ *
+ * **`epg_per_species` is gone from both sides.** `0001_init.sql:309-328` does not declare it
+ * and `ReportEntity` no longer stores it, so the insert was sending a column the table does
+ * not have. A stored EPG is a derived figure that goes stale the moment a finding is
+ * corrected; the report files carry the figures computed at generation time instead.
  */
 open class ReportRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
@@ -40,9 +42,6 @@ open class ReportRemoteDataSource @Inject constructor(
         val positives: List<String> = runCatching {
             gson.fromJson<List<String>>(positiveSpeciesJson, stringListType)
         }.getOrNull().orEmpty()
-        val epg: Map<String, Int> = runCatching {
-            gson.fromJson<Map<String, Int>>(epgPerSpeciesJson, stringIntMapType)
-        }.getOrNull().orEmpty()
         return ReportInsertRow(
             id = reportId,
             sessionId = sessionId,
@@ -52,7 +51,6 @@ open class ReportRemoteDataSource @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpecies = positives,
-            epgPerSpecies = epg.toJsonObject(),
             csvFilePath = csvFilePath,
             pdfFilePath = pdfFilePath,
         )
@@ -68,9 +66,6 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
         }.decodeList<ReportRow>().map { it.toEntity() }
-
-    private fun Map<String, Int>.toJsonObject(): JsonObject =
-        JsonObject(mapValues<String, Int, JsonElement> { (_, count) -> JsonPrimitive(count) })
 
     @Serializable
     private data class ReportInsertRow(
@@ -90,8 +85,6 @@ open class ReportRemoteDataSource @Inject constructor(
         val totalEggsConfirmed: Int,
         @SerialName("positive_species")
         val positiveSpecies: List<String>,
-        @SerialName("epg_per_species")
-        val epgPerSpecies: JsonObject,
         @SerialName("csv_file_path")
         val csvFilePath: String?,
         @SerialName("pdf_file_path")
@@ -110,7 +103,6 @@ open class ReportRemoteDataSource @Inject constructor(
         @SerialName("total_samples") val totalSamples: Int,
         @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
         @SerialName("positive_species") val positiveSpecies: List<String>,
-        @SerialName("epg_per_species") val epgPerSpecies: JsonObject,
         @SerialName("csv_file_path") val csvFilePath: String? = null,
         @SerialName("pdf_file_path") val pdfFilePath: String? = null,
     )
@@ -118,8 +110,6 @@ open class ReportRemoteDataSource @Inject constructor(
     private fun ReportRow.toEntity(): ReportEntity {
         val generatedAtMs = Instant.parse(generatedAt).toEpochMilli()
         val positiveSpeciesJson = gson.toJson(positiveSpecies)
-        val epgMap = epgPerSpecies.mapValues { (_, v) -> (v as JsonPrimitive).content.toInt() }
-        val epgPerSpeciesJson = gson.toJson(epgMap)
         return ReportEntity(
             reportId = id,
             sessionId = sessionId,
@@ -129,7 +119,6 @@ open class ReportRemoteDataSource @Inject constructor(
             totalSamples = totalSamples,
             totalEggsConfirmed = totalEggsConfirmed,
             positiveSpeciesJson = positiveSpeciesJson,
-            epgPerSpeciesJson = epgPerSpeciesJson,
             csvFilePath = csvFilePath,
             pdfFilePath = pdfFilePath,
             supabaseStatus = ReportSyncStatus.SYNCED.value,
@@ -140,6 +129,5 @@ open class ReportRemoteDataSource @Inject constructor(
     private companion object {
         private const val REPORTS_TABLE = "reports"
         private val stringListType = object : TypeToken<List<String>>() {}.type
-        private val stringIntMapType = object : TypeToken<Map<String, Int>>() {}.type
     }
 }

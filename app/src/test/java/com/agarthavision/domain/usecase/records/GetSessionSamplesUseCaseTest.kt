@@ -273,7 +273,6 @@ private fun sessionsSession(id: String, userId: String?) = Session(
     deviceId = "device-1",
     startedAt = 1_000L,
     endedAt = null,
-    notes = null,
     label = null,
 )
 
@@ -286,9 +285,6 @@ private fun sessionsSample(id: String, sessionId: String, userId: String?) = Sam
     sessionId = sessionId,
     filePath = "/tmp/$id.jpg",
     storagePath = userId?.let { "$it/$id.jpg" },
-    latitude = 10.0,
-    longitude = 20.0,
-    accuracyMeters = 5f,
     status = SampleStatus.SYNCED,
 )
 

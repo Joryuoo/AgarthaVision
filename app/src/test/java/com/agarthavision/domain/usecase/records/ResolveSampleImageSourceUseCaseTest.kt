@@ -81,8 +81,5 @@ private fun sample(
         sessionId = "session-1",
         filePath = filePath,
         storagePath = storagePath,
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )

@@ -40,9 +40,6 @@ class DeleteQueueItemsUseCaseTest {
         deviceId = "device-1",
         timestamp = 1_000L,
         imagePath = "/tmp/$id.jpg",
-        gpsLatitude = null,
-        gpsLongitude = null,
-        gpsAccuracy = null,
         status = status.value,
         deletedAt = deletedAt,
     )

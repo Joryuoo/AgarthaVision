@@ -80,7 +80,6 @@ internal data class SessionDetailUi(
     val label: String?,
     val dateLabel: String,
     val timeLabel: String,
-    val patientIdOrNote: String?,
     val epg: Int,
     val confirmedEggs: Int,
     val speciesCount: Int,
@@ -251,7 +250,6 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         label = sessionRecord.label,
         dateLabel = startedAt.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
         timeLabel = startedAt.format(DateTimeFormatter.ofPattern("HH:mm")),
-        patientIdOrNote = sessionRecord.notes,
         epg = state.epg,
         confirmedEggs = state.totalEggCount,
         speciesCount = state.eggCounts.size,
@@ -410,10 +408,6 @@ private fun SessionDetailPopulated(
     ) {
         item(span = { GridItemSpan(maxLineSpan) }) {
             Column {
-                if (!session.patientIdOrNote.isNullOrBlank()) {
-                    SessionNoteCard(note = session.patientIdOrNote)
-                    Spacer(Modifier.height(Spacing.md))
-                }
                 EpgHeroCard(
                     session = session,
                     modifier = Modifier.semantics(mergeDescendants = true) {
@@ -451,10 +445,6 @@ private fun SessionDetailEmpty(
             .padding(top = Spacing.xs)
             .verticalScroll(rememberScrollState()),
     ) {
-        if (!session.patientIdOrNote.isNullOrBlank()) {
-            SessionNoteCard(note = session.patientIdOrNote)
-            Spacer(Modifier.height(Spacing.md))
-        }
         EpgHeroCard(session = session)
         Spacer(Modifier.height(Spacing.md))
         ReportsSection(state = state)

@@ -3,6 +3,12 @@ package com.agarthavision.domain.model
 /**
  * Domain model for one capture session. Per ADR-005 a session equals one fecal
  * smear; [label] is the medtech-entered smear name set in the SessionPicker.
+ *
+ * **A session no longer carries a barangay or a note.** The barangay lives on the patient,
+ * because it is the unit surveillance aggregates on and the admin site's geospatial mapping
+ * tracks the patient, not the smear — and it does not change from one smear to the next.
+ * The note was only ever an ad-hoc patient identifier, which [Patient] now is properly.
+ * Both are gone from the Room row, from Supabase, and from here.
  */
 data class Session(
     val id: String,
@@ -10,15 +16,7 @@ data class Session(
     val deviceId: String,
     val startedAt: Long,
     val endedAt: Long?,
-    val notes: String?,
     val label: String?,
-    /**
-     * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
-     * sessions created before the picker existed. The unit of analysis for surveillance
-     * mapping. The per-sample GPS fix is gone as of Room 13 — it recorded where the smear
- * was read, not where the infection came from.
-     */
-    val psgcBarangayCode: String? = null,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */
     val supabaseStatus: SessionSyncStatus = SessionSyncStatus.SYNCED,
 ) {

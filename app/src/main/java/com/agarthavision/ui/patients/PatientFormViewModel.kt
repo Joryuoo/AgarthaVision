@@ -79,7 +79,13 @@ sealed interface PatientFormEvent {
  * keep the details they were generated with (PB-20). The screen says so where the edit is
  * confirmed, because otherwise the first medtech to correct a misspelled name and see the
  * old one still on a report will file it as a bug.
+ *
+ * `TooManyFunctions` is suppressed for the same reason [com.agarthavision.ui.sessions.SessionsViewModel]
+ * suppresses it: one screen's callbacks belong to one ViewModel, and a form has one per
+ * field by construction. Splitting them to satisfy a count would be inconsistent with every
+ * other ViewModel here for no functional benefit.
  */
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class PatientFormViewModel @Inject constructor(
     private val patientRepository: PatientRepository,
@@ -106,11 +112,20 @@ class PatientFormViewModel @Inject constructor(
      */
     private var loaded: Patient? = null
 
+    /**
+     * Shared [SharingStarted.Eagerly], not `WhileSubscribed`.
+     *
+     * The list screens use `WhileSubscribed` to cancel an expensive upstream Room query when
+     * they leave composition. There is no upstream here — just two in-memory flows — so the
+     * only thing `WhileSubscribed` would buy is a window in which `state.value` silently
+     * reports the initial form while [loadExisting] has already filled `fields`. A form that
+     * lies about what the medtech typed is worse than a combine that runs while nobody looks.
+     */
     val state: StateFlow<PatientFormState> =
         combine(fields, barangayPicker.state) { form, barangay -> form.copy(barangay = barangay) }
             .stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
+                started = SharingStarted.Eagerly,
                 initialValue = PatientFormState(isEditing = patientId != null),
             )
 

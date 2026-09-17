@@ -192,3 +192,4 @@ class SyncBadgeStateTest {
         assertEquals(SyncBadge.PENDING, result)
     }
 
+}

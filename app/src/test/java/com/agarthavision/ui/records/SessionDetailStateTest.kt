@@ -94,7 +94,6 @@ class SessionDetailStateTest {
             deviceId = "device-1",
             startedAt = 1_000L,
             endedAt = endedAt,
-            notes = null,
             label = null,
         )
         return SessionDetailState(

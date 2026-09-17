@@ -23,7 +23,12 @@ import kotlinx.coroutines.flow.Flow
  * None of these queries touch `samples`, so `SoftDeleteGuardTest` has nothing to enforce
  * here and this file is deliberately not in its `daoFiles` list. If a future method does
  * join `samples`, add it there in the same change.
+ *
+ * `TooManyFunctions` is suppressed for the same reason [SessionDao] suppresses it: one
+ * table's queries belong in one `@Dao`, and splitting them across two interfaces to satisfy
+ * a count would be inconsistent with every other DAO here for no functional benefit.
  */
+@Suppress("TooManyFunctions")
 @Dao
 interface PatientDao {
 

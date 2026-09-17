@@ -46,6 +46,15 @@ import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 
 /**
+ * Bottom clearance so the last row is not stranded under the floating New Patient button.
+ *
+ * A literal rather than a [Spacing] token: the compact scale this file uses tops out at 32dp
+ * and this has to clear a ~48dp button plus its own 16dp inset. It is a layout clearance for
+ * one specific control, not a spacing step.
+ */
+private val FloatingActionClearance = 64.dp
+
+/**
  * The patient list: everyone the signed-in medtech is linked to.
  *
  * Every read behind this screen is local, so it renders and searches with the radio off —
@@ -139,7 +148,7 @@ fun PatientsScreen(
                         start = Spacing.lg,
                         end = Spacing.lg,
                         top = Spacing.xs,
-                        bottom = Spacing.mega,
+                        bottom = FloatingActionClearance,
                     ),
                     verticalArrangement = Arrangement.spacedBy(Spacing.xs),
                 ) {
@@ -222,7 +231,7 @@ private fun PatientRow(
             .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
             .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xxs),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
         Text(
             text = patient.displayName,

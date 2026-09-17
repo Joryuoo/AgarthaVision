@@ -620,7 +620,6 @@ private fun makeSession(id: String, userId: String): Session =
         deviceId = "device-1",
         startedAt = 1_000L,
         endedAt = 2_000L,
-        notes = null,
         label = null,
     )
 

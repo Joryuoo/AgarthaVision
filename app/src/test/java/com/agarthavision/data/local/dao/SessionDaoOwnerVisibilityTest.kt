@@ -3,6 +3,7 @@ package com.agarthavision.data.local.dao
 import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -28,6 +29,7 @@ class SessionDaoOwnerVisibilityTest {
 
     private lateinit var db: AgarthaDatabase
     private lateinit var dao: SessionDao
+    private lateinit var patientDao: PatientDao
 
     @Before
     fun setUp() {
@@ -36,6 +38,7 @@ class SessionDaoOwnerVisibilityTest {
             .allowMainThreadQueries()
             .build()
         dao = db.sessionDao()
+        patientDao = db.patientDao()
     }
 
     @After
@@ -43,7 +46,26 @@ class SessionDaoOwnerVisibilityTest {
         db.close()
     }
 
+    /**
+     * The patient goes in first. `sessions.patient_id` is NOT NULL with a foreign key onto
+     * `patients` and Room enforces it, so an unseeded patient fails the insert before any
+     * visibility assertion below can run.
+     */
     private suspend fun seedThreeSessions() {
+        patientDao.upsertPatient(
+            PatientEntity(
+                patientId = PATIENT_ID,
+                lastname = "Cruz",
+                firstname = "Gerald",
+                middleName = null,
+                sex = "M",
+                birthdate = 0L,
+                psgcBarangayCode = "0102801001",
+                createdBy = "user-a",
+                createdAt = 1_000L,
+                updatedAt = 1_000L,
+            ),
+        )
         dao.insertSession(sessionEntity(id = "s-a",        userId = "user-a"))
         dao.insertSession(sessionEntity(id = "s-b",        userId = "user-b"))
         dao.insertSession(sessionEntity(id = "s-unowned",  userId = null))
@@ -99,9 +121,10 @@ class SessionDaoOwnerVisibilityTest {
 private fun sessionEntity(id: String, userId: String?) = SessionEntity(
     sessionId = id,
     userId = userId,
+    patientId = PATIENT_ID,
     deviceId = "device-1",
     startedAt = 1_000L,
-    endedAt = null,
-    notes = null,
     label = null,
 )
+
+private const val PATIENT_ID = "patient-1"

@@ -113,8 +113,10 @@ class FetchRemoteDataUseCase @Inject constructor(
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
 
-        // Mark completed only when all four types succeeded (E2)
-        if (patientsOk && sessionsOk && samplesOk && reportsOk) {
+        // Mark completed only when all four types succeeded (E2). Listed rather than chained
+        // so a fifth entity type is one entry, not a longer boolean expression.
+        val everyTypeSucceeded = listOf(patientsOk, sessionsOk, samplesOk, reportsOk).all { it }
+        if (everyTypeSucceeded) {
             initialFetchStateStore.markCompleted(userId)
         }
 
