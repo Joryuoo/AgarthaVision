@@ -20,7 +20,8 @@ import org.robolectric.annotation.Config
  *
  * It used to be one of two overloads; the other took raw SVG path data and went with
  * `SvgIcon`, so every caller now passes an `ImageVector` and this is the only one left. It is
- * `internal` so we can reach it from test scope without crossing a module boundary. The production `CaptureScreen` is not instantiated here — no camera, no Hilt graph.
+ * `internal` so we can reach it from test scope without crossing a module boundary. The
+ * production `CaptureScreen` is not instantiated here — no camera, no Hilt graph.
  *
  * Three properties are verified:
  * 1. The icon is reachable by the accessibility label added by the ticket.

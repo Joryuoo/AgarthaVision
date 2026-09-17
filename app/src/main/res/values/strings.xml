@@ -413,6 +413,7 @@
          on the patient and the note was an ad-hoc patient identifier the patient record
          replaces. Only the label is left. -->
     <string name="session_new_sheet_subtitle">Name this smear before scanning</string>
+    <string name="session_new_sheet_close">Close</string>
     <string name="session_new_label_required">Please fill in the label field to continue.</string>
     <string name="session_new_char_counter">%1$d / %2$d</string>
     <!-- Sessions empty state (86d4apzf5) -->
