@@ -6,18 +6,16 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.room.withTransaction
 import kotlinx.coroutines.CancellationException
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
-import java.io.InputStreamReader
-import java.util.zip.GZIPInputStream
+import java.io.File
 import javax.inject.Inject
 
 /**
- * Seeds the bundled PSGC barangay dataset into Room.
+ * Copies the bundled PSGC barangay dataset into Room.
  *
  * Called once per launch from [com.agarthavision.AgarthaVisionApp]. The dataset ships in the
  * APK and is never fetched at point of use — medtechs collect in areas with no cellular
@@ -30,6 +28,17 @@ import javax.inject.Inject
  *   vintage alone would wrongly report it as already seeded.
  * - The recorded vintage differing from [PsgcDataset.VINTAGE]. This is what makes changing
  *   the pinned PSGC release a dataset swap plus a constant, with no migration.
+ *
+ * **The asset is a SQLite file, not a CSV, and this class no longer parses anything.** It
+ * used to gunzip a CSV, build 42,010 entities in Kotlin and insert them in chunks, which cost
+ * roughly a minute on a Redmi Note 11 and made the app feel unresponsive for the whole of a
+ * first launch. The rows now move in one `INSERT ... SELECT` over an attached database.
+ *
+ * The asset carries no `room_master_table` and is never opened as a Room database, which is
+ * what keeps it independent of Room's `identityHash`: bumping the schema version does not
+ * mean regenerating it. It cannot be a second Room database either — `PatientDao` joins
+ * `psgc_barangays` against `patients` for the patient search, and SQLite cannot join across
+ * connections. Hence copying into the main database rather than reading the asset in place.
  */
 class PsgcSeeder @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -66,24 +75,49 @@ class PsgcSeeder @Inject constructor(
     }
 
     /**
-     * Replaces the table in one transaction, inserting in chunks so neither the parse nor
-     * the insert holds all 42,010 rows at once. One transaction keeps a failure from
-     * leaving a partially-seeded table behind.
+     * Replaces the table from the bundled database, and returns the row count that landed.
+     *
+     * `ATTACH` is issued outside any transaction because SQLite rejects it inside one, which
+     * is why this does not use `database.withTransaction` the way the rest of the data layer
+     * does. The replacement itself still gets a transaction — an interrupted copy must not
+     * leave the picker holding half a country — it is just opened around the two statements
+     * rather than around the attach.
      */
     private suspend fun replaceAll(): Int {
-        var inserted = 0
-        database.withTransaction {
-            barangayDao.deleteAll()
-            context.assets.open(PsgcDataset.ASSET_PATH).use { asset ->
-                InputStreamReader(GZIPInputStream(asset), Charsets.UTF_8).buffered().useLines { lines ->
-                    PsgcCsvParser.parseLines(lines).chunked(CHUNK_SIZE).forEach { chunk ->
-                        barangayDao.insertAll(chunk)
-                        inserted += chunk.size
-                    }
+        val staged = stageAsset()
+        try {
+            val db = database.openHelper.writableDatabase
+            db.execSQL("ATTACH DATABASE ? AS $SOURCE_SCHEMA", arrayOf(staged.absolutePath))
+            try {
+                db.beginTransaction()
+                try {
+                    db.execSQL("DELETE FROM $TABLE")
+                    db.execSQL(COPY_SQL)
+                    db.setTransactionSuccessful()
+                } finally {
+                    db.endTransaction()
                 }
+            } finally {
+                db.execSQL("DETACH DATABASE $SOURCE_SCHEMA")
             }
+        } finally {
+            staged.delete()
         }
-        return inserted
+        return barangayDao.count()
+    }
+
+    /**
+     * Unpacks the asset to a real file, because SQLite attaches paths and an asset inside the
+     * APK is not one. Written to `cacheDir` and deleted in the same call: it is a copy of
+     * something the APK already carries, so nothing is lost if the process dies mid-seed and
+     * the next launch simply stages it again.
+     */
+    private fun stageAsset(): File {
+        val staged = File.createTempFile("psgc-", ".db", context.cacheDir)
+        context.assets.open(PsgcDataset.ASSET_PATH).use { asset ->
+            staged.outputStream().use { asset.copyTo(it) }
+        }
+        return staged
     }
 
     private companion object {
@@ -91,7 +125,24 @@ class PsgcSeeder @Inject constructor(
 
         private val SEEDED_VINTAGE = stringPreferencesKey("psgc_seeded_vintage")
 
-        /** Big enough to keep SQLite busy, small enough to stay off the allocation radar. */
-        private const val CHUNK_SIZE = 2_000
+        private const val TABLE = "psgc_barangays"
+
+        /** Attach alias for the bundled file. Scoped to one call, so it only has to be unused. */
+        private const val SOURCE_SCHEMA = "psgc_src"
+
+        /**
+         * Columns are named rather than `SELECT *` so a column added to either side fails
+         * loudly instead of shifting every value one place to the left.
+         */
+        private val COPY_SQL = """
+            INSERT INTO $TABLE (
+                code, name, city_muni_code, city_muni_name,
+                province_code, province_name, region_code, region_name, search_text
+            )
+            SELECT
+                code, name, city_muni_code, city_muni_name,
+                province_code, province_name, region_code, region_name, search_text
+            FROM $SOURCE_SCHEMA.$TABLE
+        """.trimIndent()
     }
 }
