@@ -258,6 +258,7 @@ fun SessionsScreen(
             // Leaving the sheet abandons the draft; the label is local `remember` state and
             // resets with it. There is nothing left in the ViewModel to reset — the barangay
             // moved to the patient and the note is gone.
+            suggestedLabel = state.suggestedLabel,
             onDismiss = { showCreateDialog = false },
             onSubmit = { label ->
                 viewModel.onCreateSession(label)
@@ -444,6 +445,7 @@ fun LiveDot() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
+    suggestedLabel: String,
     onDismiss: () -> Unit,
     onSubmit: (label: String) -> Unit
 ) {
@@ -464,7 +466,10 @@ private fun NewSessionSheet(
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     ) {
-        var label by remember { mutableStateOf("") }
+        // Keyed on the suggestion so a sheet opened after the previous smear was created
+        // starts on the new number rather than the one already used. It is only a seed: the
+        // field is editable from the first keystroke, and nothing re-applies it.
+        var label by remember(suggestedLabel) { mutableStateOf(suggestedLabel) }
         var showError by remember { mutableStateOf(false) }
 
         Column(
@@ -517,8 +522,8 @@ private fun NewSessionSheet(
                     value = label,
                     onValueChange = { label = it; showError = false },
                     config = SheetInputConfig(
-                        label = "Label",
-                        placeholder = "e.g. 325",
+                        label = stringResource(R.string.session_label_field_label),
+                        placeholder = stringResource(R.string.session_label_placeholder),
                         isError = showError && label.isBlank(),
                         maxLength = SESSION_LABEL_MAX_LENGTH
                     )
@@ -582,7 +587,7 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "A session label is required by lab protocol. You can edit it later from Session Detail.",
+                            stringResource(R.string.session_label_helper),
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                             lineHeight = 16.sp

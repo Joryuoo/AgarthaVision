@@ -33,6 +33,15 @@ interface SessionRepository {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for [patientId]'s smears, newest-agnostic and unordered.
+     *
+     * Feeds the sequence in the next auto-generated label. Returns labels, not a count: a
+     * count would drift the moment a session was created on another device and pulled down,
+     * or a label edited, and the sequence has to be derived from what is actually there.
+     */
+    suspend fun getSessionLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions owned by [userId] plus any unclaimed local sessions. When
      * [userId] is null (never-signed-in device), observes all local sessions. Per ADR-007.
      */

@@ -415,6 +415,9 @@
     <string name="session_new_char_counter">%1$d / %2$d</string>
     <!-- Sessions empty state (86d4apzf5) -->
     <string name="sessions_search_placeholder">Search smears by label</string>
+    <string name="session_label_field_label">Label</string>
+    <string name="session_label_placeholder">C.G.-0730600000-001</string>
+    <string name="session_label_helper">Generated from the patient and the number of smears they already have. Edit it if your lab labels smears differently.</string>
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->

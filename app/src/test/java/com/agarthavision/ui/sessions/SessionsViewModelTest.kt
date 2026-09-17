@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -364,6 +365,7 @@ class SessionsViewModelTest {
                 observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
                     whenever(it.invoke()).thenReturn(MutableStateFlow(LocalIdentity("u1", "u1@example.com")))
                 },
+                generateSessionLabelUseCase = stubLabelUseCase(),
                 savedStateHandle = SavedStateHandle(),
             )
 
@@ -827,6 +829,15 @@ class SessionsViewModelTest {
         return buildViewModelWithIdentityFlow(repo, identityFlow)
     }
 
+    /**
+     * The generator is exercised by its own pure tests; here it only has to not be null. The
+     * VM calls it from `init`, so an unstubbed mock would return null from a non-null
+     * `Result` and take down every test in this file.
+     */
+    private fun stubLabelUseCase() = mock<GenerateSessionLabelUseCase> {
+        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+    }
+
     private fun buildViewModelWithIdentityFlow(
         repo: SessionRepository,
         identityFlow: MutableStateFlow<LocalIdentity?>,
@@ -845,6 +856,7 @@ class SessionsViewModelTest {
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }

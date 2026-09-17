@@ -47,6 +47,20 @@ interface SessionDao {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for one patient, for the sequence in the next one.
+     *
+     * Deliberately not `MAX(...)` in SQL: the sequence is the tail of a text label the medtech
+     * can edit, so `MAX` over the whole string would order lexically and pick the label that
+     * sorts last rather than the highest number. Parsing happens in
+     * [com.agarthavision.domain.session.SessionLabelGenerator], where it is testable.
+     *
+     * Rows with no label are excluded rather than returned as nulls — an unlabelled session
+     * holds no sequence.
+     */
+    @Query("SELECT label FROM sessions WHERE patient_id = :patientId AND label IS NOT NULL")
+    suspend fun getLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions visible to a signed-out or offline medtech: those owned by
      * [userId] plus any not-yet-claimed local sessions (`user_id IS NULL`). Newest first.
      * Per ADR-007.

@@ -43,6 +43,9 @@ class SessionRepositoryImpl @Inject constructor(
         sessionDao.updateSessionLabel(sessionId, label)
     }
 
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> =
+        sessionDao.getLabelsForPatient(patientId)
+
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> {
         val entities = if (userId == null) {
             sessionDao.observeAllLocal()

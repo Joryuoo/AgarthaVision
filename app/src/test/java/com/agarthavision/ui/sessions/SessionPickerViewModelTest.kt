@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -59,6 +60,11 @@ class SessionPickerViewModelTest {
     private val sessionManager: SessionManager = mock {
         on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
     }
+    // Called from the VM's init. An unstubbed mock returns null for a non-null Result and
+    // takes down every test here, so it is stubbed even though the label is not asserted.
+    private val generateSessionLabelUseCase: GenerateSessionLabelUseCase = mock {
+        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+    }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(
@@ -75,6 +81,7 @@ class SessionPickerViewModelTest {
         sessionRepository = sessionRepository,
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+        generateSessionLabelUseCase = generateSessionLabelUseCase,
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),
