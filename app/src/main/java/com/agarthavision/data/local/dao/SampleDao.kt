@@ -194,10 +194,7 @@ interface SampleDao {
         SET status = :status,
             verified_at = :verifiedAt,
             needs_reannotation = :needsReannotation,
-            user_note = :userNote,
-            gps_latitude = :gpsLatitude,
-            gps_longitude = :gpsLongitude,
-            gps_accuracy = :gpsAccuracy
+            user_note = :userNote
         WHERE sample_id = :sampleId
         """,
     )
@@ -211,9 +208,6 @@ interface SampleDao {
         verifiedAt: Long,
         needsReannotation: Boolean,
         userNote: String?,
-        gpsLatitude: Double?,
-        gpsLongitude: Double?,
-        gpsAccuracy: Float?,
     )
 
     @Query(

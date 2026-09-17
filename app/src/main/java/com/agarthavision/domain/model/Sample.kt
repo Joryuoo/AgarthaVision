@@ -29,8 +29,5 @@ data class Sample(
     val needsReannotation: Boolean = false,
     val userNote: String? = null,
     val isManual: Boolean = false,
-    val latitude: Double?,
-    val longitude: Double?,
-    val accuracyMeters: Float? = null,
     val status: SampleStatus = SampleStatus.FLAGGED,
 )

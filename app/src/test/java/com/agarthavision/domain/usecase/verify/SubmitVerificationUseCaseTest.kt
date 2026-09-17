@@ -9,7 +9,6 @@ import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.repository.LocationProvider
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -36,7 +35,6 @@ class SubmitVerificationUseCaseTest {
 
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
-    private val locationProvider: LocationProvider = mock()
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val findingDao: SampleSpeciesFindingDao = mock()
@@ -45,7 +43,6 @@ class SubmitVerificationUseCaseTest {
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         findingDao = findingDao,
-        locationProvider = locationProvider,
         syncSampleUseCase = syncSampleUseCase,
     )
 
@@ -70,7 +67,6 @@ class SubmitVerificationUseCaseTest {
     @Test
     fun `submit persists sample with VERIFIED status and one detection per box`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val findings = listOf(
@@ -93,9 +89,6 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
-                gpsLatitude = isNull(),
-                gpsLongitude = isNull(),
-                gpsAccuracy = isNull(),
             )
             verify(detectionDao).insertDetections(any())
         }
@@ -103,7 +96,6 @@ class SubmitVerificationUseCaseTest {
     @Test
     fun `submit with all FALSE_POSITIVE still writes sample row`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val findings = listOf(Finding(prediction, VerificationAnswers(isEgg = false)))
@@ -117,16 +109,12 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
-                gpsLatitude = isNull(),
-                gpsLongitude = isNull(),
-                gpsAccuracy = isNull(),
             )
         }
 
     @Test
     fun `Q4 yes sets needsReannotation true on sample row`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             val findings = listOf(
@@ -148,32 +136,6 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(true),
                 userNote = isNull(),
-                gpsLatitude = isNull(),
-                gpsLongitude = isNull(),
-                gpsAccuracy = isNull(),
-            )
-        }
-
-    @Test
-    fun `submit succeeds with null GPS when LocationProvider returns null`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
-            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
-
-            val findings = listOf(Finding(prediction, VerificationAnswers(isEgg = false)))
-            val result = useCase(frame, findings, missedEgg = null)
-            advanceUntilIdle()
-
-            assertTrue(result.isSuccess)
-            verify(sampleDao).updateSampleOnVerify(
-                sampleId = eq("sample-1"),
-                status = eq(SampleStatus.VERIFIED.value),
-                verifiedAt = any(),
-                needsReannotation = eq(false),
-                userNote = isNull(),
-                gpsLatitude = isNull(),
-                gpsLongitude = isNull(),
-                gpsAccuracy = isNull(),
             )
         }
 
@@ -183,7 +145,6 @@ class SubmitVerificationUseCaseTest {
             // The dangerous one. Detection ids used to be random, so a second save inserted a
             // whole second set beside the first - doubling every egg count with no error
             // anywhere. Derived ids plus the DAO REPLACE strategy make a re-save an overwrite.
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
             val findings = listOf(
                 Finding(
@@ -216,7 +177,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // An already-SYNCED sample has to re-enter getSamplesPendingSync, or an edit made
             // offline would never reach Supabase at all.
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             useCase(frame, listOf(Finding(prediction, VerificationAnswers(isEgg = false))), missedEgg = null)
@@ -228,9 +188,6 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
-                gpsLatitude = isNull(),
-                gpsLongitude = isNull(),
-                gpsAccuracy = isNull(),
             )
         }
 
@@ -239,7 +196,6 @@ class SubmitVerificationUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Replace rather than upsert: a species the medtech removed on re-open has to
             // actually disappear, or it lingers and inflates the count.
-            whenever(locationProvider.getCurrentLocation()).thenReturn(null)
             whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
 
             useCase(frame, listOf(Finding(prediction, VerificationAnswers(isEgg = false))), missedEgg = null)

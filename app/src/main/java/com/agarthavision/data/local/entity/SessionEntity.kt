@@ -2,15 +2,40 @@ package com.agarthavision.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * Room entity for a capture session.
+ * Room entity for one fecal smear.
  *
- * Mirrors the Supabase `sessions` table. One row per `startSession()` call;
- * `endedAt` is set on `stopSession()`. See CONTEXT.md.
+ * Mirrors the Supabase `sessions` table in `supabase/migrations/0001_init.sql`. One row
+ * per `startSession()` call. A session belongs to a [PatientEntity] and never ends.
+ *
+ * Three columns that existed up to Room 12 are deliberately gone:
+ * - `ended_at` — sessions never end (86d4ab4vm). Nothing had written it since that
+ *   ticket, and a column no writer sets is a trap: `ended_at IS NULL` silently matches
+ *   every row while still reading like a filter.
+ * - `notes` — it was being used as an ad-hoc patient identifier. [PatientEntity] is what
+ *   replaces it.
+ * - `psgc_barangay_code` — moved to the patient, which is the unit surveillance
+ *   aggregates on and which does not change from one smear to the next.
+ *
+ * `claim_exempt` is gone too: login is mandatory on first run, so every row has an owner
+ * from the moment it is created and the deferred-claim axis it served has nothing left
+ * to do.
  */
-@Entity(tableName = "sessions")
+@Entity(
+    tableName = "sessions",
+    foreignKeys = [
+        ForeignKey(
+            entity = PatientEntity::class,
+            parentColumns = ["patient_id"],
+            childColumns = ["patient_id"],
+        ),
+    ],
+    indices = [Index("patient_id")],
+)
 data class SessionEntity(
     @PrimaryKey
     @ColumnInfo(name = "session_id")
@@ -19,47 +44,31 @@ data class SessionEntity(
     @ColumnInfo(name = "user_id")
     val userId: String?,
 
+    /**
+     * The patient this smear belongs to. A session is always created from a patient's
+     * session list, so the patient is known at creation and this is never null.
+     */
+    @ColumnInfo(name = "patient_id")
+    val patientId: String,
+
     @ColumnInfo(name = "device_id")
     val deviceId: String,
 
     @ColumnInfo(name = "started_at")
     val startedAt: Long,
 
-    @ColumnInfo(name = "ended_at")
-    val endedAt: Long?,
-
-    @ColumnInfo(name = "notes")
-    val notes: String?,
-
+    /**
+     * The smear label, auto-generated as `C.G.-0730600000-001` and editable thereafter.
+     * Cosmetic and deliberately not unique — the session id is the real key.
+     */
     @ColumnInfo(name = "label")
     val label: String? = null,
 
     /**
-     * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
-     * sessions created before the picker existed. Mirrors `sessions.psgc_barangay_code`
-     * (`supabase/migrations/0010_session_psgc_barangay.sql`).
-     *
-     * Barangay level only — the code resolves upward to city/municipality, province and
-     * region on its own. This is the key the surveillance map aggregates on; the
-     * capture-time GPS fix on each sample stays provenance only.
-     */
-    @ColumnInfo(name = "psgc_barangay_code")
-    val psgcBarangayCode: String? = null,
-
-    /**
-     * Room-only cloud sync state. Per ADR-007, a session is now written locally first
-     * and pushed best-effort; `pending` until the Supabase row exists. Never a Supabase
-     * column — remote presence is authoritative there. Defaults `synced` on migration so
-     * pre-feature rows (whose remote insert already succeeded) are not re-pushed.
+     * Room-only cloud sync state. Per ADR-007, a session is written locally first and
+     * pushed best-effort; `pending` until the Supabase row exists. Never a Supabase
+     * column — remote presence is authoritative there.
      */
     @ColumnInfo(name = "supabase_status", defaultValue = "'synced'")
     val supabaseStatus: String = "synced",
-
-    /**
-     * `true` when the medtech has opted this session out of being claimed at the next
-     * login (the per-session "Don't link to account" toggle). Claim-exempt sessions stay
-     * local-only and are excluded from sync. **Room-only.** Per ADR-007.
-     */
-    @ColumnInfo(name = "claim_exempt", defaultValue = "0")
-    val claimExempt: Boolean = false,
 )

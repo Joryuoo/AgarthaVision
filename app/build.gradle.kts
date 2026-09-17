@@ -110,7 +110,6 @@ ksp {
 
 dependencies {
     implementation(libs.foundation.layout)
-    implementation(libs.play.services.location)
     // CameraX
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)
@@ -177,9 +176,6 @@ dependencies {
 
     // Image loading
     implementation(libs.coil)
-
-    // Location
-    implementation(libs.play.services.location)
 
     // Testing
     testImplementation(libs.junit)

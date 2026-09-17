@@ -567,12 +567,6 @@ private fun MetadataTab(sample: Sample) {
 
         item {
             GroupedList(title = "CAPTURE DATA") {
-                val locString = if (sample.latitude != null && sample.longitude != null) {
-                    String.format(Locale.US, "%.4f, %.4f", sample.latitude, sample.longitude)
-                } else {
-                    "None"
-                }
-                DetailRow(label = "Location", value = locString, isLast = false)
                 DetailRow(label = "Model Version", value = sample.inferenceModelVersion, isLast = false)
                 DetailRow(
                     label = "Needs Reannotation",

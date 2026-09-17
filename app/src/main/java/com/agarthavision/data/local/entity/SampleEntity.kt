@@ -50,14 +50,10 @@ data class SampleEntity(
     @ColumnInfo(name = "needs_reannotation", defaultValue = "0")
     val needsReannotation: Boolean = false,
 
-    @ColumnInfo(name = "gps_latitude")
-    val gpsLatitude: Double?,
-
-    @ColumnInfo(name = "gps_longitude")
-    val gpsLongitude: Double?,
-
-    @ColumnInfo(name = "gps_accuracy")
-    val gpsAccuracy: Float?,
+    // The three gps_* columns are gone as of Room 13. The fix was taken at the
+    // microscope, so it recorded where the smear was read, not where the infection came
+    // from — plotted, it mapped laboratories. Geospatial mapping keys on the patient's
+    // barangay now. Nothing ever read them.
 
     @ColumnInfo(name = "status")
     val status: String,

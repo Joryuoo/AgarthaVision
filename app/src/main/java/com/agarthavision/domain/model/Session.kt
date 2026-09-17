@@ -15,7 +15,8 @@ data class Session(
     /**
      * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
      * sessions created before the picker existed. The unit of analysis for surveillance
-     * mapping; the per-sample GPS fix is provenance only.
+     * mapping. The per-sample GPS fix is gone as of Room 13 — it recorded where the smear
+ * was read, not where the infection came from.
      */
     val psgcBarangayCode: String? = null,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */

@@ -73,9 +73,6 @@ class ReportCsvBuilder @Inject constructor() {
             detection?.confidence?.toString().orEmpty(),
             detection?.expertClass.orEmpty(),
             detection?.verdict?.value.orEmpty(),
-            latitude?.toString().orEmpty(),
-            longitude?.toString().orEmpty(),
-            accuracyMeters?.toString().orEmpty(),
             isManual.toString(),
             userNote.orEmpty(),
             inferenceModelVersion,
@@ -106,6 +103,6 @@ class ReportCsvBuilder @Inject constructor() {
         // by one from user_note onward.
         private const val CSV_HEADER =
             "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict," +
-                "gps_lat,gps_lng,gps_accuracy,is_manual,user_note,model_version"
+                "is_manual,user_note,model_version"
     }
 }

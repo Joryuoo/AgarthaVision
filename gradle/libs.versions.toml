@@ -22,7 +22,6 @@ espresso = "3.7.0"
 exifinterface = "1.4.2"
 ksp = "2.2.10-2.0.2"
 ktlint-plugin = "12.1.2"
-play-services-location = "21.3.0"
 mockito-kotlin = "5.4.0"
 turbine = "1.1.0"
 detekt = "1.23.7"
@@ -103,7 +102,6 @@ datastore = { group = "androidx.datastore", name = "datastore-preferences", vers
 coil = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 # Location
-play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "play-services-location" }
 
 # Testing
 junit = { group = "junit", name = "junit", version = "4.13.2" }

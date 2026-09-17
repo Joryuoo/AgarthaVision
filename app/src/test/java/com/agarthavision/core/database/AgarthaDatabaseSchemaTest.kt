@@ -123,6 +123,81 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
+    fun `patients and the visibility join exist`() {
+        assertTrue(
+            "patients is missing from v$EXPECTED_VERSION — a session has nothing to belong to.",
+            tables().contains("patients"),
+        )
+        assertTrue(
+            "patient_users is missing — patient visibility resolves through it, so without " +
+                "it a medtech can read no patient at all.",
+            tables().contains("patient_users"),
+        )
+        listOf(
+            "lastname", "firstname", "middle_name", "sex", "birthdate",
+            "psgc_barangay_code", "created_by", "created_at", "updated_at",
+        ).forEach { column ->
+            assertTrue("patients.$column is missing.", columnsOf("patients").contains(column))
+        }
+        // Only the middle name is optional — the rest identify the patient.
+        assertFalse(isNotNull("patients", "middle_name"))
+        assertTrue(isNotNull("patients", "lastname"))
+        assertTrue(isNotNull("patients", "birthdate"))
+        assertTrue(isNotNull("patients", "psgc_barangay_code"))
+    }
+
+    @Test
+    fun `a session belongs to a patient`() {
+        assertTrue(
+            "sessions.patient_id is missing — sessions would still hang off the user alone.",
+            columnsOf("sessions").contains("patient_id"),
+        )
+        // Not null: a session is always created from a patient's session list, so the
+        // patient is known at creation. A nullable column here would let an orphan smear
+        // exist and quietly drop out of every per-patient report.
+        assertTrue(isNotNull("sessions", "patient_id"))
+    }
+
+    @Test
+    fun `sessions no longer carry notes, ended_at, psgc_barangay_code or claim_exempt`() {
+        // Each removal has its own reason and each would be easy to restore by reflex:
+        //  - ended_at: sessions never end (86d4ab4vm), so nothing wrote it and
+        //    `ended_at IS NULL` silently matched every row while still reading as a filter.
+        //  - notes: it was doubling as an ad-hoc patient identifier. Patient replaces it.
+        //  - psgc_barangay_code: moved to the patient, the unit surveillance aggregates on.
+        //  - claim_exempt: login is mandatory on first run, so every row has an owner.
+        listOf("notes", "ended_at", "psgc_barangay_code", "claim_exempt").forEach { column ->
+            assertFalse(
+                "sessions.$column should be gone at v$EXPECTED_VERSION.",
+                columnsOf("sessions").contains(column),
+            )
+        }
+    }
+
+    @Test
+    fun `samples no longer carry a GPS fix`() {
+        // The fix was taken at the microscope, so it recorded where the smear was read, not
+        // where the infection came from. Mapping keys on the patient's barangay now.
+        listOf("gps_latitude", "gps_longitude", "gps_accuracy").forEach { column ->
+            assertFalse(
+                "samples.$column should be gone at v$EXPECTED_VERSION.",
+                columnsOf("samples").contains(column),
+            )
+        }
+    }
+
+    @Test
+    fun `reports no longer carry an EPG figure`() {
+        // EPG is eggs-per-gram via Kato-Katz; these smears are direct smears, so the x24
+        // multiplier was wrong for the method in use. A stale EPG surviving into a generated
+        // report is a clinical error, not a cosmetic one.
+        assertFalse(
+            "reports.epg_per_species_json should be gone at v$EXPECTED_VERSION.",
+            columnsOf("reports").contains("epg_per_species_json"),
+        )
+    }
+
+    @Test
     fun `the barangay picker's half of the schema survived the merge`() {
         assertTrue(
             "psgc_barangays is missing from v$EXPECTED_VERSION — the picker has no data.",
@@ -186,6 +261,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 12
+        private const val EXPECTED_VERSION = 13
     }
 }
