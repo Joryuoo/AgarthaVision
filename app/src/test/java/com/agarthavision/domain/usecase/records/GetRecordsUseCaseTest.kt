@@ -591,6 +591,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -601,6 +602,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -668,6 +670,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -678,6 +681,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -696,7 +700,7 @@ private fun session(id: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
+        patientId = "patient-1",
         label = null,
     )
 

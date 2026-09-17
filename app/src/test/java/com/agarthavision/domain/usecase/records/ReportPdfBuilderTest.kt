@@ -15,7 +15,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 private const val SESSION_STARTED_AT = 10_000L
-private const val SESSION_ENDED_AT = 20_000L
+private const val SESSION_PATIENT_ID = "patient-1"
 private const val SAMPLE_TIMESTAMP = 1_000L
 private const val SAMPLE_VERIFIED_AT = 2_000L
 private const val GENERATED_AT_MILLIS = 30_000L
@@ -40,7 +40,7 @@ class ReportPdfBuilderTest {
             userId = "user-1",
             deviceId = "device-1",
             startedAt = SESSION_STARTED_AT,
-            endedAt = SESSION_ENDED_AT,
+            patientId = SESSION_PATIENT_ID,
             label = "Smear A",
         )
         val samples = listOf(
@@ -129,7 +129,7 @@ class ReportPdfBuilderTest {
                 userId = "user-1",
                 deviceId = "device-1",
                 startedAt = SESSION_STARTED_AT,
-                endedAt = SESSION_ENDED_AT,
+                patientId = SESSION_PATIENT_ID,
                 label = null,
             ),
             generatedBy = "user-1",

@@ -217,6 +217,7 @@ private class SamplesSessionRepository(
     ): Flow<RecordsTotals> = flowOf(RecordsTotals())
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -226,6 +227,7 @@ private class SamplesSessionRepository(
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -272,7 +274,7 @@ private fun sessionsSession(id: String, userId: String?) = Session(
     userId = userId,
     deviceId = "device-1",
     startedAt = 1_000L,
-    endedAt = null,
+    patientId = "patient-1",
     label = null,
 )
 

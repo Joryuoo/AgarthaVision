@@ -24,7 +24,7 @@ class ReportCsvBuilderTest {
             userId = "user-1",
             deviceId = "device-1",
             startedAt = 10_000L,
-            endedAt = 20_000L,
+            patientId = "patient-1",
             label = "Smear A",
         )
         val samples = listOf(
@@ -91,7 +91,7 @@ class ReportCsvBuilderTest {
             # session_id: session-1
             # session_label: Smear A
             # session_started_at: 1970-01-01T00:00:10Z
-            # session_ended_at: 1970-01-01T00:00:20Z
+            # patient_id: patient-1
             # device_id: device-1
             # generated_by: user-1
             # generated_at: 1970-01-01T00:00:30Z
