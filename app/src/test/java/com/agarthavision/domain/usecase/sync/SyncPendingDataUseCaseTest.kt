@@ -65,7 +65,7 @@ class SyncPendingDataUseCaseTest {
         whenever(authRepository.currentLocalUserId()).thenReturn(USER_ID)
         whenever(authRepository.isAuthenticated()).thenReturn(true)
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
-        whenever(patientDao.getPatientsPendingSync()).thenReturn(emptyList())
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(emptyList())
         whenever(sessionDao.getSessionsPendingSync(USER_ID)).thenReturn(emptyList())
         whenever(sampleDao.getSamplesPendingSyncIncludingDeleted(USER_ID)).thenReturn(emptyList())
         whenever(reportDao.getReportsPendingSync(USER_ID)).thenReturn(emptyList())
@@ -75,7 +75,7 @@ class SyncPendingDataUseCaseTest {
 
     @Test
     fun `a pending patient is pushed before a session that references it`() = runTest {
-        whenever(patientDao.getPatientsPendingSync()).thenReturn(listOf(patientEntity()))
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
         whenever(sessionDao.getSessionsPendingSync(USER_ID)).thenReturn(listOf(sessionEntity()))
         whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.success(Unit))
         whenever(syncSessionUseCase(SESSION_ID)).thenReturn(Result.success(Unit))
@@ -90,7 +90,7 @@ class SyncPendingDataUseCaseTest {
 
     @Test
     fun `the summary counts patients that pushed successfully`() = runTest {
-        whenever(patientDao.getPatientsPendingSync()).thenReturn(listOf(patientEntity()))
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
         whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.success(Unit))
 
         val summary = useCase().getOrNull() as SyncSummary.Ran
@@ -100,7 +100,7 @@ class SyncPendingDataUseCaseTest {
 
     @Test
     fun `a patient that fails to push does not abort the pass`() = runTest {
-        whenever(patientDao.getPatientsPendingSync()).thenReturn(listOf(patientEntity()))
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
         whenever(sessionDao.getSessionsPendingSync(USER_ID)).thenReturn(listOf(sessionEntity()))
         whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.failure(IllegalStateException("offline")))
         whenever(syncSessionUseCase(SESSION_ID)).thenReturn(Result.success(Unit))
@@ -119,7 +119,7 @@ class SyncPendingDataUseCaseTest {
     @Test
     fun `a patient edited after its first sync is pushed again`() = runTest {
         val edited = patientEntity(lastname = "Cruz-Reyes", supabaseStatus = "pending")
-        whenever(patientDao.getPatientsPendingSync()).thenReturn(listOf(edited))
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(edited))
         whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.success(Unit))
 
         val summary = useCase().getOrNull() as SyncSummary.Ran
@@ -135,7 +135,7 @@ class SyncPendingDataUseCaseTest {
         whenever(connectivityObserver.currentlyOnline()).thenReturn(false)
 
         assertTrue(useCase().getOrNull() is SyncSummary.Skipped)
-        verify(patientDao, never()).getPatientsPendingSync()
+        verify(patientDao, never()).getPatientsPendingSync(USER_ID)
     }
 
     @Test
@@ -143,7 +143,7 @@ class SyncPendingDataUseCaseTest {
         whenever(authRepository.currentLocalUserId()).thenReturn(null)
 
         assertTrue(useCase().getOrNull() is SyncSummary.Skipped)
-        verify(patientDao, never()).getPatientsPendingSync()
+        verify(patientDao, never()).getPatientsPendingSync(USER_ID)
     }
 
     private fun patientEntity(

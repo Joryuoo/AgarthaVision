@@ -179,7 +179,60 @@ class PatientRepositoryImplTest {
         val stored = dao.getPatientById("p-1")
         assertEquals("Cruz-Reyes", stored?.lastname)
         assertEquals("pending", stored?.supabaseStatus)
-        assertEquals(1, dao.getPatientsPendingSync().size)
+        assertEquals(1, dao.getPatientsPendingSync(USER_A).size)
+    }
+
+    // ── the upsert must not cascade the link away ─────────────────────────────
+
+    @Test
+    fun `re-upserting a patient keeps its creator link, and the patient visible`() = runTest {
+        repository.insert(patient())
+        assertEquals(listOf("p-1"), page(USER_A).map { it.id })
+
+        // What a pull does to a patient the device already holds.
+        dao.upsertPatient(
+            dao.getPatientById("p-1")!!.copy(lastname = "Cruz-Reyes", supabaseStatus = "synced"),
+        )
+
+        // Fails on @Insert(REPLACE): SQLite resolves the conflict by deleting the row, which
+        // cascades patient_users away, and every read here resolves through that join. The
+        // patient would still be on the device and invisible to the medtech who created it.
+        assertEquals(listOf("p-1"), page(USER_A).map { it.id })
+        assertEquals(listOf("p-1"), dao.getLinksForUser(USER_A).map { it.patientId })
+        assertEquals("Cruz-Reyes", dao.getPatientById("p-1")?.lastname)
+    }
+
+    @Test
+    fun `a bulk upsert keeps links too`() = runTest {
+        repository.insert(patient(id = "p-1"))
+        repository.insert(patient(id = "p-2", lastname = "Santos"))
+
+        dao.upsertPatients(listOf(dao.getPatientById("p-1")!!, dao.getPatientById("p-2")!!))
+
+        assertEquals(listOf("p-1", "p-2"), page(USER_A).map { it.id }.sorted())
+    }
+
+    // ── pending sync is scoped to the medtech ─────────────────────────────────
+
+    @Test
+    fun `getPatientsPendingSync returns only the calling medtech's rows`() = runTest {
+        repository.insert(patient(id = "p-1", createdBy = USER_A))
+        repository.insert(patient(id = "p-2", lastname = "Santos", createdBy = USER_B))
+
+        // Unscoped, a sync pass run by A pushed B's offline patient under A's session; the
+        // server rejects it and the row lands back here marked sync_failed.
+        assertEquals(listOf("p-1"), dao.getPatientsPendingSync(USER_A).map { it.patientId })
+        assertEquals(listOf("p-2"), dao.getPatientsPendingSync(USER_B).map { it.patientId })
+    }
+
+    @Test
+    fun `getPatientsPendingSync includes a patient shared by an admin`() = runTest {
+        repository.insert(patient(id = "p-1", createdBy = USER_A))
+        dao.linkPatientToUser(PatientUserEntity("p-1", USER_B, linkedAt = 1_700_000_000_000))
+
+        // Scoping on created_by instead of the join would hide it, which is the whole reason
+        // the join table exists.
+        assertEquals(listOf("p-1"), dao.getPatientsPendingSync(USER_B).map { it.patientId })
     }
 
     private companion object {

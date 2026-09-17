@@ -73,8 +73,10 @@ class SyncPendingDataUseCase @Inject constructor(
             return@runCatching SyncSummary.Skipped
         }
 
-        // Patients first: a session insert fails on sessions.patient_id otherwise.
-        val patientsSynced = patientDao.getPatientsPendingSync().count { patient ->
+        // Patients first: a session insert fails on sessions.patient_id otherwise. Scoped to
+        // this medtech like every other type below — on a shared device an unscoped pass
+        // pushed another medtech's offline patients under whoever was signed in.
+        val patientsSynced = patientDao.getPatientsPendingSync(userId).count { patient ->
             syncPatientUseCase(patient.patientId).isSuccess
         }
         val sessionsSynced = sessionDao.getSessionsPendingSync(userId).count { session ->
