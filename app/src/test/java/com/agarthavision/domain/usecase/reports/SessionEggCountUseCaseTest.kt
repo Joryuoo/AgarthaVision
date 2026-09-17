@@ -91,9 +91,6 @@ class SessionEggCountUseCaseTest {
         deviceId = "device-1",
         filePath = "path/to/file",
         status = com.agarthavision.domain.model.SampleStatus.VERIFIED,
-        latitude = null,
-        longitude = null,
-        accuracyMeters = null,
         isManual = false,
         userNote = null,
         inferenceModelVersion = "v1"
