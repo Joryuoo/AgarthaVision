@@ -46,7 +46,9 @@ class ReportCsvBuilder @Inject constructor() {
             "# session_id: ${session.id}",
             "# session_label: ${session.label.orEmpty()}",
             "# session_started_at: ${Instant.ofEpochMilli(session.startedAt)}",
-            "# session_ended_at: ${session.endedAt?.let { Instant.ofEpochMilli(it).toString() }.orEmpty()}",
+            // No `session_ended_at`. Sessions do not end (86d4ab4vm) and the column is gone
+            // as of Room 13, so the row only ever emitted an empty value.
+            "# patient_id: ${session.patientId}",
             "# device_id: ${session.deviceId}",
             "# generated_by: ${metadata.generatedBy}",
             "# generated_at: ${metadata.generatedAt}",

@@ -9,13 +9,25 @@ package com.agarthavision.domain.model
  * tracks the patient, not the smear — and it does not change from one smear to the next.
  * The note was only ever an ad-hoc patient identifier, which [Patient] now is properly.
  * Both are gone from the Room row, from Supabase, and from here.
+ *
+ * **`endedAt` is gone too.** Nothing had written it since 86d4ab4vm, and Room 13 dropped the
+ * column; the field survived only so the Sessions list could derive an active/resumable flag
+ * from it. That derivation was the bug: a column no writer sets makes `endedAt == null` true
+ * for every row, so every card rendered active while still reading like a test. The one
+ * session the app is actually working in comes from
+ * [com.agarthavision.core.session.SessionManager], which is the only thing that knows.
  */
 data class Session(
     val id: String,
     val userId: String?,
+    /**
+     * The patient this smear belongs to. Not nullable: `sessions.patient_id` is
+     * `not null references patients(id)` on both sides, so a session without one cannot
+     * exist in either database.
+     */
+    val patientId: String,
     val deviceId: String,
     val startedAt: Long,
-    val endedAt: Long?,
     val label: String?,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */
     val supabaseStatus: SessionSyncStatus = SessionSyncStatus.SYNCED,

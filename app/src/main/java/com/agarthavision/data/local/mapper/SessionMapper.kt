@@ -7,17 +7,18 @@ import com.agarthavision.domain.model.SessionSyncStatus
 /**
  * Converts a Room session row into the domain model used by records screens.
  *
- * [Session.endedAt] is always null. The column is gone as of Room 13 — sessions do not end
- * (86d4ab4vm) — and the domain field survives only because the Sessions list still derives
- * its active/resumable state from it. PB-09 gives that a real source.
+ * The mapping is now one-to-one: `notes`, `psgc_barangay_code` and `ended_at` are gone from
+ * the entity as of Room 13 and gone from [Session] as of PB-09, so there is no longer a
+ * field on either side without a counterpart on the other. `patient_id` carries straight
+ * through — it is not null in Room or in Postgres.
  */
 fun SessionEntity.toDomain(): Session =
     Session(
         id = sessionId,
         userId = userId,
+        patientId = patientId,
         deviceId = deviceId,
         startedAt = startedAt,
-        endedAt = null,
         label = label,
         supabaseStatus = SessionSyncStatus.fromValue(supabaseStatus),
     )
