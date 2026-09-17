@@ -44,6 +44,9 @@ sealed interface PatientsEvent {
     /** Open this patient's session list. */
     data class OpenPatient(val patientId: String) : PatientsEvent
 
+    /** Open the form on an existing patient. */
+    data class EditPatient(val patientId: String) : PatientsEvent
+
     /** Open the blank New Patient form. */
     data object CreatePatient : PatientsEvent
 }
@@ -114,6 +117,17 @@ class PatientsViewModel @Inject constructor(
 
     fun onPatientSelected(patientId: String) {
         viewModelScope.launch { eventFlow.emit(PatientsEvent.OpenPatient(patientId)) }
+    }
+
+    /**
+     * Opens the form on an existing patient.
+     *
+     * Separate from [onPatientSelected] because a row tap goes to that patient's smears, which
+     * is what a medtech wants nearly every time. Editing is the rarer, deliberate action, so
+     * it gets its own affordance rather than displacing the common one.
+     */
+    fun onEditPatient(patientId: String) {
+        viewModelScope.launch { eventFlow.emit(PatientsEvent.EditPatient(patientId)) }
     }
 
     fun onCreatePatient() {

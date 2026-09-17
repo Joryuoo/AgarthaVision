@@ -31,7 +31,12 @@ data class PatientListItem(
     val barangayName: String?,
 )
 
-/** A page of patients plus the total matching the same filter, for the pager. */
+/**
+ * A page of patients plus the total matching the same filter.
+ *
+ * The total is what tells the list whether another page exists — it is not a page count.
+ * There is no pager: the list is infinite-scroll and grows its limit.
+ */
 data class PatientsResult(
     val items: List<PatientListItem> = emptyList(),
     val total: Int = 0,
@@ -65,7 +70,6 @@ class ObservePatientsUseCase @Inject constructor(
             userId = userId,
             query = needle,
             limit = query.limit,
-            offset = 0,
         )
         val total = patientRepository.observePatientCount(userId, needle)
 

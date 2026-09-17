@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -16,9 +17,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -66,6 +70,7 @@ private val FloatingActionClearance = 64.dp
 @Composable
 fun PatientsScreen(
     onPatientSelected: (String) -> Unit,
+    onEditPatient: (String) -> Unit,
     onCreatePatient: () -> Unit,
     viewModel: PatientsViewModel = hiltViewModel(),
 ) {
@@ -76,6 +81,7 @@ fun PatientsScreen(
         viewModel.events.collect { event ->
             when (event) {
                 is PatientsEvent.OpenPatient -> onPatientSelected(event.patientId)
+                is PatientsEvent.EditPatient -> onEditPatient(event.patientId)
                 PatientsEvent.CreatePatient -> onCreatePatient()
             }
         }
@@ -157,6 +163,7 @@ fun PatientsScreen(
                             item = item,
                             now = state.now,
                             onClick = { viewModel.onPatientSelected(item.patient.id) },
+                            onEdit = { viewModel.onEditPatient(item.patient.id) },
                         )
                     }
                 }
@@ -205,6 +212,7 @@ private fun PatientRow(
     item: PatientListItem,
     now: Instant,
     onClick: () -> Unit,
+    onEdit: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
     val patient = item.patient
@@ -223,30 +231,46 @@ private fun PatientRow(
         item.barangayName ?: patient.psgcBarangayCode,
     )
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
             .background(colors.surface)
             .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+            .padding(start = Spacing.md, end = Spacing.xs, top = Spacing.sm, bottom = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = patient.displayName,
-            color = colors.textPrimary,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = meta,
-            color = colors.textSecondary,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            Text(
+                text = patient.displayName,
+                color = colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = meta,
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // The row itself opens this patient's smears, which is the common action. Editing
+        // their details is rarer and deliberate, so it gets its own target rather than
+        // displacing the tap. `material-icons-extended` per C11: this is an in-screen
+        // affordance, not house identity.
+        IconButton(onClick = onEdit) {
+            Icon(
+                imageVector = Icons.Outlined.Edit,
+                contentDescription = stringResource(R.string.patients_edit_desc, patient.displayName),
+                tint = colors.textSecondary,
+            )
+        }
     }
 }

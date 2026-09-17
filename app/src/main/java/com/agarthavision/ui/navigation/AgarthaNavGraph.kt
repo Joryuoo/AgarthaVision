@@ -184,6 +184,9 @@ fun AgarthaNavHost(
                 onPatientSelected = { patientId ->
                     navController.navigate(Screen.PatientSessions.createRoute(patientId))
                 },
+                onEditPatient = { patientId ->
+                    navController.navigate(Screen.PatientForm.createRoute(patientId))
+                },
                 onCreatePatient = {
                     navController.navigate(Screen.PatientForm.createRoute())
                 },
@@ -208,6 +211,7 @@ fun AgarthaNavHost(
         // do not become orphaned by the tab rename.
         composable(Screen.PatientSessions.route) {
             SessionsScreen(
+                onBack = { navController.popBackStack() },
                 onNavigate = { route -> navController.navigate(route) },
                 onNavigateToCapture = {
                     navController.navigate(Screen.Capture.route)

@@ -73,7 +73,7 @@ class PatientRepositoryImplTest {
     )
 
     private suspend fun page(userId: String, query: String = "") =
-        repository.observePatients(userId, query, limit = 50, offset = 0).first()
+        repository.observePatients(userId, query, limit = 50).first()
 
     // ── visibility resolves through patient_users ─────────────────────────────
 

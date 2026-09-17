@@ -25,12 +25,17 @@ interface PatientRepository {
      * [query] matches lastname, firstname or barangay name; a blank query matches
      * everything. The barangay half joins the bundled PSGC reference table, so this search
      * works with the radio off.
+     *
+     * **A growing [limit], not an offset.** The list is infinite-scroll, so each page
+     * includes the rows above it — the same shape `RecordsViewModel` and `SessionsViewModel`
+     * use, and their repository methods take no offset either. There was an `offset`
+     * parameter here that every caller passed 0, which reads as a paging control that works
+     * and is not one.
      */
     fun observePatients(
         userId: String,
         query: String,
         limit: Int,
-        offset: Int,
     ): Flow<List<Patient>>
 
     /** Total matching [observePatients] under the same filter, for the pager. */

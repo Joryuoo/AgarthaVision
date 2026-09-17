@@ -335,6 +335,8 @@
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name or barangay.</string>
     <string name="patients_new">New patient</string>
+    <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
+    <string name="patients_edit_desc">Edit %1$s</string>
     <!-- Row meta: sex · age · barangay. -->
     <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
     <string name="patients_age_years">%1$d yrs</string>

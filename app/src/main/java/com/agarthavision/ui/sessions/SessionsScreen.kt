@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -88,6 +89,7 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun SessionsScreen(
+    onBack: () -> Unit,
     onNavigate: (String) -> Unit = {},
     onNavigateToCapture: (String) -> Unit,
     onSessionSelected: (String) -> Unit,
@@ -132,7 +134,11 @@ fun SessionsScreen(
                 // only what had been scrolled into view. Sessions do not end any more, so the
                 // count is of frames awaiting review rather than of open sessions - the
                 // latter would have counted every session and said nothing.
-                AppBar(unverifiedCount = state.unverifiedCount, totalCount = state.totalCount)
+                AppBar(
+                    unverifiedCount = state.unverifiedCount,
+                    totalCount = state.totalCount,
+                    onBack = onBack,
+                )
 
                 // Search + date filter row
                 SearchInput(
@@ -260,13 +266,33 @@ fun SessionsScreen(
     }
 }
 
+/**
+ * This screen is a drill-down now, so it carries a back arrow.
+ *
+ * It used to be a root tab, where the bottom bar was the way out. It is registered at
+ * `patients/{patientId}`, which is not in `bottomBarRoutes`, so without this the only way
+ * back is the system gesture — and a screen reachable only by gesture reads as a dead end.
+ *
+ * [ScreenHeader] is deliberately not given a leading slot: its doc scopes it to the root
+ * tabs, and four screens share it. The arrow sits beside it instead, matching
+ * `SessionDetailScreen`'s top bar.
+ */
 @Composable
-private fun AppBar(unverifiedCount: Int, totalCount: Int) {
-    ScreenHeader(
-        title = stringResource(R.string.sessions_title),
-        purpose = stringResource(R.string.sessions_subtitle_purpose),
-        status = pluralStringResource(R.plurals.sessions_subtitle, totalCount, totalCount, unverifiedCount),
-    )
+private fun AppBar(unverifiedCount: Int, totalCount: Int, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        BackArrow(onBack = onBack, modifier = Modifier.padding(start = Spacing.xs))
+        ScreenHeader(
+            title = stringResource(R.string.sessions_title),
+            purpose = stringResource(R.string.sessions_subtitle_purpose),
+            status = pluralStringResource(
+                R.plurals.sessions_subtitle,
+                totalCount,
+                totalCount,
+                unverifiedCount,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+    }
 }
 
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */

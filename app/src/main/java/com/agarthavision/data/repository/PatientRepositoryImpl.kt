@@ -25,9 +25,10 @@ class PatientRepositoryImpl @Inject constructor(
         userId: String,
         query: String,
         limit: Int,
-        offset: Int,
     ): Flow<List<Patient>> =
-        patientDao.observePatients(userId, query, limit, offset).map { entities ->
+        // Always from the top: the list accumulates rather than paging, as Records and
+        // Sessions do. The DAO keeps its offset for a caller that one day wants real pages.
+        patientDao.observePatients(userId, query, limit, offset = 0).map { entities ->
             entities.map { it.toDomain() }
         }
 

@@ -41,7 +41,7 @@ class ObservePatientsUseCaseTest {
     )
 
     private fun stubPage(patients: List<Patient>, total: Int = patients.size) {
-        whenever(patientRepository.observePatients("user-a", "", 20, 0)).thenReturn(flowOf(patients))
+        whenever(patientRepository.observePatients("user-a", "", 20)).thenReturn(flowOf(patients))
         whenever(patientRepository.observePatientCount("user-a", "")).thenReturn(flowOf(total))
     }
 
@@ -50,7 +50,7 @@ class ObservePatientsUseCaseTest {
         // `_` is a single-character wildcard in LIKE. Unescaped, a medtech searching for a
         // surname that contains one gets everyone whose name is the same length, and a lone
         // `%` returns every patient on the device.
-        whenever(patientRepository.observePatients("user-a", "de\\_la", 20, 0))
+        whenever(patientRepository.observePatients("user-a", "de\\_la", 20))
             .thenReturn(flowOf(listOf(patient("p-1"))))
         whenever(patientRepository.observePatientCount("user-a", "de\\_la")).thenReturn(flowOf(1))
         whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
@@ -59,7 +59,7 @@ class ObservePatientsUseCaseTest {
 
         assertEquals(1, result.items.size)
         // The page and the count run the same predicate, so both must see the same needle.
-        verify(patientRepository).observePatients("user-a", "de\\_la", 20, 0)
+        verify(patientRepository).observePatients("user-a", "de\\_la", 20)
         verify(patientRepository).observePatientCount("user-a", "de\\_la")
     }
 
@@ -119,7 +119,7 @@ class ObservePatientsUseCaseTest {
 
         assertTrue(result.items.isEmpty())
         assertEquals(0, result.total)
-        verify(patientRepository, never()).observePatients(any(), any(), any(), any())
+        verify(patientRepository, never()).observePatients(any(), any(), any())
     }
 
     @Test
