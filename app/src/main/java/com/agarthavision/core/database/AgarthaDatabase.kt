@@ -9,6 +9,7 @@ import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
@@ -17,6 +18,7 @@ import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
 
 /**
  * AgarthaVision Room database.
@@ -44,6 +46,17 @@ import com.agarthavision.data.local.entity.SessionEntity
  * `patient_id`, and drops five columns: `sessions.ended_at`, `sessions.notes`,
  * `sessions.psgc_barangay_code`, `sessions.claim_exempt` and all three `samples.gps_*`,
  * plus `reports.epg_per_species_json`.
+ *
+ * Version 14 adds `species_suggestions`, the offline index behind the "Other species"
+ * field (PB-08b). Like `psgc_barangays` it has no Supabase mirror — it is derived locally
+ * from rows the device already holds.
+ *
+ * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
+ * already committed and on devices. Adding a table without changing the number is precisely
+ * the equal-version-different-hash case described below: destructive fallback does not
+ * fire, Room throws `Room cannot verify the data integrity` on open, and every device
+ * carrying the other build crashes at launch. A version bump is cheap and a collision is
+ * not.
  *
  * **Version 13 owns the whole shape.** `claim_exempt` is dropped here rather than in the
  * mandatory-login change that makes it dead, because a second schema change at the same
@@ -75,8 +88,9 @@ import com.agarthavision.data.local.entity.SessionEntity
         ReportEntity::class,
         SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
+        SpeciesSuggestionEntity::class,
     ],
-    version = 13,
+    version = 14,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
@@ -86,6 +100,7 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun detectionDao(): DetectionDao
     abstract fun reportDao(): ReportDao
     abstract fun psgcBarangayDao(): PsgcBarangayDao
+    abstract fun speciesSuggestionDao(): SpeciesSuggestionDao
 
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
 }
