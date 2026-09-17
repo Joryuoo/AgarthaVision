@@ -224,6 +224,15 @@ weight or optical sizing however long they take. When the right export cannot be
 the moment, reuse an existing glyph from `ui/icons/` as a marked placeholder rather than
 drawing one — `AgarthaBottomBar.kt`'s `Tab.Patients` carries exactly that marker today.
 
+**The last hand-authored geometry is gone.** `ui/components/SvgIcon.kt` was a generic
+path-string renderer with eleven call sites carrying inline SVG — a close cross, a search
+lens, a plus, a warning triangle, an arrow, and two "!" strokes whose surrounding circle was
+drawn separately through a `drawExtras` lambda. All eleven are `Icons.*` or a `ui/icons/`
+export now and the component is deleted, so the rule above has no vehicle left to break. It
+also closed an accessibility hole the rule did not mention: `SvgIcon` drew onto a `Canvas`
+with no `contentDescription`, so a capture back button and a sheet close button were
+invisible to TalkBack.
+
 **Drift, corrected in 86d4be3na:** this paragraph described house glyphs as "hand-authored
 1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds only
 `ic_launcher_background`, `ic_launcher_foreground` and `ic_logo`; every UI glyph is, and was,

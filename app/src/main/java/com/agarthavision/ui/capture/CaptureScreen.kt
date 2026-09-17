@@ -15,10 +15,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.icons.LabProfile
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -66,12 +68,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
@@ -205,24 +205,6 @@ private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifie
     .clickable(enabled = enabled) { onClick() }
 
 @Composable
-private fun IconButtonGlass(
-    pathData: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    drawExtras: (DrawScope.() -> Unit)? = null,
-) {
-    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
-        SvgIcon(
-            pathData,
-            color = Color.White,
-            strokeWidth = 1.8f,
-            modifier = Modifier.size(22.dp),
-            drawExtras = drawExtras,
-        )
-    }
-}
-
-@Composable
 internal fun IconButtonGlass(
     icon: ImageVector,
     contentDescription: String?,
@@ -253,16 +235,11 @@ private fun VerificationQueueButton(
 ) {
     Box {
         IconButtonGlass(
-            "M9 12l2 2 4-4",
-            drawExtras = {
-                drawRoundRect(
-                    Color.White,
-                    Offset(3f, 3f),
-                    Size(18f, 18f),
-                    CornerRadius(2f, 2f),
-                    style = Stroke(1.6f),
-                )
-            },
+            // Was a check stroke with the surrounding box hand-drawn through `drawExtras`.
+            // FactCheck is that glyph, and it is already what Session Detail uses for the
+            // same "go and review these frames" action.
+            icon = Icons.AutoMirrored.Outlined.FactCheck,
+            contentDescription = stringResource(R.string.capture_verify_action_desc),
             onClick = onClick,
         )
 
@@ -419,7 +396,11 @@ fun CaptureScreen(
         ) {
             // Back
             IconButtonGlass(
-                pathData = "M 15 18 L 9 12 L 15 6",
+                // The house back glyph, same as BackArrow and the verification sheets —
+                // C11 wants a new affordance to match its neighbours, and back already
+                // has one.
+                icon = AgarthaIcons.ArrowBackIosNew,
+                contentDescription = stringResource(R.string.capture_back_desc),
                 onClick = onNavigateBack,
                 enabled = !state.isBusy,
             )

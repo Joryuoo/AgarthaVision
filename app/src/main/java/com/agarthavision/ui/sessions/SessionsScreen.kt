@@ -8,7 +8,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import com.agarthavision.ui.components.BackArrow
-import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -37,6 +36,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -53,11 +53,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -76,7 +74,11 @@ import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.navigation.Screen
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
@@ -240,10 +242,12 @@ fun SessionsScreen(
                             contentColor = colors.onAccent
                         )
                     ) {
-                        SvgIcon(
-                            "M12 5v14M5 12h14",
-                            strokeWidth = 2.2f,
-                            color = colors.onAccent,
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            // The button's own "New session" label says it; repeating it
+                            // makes TalkBack read the control twice.
+                            contentDescription = null,
+                            tint = colors.onAccent,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -507,10 +511,10 @@ private fun NewSessionSheet(
                         .size(32.dp)
                         .background(colors.surfaceMuted, CircleShape)
                 ) {
-                    SvgIcon(
-                        "M18 6L6 18M6 6l12 12",
-                        color = colors.textSecondary,
-                        strokeWidth = 2f,
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.session_new_sheet_close),
+                        tint = colors.textSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -532,7 +536,6 @@ private fun NewSessionSheet(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 if (showError && label.isBlank()) {
-                    val bannerDanger = colors.danger
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -542,17 +545,12 @@ private fun NewSessionSheet(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon(
-                            "M12 8v4M12 16h.01",
-                            drawExtras = {
-                                drawCircle(
-                                    bannerDanger,
-                                    radius = 9f,
-                                    center = Offset(12f, 12f),
-                                    style = Stroke(width = 1.8f)
-                                )
-                            },
-                            color = colors.danger,
+                        Icon(
+                            // Was a bare "!" stroke with the surrounding ring hand-drawn
+                            // through `drawExtras`; the Material glyph already carries it.
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = colors.danger,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
@@ -564,7 +562,6 @@ private fun NewSessionSheet(
                         )
                     }
                 } else {
-                    val bannerAccent = colors.accent
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -573,17 +570,10 @@ private fun NewSessionSheet(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon(
-                            "M12 8v4M12 16h.01",
-                            drawExtras = {
-                                drawCircle(
-                                    bannerAccent,
-                                    radius = 9f,
-                                    center = Offset(12f, 12f),
-                                    style = Stroke(width = 1.8f)
-                                )
-                            },
-                            color = colors.accent,
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = colors.accent,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
@@ -624,10 +614,10 @@ private fun NewSessionSheet(
                 ) {
                     Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                     Spacer(modifier = Modifier.width(6.dp))
-                    SvgIcon(
-                        "M5 12h14M13 5l7 7-7 7",
-                        color = colors.onAccent,
-                        strokeWidth = 2.2f,
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                        contentDescription = null,
+                        tint = colors.onAccent,
                         modifier = Modifier.size(16.dp)
                     )
                 }

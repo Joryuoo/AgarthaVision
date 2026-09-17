@@ -20,6 +20,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -190,9 +194,11 @@ private fun SearchField(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                SvgIcon(
-                    "M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z",
-                    color = colors.textTertiary,
+                Icon(
+                    imageVector = Icons.Outlined.Search,
+                    // Decorative: the field's own placeholder says what it searches.
+                    contentDescription = null,
+                    tint = colors.textTertiary,
                     modifier = Modifier.size(16.dp),
                 )
                 Box(modifier = Modifier.weight(1f)) {
@@ -231,10 +237,11 @@ private fun SelectionRow(
                 .semantics { contentDescription = clearLabel },
             contentAlignment = Alignment.Center,
         ) {
-            SvgIcon(
-                "M18 6L6 18M6 6l12 12",
-                color = colors.textSecondary,
-                strokeWidth = 2f,
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                // The enclosing Box already carries `clearLabel` as its semantics.
+                contentDescription = null,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(14.dp),
             )
         }
