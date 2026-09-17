@@ -1,16 +1,16 @@
 package com.agarthavision.ui.sessions
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.ui.components.BarangayPickerDelegate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -28,7 +28,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -87,10 +86,18 @@ class SessionsViewModel @Inject constructor(
     private val eventChannel = Channel<SessionsEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
 
-    private val barangayQueries = MutableStateFlow("")
+    /**
+     * The barangay picker, shared with the patient form (PB-07c) rather than copied into
+     * it. This ViewModel's own surface is unchanged — [SessionsState] still carries the
+     * three flat fields and the three callbacks below still exist — so
+     * `SessionPickerViewModelTest` remains the regression net for behaviour that did not
+     * change.
+     */
+    private val barangayPicker = BarangayPickerDelegate(searchBarangaysUseCase)
 
     init {
-        observeBarangayQueries()
+        barangayPicker.start(viewModelScope)
+        mirrorBarangayPickerState()
     }
 
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
@@ -215,56 +222,32 @@ class SessionsViewModel @Inject constructor(
     }
 
     /**
-     * Runs the barangay search off the keystroke path.
+     * Keeps [SessionsState]'s barangay fields in step with the delegate.
      *
-     * Debounced so a medtech typing "cebu" triggers one query instead of four, and
-     * [mapLatest] so a slower earlier search cannot land after a newer one and show stale
-     * results. The search itself is a local Room scan — there is no network call here, which
-     * is what makes the picker work with the radio off.
+     * The delegate owns the pipeline; the flat fields stay on the state because the sheet
+     * and its tests already read them, and changing that shape would be a second,
+     * unrelated change riding on a behaviour-preserving refactor.
      */
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    private fun observeBarangayQueries() {
+    private fun mirrorBarangayPickerState() {
         viewModelScope.launch {
-            barangayQueries
-                .debounce(BARANGAY_DEBOUNCE_MS)
-                .distinctUntilChanged()
-                .mapLatest { query ->
-                    searchBarangaysUseCase(query).getOrElse { throwable ->
-                        // Without this the picker renders its "no barangay matches" state for a
-                        // broken table exactly as it does for a typo, and nothing anywhere says
-                        // the dataset failed to seed.
-                        Log.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
-                        emptyList()
-                    }
+            barangayPicker.state.collect { picker ->
+                internalState.update {
+                    it.copy(
+                        barangayQuery = picker.query,
+                        barangayResults = picker.results,
+                        selectedBarangay = picker.selected,
+                    )
                 }
-                .collect { results -> internalState.update { it.copy(barangayResults = results) } }
+            }
         }
     }
 
-    fun onBarangayQueryChanged(query: String) {
-        internalState.update { it.copy(barangayQuery = query) }
-        barangayQueries.value = query
-    }
+    fun onBarangayQueryChanged(query: String) = barangayPicker.onQueryChanged(query)
 
-    /**
-     * Resolves [code] against the current result set. Ignored when it matches nothing,
-     * which can only happen if results changed under a tap already in flight.
-     */
-    fun onBarangaySelected(code: String) {
-        val barangay = internalState.value.barangayResults.firstOrNull { it.code == code } ?: return
-        internalState.update {
-            it.copy(selectedBarangay = barangay, barangayQuery = "", barangayResults = emptyList())
-        }
-        barangayQueries.value = ""
-    }
+    fun onBarangaySelected(code: String) = barangayPicker.onSelected(code)
 
     /** Clears the picker — on the clear button, on sheet dismissal, and after a session starts. */
-    fun onBarangayCleared() {
-        internalState.update {
-            it.copy(selectedBarangay = null, barangayQuery = "", barangayResults = emptyList())
-        }
-        barangayQueries.value = ""
-    }
+    fun onBarangayCleared() = barangayPicker.onCleared()
 
     fun onCreateSession(label: String, notes: String?) {
         if (internalState.value.isCreating) return
@@ -289,12 +272,12 @@ class SessionsViewModel @Inject constructor(
                 )
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
-                onBarangayCleared()
+                barangayPicker.onCleared()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
                 // The sheet has already closed and its label/note state has gone with it, so
                 // leaving the selection behind would reopen a half-filled sheet.
-                onBarangayCleared()
+                barangayPicker.onCleared()
                 internalState.update {
                     it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
                 }
@@ -349,17 +332,12 @@ class SessionsViewModel @Inject constructor(
     }
 
     private companion object {
-        private const val TAG = "SessionsViewModel"
-
         private const val RECENT_WINDOW_DAYS = 30L
         private const val INITIAL_PAGE = 5
         private const val PAGE_STEP = 10
 
         /** Debounce for the session list's free-text search before it hits Room. */
         private const val SEARCH_DEBOUNCE_MS = 300L
-
-        /** Long enough to coalesce a burst of keystrokes, short enough to feel immediate. */
-        private const val BARANGAY_DEBOUNCE_MS = 150L
 
         // Copy lives here rather than in strings.xml to match the other ViewModels in this
         // module (see CaptureViewModel). Lifting all of it into resources needs an error-type

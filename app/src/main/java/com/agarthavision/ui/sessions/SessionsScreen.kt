@@ -11,7 +11,7 @@ import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
 import com.agarthavision.ui.components.SearchableDropdownState
-import com.agarthavision.ui.components.SearchableOption
+import com.agarthavision.ui.components.toOption
 import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -255,7 +255,7 @@ fun SessionsScreen(
 
     if (showCreateDialog) {
         NewSessionSheet(
-            barangay = BarangayPickerState(
+            barangay = BarangaySheetPickerState(
                 selected = state.selectedBarangay,
                 query = state.barangayQuery,
                 results = state.barangayResults,
@@ -428,21 +428,25 @@ fun LiveDot() {
     )
 }
 
-/** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
-private data class BarangayPickerState(
+/**
+ * The barangay picker's slice of [SessionsState] plus its callbacks, hoisted into
+ * [NewSessionSheet].
+ *
+ * Distinct from `com.agarthavision.ui.components.BarangayPickerState`, which is the
+ * delegate's state alone: this one bundles the actions with it because the sheet takes a
+ * single parameter.
+ */
+private data class BarangaySheetPickerState(
     val selected: PsgcBarangay?,
     val query: String,
     val results: List<PsgcBarangay>,
     val actions: SearchableDropdownActions,
 )
 
-private fun PsgcBarangay.toOption(): SearchableOption =
-    SearchableOption(key = code, title = name, subtitle = parentPath)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
-    barangay: BarangayPickerState,
+    barangay: BarangaySheetPickerState,
     onDismiss: () -> Unit,
     onSubmit: (label: String, note: String) -> Unit
 ) {
