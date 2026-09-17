@@ -200,6 +200,9 @@ internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
 private fun SyncCounts(counts: PendingSyncCounts) {
     val colors = AgarthaTheme.colors
     Spacer(Modifier.height(Spacing.md))
+    // Patients lead, matching the FK-safe push order: a patient that will not sync blocks
+    // every session that references it, so it is the first thing worth looking at.
+    SyncCountRow(label = stringResource(R.string.settings_sync_patients), count = counts.pendingPatients)
     SyncCountRow(label = stringResource(R.string.settings_sync_sessions), count = counts.pendingSessions)
     SyncCountRow(label = stringResource(R.string.settings_sync_samples), count = counts.pendingSamples)
     SyncCountRow(label = stringResource(R.string.settings_sync_reports), count = counts.pendingReports)

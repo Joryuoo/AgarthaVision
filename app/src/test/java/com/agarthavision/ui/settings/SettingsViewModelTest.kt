@@ -47,7 +47,7 @@ class SettingsViewModelTest {
     private val connectivityObserver: ConnectivityObserver = mock<ConnectivityObserver>().also {
         whenever(it.isOnline).thenReturn(MutableStateFlow(true))
     }
-    private val pendingCountsFlow = MutableStateFlow(PendingSyncCounts(0, 0, 0, 0))
+    private val pendingCountsFlow = MutableStateFlow(PendingSyncCounts(0, 0, 0, 0, 0))
     private val observePendingSyncCountsUseCase: ObservePendingSyncCountsUseCase =
         mock<ObservePendingSyncCountsUseCase>().also {
             whenever(it.invoke(any())).thenReturn(pendingCountsFlow)

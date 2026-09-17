@@ -335,7 +335,6 @@
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name or barangay.</string>
     <string name="patients_new">New patient</string>
-    <string name="patients_load_more">Load more</string>
     <!-- Row meta: sex · age · barangay. -->
     <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
     <string name="patients_age_years">%1$d yrs</string>
@@ -394,6 +393,7 @@
     <string name="settings_sync_not_yet_synced">Not yet synced</string>
     <string name="settings_sync_pending">%1$d pending upload</string>
     <string name="settings_sync_failed">%1$d failed</string>
+    <string name="settings_sync_patients">Patients</string>
     <string name="settings_sync_sessions">Sessions</string>
     <string name="settings_sync_samples">Samples</string>
     <string name="settings_sync_reports">Reports</string>

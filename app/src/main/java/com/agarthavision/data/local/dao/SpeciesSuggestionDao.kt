@@ -22,11 +22,15 @@ interface SpeciesSuggestionDao {
      * A prefix match rather than a contains match: the point is to complete what the
      * medtech is typing, and a leading wildcard would surface unrelated names that merely
      * contain the fragment.
+     *
+     * `ESCAPE` is not optional: the needle is free text, so without it a typed `_` is a
+     * single-character wildcard and a typed `%` matches the whole index. The caller escapes
+     * with `core/util/escapeLike`.
      */
     @Query(
         """
         SELECT * FROM species_suggestions
-        WHERE lookup LIKE :prefix || '%'
+        WHERE lookup LIKE :prefix || '%' ESCAPE '\'
         ORDER BY species ASC
         LIMIT :limit
         """,

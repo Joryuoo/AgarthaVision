@@ -31,7 +31,7 @@ class SyncCardTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun emptyCounts() = PendingSyncCounts(0, 0, 0, 0)
+    private fun emptyCounts() = PendingSyncCounts(0, 0, 0, 0, 0)
 
     private fun signedOutState() = SyncCardState(
         isSignedIn = false,
@@ -48,6 +48,7 @@ class SyncCardTest {
         isSignedIn = true,
         isOffline = false,
         counts = PendingSyncCounts(
+            pendingPatients = 0,
             pendingSessions = pending,
             pendingSamples = 0,
             pendingReports = 0,

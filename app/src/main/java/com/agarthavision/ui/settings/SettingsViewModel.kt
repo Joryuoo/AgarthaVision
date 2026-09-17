@@ -41,7 +41,7 @@ data class SettingsUiState(
     val isSignedIn: Boolean = false,
     val isOffline: Boolean = false,
     val isDarkMode: Boolean = false,
-    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
     val initialFetchDone: Boolean = true,
 ) {
@@ -78,7 +78,7 @@ class SettingsViewModel @Inject constructor(
 
     private val pendingSyncFlow = identityFlow.flatMapLatest { identity ->
         if (identity == null) {
-            flowOf(PendingSyncCounts(0, 0, 0, 0))
+            flowOf(PendingSyncCounts(0, 0, 0, 0, 0))
         } else {
             observePendingSyncCountsUseCase(identity.userId)
         }

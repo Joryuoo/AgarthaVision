@@ -257,7 +257,7 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
-    fun `a pass whose samples failed does not refresh the species index`() = runTest {
+    fun `a pass whose samples failed still refreshes the species index`() = runTest {
         setupOnlineSignedIn()
         whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
@@ -266,8 +266,11 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        // Findings and expert classes ride with samples, so no samples means no new names.
-        verify(speciesSuggestionSeeder, never()).refresh()
+        // PB-08b says "refreshed on each successful fetch pass", and the seeder re-derives
+        // from rows the device already holds rather than from what this pass brought down.
+        // Gating it on samples left the index stale after a pass that pulled patients and
+        // reports fine. It never throws, so it cannot turn a partial pass into a failed one.
+        verify(speciesSuggestionSeeder).refresh()
     }
 
     @Test

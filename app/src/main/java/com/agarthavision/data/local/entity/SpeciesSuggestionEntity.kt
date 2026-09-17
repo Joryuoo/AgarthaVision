@@ -2,6 +2,7 @@ package com.agarthavision.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -18,9 +19,13 @@ import androidx.room.PrimaryKey
  * [species] is the primary key so a re-derivation is idempotent — the same name from a
  * finding and from a detection collapses to one row. [lookup] is the pre-lowercased form
  * the prefix match runs against, lowercased in Kotlin rather than by SQL `lower()`, which
- * folds ASCII only.
+ * folds ASCII only. It carries the index, because the prefix match runs against it and
+ * not against the primary key.
  */
-@Entity(tableName = "species_suggestions")
+@Entity(
+    tableName = "species_suggestions",
+    indices = [Index("lookup")],
+)
 data class SpeciesSuggestionEntity(
     @PrimaryKey
     @ColumnInfo(name = "species")

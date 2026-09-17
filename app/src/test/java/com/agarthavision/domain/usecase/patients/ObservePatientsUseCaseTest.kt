@@ -46,6 +46,24 @@ class ObservePatientsUseCaseTest {
     }
 
     @Test
+    fun `a wildcard typed into the search box is matched literally`() = runTest {
+        // `_` is a single-character wildcard in LIKE. Unescaped, a medtech searching for a
+        // surname that contains one gets everyone whose name is the same length, and a lone
+        // `%` returns every patient on the device.
+        whenever(patientRepository.observePatients("user-a", "de\\_la", 20, 0))
+            .thenReturn(flowOf(listOf(patient("p-1"))))
+        whenever(patientRepository.observePatientCount("user-a", "de\\_la")).thenReturn(flowOf(1))
+        whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+        val result = useCase("user-a", PatientsQuery(query = "de_la")).first()
+
+        assertEquals(1, result.items.size)
+        // The page and the count run the same predicate, so both must see the same needle.
+        verify(patientRepository).observePatients("user-a", "de\\_la", 20, 0)
+        verify(patientRepository).observePatientCount("user-a", "de\\_la")
+    }
+
+    @Test
     fun `resolves each patient's barangay name for the row`() = runTest {
         stubPage(listOf(patient("p-1")))
         whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())

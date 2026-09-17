@@ -120,13 +120,12 @@ class FetchRemoteDataUseCase @Inject constructor(
             initialFetchStateStore.markCompleted(userId)
         }
 
-        // Fold any species that arrived with this pass into the offline suggestion index,
-        // so the two reference caches stay in step (PB-08a). Gated on samples because
-        // findings and expert classes ride with them — a pass that pulled no samples
-        // brought no new names either. It never throws, so it cannot fail the pass.
-        if (samplesOk) {
-            speciesSuggestionSeeder.refresh()
-        }
+        // Fold any species that arrived with this pass into the offline suggestion index, so
+        // the two reference caches stay in step (PB-08a). Ungated on purpose: the seeder
+        // re-derives from rows the device already holds, so a pass where only samples failed
+        // still has work for it, and it never throws, so it cannot fail the pass. The
+        // offline/unauthenticated returns are above, which makes this "every pass that ran".
+        speciesSuggestionSeeder.refresh()
 
         FetchSummary.Ran(
             patientsFetched = patientsFetched,

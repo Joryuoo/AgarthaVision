@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.patients
 
+import com.agarthavision.core.util.escapeLike
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
@@ -56,13 +57,17 @@ class ObservePatientsUseCase @Inject constructor(
     operator fun invoke(userId: String?, query: PatientsQuery): Flow<PatientsResult> {
         if (userId == null) return flowOf(PatientsResult())
 
+        // Escaped here, once, for both the page and the count — they run the same predicate
+        // and must not disagree. Without it a surname containing `_` is a wildcard and a
+        // query of `%` matches every patient on the device.
+        val needle = escapeLike(query.query)
         val page = patientRepository.observePatients(
             userId = userId,
-            query = query.query,
+            query = needle,
             limit = query.limit,
             offset = 0,
         )
-        val total = patientRepository.observePatientCount(userId, query.query)
+        val total = patientRepository.observePatientCount(userId, needle)
 
         return combine(page, total) { patients, count ->
             PatientsResult(items = patients.mapToItems(), total = count)

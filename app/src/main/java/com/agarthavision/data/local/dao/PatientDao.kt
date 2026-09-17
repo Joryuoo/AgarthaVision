@@ -33,7 +33,7 @@ import kotlinx.coroutines.flow.Flow
 interface PatientDao {
 
     /**
-     * One page of the signed-in medtech's patients, newest first, optionally filtered.
+     * One page of the signed-in medtech's patients, by name, optionally filtered.
      *
      * [query] matches lastname, firstname or barangay name. The barangay join is against
      * the bundled `psgc_barangays` reference table, which is why searching by barangay
@@ -49,9 +49,9 @@ interface PatientDao {
         WHERE pu.user_id = :userId
           AND (
             :query = ''
-            OR p.lastname  LIKE '%' || :query || '%'
-            OR p.firstname LIKE '%' || :query || '%'
-            OR b.name      LIKE '%' || :query || '%'
+            OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
+            OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
+            OR b.name      LIKE '%' || :query || '%' ESCAPE '\'
           )
         ORDER BY p.lastname ASC, p.firstname ASC
         LIMIT :limit OFFSET :offset
@@ -73,9 +73,9 @@ interface PatientDao {
         WHERE pu.user_id = :userId
           AND (
             :query = ''
-            OR p.lastname  LIKE '%' || :query || '%'
-            OR p.firstname LIKE '%' || :query || '%'
-            OR b.name      LIKE '%' || :query || '%'
+            OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
+            OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
+            OR b.name      LIKE '%' || :query || '%' ESCAPE '\'
           )
         """,
     )
@@ -95,6 +95,32 @@ interface PatientDao {
      */
     @Query("SELECT * FROM patients WHERE supabase_status IN ('pending', 'sync_failed')")
     suspend fun getPatientsPendingSync(): List<PatientEntity>
+
+    /**
+     * Live count of this medtech's patients awaiting upload. Drives the Settings
+     * Data & Sync section, alongside the session, sample and report rows.
+     *
+     * Scoped through `patient_users` like every other read here, not through `created_by`:
+     * a patient an admin shared with this medtech is theirs to sync too.
+     */
+    @Query(
+        """
+        SELECT COUNT(*) FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId AND p.supabase_status = 'pending'
+        """,
+    )
+    fun observePendingCount(userId: String): Flow<Int>
+
+    /** Live count of this medtech's patients whose last sync attempt failed. */
+    @Query(
+        """
+        SELECT COUNT(*) FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId AND p.supabase_status = 'sync_failed'
+        """,
+    )
+    fun observeFailedCount(userId: String): Flow<Int>
 
     @Query("UPDATE patients SET supabase_status = :status WHERE patient_id = :patientId")
     suspend fun updateSyncStatus(patientId: String, status: String)

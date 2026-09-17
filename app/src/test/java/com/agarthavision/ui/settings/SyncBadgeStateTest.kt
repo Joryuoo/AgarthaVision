@@ -16,6 +16,7 @@ class SyncBadgeStateTest {
         pending: Int = 0,
         failed: Int = 0,
     ) = PendingSyncCounts(
+        pendingPatients = 0,
         pendingSessions = pending,
         pendingSamples = 0,
         pendingReports = 0,

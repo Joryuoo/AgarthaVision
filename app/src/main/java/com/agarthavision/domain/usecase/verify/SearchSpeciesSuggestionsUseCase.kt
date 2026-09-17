@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.core.util.escapeLike
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import javax.inject.Inject
 
@@ -20,7 +21,8 @@ class SearchSpeciesSuggestionsUseCase @Inject constructor(
         if (trimmed.length < MIN_QUERY_LENGTH) {
             emptyList()
         } else {
-            dao.searchByPrefix(prefix = trimmed.lowercase(), limit = RESULT_LIMIT)
+            // Escaped, or a species name typed with an underscore becomes a wildcard.
+            dao.searchByPrefix(prefix = escapeLike(trimmed.lowercase()), limit = RESULT_LIMIT)
                 .map { it.species }
         }
     }

@@ -209,7 +209,7 @@ private fun SettingsScreenPreview() {
             isSignedIn = true,
             isOffline = false,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(2, 5, 1, 0),
+            pendingSyncCounts = PendingSyncCounts(1, 2, 5, 1, 0),
         ),
         actions = SettingsActions(
             onSignInClick = {},
@@ -230,7 +230,7 @@ private fun SettingsScreenSignedOutPreview() {
             isSignedIn = false,
             isOffline = false,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
         ),
         actions = SettingsActions(
             onSignInClick = {},
