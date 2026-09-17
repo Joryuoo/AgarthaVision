@@ -35,6 +35,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
+import com.agarthavision.ui.patients.PatientFormScreen
 import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreen
@@ -187,6 +188,19 @@ fun AgarthaNavHost(
                     navController.navigate(Screen.PatientForm.createRoute())
                 },
             )
+        }
+
+        composable(
+            route = Screen.PatientForm.route,
+            arguments = listOf(
+                navArgument("patientId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
+            PatientFormScreen(onDone = { navController.popBackStack() })
         }
 
         // One patient's session list. PB-09c scopes it to the patient; until then it is

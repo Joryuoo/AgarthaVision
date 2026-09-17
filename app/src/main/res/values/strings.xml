@@ -294,6 +294,37 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <!-- Patient form (PB-07c) -->
+    <string name="patient_form_new_title">New patient</string>
+    <string name="patient_form_edit_title">Edit patient</string>
+    <string name="patient_form_lastname">Lastname</string>
+    <string name="patient_form_lastname_placeholder">e.g. Cruz</string>
+    <string name="patient_form_firstname">Firstname</string>
+    <string name="patient_form_firstname_placeholder">e.g. Gerald</string>
+    <string name="patient_form_middle_name">Middle name</string>
+    <string name="patient_form_middle_name_placeholder">Optional</string>
+    <string name="patient_form_sex">Sex</string>
+    <string name="patient_form_birthdate">Birthdate</string>
+    <string name="patient_form_birthdate_placeholder">Select a date</string>
+    <string name="patient_form_barangay">Barangay</string>
+    <string name="patient_form_barangay_placeholder">Search barangay, city or province</string>
+    <string name="patient_form_barangay_hint">Type at least %1$d characters</string>
+    <string name="patient_form_barangay_no_matches">No barangay matches</string>
+    <string name="patient_form_barangay_clear">Clear</string>
+    <string name="patient_form_required_badge">REQUIRED</string>
+    <string name="patient_form_save">Save</string>
+    <string name="patient_form_cancel">Cancel</string>
+    <!-- Shown on the edit form. Without it, correcting a name and finding the old one still
+         on a report reads as a bug rather than as the intended behaviour. -->
+    <string name="patient_form_edit_note">Editing these details does not change session labels already created or reports already generated. Generate a new report to pick up the change.</string>
+    <string name="patient_form_error_lastname">Lastname is required.</string>
+    <string name="patient_form_error_firstname">Firstname is required.</string>
+    <string name="patient_form_error_sex">Select a sex.</string>
+    <string name="patient_form_error_birthdate">Select a birthdate.</string>
+    <string name="patient_form_error_birthdate_future">A birthdate cannot be in the future.</string>
+    <string name="patient_form_error_barangay">Select a barangay.</string>
+    <string name="patient_form_error_save">Could not save. Try again.</string>
+
     <!-- Patients (PB-06b) -->
     <string name="patients_title">Patients</string>
     <string name="patients_subtitle_purpose">The people whose smears you have read</string>
