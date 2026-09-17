@@ -96,6 +96,7 @@ class SessionRepositoryImpl @Inject constructor(
      */
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -103,13 +104,13 @@ class SessionRepositoryImpl @Inject constructor(
         query: String,
         limit: Int,
     ): Flow<List<SessionWithStats>> = if (userId == null) {
-        sessionDao.observeAllLocalPage(activeSessionId, startMillis, endMillis, query, limit)
+        sessionDao.observeAllLocalPage(patientId, activeSessionId, startMillis, endMillis, query, limit)
             .map { entities ->
                 entities.map { SessionWithStats(it.toDomain(), 0, 0, 0, 0) }
             }
     } else {
         sessionDao.observeSessionsPage(
-            userId, activeSessionId, sinceMillis, startMillis, endMillis, query, limit,
+            userId, patientId, activeSessionId, sinceMillis, startMillis, endMillis, query, limit,
         )
             .map { list ->
                 list.map { item ->
@@ -130,19 +131,20 @@ class SessionRepositoryImpl @Inject constructor(
      */
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts> = if (userId == null) {
-        sessionDao.observeAllLocalCounts(activeSessionId, startMillis, endMillis, query)
+        sessionDao.observeAllLocalCounts(patientId, activeSessionId, startMillis, endMillis, query)
             .map { row ->
                 SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)
             }
     } else {
         sessionDao.observeSessionsCounts(
-            userId, activeSessionId, sinceMillis, startMillis, endMillis, query,
+            userId, patientId, activeSessionId, sinceMillis, startMillis, endMillis, query,
         )
             .map { row ->
                 SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)

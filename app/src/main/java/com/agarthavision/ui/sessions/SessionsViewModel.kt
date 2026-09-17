@@ -43,6 +43,14 @@ data class SessionsState(
     /** Frames awaiting review across the filtered sessions. See [SessionsCounts]. */
     val unverifiedCount: Int = 0,
     val canLoadMore: Boolean = false,
+    /**
+     * The smear the app is currently working in, or null.
+     *
+     * The list used to read this off `Session.endedAt == null`, which was true for every
+     * row because nothing writes `ended_at`. [com.agarthavision.core.session.SessionManager]
+     * is the only thing that knows which session is active, so the flag comes from there.
+     */
+    val activeSessionId: String? = null,
 )
 
 sealed interface SessionsEvent {
@@ -81,10 +89,11 @@ class SessionsViewModel @Inject constructor(
     /**
      * The patient whose smears this screen lists, read from the `patients/{patientId}` route.
      *
-     * Every session created here belongs to that patient: `sessions.patient_id` is NOT NULL
-     * with a foreign key onto `patients`, so a session without one cannot be inserted. The
-     * *list* is still unscoped — PB-09c makes it show only this patient's sessions. This only
-     * settles what a newly created session is attributed to.
+     * Every session here belongs to that patient — both the ones listed and the ones created:
+     * `sessions.patient_id` is NOT NULL with a foreign key onto `patients`, and the list query
+     * scopes on it. A null is unreachable through the UI (nothing navigates here without a
+     * patient), so it renders an empty list with an error rather than crashing on a route
+     * that should not exist.
      */
     private val patientId: String? = savedStateHandle["patientId"]
 
@@ -140,6 +149,15 @@ class SessionsViewModel @Inject constructor(
      */
     val state: StateFlow<SessionsState> = queryInputs
         .flatMapLatest { inputs ->
+            // Unreachable through the UI. Emitting an empty, non-loading state keeps a
+            // malformed route from hanging on the loading skeleton forever, and keeps the
+            // patient id out of the SQL as a nullable that would silently match nothing.
+            val patient = patientId
+            if (patient.isNullOrBlank()) {
+                return@flatMapLatest internalState.map {
+                    it.copy(isLoading = false, errorMessage = PATIENT_REQUIRED)
+                }
+            }
             val zone = ZoneId.systemDefault()
             val sinceMillis = Instant.now().minus(Duration.ofDays(RECENT_WINDOW_DAYS)).toEpochMilli()
             val startMillis = inputs.start?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
@@ -155,12 +173,12 @@ class SessionsViewModel @Inject constructor(
 
             combine(
                 sessionRepository.observeVisibleSessionsPage(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped, inputs.limit,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped, inputs.limit,
                 ),
                 sessionRepository.observeVisibleSessionsCounts(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped,
                 ),
                 internalState,
                 searchQuery,
@@ -174,6 +192,7 @@ class SessionsViewModel @Inject constructor(
                     totalCount = counts.totalCount,
                     unverifiedCount = counts.unverifiedCount,
                     canLoadMore = sessions.size >= inputs.limit,
+                    activeSessionId = inputs.activeSessionId,
                 )
             }
         }

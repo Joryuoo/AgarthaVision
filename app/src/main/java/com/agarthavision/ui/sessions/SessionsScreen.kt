@@ -94,7 +94,6 @@ fun SessionsScreen(
     onBack: () -> Unit,
     onNavigate: (String) -> Unit = {},
     onNavigateToCapture: (String) -> Unit,
-    onSessionSelected: (String) -> Unit,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -146,7 +145,7 @@ fun SessionsScreen(
                 SearchInput(
                     value = state.searchQuery,
                     onValueChange = viewModel::onSearchQueryChanged,
-                    placeholder = "Search sessions, notes...",
+                    placeholder = stringResource(R.string.sessions_search_placeholder),
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
                 DateRangeFilterBar(
@@ -194,15 +193,15 @@ fun SessionsScreen(
                         items(state.sessions, key = { it.session.id }) { sessionData ->
                             SessionCard(
                                 sessionData = sessionData,
-                                isActive = sessionData.session.endedAt == null,
+                                isActive = sessionData.session.id == state.activeSessionId,
                                 actions = SessionCardActions(
-                                    onClick = {
-                                        if (sessionData.session.endedAt == null) {
-                                            viewModel.onResumeSession(sessionData.session.id)
-                                        } else {
-                                            onSessionSelected(sessionData.session.id)
-                                        }
-                                    },
+                                    // Every row opens Capture. There is no second
+                                    // destination to branch to: a session does not end, so
+                                    // the medtech is always going back to the smear to
+                                    // capture or correct a frame. Session Detail is reached
+                                    // from Records, which is where reading a finished
+                                    // session belongs.
+                                    onClick = { viewModel.onResumeSession(sessionData.session.id) },
                                 )
                             )
                         }

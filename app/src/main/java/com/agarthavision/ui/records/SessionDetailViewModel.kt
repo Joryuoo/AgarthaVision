@@ -3,6 +3,8 @@ package com.agarthavision.ui.records
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.session.SessionManager
+import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
@@ -24,7 +26,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -52,13 +56,20 @@ data class SessionDetailState(
     val isGenerating: Boolean = false,
     val generationError: String? = null,
     val pendingFlagged: Int = 0,
+    /**
+     * Whether this is the smear the app is currently working in, per [SessionManager].
+     *
+     * It used to be `session.endedAt == null`. Nothing writes `ended_at`, so that was true
+     * for every session ever opened and the shortcut appeared on all of them.
+     */
+    val isActiveSession: Boolean = false,
 ) {
     /**
      * The Verify Queue always shows the *active* session, so the shortcut into it is only
-     * offered while this session is still running and actually has frames waiting.
+     * offered on that session, and only while it actually has frames waiting.
      */
     val canOpenVerifyQueue: Boolean
-        get() = session != null && session.session.endedAt == null && pendingFlagged > 0
+        get() = session != null && isActiveSession && pendingFlagged > 0
 }
 
 /** Reports shown per page; more than this paginate via the Prev/Next pager. */
@@ -104,6 +115,7 @@ class SessionDetailViewModel @Inject constructor(
     observeSessionPendingCountUseCase: ObserveSessionPendingCountUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val generateSessionReportUseCase: GenerateSessionReportUseCase,
+    sessionManager: SessionManager,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
     private val generationState = MutableStateFlow(GenerationState())
@@ -115,6 +127,11 @@ class SessionDetailViewModel @Inject constructor(
     private val pagedReports = currentReportPage.flatMapLatest { page ->
         observeSessionReportsUseCase(sessionId, REPORTS_PER_PAGE, page * REPORTS_PER_PAGE)
     }
+
+    /** True while this screen's session is the one [SessionManager] is attached to. */
+    private val isActiveSessionFlow = sessionManager.state
+        .map { (it as? SessionState.Active)?.session?.sessionId == sessionId }
+        .distinctUntilChanged()
 
     private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
@@ -150,8 +167,9 @@ class SessionDetailViewModel @Inject constructor(
             )
         },
         observeSessionPendingCountUseCase(sessionId),
-    ) { partial, pending ->
-        partial.copy(pendingFlagged = pending)
+        isActiveSessionFlow,
+    ) { partial, pending, isActive ->
+        partial.copy(pendingFlagged = pending, isActiveSession = isActive)
     }
         .mapLatest { it }
         .stateIn(
