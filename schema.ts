@@ -71,7 +71,9 @@ export enum DetectionVerdict {
  *
  * Supabase source of truth: stored as text in `detections.class_label`,
  * `detections.expert_class`, `reports.positive_species`, and
- * `reports.epg_per_species`. No Postgres enum exists yet.
+ * `sample_species_findings.species`. No Postgres enum exists yet — the last
+ * holds free text too, because "Other" lets a medtech name a species outside
+ * this list.
  *
  * Domain mirror:
  * - `domain/model/EggSpecies.kt`
@@ -158,15 +160,83 @@ export interface Profile {
 }
 
 /**
- * A microscopy smear/session owned by a user.
+ * A patient: the unit a medtech works from. A patient owns sessions; a session
+ * is one fecal smear.
  *
  * Supabase migrations:
- * - `0001_init.sql`: creates `sessions` with user/device/timing/notes fields.
- * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
- * - `0005_session_label.sql`: adds nullable `label` and
- *   `sessions_user_started_idx`.
- * - `0010_session_psgc_barangay.sql`: adds nullable `psgc_barangay_code`, a
- *   partial index on it, and the admin-only `barangay_prevalence()` RPC.
+ * - `0001_init.sql` (patient-based consolidation): creates `patients`, the
+ *   `patient_users` join, and the `on_patient_created` auto-link trigger.
+ *
+ * Room mirror:
+ * - `PatientEntity.kt`
+ */
+export interface Patient {
+  id: UUID;
+  // PK.
+
+  lastname: string;
+  // NOT NULL, non-blank CHECK.
+
+  firstname: string;
+  // NOT NULL, non-blank CHECK.
+
+  middle_name: string | null;
+  // Nullable on purpose — many patients do not supply one, and a required field
+  // would only collect junk.
+
+  sex: "M" | "F";
+  // NOT NULL. CHECK in ('M','F'). Male/Female only, matching how DOH and WHO STH
+  // surveillance data is stratified.
+
+  birthdate: string;
+  // NOT NULL Postgres `date`. Birthdate, not age: age is recomputed per encounter
+  // from this, so a record does not silently go stale as time passes.
+
+  psgc_barangay_code: string;
+  // NOT NULL. Canonical zero-padded 10-digit PSGC ('0102801001'), CHECK
+  // `^[0-9]{10}$`. Moved here from `sessions` — the barangay belongs to the
+  // patient, does not change per smear, and is the unit surveillance aggregates
+  // on. This is the key `barangay_prevalence()` groups by and the key the
+  // choropleth joins against PSGC boundary GeoJSON.
+
+  created_by: UUID;
+  // NOT NULL FK -> profiles(id). Provenance only — it grants no visibility.
+  // Access resolves through `patient_users`.
+
+  created_at: TimestampTZ;
+  updated_at: TimestampTZ;
+  // Both NOT NULL, default `now()`.
+}
+
+/**
+ * The patient <-> user join. **This is what patient visibility resolves
+ * through**, not `patients.created_by`.
+ *
+ * A patient links to many users, so an admin can grant a second medtech access
+ * by inserting a row here. The creator's own row is written by the
+ * `on_patient_created` trigger rather than by the client: the `patients` SELECT
+ * policy reads this table, so without the row the inserting medtech cannot read
+ * back the patient they just created.
+ *
+ * Room mirror:
+ * - `PatientUserEntity.kt`
+ */
+export interface PatientUser {
+  patient_id: UUID;
+  user_id: UUID;
+  // Composite PK. Both FKs, both ON DELETE CASCADE.
+
+  linked_at: TimestampTZ;
+  // NOT NULL. Default `now()`.
+}
+
+/**
+ * One fecal smear, owned by a patient and captured by a user.
+ *
+ * Supabase migrations:
+ * - `0001_init.sql` (patient-based consolidation): creates `sessions` with
+ *   `patient_id`, `label` and the two indexes. Three columns present in the
+ *   legacy-dev history are deliberately absent — see the interface below.
  *
  * Room mirror:
  * - `SessionEntity.kt`
@@ -179,35 +249,30 @@ export interface Session {
   // Supabase NOT NULL FK -> profiles(id). Room allows null so an offline or
   // pre-auth session can exist before ownership is known.
 
+  patient_id: UUID;
+  // NOT NULL FK -> patients(id). A session is always created from a patient's
+  // session list, so the patient is known at creation and this is never null.
+
   device_id: string;
   // NOT NULL. Client-generated stable device identifier.
 
   started_at: TimestampTZ;
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
-  ended_at: TimestampTZ | null;
-  // Nullable. Set when the session is explicitly ended.
-
-  notes: string | null;
-  // Nullable free-form operator notes.
-
   label: string | null;
-  // Nullable human-friendly smear/session label added by migration `0005`.
+  // Nullable human-friendly smear label. Auto-generated as
+  // `C.G.-0730600000-001` (initials, the patient's barangay code, then the Nth
+  // smear for that patient) and editable thereafter. Cosmetic and deliberately
+  // not unique — the session UUID is the real key.
 
-  psgc_barangay_code: string | null;
-  // Nullable. The patient's barangay as a canonical zero-padded 10-digit PSGC
-  // code ('0102801001'), added by migration `0010`. CHECK `^[0-9]{10}$`.
-  //
-  // Barangay level only: the code resolves upward to city/municipality, province
-  // and region on its own, so there are deliberately no denormalised parent
-  // columns. This is the key the surveillance choropleth aggregates on. The
-  // per-sample GPS fix (`samples.gps_*`) stays capture provenance and is not a
-  // mapping key — it records where the smear was read, not where the infection
-  // came from.
-  //
-  // Reference data for the picker lives on-device only, in Room's
-  // `psgc_barangays` (see `PsgcBarangay` below). There is no Supabase table of
-  // barangays: the map joins this code against PSGC boundary GeoJSON.
+  // ── Deliberately absent, all three ────────────────────────────────────────
+  // `notes`     — removed. It was being used as an ad-hoc patient identifier
+  //               (`SessionDetailScreen`'s `patientIdOrNote`); the Patient
+  //               entity is what replaces it.
+  // `ended_at`  — removed. Sessions never end (86d4ab4vm), so nothing wrote it,
+  //               and a column with no writer is a trap: `ended_at IS NULL`
+  //               silently matches every row while still looking like a filter.
+  // `psgc_barangay_code` — moved to `patients`. See `Patient` above.
 }
 
 /**
@@ -304,14 +369,12 @@ export interface Sample {
   verified_at: TimestampTZ | null;
   // Nullable remote timestamp. Room stores epoch millis with `0` as unset.
 
-  gps_lat: number | null;
-  // Nullable latitude.
-
-  gps_lng: number | null;
-  // Nullable longitude.
-
-  gps_accuracy_m: number | null;
-  // Nullable accuracy in meters.
+  // ── Deliberately absent ───────────────────────────────────────────────────
+  // `gps_latitude` / `gps_longitude` / `gps_accuracy` — removed. The fix was
+  // taken at the microscope, so it recorded where the smear was read, not where
+  // the infection came from; plotted, it mapped laboratories. Geospatial
+  // mapping keys on `patients.psgc_barangay_code` instead. Nothing ever read
+  // these three columns.
 
   user_note: string | null;
   // Nullable per-sample note.
@@ -490,15 +553,19 @@ export interface Report {
   // NOT NULL. Default `0`.
 
   total_eggs_confirmed: number;
-  // NOT NULL. Default `0`; sum of confirmed detections used for EPG.
+  // NOT NULL. Default `0`; sum of confirmed detections across the smear.
 
   positive_species: string[];
   // Supabase `text[]` NOT NULL default `{}`. Room stores as
   // `positive_species_json`.
 
-  epg_per_species: Json;
-  // Supabase `jsonb` NOT NULL default `{}`. Room stores as
-  // `epg_per_species_json`.
+  // ── Deliberately absent ───────────────────────────────────────────────────
+  // `epg_per_species` — removed. EPG is eggs-per-gram via Kato-Katz; Philippine
+  // medtechs use direct smear, so the x24 multiplier was wrong for the method in
+  // use. WHO's light/moderate/heavy bands are defined only against EPG and there
+  // is no published intensity table for direct smear to rescale them to, so the
+  // infectivity tier goes with it. The per-species min-max LPF range replaces
+  // both. Do not add an EPG column back without clinical sign-off.
 
   csv_file_path: string | null;
   // Nullable local/export path to generated CSV.
@@ -622,6 +689,24 @@ export type RelationshipMatrix = [
   {
     from: "profiles";
     cardinality: "1 -> many";
+    to: "patients";
+    description: "A user creates many patients; `patients.created_by` is provenance only and grants no access.";
+  },
+  {
+    from: "patients";
+    cardinality: "many <-> many";
+    to: "profiles";
+    description: "Through `patient_users`. This is what patient visibility resolves through. The creator's row is written by the `on_patient_created` trigger; any further link is an admin action.";
+  },
+  {
+    from: "patients";
+    cardinality: "1 -> many";
+    to: "sessions";
+    description: "A patient owns many smears; `sessions.patient_id` is NOT NULL and is known at creation.";
+  },
+  {
+    from: "profiles";
+    cardinality: "1 -> many";
     to: "sessions";
     description: "A user owns many microscopy sessions; `sessions.user_id` is required remotely.";
   },
@@ -704,19 +789,19 @@ export type RelationshipMatrix = [
  *   upload succeeds.
  * - Remote `sessions.user_id` is NOT NULL; Room keeps it nullable for local
  *   resilience before auth ownership is attached.
- * - ADR-007 (offline access): Room `samples.user_id` is now also nullable (a sample
- *   captured before any medtech signed in is claimed at the next login before sync);
- *   remote `samples.user_id` stays NOT NULL, enforced by claim-before-sync. Room
- *   `sessions` gains two Room-only columns — `supabase_status`
- *   (pending/synced/sync_failed, `SessionSyncStatus`) and `claim_exempt` (the
- *   per-session "don't link to account" opt-out) — neither exists in Supabase.
- *   Introduced at Room schema v8; no Supabase migration was added.
+ * - Room `sessions` keeps one Room-only column, `supabase_status`
+ *   (pending/synced/sync_failed, `SessionSyncStatus`), which does not exist in
+ *   Supabase. Its sibling `claim_exempt` is gone: login is mandatory on first
+ *   run, so every row has an owner from the moment it is created and the whole
+ *   deferred-claim axis it served has nothing left to do.
  * - Reports are implemented for session reports only; admin/cross-session
  *   report types require a future migration.
  * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled
  *   reference data for the barangay picker; the surveillance map joins
- *   `sessions.psgc_barangay_code` against PSGC boundary GeoJSON instead. Room
- *   schema is v9.
+ *   `patients.psgc_barangay_code` against PSGC boundary GeoJSON instead. The
+ *   `barangay_prevalence()` RPC reaches that code through
+ *   `sessions -> patients`; the unit of observation is still the session, i.e.
+ *   one smear.
  * - PostGIS is deliberately not enabled. The map keys on PSGC, so the
  *   choropleth is a GROUP BY rather than a spatial query.
  */
