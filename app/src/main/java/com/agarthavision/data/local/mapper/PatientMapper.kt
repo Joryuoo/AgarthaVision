@@ -3,12 +3,10 @@ package com.agarthavision.data.local.mapper
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientSyncStatus
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import java.time.LocalDate
-
-/** Room-only sync state for a freshly written local row. Never a Supabase column. */
-private const val PENDING_STATUS = "pending"
 
 /**
  * Converts between the Room patient row and the domain model.
@@ -48,7 +46,9 @@ fun PatientEntity.toDomain(): Patient =
  * sex or writing a value the server will reject — so this refuses instead, and the caller
  * collects one first.
  */
-fun Patient.toEntity(supabaseStatus: String = PENDING_STATUS): PatientEntity =
+fun Patient.toEntity(
+    supabaseStatus: String = PatientSyncStatus.PENDING.value,
+): PatientEntity =
     PatientEntity(
         patientId = id,
         lastname = lastname,
