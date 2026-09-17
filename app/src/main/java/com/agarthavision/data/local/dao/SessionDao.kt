@@ -125,7 +125,7 @@ interface SessionDao {
         LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
         LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
         WHERE s.user_id = :userId
-          AND (s.ended_at IS NULL OR s.started_at >= :sinceMillis)
+          AND s.started_at >= :sinceMillis
         GROUP BY s.session_id
         ORDER BY s.started_at DESC
         """
@@ -321,7 +321,6 @@ private const val RECORDS_FILTER = """
     AND (:query = ''
          OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
          OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\'
          OR EXISTS (SELECT 1 FROM detections dq JOIN samples sq ON sq.sample_id = dq.sample_id
                     WHERE sq.session_id = s.session_id AND sq.deleted_at is null
                       AND dq.verdict != 'false_positive'
@@ -356,8 +355,7 @@ private const val SESSIONS_FILTER = """
           OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
     AND (:query = ''
          OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\')
+         OR s.label      LIKE '%' || :query || '%' ESCAPE '\')
 """
 
 /**
@@ -377,8 +375,7 @@ private const val LOCAL_SESSIONS_FILTER = """
           OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
     AND (:query = ''
          OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\')
+         OR s.label      LIKE '%' || :query || '%' ESCAPE '\')
 """
 
 /**

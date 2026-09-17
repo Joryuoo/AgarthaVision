@@ -16,5 +16,15 @@
     "emulator": "emulator -avd AgarthaVision_Test",
     "prepare": "husky",
     "compile": "./gradlew :app:compileDebugKotlin"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^21.0.1",
+    "@commitlint/config-conventional": "^21.0.1",
+    "@types/bun": "latest",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
   }
 }
