@@ -62,9 +62,10 @@ object SessionLabelGenerator {
     /**
      * The trailing sequence in [label], or null when it does not end in one.
      *
-     * Anchored to the end of the string on purpose: the PSGC code is also a run of digits, and
-     * an unanchored match would read the barangay as the sequence on any label whose sequence
-     * had been edited away.
+     * The whole tail is matched, not just the trailing digits: the PSGC code is also a run of
+     * digits and it is the last thing left when the sequence is edited away, so an end-anchor
+     * alone still reads the barangay as a ten-digit sequence. Requiring the barangay segment
+     * in front of it is what makes the difference legible.
      */
     private fun sequenceOf(label: String): Int? =
         SEQUENCE_SUFFIX.find(label.trim())?.groupValues?.get(1)?.toIntOrNull()
@@ -72,5 +73,6 @@ object SessionLabelGenerator {
     private fun initial(name: String): String =
         name.trim().firstOrNull { it.isLetter() }?.uppercaseChar()?.let { "$it." }.orEmpty()
 
-    private val SEQUENCE_SUFFIX = Regex("""-(\d+)$""")
+    /** `-<10-digit barangay>-<sequence>` at the end of the label. */
+    private val SEQUENCE_SUFFIX = Regex("""-\d{10}-(\d+)$""")
 }

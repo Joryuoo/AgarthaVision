@@ -232,6 +232,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(session?.let(::listOf).orEmpty())
     override fun observeSessionRecordsPage(

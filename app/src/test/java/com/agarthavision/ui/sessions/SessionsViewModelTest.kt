@@ -890,6 +890,7 @@ private class RecordingSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -938,6 +939,7 @@ private class ControllableSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -981,6 +983,7 @@ private class LambdaSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
