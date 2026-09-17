@@ -40,7 +40,7 @@ import com.agarthavision.R
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.CardsStack
 import com.agarthavision.ui.icons.HomeAppLogo
-import com.agarthavision.ui.icons.Patients
+import com.agarthavision.ui.icons.LabProfile
 import com.agarthavision.ui.icons.Settings
 import com.agarthavision.ui.theme.AgarthaTheme
 
@@ -50,7 +50,11 @@ sealed class Tab(
     val icon: ImageVector
 ) {
     data object Home     : Tab("dashboard", R.string.nav_tab_home,     AgarthaIcons.HomeAppLogo)
-    data object Patients : Tab("patients",  R.string.nav_tab_patients, AgarthaIcons.Patients)
+    // PLACEHOLDER GLYPH. LabProfile is an existing Material Symbols export from the house
+    // set; it reads as a clinical record rather than as people. Replace it with the
+    // `groups` (or `person`) export from the same set — Rounded, fill 0, to match its
+    // neighbours. Export it, do not draw it: every glyph in ui/icons/ is an export.
+    data object Patients : Tab("patients",  R.string.nav_tab_patients, AgarthaIcons.LabProfile)
     data object Reports  : Tab("reports",   R.string.nav_tab_reports,  AgarthaIcons.CardsStack)
     data object Settings : Tab("settings",  R.string.settings_title,   AgarthaIcons.Settings)
 }
