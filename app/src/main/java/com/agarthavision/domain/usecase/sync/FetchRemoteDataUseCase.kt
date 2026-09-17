@@ -9,6 +9,7 @@ import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
@@ -73,6 +74,7 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao,
     private val reportDao: ReportDao,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
 ) {
     /**
      * Runs one fetch pass.
@@ -114,6 +116,14 @@ class FetchRemoteDataUseCase @Inject constructor(
         // Mark completed only when all four types succeeded (E2)
         if (patientsOk && sessionsOk && samplesOk && reportsOk) {
             initialFetchStateStore.markCompleted(userId)
+        }
+
+        // Fold any species that arrived with this pass into the offline suggestion index,
+        // so the two reference caches stay in step (PB-08a). Gated on samples because
+        // findings and expert classes ride with them — a pass that pulled no samples
+        // brought no new names either. It never throws, so it cannot fail the pass.
+        if (samplesOk) {
+            speciesSuggestionSeeder.refresh()
         }
 
         FetchSummary.Ran(

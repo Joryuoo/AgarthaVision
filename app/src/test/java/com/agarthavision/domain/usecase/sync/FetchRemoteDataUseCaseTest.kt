@@ -8,6 +8,7 @@ import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
@@ -62,6 +63,7 @@ class FetchRemoteDataUseCaseTest {
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao = mock()
     private val reportDao: ReportDao = mock()
     private val initialFetchStateStore: InitialFetchStateStore = mock()
+    private val speciesSuggestionSeeder: SpeciesSuggestionSeeder = mock()
 
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
@@ -77,6 +79,7 @@ class FetchRemoteDataUseCaseTest {
         sampleSpeciesFindingDao = sampleSpeciesFindingDao,
         reportDao = reportDao,
         initialFetchStateStore = initialFetchStateStore,
+        speciesSuggestionSeeder = speciesSuggestionSeeder,
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -235,6 +238,47 @@ class FetchRemoteDataUseCaseTest {
             verify(patientRemoteDataSource).fetchPatients()
             verify(sessionRemoteDataSource).fetchSessions("user-1")
         }
+    }
+
+    // ── Species index refresh (PB-08a) ───────────────────────────────────────
+
+    @Test
+    fun `a successful pass folds new species into the offline index`() = runTest {
+        setupOnlineSignedIn()
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        // The two reference caches have to stay in step: a species that arrived with this
+        // pass must be suggestible on the next offline verification.
+        verify(speciesSuggestionSeeder).refresh()
+    }
+
+    @Test
+    fun `a pass whose samples failed does not refresh the species index`() = runTest {
+        setupOnlineSignedIn()
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+            .thenThrow(RuntimeException("boom"))
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        // Findings and expert classes ride with samples, so no samples means no new names.
+        verify(speciesSuggestionSeeder, never()).refresh()
+    }
+
+    @Test
+    fun `a skipped pass does not refresh the species index`() = runTest {
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+        whenever(authRepository.isAuthenticated()).thenReturn(true)
+        whenever(connectivityObserver.currentlyOnline()).thenReturn(false)
+
+        useCase.invoke()
+
+        verify(speciesSuggestionSeeder, never()).refresh()
     }
 
     // ── FK-safe order: sessions before samples ───────────────────────────────
