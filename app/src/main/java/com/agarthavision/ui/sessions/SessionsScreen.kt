@@ -80,6 +80,8 @@ import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
+import com.agarthavision.ui.components.SheetInput
+import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -626,97 +628,6 @@ private fun NewSessionSheet(
                     )
                 }
             }
-        }
-    }
-}
-
-/** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
-internal data class SheetInputConfig(
-    val label: String,
-    val placeholder: String,
-    val isError: Boolean,
-    val isTextArea: Boolean = false,
-    val isRequired: Boolean = true,
-    val maxLength: Int = Int.MAX_VALUE
-)
-
-@Composable
-internal fun SheetInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    config: SheetInputConfig
-) {
-    val colors = AgarthaTheme.colors
-    val (label, placeholder, isError) = config
-    val isTextArea = config.isTextArea
-    val isRequired = config.isRequired
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textSecondary)
-            if (isRequired) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "REQUIRED",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.04.em,
-                    color = colors.dangerText,
-                    modifier = Modifier
-                        .background(colors.dangerTint, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                )
-            } else {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "OPTIONAL",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.04.em,
-                    color = colors.textSecondary,
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        var isFocused by remember { mutableStateOf(false) }
-        val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
-        val bgColor = if (isError) colors.dangerTint.copy(alpha = 0.5f) else colors.surface
-
-        BasicTextField(
-            value = value,
-            onValueChange = { onValueChange(limitInput(value, it, config.maxLength)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused },
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = colors.textPrimary),
-            singleLine = !isTextArea,
-            minLines = if (isTextArea) 3 else 1,
-            cursorBrush = SolidColor(colors.accent),
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (isTextArea) Modifier.heightIn(min = 88.dp) else Modifier)
-                        .background(bgColor, RoundedCornerShape(12.dp))
-                        .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 13.dp),
-                    contentAlignment = if (isTextArea) Alignment.TopStart else Alignment.CenterStart
-                ) {
-                    if (value.isEmpty()) {
-                        Text(placeholder, fontSize = 15.sp, color = colors.textTertiary, lineHeight = 21.75.sp)
-                    }
-                    innerTextField()
-                }
-            }
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(
-                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
-                fontSize = 11.sp,
-                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
-            )
         }
     }
 }

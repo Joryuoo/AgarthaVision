@@ -1,9 +1,9 @@
 package com.agarthavision.ui.patients
 
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PsgcBarangay
@@ -167,13 +167,20 @@ class PatientFormViewModel @Inject constructor(
     fun onSexSelected(sex: Sex) = fields.update { it.copy(sex = sex, errors = emptySet()) }
 
     /**
-     * Clamped through the shared [sanitizeDateRange] rather than a second hand-written
-     * future-date guard. It was built for the Records date filter, where it hit and fixed
-     * exactly this bug; a patient cannot have been born tomorrow either.
+     * Stores the date as picked. A future one is **rejected**, never clamped.
+     *
+     * This used to route through `sanitizeDateRange`, which coerces to today. That is right
+     * for the Records date filter it was built for — a range ending tomorrow plainly means
+     * "up to now" — and wrong here: a birthdate silently becoming today is a patient recorded
+     * as newborn, on a clinical record, with nothing on screen saying so. PB-07c says
+     * rejected, so [validate] rejects, and [PatientFormError.BIRTHDATE_IN_FUTURE] is
+     * reachable again rather than dead.
+     *
+     * The picker's own `SelectableDates` bound is the first line of defence and stops this
+     * arising through the UI at all; this guards a value restored after process death.
      */
     fun onBirthdateSelected(date: LocalDate?) {
-        val (clamped, _) = sanitizeDateRange(date, date, LocalDate.now(CLINICAL_ZONE))
-        fields.update { it.copy(birthdate = clamped, errors = emptySet()) }
+        fields.update { it.copy(birthdate = date, errors = emptySet()) }
     }
 
     fun onBarangayQueryChanged(query: String) = barangayPicker.onQueryChanged(query)
@@ -228,7 +235,10 @@ class PatientFormViewModel @Inject constructor(
             }.onSuccess {
                 fields.update { it.copy(isSaving = false) }
                 eventFlow.emit(PatientFormEvent.Saved)
-            }.onFailure {
+            }.onFailure { throwable ->
+                // Logged, not swallowed: the screen only says "could not save", so without
+                // this a failing write leaves nothing anywhere to diagnose it from.
+                Log.e(TAG, "Saving patient ${patient.id} failed", throwable)
                 fields.update {
                     it.copy(isSaving = false, showErrors = true, errors = setOf(PatientFormError.SAVE_FAILED))
                 }
@@ -261,6 +271,8 @@ class PatientFormViewModel @Inject constructor(
         limitInput(previous, proposed, NAME_MAX_LENGTH)
 
     private companion object {
+        const val TAG = "PatientForm"
+
         /** Sized for one line of the list row's title. */
         const val NAME_MAX_LENGTH = 40
         const val STOP_TIMEOUT_MS = 5_000L

@@ -1,6 +1,7 @@
 package com.agarthavision.ui.patients
 
 import androidx.lifecycle.SavedStateHandle
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PsgcBarangay
@@ -98,16 +99,23 @@ class PatientFormViewModelTest {
     }
 
     @Test
-    fun `a future birthdate is clamped rather than stored`() = runTest(
+    fun `a future birthdate is rejected, not quietly clamped to today`() = runTest(
         mainDispatcherRule.testDispatcher.scheduler,
     ) {
         val vm = viewModel()
+        fillValid(vm)
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+        vm.onBirthdateSelected(LocalDate.now(CLINICAL_ZONE).plusDays(1))
 
-        vm.onBirthdateSelected(LocalDate.now().plusYears(2))
+        vm.onSave()
         advanceUntilIdle()
 
-        val stored = vm.state.value.birthdate
-        assertTrue("a birthdate must never be in the future", stored!! <= LocalDate.now())
+        // This used to route through sanitizeDateRange, which coerces to today — so a future
+        // date saved silently as a patient born this morning. Wrong age, on a clinical
+        // record, with nothing on screen saying anything happened.
+        assertTrue(PatientFormError.BIRTHDATE_IN_FUTURE in vm.state.value.errors)
+        verify(patientRepository, never()).insert(any())
     }
 
     @Test
