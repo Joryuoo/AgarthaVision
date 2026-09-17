@@ -37,7 +37,6 @@ class SyncCardTest {
         counts = emptyCounts(),
         isSyncing = false,
         canSyncNow = false,
-        unlinkedSessions = unlinked,
     )
 
     private fun signedInState(
@@ -55,7 +54,6 @@ class SyncCardTest {
         ),
         isSyncing = false,
         canSyncNow = true,
-        unlinkedSessions = unlinked,
     )
 
     // ── signed-out, unlinked = 3 ─────────────────────────────────────────────

@@ -58,7 +58,8 @@ sealed class Screen(val route: String) {
 @Composable
 fun AgarthaNavGraph(
     cameraManager: CameraManager,
-    frameSampler: FrameSampler
+    frameSampler: FrameSampler,
+    startDestination: String = Screen.Dashboard.route
 ) {
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -92,6 +93,7 @@ fun AgarthaNavGraph(
             navController = navController,
             cameraManager = cameraManager,
             frameSampler = frameSampler,
+            startDestination = startDestination,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
@@ -104,11 +106,12 @@ fun AgarthaNavHost(
     navController: NavHostController,
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    startDestination: String = Screen.Dashboard.route
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Dashboard.route,
+        startDestination = startDestination,
         modifier = modifier,
         // Default for unspecified destinations: fade
         enterTransition    = { fadeIn(tween(220)) },
@@ -116,12 +119,24 @@ fun AgarthaNavHost(
         popEnterTransition = { fadeIn(tween(220)) },
         popExitTransition  = { fadeOut(tween(180)) }
     ) {
-        // Login is now an explicit destination entered from the Dashboard banner
-        // (per ADR-007); on success it pops back rather than resetting the stack.
+        // Login is the start destination on first run and cannot be dismissed: a Patient
+        // must belong to a User and a Session to a Patient, so there is nothing to attach a
+        // patient to until somebody has signed in. It supersedes ADR-007's pop-back
+        // behaviour, where login was an optional detour entered from the Dashboard banner.
+        //
+        // The gate is first-run only. Once an identity is cached it is satisfied forever,
+        // including offline and after the Supabase token expires — which is what keeps the
+        // rest of the app offline-first. See ResolveAuthGateUseCase.
+        //
+        // popUpTo(inclusive) rather than popBackStack(): entered as the start destination
+        // there is nothing behind it to pop to, and back must not return here afterwards.
         composable(Screen.Login.route) {
             LoginScreen(
-                onLoggedIn = { navController.popBackStack() },
-                onBack = { navController.popBackStack() },
+                onLoggedIn = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Login.route) { inclusive = true }
+                    }
+                },
             )
         }
 

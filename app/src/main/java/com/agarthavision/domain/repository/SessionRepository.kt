@@ -39,17 +39,6 @@ interface SessionRepository {
     fun observeVisibleSessions(userId: String?): Flow<List<Session>>
 
     /**
-     * Opts a session out of (or back into) being claimed at the next login. Per ADR-007.
-     */
-    suspend fun setClaimExempt(sessionId: String, exempt: Boolean)
-
-    /**
-     * Claims a single unowned session for [userId] (the manual "Link to account" action).
-     * Per ADR-007.
-     */
-    suspend fun claimSession(sessionId: String, userId: String)
-
-    /**
      * Observes a paginated, filtered window of sessions for the Records screen.
      * Filtering (species, date range, free-text search) and aggregation are performed
      * in SQL; [limit] controls the page size for load-more pagination.

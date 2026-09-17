@@ -21,33 +21,29 @@ data class Session(
     val psgcBarangayCode: String? = null,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */
     val supabaseStatus: SessionSyncStatus = SessionSyncStatus.SYNCED,
-    /** `true` when opted out of being claimed at the next login. Per ADR-007. */
-    val claimExempt: Boolean = false,
 ) {
     /**
-     * Derived link state for the Sessions UI: whether this session is owned, still
-     * local-only (unowned or opted out), pending upload, or fully synced.
+     * Derived link state for the Sessions UI: whether this session is awaiting upload or
+     * fully synced.
+     *
+     * There is no unowned state any more. Login is mandatory on first run, so a session
+     * has an owner from the moment it is created.
      */
     val linkState: SessionLinkState
-        get() = when {
-            userId == null && claimExempt -> SessionLinkState.NOT_LINKED
-            userId == null -> SessionLinkState.UNOWNED
-            supabaseStatus == SessionSyncStatus.SYNCED -> SessionLinkState.SYNCED
+        get() = when (supabaseStatus) {
+            SessionSyncStatus.SYNCED -> SessionLinkState.SYNCED
             else -> SessionLinkState.PENDING
         }
 }
 
 /**
- * UI-facing link state for a session, derived from ownership and sync status.
- * Per ADR-007.
+ * UI-facing sync state for a session.
+ *
+ * `UNOWNED` and `NOT_LINKED` are gone: mandatory first-run login means every session has
+ * an owner when it is created, so the whole unowned axis — and the deferred-claim
+ * machinery that served it — has nothing left to represent.
  */
 enum class SessionLinkState {
-    /** No owner yet; will be claimed by the next login unless opted out. */
-    UNOWNED,
-
-    /** Owner is null and the medtech opted out of claiming; stays local-only. */
-    NOT_LINKED,
-
     /** Owned and awaiting cloud upload. */
     PENDING,
 

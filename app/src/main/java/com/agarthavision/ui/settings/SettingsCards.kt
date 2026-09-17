@@ -16,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -120,12 +119,11 @@ internal data class SyncCardState(
     val counts: PendingSyncCounts,
     val isSyncing: Boolean,
     val canSyncNow: Boolean,
-    val unlinkedSessions: Int,
     val initialFetchDone: Boolean = true,
     val isFetching: Boolean = false,
 )
 
-internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_SYNCED, NOT_LINKED, NOTHING_TO_SYNC }
+internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_SYNCED, NOTHING_TO_SYNC }
 
 /**
  * Pure function that maps sign-in state + sync counts + fetch state to a [SyncBadge] variant.
@@ -137,12 +135,13 @@ internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_S
  * - initial fetch never ran (badge prompts a manual sync)
  * - otherwise all synced
  *
- * When signed out, unlinked-session count drives the badge. Per ADR-007.
+ * The signed-out branch is vestigial: login is mandatory on first run, so isSignedIn is
+ * false only in the instant before the gate resolves. It is kept as a total function
+ * rather than a `requireNotNull`, because a badge is not worth a crash.
  */
 internal fun syncBadgeState(
     isSignedIn: Boolean,
     counts: PendingSyncCounts,
-    unlinkedSessions: Int,
     initialFetchDone: Boolean = true,
     isFetching: Boolean = false,
 ): SyncBadge = when {
@@ -151,7 +150,6 @@ internal fun syncBadgeState(
     isSignedIn && isFetching -> SyncBadge.FETCHING
     isSignedIn && !initialFetchDone -> SyncBadge.NOT_YET_SYNCED
     isSignedIn -> SyncBadge.ALL_SYNCED
-    unlinkedSessions > 0 -> SyncBadge.NOT_LINKED
     else -> SyncBadge.NOTHING_TO_SYNC
 }
 
@@ -176,15 +174,6 @@ internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
                 fontWeight = FontWeight.Medium,
             )
             SyncStatusBadge(state = state)
-        }
-        if (!state.isSignedIn && state.unlinkedSessions > 0) {
-            val n = state.unlinkedSessions
-            Spacer(Modifier.height(Spacing.sm))
-            Text(
-                text = pluralStringResource(R.plurals.settings_sync_sign_in_to_link, n, n),
-                color = colors.textSecondary,
-                fontSize = 13.sp,
-            )
         }
         if (state.isSignedIn) {
             SyncCounts(counts = state.counts)
@@ -243,12 +232,10 @@ private fun SyncCountRow(label: String, count: Int) {
 private fun SyncStatusBadge(state: SyncCardState) {
     val colors = AgarthaTheme.colors
     val counts = state.counts
-    val n = state.unlinkedSessions
     val (bg, fg, text) = when (
         syncBadgeState(
             isSignedIn = state.isSignedIn,
             counts = counts,
-            unlinkedSessions = n,
             initialFetchDone = state.initialFetchDone,
             isFetching = state.isFetching,
         )
@@ -277,11 +264,6 @@ private fun SyncStatusBadge(state: SyncCardState) {
             colors.successTint,
             colors.successText,
             stringResource(R.string.settings_sync_all_synced),
-        )
-        SyncBadge.NOT_LINKED -> Triple(
-            colors.surfaceMuted,
-            colors.textSecondary,
-            pluralStringResource(R.plurals.settings_sync_not_linked, n, n),
         )
         SyncBadge.NOTHING_TO_SYNC -> Triple(
             colors.surfaceMuted,

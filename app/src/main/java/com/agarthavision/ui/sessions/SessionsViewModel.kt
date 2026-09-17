@@ -10,8 +10,6 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.core.util.sanitizeDateRange
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
@@ -28,7 +26,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -83,8 +80,6 @@ class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
-    private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase,
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase,
     private val searchBarangaysUseCase: SearchBarangaysUseCase,
 ) : ViewModel() {
 
@@ -217,27 +212,6 @@ class SessionsViewModel @Inject constructor(
      */
     fun onLoadMore() {
         limit.value += PAGE_STEP
-    }
-
-    /**
-     * Toggles a session's account link (per ADR-007). When the session is unowned it
-     * flips the claim-exempt opt-out; when it is owned + pending the user can unlink it;
-     * an unowned session with an available identity can be claimed on demand.
-     */
-    fun onToggleAccountLink(sessionId: String, link: Boolean) {
-        viewModelScope.launch {
-            val userId = userIdFlow.first()
-            val result = if (link && userId != null) {
-                claimLocalDataUseCase(userId, sessionIds = listOf(sessionId))
-                Result.success(Unit)
-            } else {
-                // link == false → opt out of claiming (or unlink a still-pending session).
-                setSessionClaimExemptUseCase(sessionId, exempt = !link)
-            }
-            result.onFailure { error ->
-                internalState.update { it.copy(errorMessage = error.message ?: "Could not update link.") }
-            }
-        }
     }
 
     /**

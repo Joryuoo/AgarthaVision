@@ -210,8 +210,6 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(session?.let(::listOf).orEmpty())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?,
         startMillis: Long?,

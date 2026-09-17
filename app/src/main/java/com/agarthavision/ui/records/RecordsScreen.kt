@@ -442,8 +442,6 @@ private fun RecordCardSkeleton(modifier: Modifier = Modifier) {
 @Composable
 internal fun StatusPill(linkState: SessionLinkState) {
     val colors = AgarthaTheme.colors
-    // Per ADR-007: UNOWNED/NOT_LINKED are local-only states — neutral, not a warning.
-    // Mirrors the Sessions tab "Not linked" badge (colors.surfaceMuted / colors.textSecondary).
     val (bg, fg, text) = when (linkState) {
         SessionLinkState.SYNCED -> Triple(
             colors.successTint,
@@ -454,12 +452,6 @@ internal fun StatusPill(linkState: SessionLinkState) {
             colors.warningTint,
             colors.warningText,
             stringResource(R.string.records_status_pending_sync),
-        )
-        SessionLinkState.UNOWNED,
-        SessionLinkState.NOT_LINKED -> Triple(
-            colors.surfaceMuted,
-            colors.textSecondary,
-            stringResource(R.string.session_not_linked),
         )
     }
     Box(

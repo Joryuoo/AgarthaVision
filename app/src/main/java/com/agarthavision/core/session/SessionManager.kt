@@ -70,7 +70,14 @@ class SessionManager @Inject constructor(
         notes: String? = null,
     ): SessionEntity {
         val now = Instant.now()
-        val ownerId = authRepository.currentLocalUserId()
+        // Never null: login is mandatory on first run, so an identity is cached before any
+        // screen that could reach here exists. Asserting it is the point — a session with no
+        // owner cannot be pushed, and silently creating one would strand the smear on the
+        // device with no error anywhere.
+        val ownerId = requireNotNull(authRepository.currentLocalUserId()) {
+            "startSession called with no cached identity; the first-run login gate should " +
+                "have made that impossible."
+        }
         val entity = SessionEntity(
             sessionId = UUID.randomUUID().toString(),
             userId = ownerId,
@@ -81,7 +88,6 @@ class SessionManager @Inject constructor(
             label = label,
             psgcBarangayCode = psgcBarangayCode,
             supabaseStatus = SessionSyncStatus.PENDING.value,
-            claimExempt = false,
         )
         sessionDao.insertSession(entity)
         val synced = pushSessionInsert(entity)
@@ -140,11 +146,15 @@ class SessionManager @Inject constructor(
     }
 
     /**
-     * Pushes the local session row to Supabase when an owner is set and not opted out.
-     * Returns the entity with its resolved [SessionSyncStatus]; never throws.
+     * Pushes the local session row to Supabase. Returns the entity with its resolved
+     * [SessionSyncStatus]; never throws.
+     *
+     * The claim-exempt half of this guard is gone with the opt-out itself. The null-owner
+     * half is now unreachable via [startSession] — it is kept only because
+     * `SessionEntity.userId` is still typed nullable for rows pulled from Supabase.
      */
     private suspend fun pushSessionInsert(entity: SessionEntity): SessionEntity {
-        if (entity.userId == null || entity.claimExempt) {
+        if (entity.userId == null) {
             return entity
         }
         return runCatching {

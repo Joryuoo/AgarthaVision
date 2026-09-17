@@ -9,11 +9,9 @@ import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import java.time.LocalDate
@@ -784,8 +782,6 @@ class SessionsViewModelTest {
         val sessionManager = mock<SessionManager> {
             on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
         }
-        val setExempt = mock<SetSessionClaimExemptUseCase>()
-        val claim = mock<ClaimLocalDataUseCase>()
         // Real use case over a mocked repository, as in SessionPickerViewModelTest; the
         // barangay picker is out of scope here but the VM wires it up in init.
         val searchBarangays = SearchBarangaysUseCase(mock<PsgcRepository>())
@@ -793,8 +789,6 @@ class SessionsViewModelTest {
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
-            setSessionClaimExemptUseCase = setExempt,
-            claimLocalDataUseCase = claim,
             searchBarangaysUseCase = searchBarangays,
         )
     }
@@ -825,8 +819,6 @@ private class RecordingSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
@@ -873,8 +865,6 @@ private class ControllableSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
@@ -916,8 +906,6 @@ private class LambdaSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())

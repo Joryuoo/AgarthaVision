@@ -56,31 +56,4 @@ class StatusPillTest {
 
         composeRule.onNodeWithText(expected).assertIsDisplayed()
     }
-
-    @Test
-    fun `UNOWNED state renders Not linked label`() {
-        val expected = context.getString(R.string.session_not_linked)
-
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                StatusPill(linkState = SessionLinkState.UNOWNED)
-            }
-        }
-
-        composeRule.onNodeWithText(expected).assertIsDisplayed()
-    }
-
-    @Test
-    fun `NOT_LINKED state renders Not linked label`() {
-        val expected = context.getString(R.string.session_not_linked)
-
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                StatusPill(linkState = SessionLinkState.NOT_LINKED)
-            }
-        }
-
-        composeRule.onNodeWithText(expected).assertIsDisplayed()
-    }
-
 }

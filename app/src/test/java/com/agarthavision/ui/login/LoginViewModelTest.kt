@@ -3,7 +3,6 @@ package com.agarthavision.ui.login
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
@@ -41,9 +40,6 @@ class LoginViewModelTest {
         whenever(it.currentlyOnline()).thenReturn(true)
         whenever(it.isOnline).thenReturn(MutableStateFlow(true))
     }
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock<ClaimLocalDataUseCase>().also {
-        runBlocking { whenever(it.invoke("user-1", null)).thenReturn(Result.success(0)) }
-    }
     private val syncPendingDataUseCase: SyncPendingDataUseCase = mock<SyncPendingDataUseCase>().also {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
@@ -55,7 +51,6 @@ class LoginViewModelTest {
         signInUseCase = signInUseCase,
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
-        claimLocalDataUseCase = claimLocalDataUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
         fetchRemoteDataUseCase = fetchRemoteDataUseCase,
     )

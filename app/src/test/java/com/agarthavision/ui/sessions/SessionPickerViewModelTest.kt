@@ -11,10 +11,8 @@ import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -71,8 +69,6 @@ class SessionPickerViewModelTest {
                 MutableStateFlow(LocalIdentity(userId = "user-1", email = "user@example.com")),
             )
         }
-    private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase = mock()
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock()
 
     // The real use case over a mocked repository, so the minimum-query-length rule is
     // exercised here rather than stubbed away.
@@ -83,8 +79,6 @@ class SessionPickerViewModelTest {
         sessionRepository = sessionRepository,
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
-        setSessionClaimExemptUseCase = setSessionClaimExemptUseCase,
-        claimLocalDataUseCase = claimLocalDataUseCase,
         searchBarangaysUseCase = searchBarangaysUseCase,
     )
 

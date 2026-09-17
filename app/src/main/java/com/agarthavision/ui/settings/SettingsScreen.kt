@@ -130,7 +130,6 @@ private fun SettingsContent(
                             counts = state.pendingSyncCounts,
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
-                            unlinkedSessions = state.unlinkedSessions,
                             initialFetchDone = state.initialFetchDone,
                             isFetching = state.isSyncing,
                         ),
@@ -232,7 +231,6 @@ private fun SettingsScreenSignedOutPreview() {
             isOffline = false,
             isDarkMode = false,
             pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
-            unlinkedSessions = 3,
         ),
         actions = SettingsActions(
             onSignInClick = {},

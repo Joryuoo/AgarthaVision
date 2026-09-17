@@ -68,98 +68,46 @@ interface SessionDao {
     fun observeAllLocal(): Flow<List<SessionEntity>>
 
     /**
-     * Owned, non-exempt sessions still awaiting cloud upload, oldest first so the sync
-     * pass pushes them in creation order. Per ADR-007.
+     * Sessions still awaiting cloud upload, oldest first so the sync pass pushes them in
+     * creation order.
      */
     @Query(
         """
         SELECT * FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0
+        WHERE user_id = :userId
           AND supabase_status IN ('pending', 'sync_failed')
         ORDER BY started_at ASC
         """
     )
     suspend fun getSessionsPendingSync(userId: String): List<SessionEntity>
 
-    /**
-     * Unowned (`user_id IS NULL`) sessions that have not been opted out, newest first.
-     * Drives the login-time claim. Per ADR-007.
-     */
-    @Query(
-        """
-        SELECT * FROM sessions
-        WHERE user_id IS NULL AND claim_exempt = 0
-        ORDER BY started_at DESC
-        """
-    )
-    suspend fun getClaimableSessions(): List<SessionEntity>
-
     /** Updates the Room-only cloud sync status for a session. Per ADR-007. */
     @Query("UPDATE sessions SET supabase_status = :status WHERE session_id = :sessionId")
     suspend fun updateSupabaseStatus(sessionId: String, status: String)
 
-    /** Toggles the claim-exempt flag for a session. Per ADR-007. */
-    @Query("UPDATE sessions SET claim_exempt = :exempt WHERE session_id = :sessionId")
-    suspend fun setClaimExempt(sessionId: String, exempt: Boolean)
-
     /**
-     * Claims all unowned, non-exempt sessions for [userId], marking them pending sync.
-     * Only touches `user_id IS NULL` rows so it is idempotent. Per ADR-007.
-     */
-    @Query(
-        """
-        UPDATE sessions
-        SET user_id = :userId, supabase_status = 'pending'
-        WHERE user_id IS NULL AND claim_exempt = 0
-        """
-    )
-    suspend fun claimUnownedSessions(userId: String)
-
-    /**
-     * Claims a single unowned session by id (the manual "Link to account" action).
-     * Per ADR-007.
-     */
-    @Query(
-        """
-        UPDATE sessions
-        SET user_id = :userId, supabase_status = 'pending', claim_exempt = 0
-        WHERE session_id = :sessionId AND user_id IS NULL
-        """
-    )
-    suspend fun claimSession(sessionId: String, userId: String)
-
-    /**
-     * Live count of owned, non-exempt sessions still awaiting cloud upload (`pending`
-     * only, not `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
+     * Live count of sessions still awaiting cloud upload (`pending` only, not
+     * `sync_failed`). Drives the Settings Data & Sync section.
      */
     @Query(
         """
         SELECT COUNT(*) FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'pending'
+        WHERE user_id = :userId AND supabase_status = 'pending'
         """,
     )
     fun observePendingCount(userId: String): Flow<Int>
 
     /**
-     * Live count of owned, non-exempt sessions whose last sync attempt failed. Drives
-     * the Settings Data & Sync section. Per ADR-007.
+     * Live count of sessions whose last sync attempt failed. Drives the Settings
+     * Data & Sync section.
      */
     @Query(
         """
         SELECT COUNT(*) FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'sync_failed'
+        WHERE user_id = :userId AND supabase_status = 'sync_failed'
         """,
     )
     fun observeFailedCount(userId: String): Flow<Int>
-
-    /**
-     * Live count of unowned, non-exempt local sessions (user_id IS NULL AND claim_exempt = 0):
-     * recorded while signed out and still claimable at the next login. Drives the signed-out
-     * "not linked" badge in Settings. Session-level only - unowned samples always belong to
-     * an unowned session, so a session count fully describes the claim backlog. Per ADR-007.
-     */
-    @Query("SELECT COUNT(*) FROM sessions WHERE user_id IS NULL AND claim_exempt = 0")
-    fun observeUnlinkedCount(): Flow<Int>
 
     /**
      * Observes sessions with their associated sample, verification, and EPG counts.

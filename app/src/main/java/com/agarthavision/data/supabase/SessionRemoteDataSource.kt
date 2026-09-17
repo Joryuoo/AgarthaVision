@@ -129,7 +129,6 @@ class SessionRemoteDataSource @Inject constructor(
         label = label,
         psgcBarangayCode = psgcBarangayCode,
         supabaseStatus = SessionSyncStatus.SYNCED.value,
-        claimExempt = false,
     )
 
     private companion object {
