@@ -294,6 +294,25 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_back">Back to session</string>
 
+    <!-- Patients (PB-06b) -->
+    <string name="patients_title">Patients</string>
+    <string name="patients_subtitle_purpose">The people whose smears you have read</string>
+    <string name="patients_status_counts">%1$d patients</string>
+    <string name="patients_search_placeholder">Search name or barangay…</string>
+    <string name="patients_empty_title">No patients yet</string>
+    <string name="patients_empty_body">Add a patient to start recording their smears.</string>
+    <string name="patients_empty_search_title">No matches</string>
+    <string name="patients_empty_search_body">No patient matches that name or barangay.</string>
+    <string name="patients_new">New patient</string>
+    <string name="patients_load_more">Load more</string>
+    <!-- Row meta: sex · age · barangay. -->
+    <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
+    <string name="patients_age_years">%1$d yrs</string>
+    <string name="patients_sex_male">Male</string>
+    <string name="patients_sex_female">Female</string>
+    <!-- Shown when a stored sex is neither M nor F, which only a hand-edited row produces. -->
+    <string name="patients_sex_unknown">Sex not recorded</string>
+
     <string name="sessions_title">Sessions</string>
     <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
     <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>

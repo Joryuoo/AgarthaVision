@@ -35,6 +35,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
+import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
@@ -43,6 +44,28 @@ sealed class Screen(val route: String) {
     data object Login : Screen("login")
     data object Dashboard : Screen("dashboard")
     data object Patients : Screen("patients")
+
+    /**
+     * One patient's session list. PB-09c builds what it shows; today it is the sessions
+     * list, unscoped.
+     */
+    data object PatientSessions : Screen("patients/{patientId}") {
+        fun createRoute(patientId: String) = "patients/$patientId"
+    }
+
+    /**
+     * The New / Edit Patient form. Omitting `patientId` means a blank form.
+     *
+     * Deliberately **not** under `patients/`. A literal `patients/form` would also match
+     * [PatientSessions]'s `patients/{patientId}` pattern, and which one wins is a matter
+     * of registration order rather than intent — the kind of ambiguity that resolves
+     * correctly in testing and wrongly after an unrelated reorder.
+     */
+    data object PatientForm : Screen("patient-form?patientId={patientId}") {
+        fun createRoute(patientId: String? = null) =
+            if (patientId == null) "patient-form" else "patient-form?patientId=$patientId"
+    }
+
     data object Capture : Screen("capture")
 
     /**
@@ -155,10 +178,21 @@ fun AgarthaNavHost(
                 onNavigate = { route -> navController.navigate(route) }
             )
         }
-        // Hosts [SessionsScreen] until PB-06b replaces it with the patient list. The
-        // route is renamed now, in the same edit as the tab, because a route rename split
-        // across two changes is exactly how the bottom bar silently loses a destination.
         composable(Screen.Patients.route) {
+            PatientsScreen(
+                onPatientSelected = { patientId ->
+                    navController.navigate(Screen.PatientSessions.createRoute(patientId))
+                },
+                onCreatePatient = {
+                    navController.navigate(Screen.PatientForm.createRoute())
+                },
+            )
+        }
+
+        // One patient's session list. PB-09c scopes it to the patient; until then it is
+        // the existing unscoped list, reachable so the capture and detail flows below it
+        // do not become orphaned by the tab rename.
+        composable(Screen.PatientSessions.route) {
             SessionsScreen(
                 onNavigate = { route -> navController.navigate(route) },
                 onNavigateToCapture = {

@@ -1,0 +1,243 @@
+package com.agarthavision.ui.patients
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agarthavision.R
+import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.usecase.patients.PatientListItem
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ScreenHeader
+import com.agarthavision.ui.components.SearchInput
+import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.Spacing
+import java.time.Instant
+
+/**
+ * The patient list: everyone the signed-in medtech is linked to.
+ *
+ * Every read behind this screen is local, so it renders and searches with the radio off —
+ * including the barangay filter, which joins the PSGC table bundled in the APK.
+ *
+ * **There is no delete affordance, and none should be added.** Removing a patient is an
+ * admin-side action.
+ */
+@Composable
+fun PatientsScreen(
+    onPatientSelected: (String) -> Unit,
+    onCreatePatient: () -> Unit,
+    viewModel: PatientsViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val colors = AgarthaTheme.colors
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                is PatientsEvent.OpenPatient -> onPatientSelected(event.patientId)
+                PatientsEvent.CreatePatient -> onCreatePatient()
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colors.background),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .widthIn(max = 480.dp)
+                .align(Alignment.TopCenter),
+        ) {
+            ScreenHeader(
+                title = stringResource(R.string.patients_title),
+                purpose = stringResource(R.string.patients_subtitle_purpose),
+                status = stringResource(R.string.patients_status_counts, state.total),
+            )
+
+            SearchInput(
+                value = state.searchQuery,
+                onValueChange = viewModel::onSearchQueryChanged,
+                placeholder = stringResource(R.string.patients_search_placeholder),
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            )
+
+            val listState = rememberLazyListState()
+            val shouldLoadMore by remember {
+                derivedStateOf {
+                    val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                    lastVisible >= listState.layoutInfo.totalItemsCount - 1 && state.canLoadMore
+                }
+            }
+            LaunchedEffect(shouldLoadMore) {
+                if (shouldLoadMore) viewModel.onLoadMore()
+            }
+
+            if (!state.isLoading && state.patients.isEmpty()) {
+                // A blank query with no rows is a new account; a non-blank one that matches
+                // nothing is a failed search. Telling the medtech to add a patient in the
+                // second case would be wrong — theirs may already exist under another
+                // spelling.
+                val searching = state.searchQuery.isNotBlank()
+                val emptyAction: (@Composable () -> Unit)? = if (searching) {
+                    null
+                } else {
+                    { NewPatientButton(onClick = viewModel::onCreatePatient) }
+                }
+                EmptyState(
+                    icon = Icons.Outlined.Inbox,
+                    title = stringResource(
+                        if (searching) R.string.patients_empty_search_title
+                        else R.string.patients_empty_title,
+                    ),
+                    body = stringResource(
+                        if (searching) R.string.patients_empty_search_body
+                        else R.string.patients_empty_body,
+                    ),
+                    modifier = Modifier.padding(top = Spacing.xxl),
+                    action = emptyAction,
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(
+                        start = Spacing.lg,
+                        end = Spacing.lg,
+                        top = Spacing.xs,
+                        bottom = Spacing.mega,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                ) {
+                    items(state.patients, key = { it.patient.id }) { item ->
+                        PatientRow(
+                            item = item,
+                            now = state.now,
+                            onClick = { viewModel.onPatientSelected(item.patient.id) },
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.patients.isNotEmpty()) {
+            NewPatientButton(
+                onClick = viewModel::onCreatePatient,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = Spacing.lg),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NewPatientButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = colors.accent,
+            contentColor = colors.onAccent,
+        ),
+    ) {
+        Text(text = stringResource(R.string.patients_new), fontWeight = FontWeight.SemiBold)
+    }
+}
+
+/**
+ * One patient.
+ *
+ * Age is computed from the birthdate against [now] rather than stored, which is the whole
+ * reason the birthdate is the column. [now] is fixed for the screen so a list open across
+ * midnight cannot show two ages for one birthday.
+ */
+@Composable
+private fun PatientRow(
+    item: PatientListItem,
+    now: Instant,
+    onClick: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    val patient = item.patient
+
+    val sexLabel = when (patient.sex) {
+        Sex.MALE -> stringResource(R.string.patients_sex_male)
+        Sex.FEMALE -> stringResource(R.string.patients_sex_female)
+        null -> stringResource(R.string.patients_sex_unknown)
+    }
+    val meta = stringResource(
+        R.string.patients_row_meta,
+        sexLabel,
+        stringResource(R.string.patients_age_years, patient.ageYears(now)),
+        // A code that resolves to nothing renders as itself: a PSGC vintage change can
+        // retire one, and a blank where a barangay should be reads as missing data.
+        item.barangayName ?: patient.psgcBarangayCode,
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xxs),
+    ) {
+        Text(
+            text = patient.displayName,
+            color = colors.textPrimary,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = meta,
+            color = colors.textSecondary,
+            fontSize = 12.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
