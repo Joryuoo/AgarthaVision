@@ -9,6 +9,7 @@ import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -19,6 +20,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -81,19 +83,22 @@ class OpenVerificationTargetUseCaseTest {
         verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
         x: Float = 320f,
         y: Float = 240f,
+        classLabel: String = "Ascaris",
+        expertClass: String? = null,
+        speciesTouched: Boolean = true,
     ) = DetectionEntity(
         detectionId = detectionIdFor(sampleId, ordinal),
         sampleId = sampleId,
-        classLabel = "Ascaris",
+        classLabel = classLabel,
         confidence = 0.87f,
         bboxX = x,
         bboxY = y,
         bboxW = 40f,
         bboxH = 30f,
         verdict = verdict.value,
-        expertClass = null,
+        expertClass = expertClass,
         verifiedByUser = true,
-        speciesTouched = true,
+        speciesTouched = speciesTouched,
     )
 
     private suspend fun stub(detections: List<DetectionEntity>) {
@@ -298,5 +303,119 @@ class OpenVerificationTargetUseCaseTest {
             val target = useCase(sampleId).getOrThrow()
 
             assertEquals(1, target.frame.predictions.size)
+        }
+
+    // ── Q3 on read-back ──────────────────────────────────────────────────────
+    //
+    // `speciesConfirmed` is not a column. It has to be derived on reopen, and leaving it at its
+    // null default drew every reopened row as "this is NOT an Ascaris egg" with no picker under
+    // it to say otherwise. The trap is the correction: tapping the checkbox sets
+    // `speciesTouched`, so the natural fix writes `species_touched = 1` on a row no human ever
+    // adjudicated - a C7 violation reachable by doing the obvious thing. Hence the pair of
+    // assertions in the first test: the flag must come back true, and `speciesTouched` must not
+    // move with it.
+
+    @Test
+    fun `a species the medtech kept reopens confirmed, and still untouched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // expert_class null and species_touched false: the model said Ascaris, the medtech
+            // submitted without objecting. Exactly the row the field test found broken.
+            stub(listOf(boxDetection(0, speciesTouched = false)))
+
+            val answers = useCase(sampleId).getOrThrow().findings[0].answers
+
+            assertEquals(true, answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertFalse(
+                "Reopening must not turn 'did not object' into 'a human confirmed this'.",
+                answers.speciesTouched,
+            )
+        }
+
+    @Test
+    fun `a species the medtech overrode reopens unconfirmed, so the picker is offered`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(boxDetection(0, expertClass = "Hookworm")))
+
+            val answers = useCase(sampleId).getOrThrow().findings[0].answers
+
+            // False, not null: false is what opens SpeciesDropdown, with their own choice in it.
+            assertEquals(false, answers.speciesConfirmed)
+            assertEquals(EggSpecies.HOOKWORM, answers.species)
+            assertTrue("The override was a deliberate assertion.", answers.speciesTouched)
+        }
+
+    @Test
+    fun `a free-text species reopens as an override rather than as agreement`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Nothing maps "Fasciola hepatica" to an EggSpecies, so it lands on OTHER - which
+            // must not compare equal to the model's Ascaris and read as a confirmation.
+            stub(listOf(boxDetection(0, expertClass = "Fasciola hepatica")))
+
+            val answers = useCase(sampleId).getOrThrow().findings[0].answers
+
+            assertEquals(false, answers.speciesConfirmed)
+            assertEquals(EggSpecies.OTHER, answers.species)
+            assertEquals("Fasciola hepatica", answers.otherSpeciesText)
+        }
+
+    @Test
+    fun `a model class the app cannot map leaves nothing to confirm`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(boxDetection(0, classLabel = "Strongyloides stercoralis")))
+
+            val answers = useCase(sampleId).getOrThrow().findings[0].answers
+
+            // Null, and it must stay null: Q3 never renders, the picker is offered straight
+            // away. This is the one case where the default was right by accident.
+            assertNull(answers.speciesConfirmed)
+        }
+
+    @Test
+    fun `a box the model misplaced still reopens with its species confirmed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Q2 "No" does not short-circuit Q3 - a box in the wrong place still holds a real
+            // egg that has to be named - so the BOX_INCORRECT branch needs the flag too.
+            stub(
+                listOf(
+                    boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT, speciesTouched = false),
+                ),
+            )
+
+            val answers = useCase(sampleId).getOrThrow().findings[0].answers
+
+            assertEquals(false, answers.isBoxCorrect)
+            assertEquals(true, answers.speciesConfirmed)
+            assertFalse(answers.speciesTouched)
+        }
+
+    @Test
+    fun `an added species has nothing to confirm`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // A human assertion with no model claim behind it. Null is correct here and the
+            // sheet relies on it: with no prediction there is no suggestion, so Q3 never
+            // renders and SpeciesDropdown is shown unconditionally.
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertNull(added.answers.speciesConfirmed)
         }
 }
