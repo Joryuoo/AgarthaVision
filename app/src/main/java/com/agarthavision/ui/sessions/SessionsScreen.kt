@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -229,6 +230,12 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // This screen is a drill-down with no tab bar under it, so nothing
+                        // else reserves the system navigation bar's space. Without this the
+                        // button's lower half renders behind the system buttons and they take
+                        // the taps. Inset here rather than on the root Column so the list
+                        // above still scrolls the full height of the screen.
+                        .navigationBarsPadding()
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
