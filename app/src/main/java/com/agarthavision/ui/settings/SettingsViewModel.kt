@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
@@ -44,6 +45,7 @@ data class SettingsUiState(
     val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
     val initialFetchDone: Boolean = true,
+    val lastFetchIncomplete: Boolean = false,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -68,6 +70,7 @@ class SettingsViewModel @Inject constructor(
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val signOutUseCase: SignOutUseCase,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val fetchOutcomeStore: FetchOutcomeStore,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -93,13 +96,19 @@ class SettingsViewModel @Inject constructor(
         identity?.let { initialFetchStateStore.observeCompleted(it.userId) } ?: flowOf(true)
     }
 
+    // Whether the last pull left an entity type unfetched. Read from a store rather than held
+    // here because the pass that fails is usually the worker's, with this screen not in memory.
+    private val lastFetchIncompleteFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { fetchOutcomeStore.observeIncomplete(it.userId) } ?: flowOf(false)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(isSyncingFlow, initialFetchDoneFlow) { s, f -> s to f },
-    ) { identity, online, themeMode, pendingSync, (syncing, initialFetchDone) ->
+        combine(isSyncingFlow, initialFetchDoneFlow, lastFetchIncompleteFlow, ::Triple),
+    ) { identity, online, themeMode, pendingSync, (syncing, initialFetchDone, fetchIncomplete) ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
@@ -109,6 +118,7 @@ class SettingsViewModel @Inject constructor(
             pendingSyncCounts = pendingSync,
             isSyncing = syncing,
             initialFetchDone = initialFetchDone,
+            lastFetchIncomplete = fetchIncomplete,
         )
     }.stateIn(
         scope = viewModelScope,

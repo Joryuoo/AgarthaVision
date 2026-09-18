@@ -405,6 +405,8 @@
     <string name="settings_sync_now">Sync now</string>
     <string name="settings_sync_syncing">Syncing…</string>
     <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
+    <string name="settings_sync_incomplete_badge">Sync incomplete</string>
+    <string name="settings_sync_incomplete">Some data could not be downloaded. Retrying automatically.</string>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>

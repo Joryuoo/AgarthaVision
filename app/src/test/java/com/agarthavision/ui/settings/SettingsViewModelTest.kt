@@ -2,6 +2,7 @@ package com.agarthavision.ui.settings
 
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
@@ -67,6 +68,9 @@ class SettingsViewModelTest {
     private val initialFetchStateStore: InitialFetchStateStore = mock<InitialFetchStateStore>().also {
         whenever(it.observeCompleted(any())).thenReturn(MutableStateFlow(true))
     }
+    private val fetchOutcomeStore: FetchOutcomeStore = mock<FetchOutcomeStore>().also {
+        whenever(it.observeIncomplete(any())).thenReturn(MutableStateFlow(false))
+    }
 
     private fun viewModel() = SettingsViewModel(
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
@@ -78,6 +82,7 @@ class SettingsViewModelTest {
         fetchRemoteDataUseCase = fetchRemoteDataUseCase,
         signOutUseCase = signOutUseCase,
         initialFetchStateStore = initialFetchStateStore,
+        fetchOutcomeStore = fetchOutcomeStore,
     )
 
     @Test
