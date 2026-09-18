@@ -3,6 +3,7 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
@@ -51,6 +52,13 @@ data class VerificationUiState(
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
     val findings: List<Finding> = emptyList(),
+    /**
+     * Which finding the medtech is drawing a box for, or null when nobody is drawing.
+     *
+     * An index rather than a boolean, because a redraw and an Add Egg draw are the same gesture
+     * pointed at different rows, and the frame can only host one at a time.
+     */
+    val drawingFindingIndex: Int? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
@@ -107,6 +115,10 @@ data class VerificationUiState(
             frame == null -> false
             else -> findings.all { it.isComplete }
         }
+
+    /** True while a box is being drawn, which is what dims every existing box on the frame. */
+    val isDrawing: Boolean
+        get() = drawingFindingIndex != null
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -222,6 +234,7 @@ class VerificationViewModel @Inject constructor(
                 currentDetectionIndex = 0,
                 findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
                     ?: frame.initialFindings(),
+                drawingFindingIndex = null,
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = prior?.userNote.orEmpty(),
@@ -252,12 +265,22 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * **A replaced box cannot be told it was placed correctly.**
+     *
+     * Once the medtech has redrawn a box, "yes the model placed it right" is false, and it stays
+     * false — the model did put the box in the wrong place, and a human fixing it does not undo
+     * that. Letting Q2 flip back would leave a detection claiming correct localisation while
+     * carrying the human's geometry, which is exactly the label the drawing feature exists to
+     * produce. Refused silently, because the screen does not offer the affordance on a replaced
+     * row; this is the backstop.
+     */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            if (it.isBoxCorrect == isBoxCorrect) {
-                it
-            } else {
-                it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+            when {
+                it.boxReplaced && isBoxCorrect -> it
+                it.isBoxCorrect == isBoxCorrect -> it
+                else -> it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
             }
         }
     }
@@ -302,6 +325,11 @@ class VerificationViewModel @Inject constructor(
      */
     private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
         eggCount = eggCount,
+        // Geometry is not an answer to any of the questions being cleared. A medtech who redrew
+        // a box and then changed their mind about the species has not un-drawn the box, and
+        // dropping it here would quietly restore the model's own geometry under them.
+        drawnBox = drawnBox,
+        boxReplaced = boxReplaced,
     )
 
     /**
@@ -469,6 +497,54 @@ class VerificationViewModel @Inject constructor(
                 currentFrame = null
                 _events.emit(VerificationEvent.Dismiss)
             }
+        }
+    }
+
+    /**
+     * Starts drawing a box for the finding at [index].
+     *
+     * Two call sites, one capability: replacing the model's box after Q2 is answered "No", and
+     * giving an added egg a box. Both are optional — answering "No" without redrawing is a
+     * complete, valid answer that records a localisation error, and an added egg with no box is
+     * a complete finding whose drawing may be deferred to the Sample Data Screen entirely.
+     */
+    fun onBeginDraw(index: Int) {
+        if (index in _state.value.findings.indices) {
+            _state.update { it.copy(drawingFindingIndex = index) }
+        }
+    }
+
+    fun onCancelDraw() {
+        _state.update { it.copy(drawingFindingIndex = null) }
+    }
+
+    /**
+     * Records a box the medtech drew.
+     *
+     * The geometry arrives already in the model's coordinate space — centre-based pixels in the
+     * source image — from `FrameWithBoxes`. **Nothing is converted here.** If a box lands half
+     * its own size out of place, the bug is in that transform, and patching it at this layer
+     * would hide it behind a second, disagreeing convention.
+     *
+     * Committing a redraw sets Q2 to "No" and latches it there. On an added row there is no Q2
+     * to set: there was never a model box to be wrong about.
+     */
+    fun onBoxDrawn(box: ImageBox) {
+        val index = _state.value.drawingFindingIndex ?: return
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            if (index in updated.indices) {
+                val finding = updated[index]
+                val isRedraw = finding.prediction != null
+                updated[index] = finding.copy(
+                    answers = finding.answers.copy(
+                        drawnBox = box,
+                        isBoxCorrect = if (isRedraw) false else finding.answers.isBoxCorrect,
+                        boxReplaced = isRedraw || finding.answers.boxReplaced,
+                    ),
+                )
+            }
+            current.copy(findings = updated, drawingFindingIndex = null)
         }
     }
 

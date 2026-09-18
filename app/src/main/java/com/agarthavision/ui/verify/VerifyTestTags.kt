@@ -77,6 +77,12 @@ internal object VerifyTestTags {
     const val DRAW_ACCEPT = "draw_accept"
     const val DRAW_CANCEL = "draw_cancel"
 
+    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    const val REDRAW_BOX = "redraw_box"
+
+    /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
+    const val BOX_REPLACED_NOTE = "box_replaced_note"
+
     /**
      * Caution line under the model-output summary, present only when the model named something.
      *
@@ -113,6 +119,9 @@ internal object VerifyTestTags {
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
+
+    /** Draw / redraw affordance on the added finding at [index]. */
+    fun drawBox(index: Int): String = "draw_box_" + index
 
     /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
     fun questionOption(question: String, label: String): String =
