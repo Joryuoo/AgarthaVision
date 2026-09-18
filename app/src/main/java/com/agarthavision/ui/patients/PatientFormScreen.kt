@@ -53,6 +53,7 @@ import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.toOption
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.LocalDate
@@ -346,10 +347,18 @@ private fun BirthdatePickerDialog(
         },
     )
 
+    // Material3 defaults dialogs to shapes.extraLarge, which is this app's 999.dp pill token,
+    // so without this the picker renders as an ellipse. Every other dialog in the app already
+    // passes it -- see the note on DialogShape in Theme.kt, and SingleDatePickerDialog in
+    // DateRangeFilterBar, which this now matches.
     DatePickerDialog(
         onDismissRequest = onDismiss,
+        shape = DialogShape,
         confirmButton = {
             TextButton(
+                // Disabled until a day is picked, matching the Records picker. Previously the
+                // button was always live and simply did nothing when nothing was selected.
+                enabled = pickerState.selectedDateMillis != null,
                 onClick = {
                     pickerState.selectedDateMillis?.let { millis ->
                         onSelected(

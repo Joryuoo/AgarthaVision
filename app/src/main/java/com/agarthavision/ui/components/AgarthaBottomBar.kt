@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -101,10 +102,22 @@ fun AgarthaBottomBar(
         shadowElevation = 0.dp
     ) {
         Column(
-            // Balance the bar: equal padding above and below the tab row. Previously
-            // navigationBarsPadding() dumped the whole system-nav inset below the row with
-            // nothing above it, so the bar read bottom-heavy.
-            modifier = Modifier.padding(vertical = 6.dp)
+            // The navigation-bar inset goes HERE, inside the Surface, and must stay here.
+            //
+            // MainActivity calls enableEdgeToEdge() and the Scaffold zeroes its
+            // contentWindowInsets, so nothing else puts this inset back. Without it the bar
+            // is laid out flush to the bottom of the screen and the system navigation bar --
+            // 47dp of it in three-button mode -- sits on top of the tab row, consuming every
+            // touch before the app sees it. Only a ~21dp strip at the top of the bar stayed
+            // tappable, which read as "the tabs work sometimes".
+            //
+            // Applying it inside the Surface rather than around it is what keeps the earlier
+            // complaint fixed too: the background still paints to the bottom of the screen,
+            // so the area behind the system buttons is bar-coloured instead of a grey gap,
+            // and the row keeps equal 6dp above and below rather than reading bottom-heavy.
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier
