@@ -14,7 +14,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -67,6 +66,11 @@ class VerificationViewModelTest {
             predictions = preds,
         )
     }
+
+    /** A frame whose model class this app cannot map to an EggSpecies, so nothing seeds. */
+    private fun unmappableFrame() = makeFrame(predictions = 1).copy(
+        predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
+    )
 
     private fun makeManualFrame(sampleId: String) =
         makeIdentifiedFrame(sampleId).copy(source = FrameSource.MANUAL, predictions = emptyList())
@@ -140,13 +144,31 @@ class VerificationViewModelTest {
             assertFalse(vm.state.value.isSubmitting)
         }
 
+    /**
+     * The governing principle of the screen, stated as a test.
+     *
+     * Every answer opens pre-filled from model output, so a medtech whose model was right
+     * submits without typing or tapping anything. Ten fields a smear, most of them correct: the
+     * taps this saves are the whole economics of the change.
+     */
     @Test
-    fun `canSubmit is false when answers are incomplete`() =
+    fun `a frame the model got right submits with zero taps`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
+            vm.setFrame(makeFrame(predictions = 3))
             advanceUntilIdle()
+
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `canSubmit is false while a row has no species the app can pre-fill`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // An unmappable model class seeds no species, so the row is genuinely unanswered.
+            val vm = viewModel()
+            vm.setFrame(unmappableFrame())
+            advanceUntilIdle()
+
             assertFalse(vm.state.value.canSubmit)
         }
 
@@ -154,10 +176,24 @@ class VerificationViewModelTest {
     fun `canSubmit is true when all answers are complete`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
+            vm.setFrame(unmappableFrame())
             vm.onQ1Selected(false) // complete after Q1=No
             advanceUntilIdle()
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    /**
+     * A clean field is a real negative result and the most common one in surveillance. It has
+     * nothing to fill in, so it must be recordable as it stands.
+     */
+    @Test
+    fun `a clean field submits as it stands`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.findings.isEmpty())
             assertTrue(vm.state.value.canSubmit)
         }
 
@@ -208,20 +244,36 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
             vm.onSpeciesConfirmed(true)
 
-            vm.onQ2Selected(true)
+            // A genuine change: the box is in the wrong place after all.
+            vm.onQ2Selected(false)
             advanceUntilIdle()
             assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
             assertEquals(null, vm.state.value.findings[0].answers.species)
+        }
 
-            vm.onSpeciesConfirmed(true)
+    /**
+     * Re-affirming an answer a row already holds changes nothing.
+     *
+     * Without this, a stray tap on a pre-filled "Yes" would wipe the pre-filled species beneath
+     * it - clearing later answers is correct when an earlier one *changes*, and this is not a
+     * change. It would hand the medtech back exactly the work the pre-fill saved them.
+     */
+    @Test
+    fun `re-affirming a pre-filled answer keeps the species under it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
             vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
-            assertEquals(null, vm.state.value.findings[0].answers.species)
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertEquals(true, answers.speciesConfirmed)
+            assertTrue(vm.state.value.canSubmit)
         }
 
     @Test
@@ -518,7 +570,7 @@ class VerificationViewModelTest {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             advanceUntilIdle()
 
             val findings = vm.state.value.findings
@@ -532,7 +584,7 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onRemoveFinding(1)
             advanceUntilIdle()
@@ -556,34 +608,81 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `a typed egg count lands on the added finding`() =
+    fun `a typed field total lands on the added species`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
-            vm.onEggCountChanged(1, "4")
+            vm.onFieldTotalChanged(1, "4")
             advanceUntilIdle()
 
             val added = vm.state.value.findings[1].answers
             assertEquals(EggSpecies.HOOKWORM, added.species)
-            assertEquals(4, added.eggCount)
+            assertEquals(4, added.fieldTotal)
             assertEquals(true, added.speciesTouched)
         }
 
     @Test
-    fun `a non-numeric egg count clears rather than crashing`() =
+    fun `a non-numeric field total clears rather than crashing`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
-            vm.onEggCountChanged(1, "4")
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "4")
 
-            vm.onEggCountChanged(1, "abc")
+            vm.onFieldTotalChanged(1, "abc")
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[1].answers.eggCount)
+            assertNull(vm.state.value.findings[1].answers.fieldTotal)
+        }
+
+    @Test
+    fun `the total is taken as typed, not clamped up to the floor`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The floor is usually above the first digit of the number being typed - heading
+            // for 23 against nine boxed eggs, a clamp would snap "2" to 9 and the 3 would land
+            // on the wrong number. Submit holds instead, and says why.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
+
+            vm.onFieldTotalChanged(2, "1")
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings[2].answers.fieldTotal)
+            assertFalse(
+                "One egg is fewer than the two boxes already kept for this species.",
+                vm.state.value.canSubmit,
+            )
+
+            vm.onFieldTotalChanged(2, "12")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `naming a species another card already holds merges the two`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // sample_species_findings is unique on (sample_id, species) and the detection ids
+            // derive from the species, so two cards naming one species have nowhere separate to
+            // be stored - and the reopen path brought them back merged anyway.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals("The two cards became one.", 1, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
         }
 
     @Test
@@ -606,20 +705,40 @@ class VerificationViewModelTest {
 
     // Where the species comes from, and the provenance it needs (86d4ab4tq / 86d4auj84)
 
+    /**
+     * A box opens fully pre-filled, and **untouched**.
+     *
+     * Both halves matter. The pre-fill is what lets a correct model cost zero taps; the untouched
+     * flag is what keeps that from entering the retraining corpus as a human judgement. A seeded
+     * species is the model's own answer sitting in the slot a human answer is read from, and
+     * `species_touched` is the only thing that tells the two apart.
+     */
     @Test
-    fun `a box opens with no species filled in`() =
+    fun `a box opens pre-filled from the model, and untouched`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // The sheet used to pre-fill the model's class here and flag it untouched. That
-            // was replaced by the explicit "is this egg <species>?" step, which solves the
-            // same problem - the medtech does not retype what the model got right - without
-            // ever putting an unreviewed model answer where a human answer is read from.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
-            assertEquals(null, answers.species)
-            assertFalse(answers.speciesTouched)
+            assertEquals(true, answers.isEgg)
+            assertEquals(true, answers.isBoxCorrect)
+            assertEquals(true, answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertFalse("Nobody has agreed with this yet.", answers.speciesTouched)
+        }
+
+    @Test
+    fun `confirming a pre-filled species is what marks it touched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            assertFalse(vm.state.value.findings[0].answers.speciesTouched)
+
+            vm.onSpeciesConfirmed(true)
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.findings[0].answers.speciesTouched)
         }
 
     @Test
@@ -646,15 +765,13 @@ class VerificationViewModelTest {
     @Test
     fun `changing an earlier answer clears the species rather than re-seeding it`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Re-seeding from the model here would answer the confirm question on the
-            // medtech's behalf - the one thing that step exists to stop.
+            // Re-seeding from the model here would answer the confirm question on the medtech's
+            // behalf a second time, after they have told the screen the box is wrong.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
             vm.onSpeciesConfirmed(true)
 
-            vm.onQ1Selected(true)
+            vm.onQ1Selected(false)
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
@@ -668,8 +785,6 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
 
             vm.onSpeciesSelected(EggSpecies.TRICHURIS)
             vm.onSpeciesSelected(EggSpecies.ASCARIS)
@@ -681,17 +796,114 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `an unrecognised model class pre-fills nothing`() =
+    fun `an unrecognised model class pre-fills no species, but still pre-fills the box`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
-            // fill, so it would look answered while being incomplete.
+            // fill, so it would look answered while being incomplete. The box questions are
+            // still pre-filled - the model did draw a box, whatever it called what is in it.
             val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1).copy(
-                predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
-            ))
+            vm.setFrame(unmappableFrame())
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[0].answers.species)
+            val answers = vm.state.value.findings[0].answers
+            assertNull(answers.species)
+            assertNull("Nothing to confirm, so the picker is offered directly.", answers.speciesConfirmed)
+            assertEquals(true, answers.isEgg)
+            assertEquals(true, answers.isBoxCorrect)
+        }
+
+    // Q4, derived rather than asked
+
+    @Test
+    fun `a frame the medtech added nothing to did not miss an egg`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
+        }
+
+    @Test
+    fun `a species the boxes already account for is not a miss`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // One Ascaris boxed, and the medtech says there is one Ascaris in the field. They
+            // agree, so nothing was missed - the row exists but claims no unboxed egg.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
+        }
+
+    @Test
+    fun `adding an egg the model never boxed is what says it missed one`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.missedEgg)
+        }
+
+    @Test
+    fun `taking the added egg away again says it did not`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            assertEquals(true, vm.state.value.missedEgg)
+
+            vm.onRemoveFinding(1)
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
+        }
+
+    /**
+     * The case a total comparison gets wrong.
+     *
+     * Rejecting one of the model's boxes and adding an egg it missed nets out to the same egg
+     * count, while both things are true. Q4 is read off the added rows rather than off the
+     * totals precisely so this does not silently report that nothing was missed.
+     */
+    @Test
+    fun `a rejected box and an added egg still report a miss`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onQ1Selected(false)
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.missedEgg)
+        }
+
+    /**
+     * There is no model claim on a frame captured with the container unreachable, so there is
+     * nothing for it to have missed. Null, not false: `samples.needs_reannotation` is nullable
+     * for exactly this, and false would assert something about a model that never ran.
+     */
+    @Test
+    fun `a frame with no model output has no missed-egg answer at all`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeManualFrame("sample-manual"))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.missedEgg)
         }
 
 

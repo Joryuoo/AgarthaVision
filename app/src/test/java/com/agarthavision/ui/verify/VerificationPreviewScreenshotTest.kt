@@ -96,7 +96,6 @@ class VerificationPreviewScreenshotTest {
         onSpeciesConfirmed = {},
         onSpeciesSelected = {},
         onOtherSpeciesChanged = {},
-        onQ4Selected = {},
         onDetectionPrev = {},
         onDetectionNext = {},
         onFramePrev = {},
@@ -106,15 +105,14 @@ class VerificationPreviewScreenshotTest {
         onSubmit = {},
         onCancel = {},
         onUserNoteChanged = {},
-        onAddFinding = {},
+        onAddSpecies = {},
         onRemoveFinding = {},
-        onEggCountChanged = { _, _ -> },
+        onFieldTotalChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },
-        onManualNoDetectionSelected = {},
-        onManualSpeciesToggled = { _, _ -> },
-        onManualCountChanged = { _, _ -> },
-        onManualOtherNameChanged = {},
+        onBeginDraw = { _, _ -> },
+        onBoxDrawn = {},
+        onCancelDraw = {},
     )
 
     @Test

@@ -16,40 +16,35 @@ import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.components.SkeletonBox
 
 /**
- * Loading placeholder for [SampleDetailScreen]. Mirrors the loaded layout — nav bar,
- * segmented control, square image card, metadata strip — with shimmer stencils, so the
- * screen keeps its shape on resume instead of flashing a blank white spinner.
+ * Loading placeholder for [SampleDetailScreen].
+ *
+ * Mirrors the loaded layout — nav bar, square frame, a few detection rows — so the screen keeps
+ * its shape on resume instead of flashing a blank spinner. The segmented control it used to
+ * stencil is gone with the tabs: there is one screen now, not three.
  */
 @Composable
 fun SampleDetailSkeleton(onBack: () -> Unit) {
-    SampleDetailNavBar(title = "", onBack = onBack)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 80.dp),
-    ) {
-        // Segmented-control-height placeholder
-        SkeletonBox(
-            modifier = Modifier.fillMaxWidth().height(40.dp),
-            shape = RoundedCornerShape(0.dp),
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+        SampleDetailNavBar(title = "", onBack = onBack)
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 16.dp)
-                .padding(horizontal = 18.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            // Square image-card placeholder
             SkeletonBox(
                 modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                 shape = RoundedCornerShape(16.dp),
             )
-            // Metadata strip placeholder
-            SkeletonBox(
-                modifier = Modifier.fillMaxWidth().height(72.dp),
-                shape = RoundedCornerShape(12.dp),
-            )
+            repeat(SKELETON_DETECTION_ROWS) {
+                SkeletonBox(
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                )
+            }
         }
     }
 }
+
+/** Enough rows to read as a list without claiming a count the sample may not have. */
+private const val SKELETON_DETECTION_ROWS = 3
