@@ -60,7 +60,7 @@ class DetectionDaoOwnerVisibilityTest {
     private suspend fun seedData(): String {
         seedPatient()
         val sessionId = "session-1"
-        sessionDao.insertSession(
+        sessionDao.upsertSession(
             SessionEntity(
                 sessionId = sessionId,
                 userId = "user-a",
@@ -71,11 +71,11 @@ class DetectionDaoOwnerVisibilityTest {
         )
 
         // sample owned by user-a
-        sampleDao.insertSample(confirmedSample(id = "smp-a",       sessionId = sessionId, userId = "user-a"))
+        sampleDao.upsertSample(confirmedSample(id = "smp-a",       sessionId = sessionId, userId = "user-a"))
         // sample owned by user-b
-        sampleDao.insertSample(confirmedSample(id = "smp-b",       sessionId = sessionId, userId = "user-b"))
+        sampleDao.upsertSample(confirmedSample(id = "smp-b",       sessionId = sessionId, userId = "user-b"))
         // unowned sample
-        sampleDao.insertSample(confirmedSample(id = "smp-unowned", sessionId = sessionId, userId = null))
+        sampleDao.upsertSample(confirmedSample(id = "smp-unowned", sessionId = sessionId, userId = null))
 
         detectionDao.insertDetection(confirmedDetection(id = "det-a",       sampleId = "smp-a"))
         detectionDao.insertDetection(confirmedDetection(id = "det-b",       sampleId = "smp-b"))

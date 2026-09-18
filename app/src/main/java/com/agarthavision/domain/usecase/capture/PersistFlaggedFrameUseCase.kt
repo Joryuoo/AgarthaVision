@@ -38,7 +38,7 @@ class PersistFlaggedFrameUseCase @Inject constructor(
             FrameSource.MODEL -> frame.inferenceModelVersion ?: "unknown"
         }
 
-        sampleDao.insertSample(
+        sampleDao.upsertSample(
             SampleEntity(
                 sampleId = sampleId,
                 sessionId = frame.sessionId,

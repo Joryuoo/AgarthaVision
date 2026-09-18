@@ -55,7 +55,7 @@ class SampleSessionForeignKeyTest {
     fun `a sample cannot be inserted for a session that does not exist`() = runTest {
         // The whole point of the key. Before Room 16 this insert succeeded and left an orphan
         // that every query not joining sessions would happily return.
-        val error = runCatching { sampleDao.insertSample(sample(sessionId = "no-such-session")) }
+        val error = runCatching { sampleDao.upsertSample(sample(sessionId = "no-such-session")) }
             .exceptionOrNull()
 
         assertTrue(
@@ -67,7 +67,7 @@ class SampleSessionForeignKeyTest {
     @Test
     fun `deleting a session that still owns samples is refused rather than cascading`() = runTest {
         seedSession()
-        sampleDao.insertSample(sample(sessionId = SESSION_ID))
+        sampleDao.upsertSample(sample(sessionId = SESSION_ID))
 
         // NO_ACTION, not CASCADE, and deliberately so: a cascade would take the sample and its
         // detections with the session, which is what C8 and docs/non-negotiables.md forbid. The
@@ -85,7 +85,7 @@ class SampleSessionForeignKeyTest {
     fun `a sample inserts normally once its session exists`() = runTest {
         seedSession()
 
-        sampleDao.insertSample(sample(sessionId = SESSION_ID))
+        sampleDao.upsertSample(sample(sessionId = SESSION_ID))
 
         assertEquals(1, sampleDao.getSamplesPendingSyncIncludingDeleted(USER_ID).size)
     }
@@ -109,7 +109,7 @@ class SampleSessionForeignKeyTest {
                 updatedAt = 1_000L,
             ),
         )
-        sessionDao.insertSession(
+        sessionDao.upsertSession(
             SessionEntity(
                 sessionId = SESSION_ID,
                 userId = USER_ID,
