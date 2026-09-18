@@ -49,6 +49,14 @@ interface ReportDao {
     )
     suspend fun getReportsPendingSync(userId: String): List<ReportEntity>
 
+    /**
+     * Hard-deletes a report. Called only for one that never reached Supabase, when its author
+     * signs out — see `DiscardUnsyncedDataUseCase`. Outside C8's scope: a report is a rendering
+     * of findings, not the findings themselves, and nothing hangs off this row.
+     */
+    @Query("DELETE FROM reports WHERE report_id = :reportId")
+    suspend fun deleteReport(reportId: String)
+
     @Query("UPDATE reports SET supabase_status = :status WHERE report_id = :reportId")
     suspend fun updateSupabaseStatus(reportId: String, status: String)
 

@@ -112,6 +112,16 @@ interface PatientDao {
     suspend fun getPatientsPendingSync(userId: String): List<PatientEntity>
 
     /**
+     * Hard-deletes a patient and, by cascade, its `patient_users` links.
+     *
+     * `sessions.patient_id` is NO_ACTION rather than CASCADE, so a patient that still owns a
+     * session cannot be deleted — SQLite raises a constraint violation. The caller checks
+     * first; see `DiscardUnsyncedDataUseCase`.
+     */
+    @Query("DELETE FROM patients WHERE patient_id = :patientId")
+    suspend fun deletePatient(patientId: String)
+
+    /**
      * Live count of this medtech's patients awaiting upload. Drives the Settings
      * Data & Sync section, alongside the session, sample and report rows.
      *

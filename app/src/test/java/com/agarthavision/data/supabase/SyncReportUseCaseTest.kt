@@ -77,6 +77,10 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
 
     fun statusOf(reportId: String): String? = rows[reportId]?.supabaseStatus
 
+    override suspend fun deleteReport(reportId: String) {
+        rows.remove(reportId)
+    }
+
     override suspend fun insertReport(report: ReportEntity) {
         rows[report.reportId] = report
     }

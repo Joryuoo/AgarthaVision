@@ -93,6 +93,21 @@ interface SessionDao {
     )
     suspend fun getSessionsPendingSync(userId: String): List<SessionEntity>
 
+    /**
+     * Hard-deletes a session and, by cascade, its reports (`ReportEntity` declares
+     * `onDelete = CASCADE`).
+     *
+     * **Samples are deliberately untouched.** `SampleEntity` declares no foreign key to
+     * `sessions` at all, so nothing cascades into the verified samples and detections that C8
+     * protects. Sign-out tombstones those separately rather than deleting them.
+     */
+    @Query("DELETE FROM sessions WHERE session_id = :sessionId")
+    suspend fun deleteSession(sessionId: String)
+
+    /** Sessions still attached to a patient, used to keep a delete off a NO_ACTION foreign key. */
+    @Query("SELECT COUNT(*) FROM sessions WHERE patient_id = :patientId")
+    suspend fun countSessionsForPatient(patientId: String): Int
+
     /** Updates the Room-only cloud sync status for a session. Per ADR-007. */
     @Query("UPDATE sessions SET supabase_status = :status WHERE session_id = :sessionId")
     suspend fun updateSupabaseStatus(sessionId: String, status: String)

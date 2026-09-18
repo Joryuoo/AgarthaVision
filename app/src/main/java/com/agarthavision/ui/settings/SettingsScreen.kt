@@ -81,7 +81,7 @@ fun SettingsScreen(
 
     if (showSignOutDialog) {
         SignOutConfirmDialog(
-            pendingCount = state.pendingSyncCounts.totalPending,
+            unsyncedCount = state.pendingSyncCounts.totalUnsynced,
             onConfirm = {
                 showSignOutDialog = false
                 viewModel.onSignOut()
@@ -159,7 +159,7 @@ private fun SettingsContent(
 
 @Composable
 private fun SignOutConfirmDialog(
-    pendingCount: Int,
+    unsyncedCount: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -170,8 +170,8 @@ private fun SignOutConfirmDialog(
         title = { Text(stringResource(R.string.settings_sign_out_dialog_title)) },
         text = {
             Text(
-                if (pendingCount > 0) {
-                    stringResource(R.string.settings_sign_out_dialog_body_pending, pendingCount)
+                if (unsyncedCount > 0) {
+                    stringResource(R.string.settings_sign_out_dialog_body_pending, unsyncedCount)
                 } else {
                     stringResource(R.string.settings_sign_out_dialog_body_synced)
                 },
@@ -179,7 +179,14 @@ private fun SignOutConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.settings_sign_out_dialog_confirm), color = colors.danger)
+                // Names the consequence when there is one to name. A medtech who is fully
+                // synced is not losing anything and should not be warned as though they are.
+                val confirm = if (unsyncedCount > 0) {
+                    R.string.settings_sign_out_dialog_confirm_discard
+                } else {
+                    R.string.settings_sign_out_dialog_confirm
+                }
+                Text(stringResource(confirm), color = colors.danger)
             }
         },
         dismissButton = {

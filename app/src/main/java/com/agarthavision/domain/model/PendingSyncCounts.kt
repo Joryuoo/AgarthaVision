@@ -21,6 +21,13 @@ data class PendingSyncCounts(
     val totalPending: Int
         get() = pendingPatients + pendingSessions + pendingSamples + pendingReports
 
+    /**
+     * Rows that have not reached the central database - those still queued and those whose
+     * upload already failed. What sign-out warns about and discards, so the two cannot drift.
+     */
+    val totalUnsynced: Int
+        get() = totalPending + failed
+
     /** True when nothing is pending and nothing has failed. */
     val allSynced: Boolean
         get() = totalPending == 0 && failed == 0

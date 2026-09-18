@@ -386,8 +386,9 @@
     <string name="settings_sign_out">Sign out</string>
     <string name="settings_sign_out_dialog_title">Sign out?</string>
     <string name="settings_sign_out_dialog_body_synced">You will need to sign in again to upload future sessions.</string>
-    <string name="settings_sign_out_dialog_body_pending">%1$d item(s) not yet uploaded — they stay on this device and upload the next time this account signs in.</string>
+    <string name="settings_sign_out_dialog_body_pending">%1$d item(s) have not reached the central database. Signing out discards them — they will never be uploaded. This cannot be undone.</string>
     <string name="settings_sign_out_dialog_confirm">Sign out</string>
+    <string name="settings_sign_out_dialog_confirm_discard">Discard &amp; sign out</string>
     <string name="settings_sign_out_dialog_cancel">Cancel</string>
     <string name="settings_sign_out_blocked">%1$s</string>
     <string name="settings_connectivity_online">Online</string>
