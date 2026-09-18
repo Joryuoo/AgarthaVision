@@ -124,26 +124,17 @@ as working.
   (`ui/records/RecordsScreen.kt`, `domain/usecase/records/GetRecordsUseCase.kt`).
   Records reads unowned local data the same way Sessions and Verify do — no sign-in required.
   Report generation still requires a cached local identity.
-- **Session detail** with per-species counts and EPG (`ui/records/SessionDetailViewModel.kt`).
+- **Session detail** with per-species counts and LPF density (`ui/records/SessionDetailViewModel.kt`).
   Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
   is absent or belongs to a different account.
-- **Non-diagnostic infectivity indicator** on Session Detail's EPG card: a Low/Moderate badge or
-  an Extreme physician-consult alert, computed in `SessionEggCountUseCase` via the pure
-  `InfectivityLevelCalculator` (`domain/usecase/reports/InfectivityLevelCalculator.kt`) against
-  WHO Kato-Katz per-species EPG cutoffs — population-surveillance cutoffs, **pending clinical
-  sign-off (Dr. Bayron)**, not yet a validated diagnostic threshold. `EggSpecies.OTHER`/
-  unrecognized species are excluded from the tier (no WHO table exists for them); zero confirmed
-  eggs shows no badge at all (a true negative, not "Low"). The mandatory disclaimer
-  (`session_detail_infectivity_disclaimer`) renders alongside every tier, never just Extreme.
-  UI: `ui/records/InfectivityBadge.kt`, wired into `EpgHeroCard`
-  (`ui/records/SessionDetailScreen.kt`).
+- **LPF Density** is the primary reported unit (Philippine Direct Smear method). It is calculated
+  per species as the mean egg count across all fields examined in a session, reported alongside
+  the observed range (min-max). Denominator is the total count of recorded frames, including
+  clean ones.
+  (`ui/records/SessionDetailScreen.kt:LpfHeroCard`, `domain/usecase/reports/SessionEggCountUseCase.kt`).
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
-- **EPG** = confirmed egg count × 24 (Kato-Katz multiplier), repeats excluded
-  (`core/util/EpgCalculator.kt:12-17`, `data/local/dao/DetectionDao.kt:33-52`). Pending
-  replacement by LPF (Low Power Field) density under ticket 86d4a6jxw — every report
-  surface below still reports EPG until that lands.
 - **Persisted session reports** in Room and Supabase, multiple per session, newest first.
   Row-only sync — the CSV and PDF files themselves stay on the device
   (`domain/usecase/records/GenerateSessionReportUseCase.kt:37-97`,

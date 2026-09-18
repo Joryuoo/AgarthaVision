@@ -15,5 +15,5 @@ data class ReportMetadata(
     val totalSamples: Int,
     val totalEggsConfirmed: Int,
     val positiveSpecies: List<String>,
-    val epgPerSpecies: Map<String, Int>,
+    val lpfPerSpecies: Map<String, LpfDensity>,
 )

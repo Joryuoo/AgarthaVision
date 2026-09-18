@@ -226,6 +226,10 @@ class AgarthaDatabaseSchemaTest {
             "reports.pdf_file_path is missing — staging's v9 was lost in the merge.",
             columnsOf("reports").contains("pdf_file_path"),
         )
+        assertTrue(
+            "reports.lpf_per_species_json is missing — ticket 86d4a6jxw replacement of EPG failed.",
+            columnsOf("reports").contains("lpf_per_species_json"),
+        )
     }
 
     private fun tables(): List<String> =
@@ -260,6 +264,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 14
+        private const val EXPECTED_VERSION = 15
     }
 }

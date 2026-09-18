@@ -42,7 +42,7 @@ data class DashboardUiState(
     val dateString: String = "Wednesday, May 28 · Day 12", // mocked date for now
     val activeSession: ActiveSessionState? = null,
     val kpis: KpiState = KpiState(),
-    val epgSparklineData: List<Float> = emptyList(), // Array of exactly 7 items
+    val eggsSparklineData: List<Float> = emptyList(), // Array of exactly 7 items
     val topSpecies: List<SpeciesData> = emptyList(),
     val pendingReviewCount: Int = 0,
     val oldestPendingAgo: String = "",
@@ -66,7 +66,7 @@ data class ActiveSessionState(
     val updatedAtAgo: String,
     val totalFrames: String,
     val verifiedFrames: String,
-    val totalEpg: String,
+    val totalEggs: String,
     val pendingFrames: String,
 )
 
@@ -74,7 +74,7 @@ data class KpiState(
     val sessionsCount: String = "0",
     val samplesCount: String = "0",
     val verifiedRatio: String = "0%",
-    val epgAvgStatus: String = "Normal"
+    val eggsAvgStatus: String = "Normal"
 )
 
 data class SpeciesData(
@@ -142,8 +142,8 @@ class DashboardViewModel @Inject constructor(
                     verifiedRatio = verifiedRatio,
                     // Non-diagnostic wording only — "Heavy"/"Light" read as WHO clinical
                     // intensity tiers, which this sample-count heuristic is not. This does not
-                    // touch the separate totalEpg=0 mock bug in activeSessionStateFlow below.
-                    epgAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
+                    // touch the separate totalEggsCount=0 mock bug in activeSessionStateFlow below.
+                    eggsAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
                 )
             }
         }
@@ -240,14 +240,14 @@ class DashboardViewModel @Inject constructor(
                         val totalFrames = samples.size
                         val verifiedFrames = samples.count { it.verifiedAt > 0 }
                         val pendingFrames = totalFrames - verifiedFrames
-                        val totalEpg = 0 // Mocked for now, requires deeper join
+                        val totalEggsCount = 0 // Mocked for now, requires deeper join
 
                         ActiveSessionState(
                             label = state.session.label ?: "Active Session",
                             updatedAtAgo = updatedAgoLabel(lastUpdated, now),
                             totalFrames = totalFrames.toString(),
                             verifiedFrames = verifiedFrames.toString(),
-                            totalEpg = totalEpg.toString(), // Mocked
+                            totalEggs = totalEggsCount.toString(), // Mocked
                             pendingFrames = pendingFrames.toString()
                         )
                     }
@@ -348,7 +348,7 @@ class DashboardViewModel @Inject constructor(
             syncedSamplesCount  = pendingSync.syncedSamplesCount,
             activeSession       = activeSession,
             topSpecies          = topSpecies,
-            epgSparklineData    = sparkline,
+            eggsSparklineData    = sparkline,
             isDarkMode          = themeMode == ThemeMode.DARK,
             isSignedIn          = isSignedIn,
             isOffline           = isOffline,

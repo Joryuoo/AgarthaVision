@@ -163,7 +163,7 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                     borderColor = colors.border,
                 ),
                 modifier = Modifier.weight(1f))
-            KpiTile("EPG avg", kpis.epgAvgStatus, trend = null,
+            KpiTile("Eggs avg", kpis.eggsAvgStatus, trend = null,
                 colors = KpiTileColors(
                     bgColor = colors.gold,
                     contentColor = colors.onGold,

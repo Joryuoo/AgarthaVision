@@ -41,6 +41,13 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * (`0012_polyparasitism_findings.sql`) plus `samples.deleted_at`
  * (`0013_sample_soft_delete.sql`).
  *
+ * **Two branches minted a version 13.** `staging` used it for the LPF density work
+ * (86d4a6jxw), which replaces `reports.epg_per_species_json` with `lpf_per_species_json`;
+ * this branch used it for the patient schema. The exported `13.json` here is the patient
+ * one, because that is the lineage this branch continues; the LPF column arrives below at
+ * version 15, where the two lines meet. Neither 13 ever reached a release build, so no
+ * device carries the other hash.
+ *
  * Version 13 is the patient-based schema (`0001_init.sql` on the new `agarthavision`
  * project). It adds `patients` and the `patient_users` join, gives `sessions` a
  * `patient_id`, and drops five columns: `sessions.ended_at`, `sessions.notes`,
@@ -50,6 +57,11 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * Version 14 adds `species_suggestions`, the offline index behind the "Other species"
  * field (PB-08b). Like `psgc_barangays` it has no Supabase mirror — it is derived locally
  * from rows the device already holds.
+ *
+ * Version 15 carries `reports.lpf_per_species_json` in from `staging` (86d4a6jxw) — the
+ * per-species min-max larvae-per-field range that replaced EPG for direct smear. It is a
+ * new number rather than a reshaped 14 for the reason immediately below: 14 is already
+ * committed and installed, and changing its shape in place is the collision, not the bump.
  *
  * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
  * already committed and on devices. Adding a table without changing the number is precisely
@@ -90,7 +102,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

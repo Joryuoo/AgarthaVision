@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
@@ -74,7 +75,9 @@ class ReportCsvBuilderTest {
             totalSamples = 2,
             totalEggsConfirmed = 3,
             positiveSpecies = listOf("Ascaris lumbricoides"),
-            epgPerSpecies = mapOf("Ascaris lumbricoides" to 24),
+            lpfPerSpecies = mapOf(
+                "Ascaris lumbricoides" to LpfDensity(mean = 1.5f, min = 1, max = 2)
+            ),
         )
         val csv = builder.build(
             metadata = metadata,
@@ -95,9 +98,12 @@ class ReportCsvBuilderTest {
             # total_samples: 2
             # total_eggs_confirmed: 3
             # positive_species: Ascaris lumbricoides
-            # epg_ascaris_lumbricoides: 24
-            # epg_trichuris_trichiura: 0
-            # epg_hookworm: 0
+            # lpf_mean_ascaris_lumbricoides: 1.5
+            # lpf_range_ascaris_lumbricoides: 1-2
+            # lpf_mean_trichuris_trichiura: 0.0
+            # lpf_range_trichuris_trichiura: 0-0
+            # lpf_mean_hookworm: 0.0
+            # lpf_range_hookworm: 0-0
 
             sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,is_manual,user_note,model_version
             sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,false,"note,one",model-1

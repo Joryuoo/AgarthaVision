@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
@@ -20,8 +21,6 @@ private const val SAMPLE_VERIFIED_AT = 2_000L
 private const val GENERATED_AT_MILLIS = 30_000L
 private const val TOTAL_SAMPLES = 2
 private const val TOTAL_EGGS_CONFIRMED = 3
-private const val ASCARIS_EPG = 48
-private const val TRICHURIS_EPG = 24
 private const val SAMPLE_CONFIDENCE = 0.91f
 private const val SAMPLE_BBOX_X = 0.1f
 private const val SAMPLE_BBOX_Y = 0.2f
@@ -87,10 +86,10 @@ class ReportPdfBuilderTest {
             positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             // Deliberately unsorted, plus a non-egg finding, to prove buildSpeciesRows both
             // sorts and filters down to recognized egg species only.
-            epgPerSpecies = mapOf(
-                "Trichuris trichiura" to TRICHURIS_EPG,
-                "Ascaris lumbricoides" to ASCARIS_EPG,
-                "Mucus" to 1,
+            lpfPerSpecies = mapOf(
+                "Trichuris trichiura" to LpfDensity(mean = 0.5f, min = 0, max = 1),
+                "Ascaris lumbricoides" to LpfDensity(mean = 1.0f, min = 0, max = 2),
+                "Mucus" to LpfDensity(mean = 1.0f, min = 1, max = 1),
             ),
         )
 
@@ -113,8 +112,8 @@ class ReportPdfBuilderTest {
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             ),
             speciesRows = listOf(
-                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", epg = ASCARIS_EPG),
-                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", epg = TRICHURIS_EPG),
+                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", mean = 1.0f, min = 0, max = 2),
+                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", mean = 0.5f, min = 0, max = 1),
             ),
         )
         assertEquals(expected, document)
@@ -138,10 +137,10 @@ class ReportPdfBuilderTest {
             totalSamples = 1,
             totalEggsConfirmed = 0,
             positiveSpecies = emptyList(),
-            epgPerSpecies = mapOf(
-                "Mucus" to 5,
-                "Blood" to 2,
-                "WBC" to 1,
+            lpfPerSpecies = mapOf(
+                "Mucus" to LpfDensity(5f, 5, 5),
+                "Blood" to LpfDensity(2f, 2, 2),
+                "WBC" to LpfDensity(1f, 1, 1),
             ),
         )
 

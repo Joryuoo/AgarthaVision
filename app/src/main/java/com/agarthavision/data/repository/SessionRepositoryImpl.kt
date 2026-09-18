@@ -34,7 +34,7 @@ class SessionRepositoryImpl @Inject constructor(
                     totalSamples = item.totalSamples,
                     verifiedSamples = item.verifiedSamples,
                     unverifiedSamples = item.unverifiedSamples,
-                    totalEpg = item.totalEpg
+                    totalEggs = item.totalEggs
                 )
             }
         }
@@ -68,7 +68,7 @@ class SessionRepositoryImpl @Inject constructor(
                         totalSamples = row.totalSamples,
                         verifiedSamples = 0,
                         unverifiedSamples = 0,
-                        totalEpg = row.totalEpg,
+                        totalEggs = row.totalEggs,
                     )
                 }
             }
@@ -85,7 +85,7 @@ class SessionRepositoryImpl @Inject constructor(
                 RecordsTotals(
                     sessionCount = row.sessionCount,
                     totalSamples = row.totalSamples,
-                    totalEpg = row.totalEpg,
+                    totalEggs = row.totalEggs,
                 )
             }
 
@@ -118,7 +118,7 @@ class SessionRepositoryImpl @Inject constructor(
                         totalSamples = item.totalSamples,
                         verifiedSamples = item.verifiedSamples,
                         unverifiedSamples = item.unverifiedSamples,
-                        totalEpg = item.totalEpg,
+                        totalEggs = item.totalEggs,
                     )
                 }
             }

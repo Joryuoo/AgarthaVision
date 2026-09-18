@@ -57,9 +57,10 @@ class ReportCsvBuilder @Inject constructor() {
         EggSpecies.entries
             .mapNotNull { it.canonicalClass }
             .forEach { canonical ->
-                val key = canonical.toEpgHeaderKey()
-                val value = metadata.epgPerSpecies[canonical] ?: 0
-                headerLines += "# $key: $value"
+                val density = metadata.lpfPerSpecies[canonical]
+                val key = canonical.toLpfHeaderKey()
+                headerLines += "# lpf_mean_$key: ${density?.mean ?: 0.0f}"
+                headerLines += "# lpf_range_$key: ${density?.min ?: 0}-${density?.max ?: 0}"
             }
         return headerLines
     }
@@ -90,9 +91,9 @@ class ReportCsvBuilder @Inject constructor() {
     private fun String.needsCsvQuotes(): Boolean =
         any { it in CSV_QUOTED_CHARS }
 
-    private fun String.toEpgHeaderKey(): String {
+    private fun String.toLpfHeaderKey(): String {
         val slug = lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-        return "epg_$slug"
+        return slug
     }
 
     private companion object {

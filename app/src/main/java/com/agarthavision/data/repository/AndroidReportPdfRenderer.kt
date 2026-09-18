@@ -127,18 +127,19 @@ class AndroidReportPdfRenderer @Inject constructor(
 
         val headerPaint = paintFor(PdfTextStyle.TABLE_HEADER)
         canvas.drawText(context.getString(R.string.report_pdf_column_species), MARGIN, y, headerPaint)
-        canvas.drawText(context.getString(R.string.report_pdf_column_epg), EPG_COLUMN_X, y, headerPaint)
+        canvas.drawText(context.getString(R.string.report_pdf_column_lpf), LPF_COLUMN_X, y, headerPaint)
         y += LINE_HEIGHT
 
         val rowPaint = paintFor(PdfTextStyle.VALUE)
         rows.forEach { row ->
             canvas.drawText(row.speciesDisplayName, MARGIN, y, rowPaint)
-            canvas.drawText(row.epg.toString(), EPG_COLUMN_X, y, rowPaint)
+            val densityText = "%.2f (%d-%d)".format(row.mean, row.min, row.max)
+        canvas.drawText(densityText, LPF_COLUMN_X, y, rowPaint)
             y += LINE_HEIGHT
         }
 
         y += UNIT_NOTE_GAP
-        canvas.drawText(context.getString(R.string.report_pdf_epg_unit_note), MARGIN, y, paintFor(PdfTextStyle.NOTE))
+        canvas.drawText(context.getString(R.string.report_pdf_lpf_unit_note), MARGIN, y, paintFor(PdfTextStyle.NOTE))
     }
 
     /**
@@ -207,7 +208,7 @@ class AndroidReportPdfRenderer @Inject constructor(
 
         private const val MARGIN = 40f
         private const val LABEL_COLUMN_WIDTH = 160f
-        private const val EPG_COLUMN_X = 300f
+        private const val LPF_COLUMN_X = 300f
         private const val LINE_HEIGHT = 22f
         private const val SECTION_GAP = 16f
         private const val UNIT_NOTE_GAP = 10f
