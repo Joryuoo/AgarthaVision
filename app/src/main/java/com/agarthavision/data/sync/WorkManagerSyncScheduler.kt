@@ -6,7 +6,6 @@ import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.agarthavision.domain.sync.SyncScheduler
@@ -77,9 +76,13 @@ class WorkManagerSyncScheduler @Inject constructor(
             // case this exists for, and the payload is rows, not images.
             Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build(),
         )
-        // Expedited when the quota allows, an ordinary job when it does not. The fallback is
-        // required: without it an out-of-quota request throws instead of queueing.
-        .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+        // Deliberately NOT expedited. Below API 31 WorkManager implements an expedited
+        // request as a foreground service and calls getForegroundInfo(), whose
+        // CoroutineWorker default throws IllegalStateException("Not implemented"). minSdk is
+        // 26 and the fleet runs Android 11, so setExpedited killed every pass on every device
+        // that matters, before a single row was pushed - and a foreground service is the one
+        // thing the class comment above rules out. An ordinary job is also the honest shape:
+        // nothing on screen waits for a sync.
         .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_SECONDS, TimeUnit.SECONDS)
         .build()
 
