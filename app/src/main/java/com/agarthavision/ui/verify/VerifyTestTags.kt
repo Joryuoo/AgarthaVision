@@ -70,6 +70,13 @@ internal object VerifyTestTags {
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
+    /** The overlay the boxes are drawn on, and the surface a new box is dragged out on. */
+    const val FRAME_CANVAS = "frame_canvas"
+
+    /** Accept and cancel for a box being drawn. */
+    const val DRAW_ACCEPT = "draw_accept"
+    const val DRAW_CANCEL = "draw_cancel"
+
     /**
      * Caution line under the model-output summary, present only when the model named something.
      *
