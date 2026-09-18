@@ -31,8 +31,10 @@ Runs inline at the end of [`validate`](validate.md).
 
 ## Movement — the catch-up pass
 
-`SyncPendingDataUseCase` is the trigger-based sweep. It runs on login success, on app start
-while authenticated, and when connectivity returns.
+`SyncPendingDataUseCase` is the trigger-based sweep. It runs on login success, on app start,
+and after every local write. **Not when connectivity returns** - nothing observes
+`ConnectivityObserver` to start a pass, and the worker's network constraint only gates a pass
+already requested. See the trigger list below, which is the authoritative one.
 
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —
    returning `SyncSummary.Skipped`, not a failure
@@ -93,6 +95,11 @@ Only then does the sync pass run. Claim-exempt sessions are never pushed
   per-app "Background autostart" permission that is off by default, and Xiaomi handsets are
   what the medtechs carry. Nothing is load-bearing on it: the queue is durable in Room, and a
   missed pass is caught by the next foreground trigger.
+- **Never expedited.** Below API 31 WorkManager implements an expedited request as a
+  foreground service and calls `getForegroundInfo()`, whose `CoroutineWorker` default throws
+  `IllegalStateException("Not implemented")`. `minSdk` is 26 and the fleet runs Android 11, so
+  `setExpedited` killed every pass before `doWork` ran. A foreground service is also the one
+  thing this deliberately avoids.
 - **Recording.** Losing Supabase mid-session does not stop capture. Only losing the inference
   container does — see [`infer`](infer.md).
 - **Deletion.** Sync only inserts and upserts. Nothing here can remove a remote row or a
