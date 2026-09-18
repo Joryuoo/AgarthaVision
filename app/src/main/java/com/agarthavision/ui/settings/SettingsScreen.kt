@@ -47,6 +47,7 @@ data class SettingsActions(
 @Composable
 fun SettingsScreen(
     onSignInClick: () -> Unit,
+    onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -57,7 +58,12 @@ fun SettingsScreen(
     LaunchedEffect(eventFlow) {
         eventFlow.collectLatest { event ->
             when (event) {
-                SettingsEvent.SignedOut -> Unit
+                // Signing out used to do nothing here. The first-run auth gate resolves once
+                // at launch (see MainViewModel), so it does not re-fire mid-process: the
+                // medtech stayed inside the app with no identity, free to walk back into
+                // Patients and a patient's smears. Login is mandatory, so leaving is the
+                // whole point of signing out.
+                SettingsEvent.SignedOut -> onSignedOut()
                 is SettingsEvent.SignOutBlocked -> signOutBlockedReason = event.reason
             }
         }

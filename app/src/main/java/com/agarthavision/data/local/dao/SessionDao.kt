@@ -74,12 +74,10 @@ interface SessionDao {
     )
     fun observeOwnedOrUnowned(userId: String): Flow<List<SessionEntity>>
 
-    /**
-     * Observes all local sessions regardless of owner (used when no identity is cached
-     * yet — a never-logged-in device). Newest first. Per ADR-007.
-     */
-    @Query("SELECT * FROM sessions ORDER BY started_at DESC")
-    fun observeAllLocal(): Flow<List<SessionEntity>>
+    // `observeAllLocal` is gone. It was `SELECT * FROM sessions` with no owner guard, for a
+    // never-logged-in device — a state mandatory first-run login (86d4be3ke) removed. On a
+    // shared phone it returned another medtech's smears. Signed out now reads as empty, in
+    // SessionRepositoryImpl; see `observeAllSessions` above for the guard that was right.
 
     /**
      * Sessions still awaiting cloud upload, oldest first so the sync pass pushes them in
@@ -282,47 +280,10 @@ interface SessionDao {
         query: String,
     ): Flow<SessionsCountsRow>
 
-    /**
-     * Observes a paginated, filtered window of local sessions for a never-logged-in device.
-     * All sessions are visible (no user_id guard); active sessions are always included.
-     * Shares [LOCAL_SESSIONS_FILTER] with [observeAllLocalCounts]. Per ADR-007.
-     */
-    @Suppress("LongParameterList")
-    @Query(
-        "SELECT s.* FROM sessions s" + LOCAL_SESSIONS_FILTER +
-        " ORDER BY s.started_at DESC LIMIT :limit"
-    )
-    fun observeAllLocalPage(
-        patientId: String,
-        activeSessionId: String?,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-        limit: Int,
-    ): Flow<List<SessionEntity>>
-
-    /**
-     * Live count of total local sessions and unreviewed frames matching
-     * [LOCAL_SESSIONS_FILTER]. Shares the predicate with [observeAllLocalPage]. Per ADR-007.
-     *
-     * Counts unreviewed frames rather than open sessions, for the reason given on
-     * [observeSessionsCounts].
-     */
-    @Suppress("LongParameterList")
-    @Query(
-        "SELECT COUNT(DISTINCT s.session_id) AS totalCount, " +
-        "COALESCE(SUM(CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END), 0) AS unverifiedCount " +
-        "FROM sessions s " +
-        "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null" +
-        LOCAL_SESSIONS_FILTER
-    )
-    fun observeAllLocalCounts(
-        patientId: String,
-        activeSessionId: String?,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-    ): Flow<SessionsCountsRow>
+    // `observeAllLocalPage` and `observeAllLocalCounts` are gone with LOCAL_SESSIONS_FILTER,
+    // for the reason above. That filter carried the patient scope and the date range but no
+    // owner guard at all, so a signed-out Session List showed every smear recorded under the
+    // patient by anyone who had used the device.
 }
 
 /**
@@ -379,31 +340,7 @@ private const val SESSIONS_FILTER = """
          OR s.label      LIKE '%' || :query || '%' ESCAPE '\')
 """
 
-/**
- * Shared WHERE predicate for the local-only (never-logged-in) paginated page and
- * counts queries. No user_id guard, but the same hard `:patientId` scope and the same
- * active-session exemption as [SESSIONS_FILTER], for the reasons given there.
- *
- * Columns are qualified with `s.` so the counts query can join `samples` without the
- * bare names becoming ambiguous.
- *
- * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
- * and `\` in the needle before passing it in.
- */
-private const val LOCAL_SESSIONS_FILTER = """
-  WHERE s.patient_id = :patientId
-    AND ( s.session_id = :activeSessionId
-          OR (:startMillis IS NULL AND :endMillis IS NULL)
-          OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
-    AND (:query = ''
-         OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.label      LIKE '%' || :query || '%' ESCAPE '\')
-"""
-
-/**
- * Aggregate row returned by [SessionDao.observeSessionsCounts] and
- * [SessionDao.observeAllLocalCounts].
- */
+/** Aggregate row returned by [SessionDao.observeSessionsCounts]. */
 data class SessionsCountsRow(
     @ColumnInfo(name = "totalCount") val totalCount: Int,
     /** Frames still awaiting review across the filtered sessions. See [SessionDao]. */
