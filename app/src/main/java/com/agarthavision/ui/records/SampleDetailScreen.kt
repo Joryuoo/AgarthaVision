@@ -69,6 +69,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.Spacing
 import com.agarthavision.ui.theme.detectionBoxColor
+import com.agarthavision.ui.verify.VerificationSheet
 import com.agarthavision.ui.verify.frameTransform
 import com.agarthavision.ui.verify.toCanvasX
 import com.agarthavision.ui.verify.toCanvasY
@@ -94,6 +95,7 @@ fun SampleDetailScreen(
     viewModel: SampleDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val editState by viewModel.editState.collectAsStateWithLifecycle()
     val item = state.item
     val unavailable = state.unavailable
 
@@ -108,9 +110,24 @@ fun SampleDetailScreen(
                 item = item,
                 imageSource = state.imageSource,
                 onBack = onBack,
+                onViewDetection = viewModel::onViewDetection,
             )
             else -> SampleDetailSkeleton(onBack = onBack)
         }
+    }
+
+    // Edit mode is the Verification Screen, seeded with the medtech's own previous answers -
+    // the same screen and the same submit path, because an edit is a correction rather than a
+    // second kind of review. SubmitVerificationUseCase is idempotent per sample, with detection
+    // ids derived rather than random: a random id would append a second full set of detections
+    // on every re-save and silently double every egg count.
+    val target = editState.target
+    if (target != null) {
+        VerificationSheet(
+            frame = target.frame,
+            onDismiss = viewModel::onEditDismissed,
+            prior = target,
+        )
     }
 }
 
@@ -119,6 +136,7 @@ private fun SampleDetailContent(
     item: SampleRecordItem,
     imageSource: SampleImageSource,
     onBack: () -> Unit,
+    onViewDetection: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
     val capturedAt = remember(item.sample.timestamp) {
@@ -190,6 +208,13 @@ private fun SampleDetailContent(
                         },
                     )
                 }
+            }
+
+            item {
+                ViewDetectionButton(
+                    onClick = onViewDetection,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
@@ -385,6 +410,35 @@ private fun DetectionRow(
     }
 }
 
+/**
+ * Opens the Verification Screen on this sample, seeded with what the medtech said last time.
+ *
+ * Offered whether or not the sample has any detections: a frame the model called clean is still
+ * a frame a medtech may want to add an egg to, and a frame captured with the container
+ * unreachable has never had a detection to begin with.
+ */
+@Composable
+private fun ViewDetectionButton(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.accent)
+            .clickable(onClick = onClick)
+            .testTag(SampleDetailTestTags.VIEW_DETECTION)
+            .padding(vertical = 15.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(R.string.sample_detail_view_detection),
+            color = colors.onAccent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
 @Composable
 private fun SampleDetailUnavailableScreen(
     unavailable: SampleUnavailable,
@@ -459,6 +513,9 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
 /** Stable handles for this screen's UI tests. */
 internal object SampleDetailTestTags {
     const val DETECTION_OVERLAY = "sample_detection_overlay"
+
+    /** Opens the Verification Screen in edit mode. */
+    const val VIEW_DETECTION = "sample_view_detection"
 
     fun detectionRow(index: Int): String = "sample_detection_row_$index"
 }

@@ -39,20 +39,26 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
+import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -161,23 +167,40 @@ internal fun VerificationSheetContent(
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
             // 2. Frame section: the image, then one row carrying where you are and how to move.
-            FrameWithBoxes(
-                jpegBytes = frame.jpegBytes,
-                predictions = frame.predictions,
-                highlightedIndex = state.currentDetectionIndex,
-                showBoxes = state.showBoundingBoxes,
-                inferenceImageWidth = frame.imageWidth,
-                inferenceImageHeight = frame.imageHeight,
-                isDrawing = state.isDrawing,
-                onBoxDrawn = actions.onBoxDrawn,
-                onDrawCancelled = actions.onCancelDraw,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(frame.previewAspectRatio())
-                    .testTag(VerifyTestTags.FRAME_PREVIEW)
-                    .clip(RoundedCornerShape(18.dp))
-                    .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-            )
+            val imageModel = rememberFrameImageModel(frame, state.imageSource)
+            if (imageModel == null) {
+                // Honest about it, rather than opening a blank canvas the medtech might
+                // annotate into the void. A missing image and an empty one used to be
+                // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
+                // and every sample synced from another device opened silently empty.
+                FrameUnavailable(
+                    reason = state.imageSource,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(frame.previewAspectRatio())
+                        .testTag(VerifyTestTags.FRAME_UNAVAILABLE)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
+                )
+            } else {
+                FrameWithBoxes(
+                    imageModel = imageModel,
+                    predictions = frame.predictions,
+                    highlightedIndex = state.currentDetectionIndex,
+                    showBoxes = state.showBoundingBoxes,
+                    inferenceImageWidth = frame.imageWidth,
+                    inferenceImageHeight = frame.imageHeight,
+                    isDrawing = state.isDrawing,
+                    onBoxDrawn = actions.onBoxDrawn,
+                    onDrawCancelled = actions.onCancelDraw,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(frame.previewAspectRatio())
+                        .testTag(VerifyTestTags.FRAME_PREVIEW)
+                        .clip(RoundedCornerShape(18.dp))
+                        .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
+                )
+            }
 
             CycleRow(
                 indicator = if (state.frameIndexInQueue > 0) {
@@ -458,6 +481,64 @@ private fun BoxQuestionChain(
 // it carried said AI-suggested or Manual, which is exactly what the model-output section's three
 // states now say at greater length and in the place the medtech looks for it. The C7 caution the
 // card sat above moved there with it.
+
+/**
+ * What Coil should load for this frame, or null when nothing can be.
+ *
+ * Three cases, in the order they are preferred. The frame's own bytes, which only exist on the
+ * device that captured the sample. A local file, for a sample captured here and reopened. A
+ * signed Storage URL, for one synced from another device — keyed on the stable storage path
+ * rather than the URL, which carries a fresh token every time it is minted, so the disk cache
+ * outlives the signature instead of missing on every open.
+ */
+@Composable
+private fun rememberFrameImageModel(frame: FlaggedFrame, source: SampleImageSource?): Any? {
+    val context = LocalContext.current
+    return remember(frame.sampleId, frame.jpegBytes.size, source) {
+        when {
+            frame.jpegBytes.isNotEmpty() -> frame.jpegBytes
+            source is SampleImageSource.Local -> File(source.path)
+            source is SampleImageSource.RemoteSignedUrl -> ImageRequest.Builder(context)
+                .data(source.url)
+                .memoryCacheKey(source.cacheKey)
+                .diskCacheKey(source.cacheKey)
+                .crossfade(true)
+                .build()
+            else -> null
+        }
+    }
+}
+
+/**
+ * Says the frame cannot be shown, and why.
+ *
+ * The two reasons need different things from the medtech — one waits for a sync, the other for a
+ * connection — and neither is "carry on annotating", which is what a blank canvas invites.
+ */
+@Composable
+private fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier
+            .background(AgarthaTheme.colors.surfaceVariant)
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = stringResource(
+                when ((reason as? SampleImageSource.Unavailable)?.reason) {
+                    SampleImageUnavailableReason.NO_STORAGE_PATH ->
+                        R.string.sample_detail_image_no_storage_path
+                    SampleImageUnavailableReason.REMOTE_LOAD_FAILED ->
+                        R.string.sample_detail_image_remote_failed
+                    else -> R.string.sample_detail_image_unavailable
+                },
+            ),
+            color = AgarthaTheme.colors.textSecondary,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
 
 /**
  * A text affordance that starts a drawing gesture on the frame above.

@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -49,6 +50,12 @@ data class VerificationUiState(
     val frameIndexInQueue: Int = 0,
     val queueSize: Int = 0,
     val frame: FlaggedFrame? = null,
+    /**
+     * Where the frame's image can be loaded from, when it did not come with its own bytes.
+     *
+     * Null on the capture path, where the frame carries the JPEG it was just taken from.
+     */
+    val imageSource: SampleImageSource? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
     val findings: List<Finding> = emptyList(),
@@ -230,6 +237,7 @@ class VerificationViewModel @Inject constructor(
             it.copy(
                 isVisible = true,
                 frame = frame,
+                imageSource = prior?.imageSource,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
                 findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }

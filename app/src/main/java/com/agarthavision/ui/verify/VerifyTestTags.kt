@@ -22,6 +22,12 @@ internal object VerifyTestTags {
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
 
+    /**
+     * Shown in the preview's place when there is no image to load at all — neither local bytes,
+     * nor a local file, nor a signed Storage URL.
+     */
+    const val FRAME_UNAVAILABLE = "frame_unavailable"
+
     /** Detection-level navigation within a frame (AI sheet only). */
     const val DETECTION_PREV = "detection_prev"
     const val DETECTION_NEXT = "detection_next"
