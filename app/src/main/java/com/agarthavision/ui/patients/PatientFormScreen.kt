@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -98,7 +99,12 @@ fun PatientFormScreen(
                 .fillMaxSize()
                 .widthIn(max = 480.dp)
                 .align(Alignment.TopCenter)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                // After verticalScroll so the inset is part of the scrolling content rather
+                // than a dead band around it: Save and Cancel are the last thing in the form,
+                // and without this they sit flush to the screen edge at full scroll with their
+                // lower half under the system navigation bar.
+                .navigationBarsPadding(),
         ) {
             ScreenHeader(
                 title = stringResource(

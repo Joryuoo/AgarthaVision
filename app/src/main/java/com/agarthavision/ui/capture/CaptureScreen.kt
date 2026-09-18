@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -476,6 +477,11 @@ fun CaptureScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                // The inset goes on the controls, not on the screen: the viewport is meant to
+                // run edge to edge behind the system bars, and insetting the whole Box would
+                // letterbox the camera preview. Without it the system navigation bar sits over
+                // the lower part of the shutter and swallows those taps.
+                .navigationBarsPadding()
                 .padding(bottom = 28.dp)
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
