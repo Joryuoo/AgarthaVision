@@ -11,6 +11,12 @@ import org.junit.Test
  * Pure unit tests for the [SessionDetailState.canOpenVerifyQueue] computed property.
  *
  * No Hilt, no coroutines. State is constructed directly.
+ *
+ * The axis these cases turn on used to be `Session.endedAt`. It is now
+ * [SessionDetailState.isActiveSession], fed from `SessionManager`. The behaviour did not go
+ * away — the shortcut is still only offered on the session the app is working in — but the
+ * old "session has ended" cases were describing a state no session ever reached, because
+ * nothing writes `ended_at`. In production every one of them took the `true` branch.
  */
 class SessionDetailStateTest {
 
@@ -18,33 +24,33 @@ class SessionDetailStateTest {
 
     @Test
     fun `canOpenVerifyQueue is true when session is active and pendingFlagged is positive`() {
-        val state = stateWith(endedAt = null, pendingFlagged = 1)
+        val state = stateWith(isActiveSession = true, pendingFlagged = 1)
         assertTrue(state.canOpenVerifyQueue)
     }
 
     @Test
     fun `canOpenVerifyQueue is true for multiple pending flagged frames`() {
-        val state = stateWith(endedAt = null, pendingFlagged = 10)
+        val state = stateWith(isActiveSession = true, pendingFlagged = 10)
         assertTrue(state.canOpenVerifyQueue)
     }
 
     // ---------- canOpenVerifyQueue == false ----------
 
     @Test
-    fun `canOpenVerifyQueue is false when session has ended`() {
-        val state = stateWith(endedAt = 2_000L, pendingFlagged = 5)
+    fun `canOpenVerifyQueue is false when this is not the active session`() {
+        val state = stateWith(isActiveSession = false, pendingFlagged = 5)
         assertFalse(state.canOpenVerifyQueue)
     }
 
     @Test
     fun `canOpenVerifyQueue is false when pendingFlagged is zero even if session is active`() {
-        val state = stateWith(endedAt = null, pendingFlagged = 0)
+        val state = stateWith(isActiveSession = true, pendingFlagged = 0)
         assertFalse(state.canOpenVerifyQueue)
     }
 
     @Test
-    fun `canOpenVerifyQueue is false when session is ended and no pending frames`() {
-        val state = stateWith(endedAt = 1_000L, pendingFlagged = 0)
+    fun `canOpenVerifyQueue is false when inactive and no pending frames`() {
+        val state = stateWith(isActiveSession = false, pendingFlagged = 0)
         assertFalse(state.canOpenVerifyQueue)
     }
 
@@ -87,18 +93,19 @@ class SessionDetailStateTest {
 
     // ---------- helpers ----------
 
-    private fun stateWith(endedAt: Long?, pendingFlagged: Int): SessionDetailState {
+    private fun stateWith(isActiveSession: Boolean, pendingFlagged: Int): SessionDetailState {
         val session = Session(
             id = "session-1",
             userId = "user-1",
+            patientId = "patient-1",
             deviceId = "device-1",
             startedAt = 1_000L,
-            endedAt = endedAt,
             label = null,
         )
         return SessionDetailState(
             session = SessionSamples(session = session, samples = emptyList()),
             pendingFlagged = pendingFlagged,
+            isActiveSession = isActiveSession,
         )
     }
 }

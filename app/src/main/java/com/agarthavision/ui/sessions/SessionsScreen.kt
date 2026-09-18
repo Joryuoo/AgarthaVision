@@ -94,7 +94,6 @@ fun SessionsScreen(
     onBack: () -> Unit,
     onNavigate: (String) -> Unit = {},
     onNavigateToCapture: (String) -> Unit,
-    onSessionSelected: (String) -> Unit,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -146,7 +145,7 @@ fun SessionsScreen(
                 SearchInput(
                     value = state.searchQuery,
                     onValueChange = viewModel::onSearchQueryChanged,
-                    placeholder = "Search sessions, notes...",
+                    placeholder = stringResource(R.string.sessions_search_placeholder),
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
                 DateRangeFilterBar(
@@ -194,15 +193,15 @@ fun SessionsScreen(
                         items(state.sessions, key = { it.session.id }) { sessionData ->
                             SessionCard(
                                 sessionData = sessionData,
-                                isActive = sessionData.session.endedAt == null,
+                                isActive = sessionData.session.id == state.activeSessionId,
                                 actions = SessionCardActions(
-                                    onClick = {
-                                        if (sessionData.session.endedAt == null) {
-                                            viewModel.onResumeSession(sessionData.session.id)
-                                        } else {
-                                            onSessionSelected(sessionData.session.id)
-                                        }
-                                    },
+                                    // Every row opens Capture. There is no second
+                                    // destination to branch to: a session does not end, so
+                                    // the medtech is always going back to the smear to
+                                    // capture or correct a frame. Session Detail is reached
+                                    // from Records, which is where reading a finished
+                                    // session belongs.
+                                    onClick = { viewModel.onResumeSession(sessionData.session.id) },
                                 )
                             )
                         }
@@ -259,6 +258,7 @@ fun SessionsScreen(
             // Leaving the sheet abandons the draft; the label is local `remember` state and
             // resets with it. There is nothing left in the ViewModel to reset — the barangay
             // moved to the patient and the note is gone.
+            suggestedLabel = state.suggestedLabel,
             onDismiss = { showCreateDialog = false },
             onSubmit = { label ->
                 viewModel.onCreateSession(label)
@@ -445,6 +445,7 @@ fun LiveDot() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
+    suggestedLabel: String,
     onDismiss: () -> Unit,
     onSubmit: (label: String) -> Unit
 ) {
@@ -465,7 +466,10 @@ private fun NewSessionSheet(
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     ) {
-        var label by remember { mutableStateOf("") }
+        // Keyed on the suggestion so a sheet opened after the previous smear was created
+        // starts on the new number rather than the one already used. It is only a seed: the
+        // field is editable from the first keystroke, and nothing re-applies it.
+        var label by remember(suggestedLabel) { mutableStateOf(suggestedLabel) }
         var showError by remember { mutableStateOf(false) }
 
         Column(
@@ -518,8 +522,8 @@ private fun NewSessionSheet(
                     value = label,
                     onValueChange = { label = it; showError = false },
                     config = SheetInputConfig(
-                        label = "Label",
-                        placeholder = "e.g. 325",
+                        label = stringResource(R.string.session_label_field_label),
+                        placeholder = stringResource(R.string.session_label_placeholder),
                         isError = showError && label.isBlank(),
                         maxLength = SESSION_LABEL_MAX_LENGTH
                     )
@@ -583,7 +587,7 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "A session label is required by lab protocol. You can edit it later from Session Detail.",
+                            stringResource(R.string.session_label_helper),
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                             lineHeight = 16.sp

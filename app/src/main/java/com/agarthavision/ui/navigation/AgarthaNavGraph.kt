@@ -206,9 +206,9 @@ fun AgarthaNavHost(
             PatientFormScreen(onDone = { navController.popBackStack() })
         }
 
-        // One patient's session list. PB-09c scopes it to the patient; until then it is
-        // the existing unscoped list, reachable so the capture and detail flows below it
-        // do not become orphaned by the tab rename.
+        // One patient's session list, scoped by the `patientId` path argument the
+        // SessionsViewModel reads off SavedStateHandle. Every row opens Capture; Session
+        // Detail is reached from Records instead, so no callback for it is passed here.
         composable(Screen.PatientSessions.route) {
             SessionsScreen(
                 onBack = { navController.popBackStack() },
@@ -216,9 +216,6 @@ fun AgarthaNavHost(
                 onNavigateToCapture = {
                     navController.navigate(Screen.Capture.route)
                 },
-                onSessionSelected = { sessionId ->
-                    navController.navigate(Screen.SessionDetail.createRoute(sessionId))
-                }
             )
         }
         composable(Screen.Reports.route) {

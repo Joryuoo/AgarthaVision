@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -26,6 +27,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -320,6 +322,62 @@ class SessionsViewModelTest {
                 assertTrue(
                     "observeVisibleSessionsPage must be called with userId=null",
                     recording.capturedArgs.any { it.userId == null },
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
+    // PB-09c: the list is scoped to the patient in the route
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `the route patient id is passed to the repository`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                // Scoping lives in SQL, not in a filter over the loaded page: the list is
+                // paginated, so a client-side filter would drop rows from the count and
+                // shrink the page without ever looking wrong.
+                assertTrue(
+                    "every page query must be scoped to the route's patient",
+                    recording.capturedArgs.isNotEmpty() &&
+                        recording.capturedArgs.all { it.patientId == "patient-1" },
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a route with no patient id resolves to an error instead of loading forever`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = SessionsViewModel(
+                sessionRepository = recording,
+                sessionManager = mock<SessionManager> {
+                    on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+                },
+                observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
+                    whenever(it.invoke()).thenReturn(MutableStateFlow(LocalIdentity("u1", "u1@example.com")))
+                },
+                generateSessionLabelUseCase = stubLabelUseCase(),
+                savedStateHandle = SavedStateHandle(),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val state = expectMostRecentItem()
+
+                assertFalse("a missing patient must not hang on the loading skeleton", state.isLoading)
+                assertNotNull(state.errorMessage)
+                assertTrue(
+                    "no query should be issued without a patient to scope it to",
+                    recording.capturedArgs.isEmpty(),
                 )
                 cancelAndIgnoreRemainingEvents()
             }
@@ -771,6 +829,15 @@ class SessionsViewModelTest {
         return buildViewModelWithIdentityFlow(repo, identityFlow)
     }
 
+    /**
+     * The generator is exercised by its own pure tests; here it only has to not be null. The
+     * VM calls it from `init`, so an unstubbed mock would return null from a non-null
+     * `Result` and take down every test in this file.
+     */
+    private fun stubLabelUseCase() = mock<GenerateSessionLabelUseCase> {
+        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+    }
+
     private fun buildViewModelWithIdentityFlow(
         repo: SessionRepository,
         identityFlow: MutableStateFlow<LocalIdentity?>,
@@ -789,6 +856,7 @@ class SessionsViewModelTest {
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
@@ -800,6 +868,7 @@ class SessionsViewModelTest {
 
 private data class PageArgs(
     val userId: String?,
+    val patientId: String,
     val sinceMillis: Long,
     val startMillis: Long?,
     val endMillis: Long?,
@@ -818,6 +887,7 @@ private class RecordingSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -828,6 +898,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -835,12 +906,13 @@ private class RecordingSessionRepository(
         query: String,
         limit: Int,
     ): Flow<List<SessionWithStats>> {
-        capturedArgs += PageArgs(userId, sinceMillis, startMillis, endMillis, query, limit)
+        capturedArgs += PageArgs(userId, patientId, sinceMillis, startMillis, endMillis, query, limit)
         return flowOf(rows.take(limit))
     }
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -864,6 +936,7 @@ private class ControllableSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -874,6 +947,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -884,6 +958,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -905,6 +980,7 @@ private class LambdaSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -915,6 +991,7 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -925,6 +1002,7 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -942,9 +1020,9 @@ private fun makeSession(id: String, userId: String): SessionWithStats =
         session = Session(
             id = id,
             userId = userId,
+            patientId = "patient-1",
             deviceId = "device-1",
             startedAt = Instant.EPOCH.toEpochMilli(),
-            endedAt = null,
             label = "Smear $id",
         ),
         totalSamples = 0,

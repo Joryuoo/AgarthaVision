@@ -232,6 +232,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(session?.let(::listOf).orEmpty())
     override fun observeSessionRecordsPage(
@@ -252,6 +253,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -262,6 +264,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -365,7 +368,7 @@ private fun reportSession(sessionId: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
+        patientId = "patient-1",
         label = "Session A",
     )
 

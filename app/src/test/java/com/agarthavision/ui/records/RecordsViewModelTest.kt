@@ -519,6 +519,7 @@ private class RecordingSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
 
     override fun observeSessionRecordsPage(
@@ -543,6 +544,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -553,6 +555,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -574,6 +577,7 @@ private class LambdaSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -592,6 +596,7 @@ private class LambdaSessionRepository(
     ): Flow<RecordsTotals> = flowOf(totals)
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -601,6 +606,7 @@ private class LambdaSessionRepository(
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -619,7 +625,7 @@ private fun makeSession(id: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
+        patientId = "patient-1",
         label = null,
     )
 

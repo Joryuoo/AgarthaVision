@@ -47,6 +47,20 @@ interface SessionDao {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for one patient, for the sequence in the next one.
+     *
+     * Deliberately not `MAX(...)` in SQL: the sequence is the tail of a text label the medtech
+     * can edit, so `MAX` over the whole string would order lexically and pick the label that
+     * sorts last rather than the highest number. Parsing happens in
+     * [com.agarthavision.domain.session.SessionLabelGenerator], where it is testable.
+     *
+     * Rows with no label are excluded rather than returned as nulls — an unlabelled session
+     * holds no sequence.
+     */
+    @Query("SELECT label FROM sessions WHERE patient_id = :patientId AND label IS NOT NULL")
+    suspend fun getLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions visible to a signed-out or offline medtech: those owned by
      * [userId] plus any not-yet-claimed local sessions (`user_id IS NULL`). Newest first.
      * Per ADR-007.
@@ -228,6 +242,7 @@ interface SessionDao {
     )
     fun observeSessionsPage(
         userId: String,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -241,9 +256,9 @@ interface SessionDao {
      * Shares the predicate with [observeSessionsPage] so the header counts
      * and the list can never disagree. Per ADR-007.
      *
-     * The second column used to count open sessions (`ended_at IS NULL`). Sessions do not
-     * end any more (86d4ab4vm), so that counted every session and said nothing. Frames
-     * still awaiting review is a number the medtech can act on.
+     * The second column counts frames still awaiting review — a number the medtech can act
+     * on. It used to count open sessions, which stopped distinguishing anything when
+     * sessions stopped ending (86d4ab4vm).
      *
      * It is computed here rather than summed from the loaded page because the list is
      * paginated: a locally-summed header would report only what had been scrolled into
@@ -259,6 +274,7 @@ interface SessionDao {
     )
     fun observeSessionsCounts(
         userId: String,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -277,6 +293,7 @@ interface SessionDao {
         " ORDER BY s.started_at DESC LIMIT :limit"
     )
     fun observeAllLocalPage(
+        patientId: String,
         activeSessionId: String?,
         startMillis: Long?,
         endMillis: Long?,
@@ -300,6 +317,7 @@ interface SessionDao {
         LOCAL_SESSIONS_FILTER
     )
     fun observeAllLocalCounts(
+        patientId: String,
         activeSessionId: String?,
         startMillis: Long?,
         endMillis: Long?,
@@ -334,9 +352,11 @@ private const val RECORDS_FILTER = """
 
 /**
  * Shared WHERE predicate for the Sessions paginated page and counts queries.
- * The **active** session is always visible; every other session appears when it falls
- * within the recent window (`:sinceMillis`) or within an explicit date range
- * (`:startMillis`/`:endMillis`).
+ * The list belongs to **one patient**: `:patientId` is a hard AND above everything else,
+ * including the active-session exemption, because a smear open under patient A has no
+ * business appearing in patient B's list. Within that patient the **active** session is
+ * always visible; every other session appears when it falls within the recent window
+ * (`:sinceMillis`) or within an explicit date range (`:startMillis`/`:endMillis`).
  *
  * That exemption used to read `ended_at IS NULL`, meaning "a session still open". Once
  * sessions stopped ending (86d4ab4vm) that matched every session ever started, and the
@@ -350,6 +370,7 @@ private const val RECORDS_FILTER = """
  */
 private const val SESSIONS_FILTER = """
   WHERE s.user_id = :userId
+    AND s.patient_id = :patientId
     AND ( s.session_id = :activeSessionId
           OR (:startMillis IS NULL AND :endMillis IS NULL AND s.started_at >= :sinceMillis)
           OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
@@ -360,8 +381,8 @@ private const val SESSIONS_FILTER = """
 
 /**
  * Shared WHERE predicate for the local-only (never-logged-in) paginated page and
- * counts queries. No user_id guard; the active session is always visible, for the
- * reason given on [SESSIONS_FILTER].
+ * counts queries. No user_id guard, but the same hard `:patientId` scope and the same
+ * active-session exemption as [SESSIONS_FILTER], for the reasons given there.
  *
  * Columns are qualified with `s.` so the counts query can join `samples` without the
  * bare names becoming ambiguous.
@@ -370,7 +391,8 @@ private const val SESSIONS_FILTER = """
  * and `\` in the needle before passing it in.
  */
 private const val LOCAL_SESSIONS_FILTER = """
-  WHERE ( s.session_id = :activeSessionId
+  WHERE s.patient_id = :patientId
+    AND ( s.session_id = :activeSessionId
           OR (:startMillis IS NULL AND :endMillis IS NULL)
           OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
     AND (:query = ''

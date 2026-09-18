@@ -33,6 +33,15 @@ interface SessionRepository {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for [patientId]'s smears, newest-agnostic and unordered.
+     *
+     * Feeds the sequence in the next auto-generated label. Returns labels, not a count: a
+     * count would drift the moment a session was created on another device and pulled down,
+     * or a label edited, and the sequence has to be derived from what is actually there.
+     */
+    suspend fun getSessionLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions owned by [userId] plus any unclaimed local sessions. When
      * [userId] is null (never-signed-in device), observes all local sessions. Per ADR-007.
      */
@@ -72,18 +81,23 @@ interface SessionRepository {
     ): Flow<RecordsTotals>
 
     /**
-     * Observes a paginated, filtered window of sessions for the Sessions screen.
-     * When [userId] is null (never-signed-in device), observes all local sessions
-     * without a date cap; otherwise applies the recent-window / date-range filter.
+     * Observes a paginated, filtered window of one patient's sessions for the Sessions
+     * screen. When [userId] is null (never-signed-in device), observes that patient's local
+     * sessions without a date cap; otherwise applies the recent-window / date-range filter.
      *
-     * [activeSessionId] is exempt from the filter so the smear currently being worked in is
-     * never hidden by a date range. Null when there is no active session. This used to be
-     * `ended_at IS NULL`, which stopped distinguishing anything when sessions stopped
-     * ending. Per ADR-007.
+     * [patientId] is a hard scope, not a filter: the screen is reached from a patient row and
+     * lists that patient's smears only.
+     *
+     * [activeSessionId] is exempt from the date filter so the smear currently being worked in
+     * is never hidden by a date range — but not from [patientId], because an open smear under
+     * another patient does not belong in this list. Null when there is no active session. The
+     * exemption used to be `ended_at IS NULL`, which stopped distinguishing anything when
+     * sessions stopped ending. Per ADR-007.
      */
     @Suppress("LongParameterList")
     fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -100,6 +114,7 @@ interface SessionRepository {
     @Suppress("LongParameterList")
     fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,

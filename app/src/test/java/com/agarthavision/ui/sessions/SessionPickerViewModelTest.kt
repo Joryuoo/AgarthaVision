@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,13 +44,13 @@ class SessionPickerViewModelTest {
         // VM now uses observeVisibleSessionsPage / observeVisibleSessionsCounts.
         whenever(
             it.observeVisibleSessionsPage(
-                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any(),
             ),
         )
             .thenReturn(sessionsFlow)
         whenever(
             it.observeVisibleSessionsCounts(
-                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(),
             ),
         )
             .thenReturn(countsFlow)
@@ -58,6 +59,11 @@ class SessionPickerViewModelTest {
     }
     private val sessionManager: SessionManager = mock {
         on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+    }
+    // Called from the VM's init. An unstubbed mock returns null for a non-null Result and
+    // takes down every test here, so it is stubbed even though the label is not asserted.
+    private val generateSessionLabelUseCase: GenerateSessionLabelUseCase = mock {
+        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
     }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {
@@ -75,6 +81,7 @@ class SessionPickerViewModelTest {
         sessionRepository = sessionRepository,
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+        generateSessionLabelUseCase = generateSessionLabelUseCase,
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),
@@ -135,9 +142,16 @@ class SessionPickerViewModelTest {
                 while (snapshot.isLoading) {
                     snapshot = awaitItem()
                 }
+                // The *list* refuses first now: with no patient to scope the query to there
+                // is nothing to ask Room for, so the screen resolves to an error rather than
+                // an empty list that would read as "this patient has no smears".
+                assertTrue(snapshot.errorMessage?.contains("patient") == true)
+
+                // onCreateSession refuses for the same reason. It cannot be asserted with
+                // another awaitItem(): the state is already carrying this error, and a
+                // StateFlow does not re-emit an equal value.
                 vm.onCreateSession("Smear 1")
-                val withError = awaitItem()
-                assertTrue(withError.errorMessage?.contains("patient") == true)
+                assertTrue(vm.state.value.errorMessage?.contains("patient") == true)
                 cancelAndIgnoreRemainingEvents()
             }
             // Better to refuse than to write a session that fails its foreign key on insert.
@@ -170,7 +184,7 @@ class SessionPickerViewModelTest {
                 userId = "user-1",
                 deviceId = "device-1",
                 startedAt = Instant.EPOCH.toEpochMilli(),
-                endedAt = null,
+                patientId = "patient-1",
                 label = "Smear 1",
             ),
             totalSamples = 0,

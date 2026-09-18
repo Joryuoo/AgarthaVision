@@ -9,6 +9,7 @@ import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -43,6 +44,20 @@ data class SessionsState(
     /** Frames awaiting review across the filtered sessions. See [SessionsCounts]. */
     val unverifiedCount: Int = 0,
     val canLoadMore: Boolean = false,
+    /**
+     * The smear the app is currently working in, or null.
+     *
+     * The list used to read this off `Session.endedAt == null`, which was true for every
+     * row because nothing writes `ended_at`. [com.agarthavision.core.session.SessionManager]
+     * is the only thing that knows which session is active, so the flag comes from there.
+     */
+    val activeSessionId: String? = null,
+    /**
+     * The auto-generated label the New Session sheet opens on, or empty when it could not be
+     * built. Empty is the pre-PB-10 behaviour — a field the medtech types into — rather than
+     * a blocked sheet: a failure to suggest a name is no reason to refuse a smear.
+     */
+    val suggestedLabel: String = "",
 )
 
 sealed interface SessionsEvent {
@@ -71,6 +86,7 @@ class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
+    private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -81,12 +97,17 @@ class SessionsViewModel @Inject constructor(
     /**
      * The patient whose smears this screen lists, read from the `patients/{patientId}` route.
      *
-     * Every session created here belongs to that patient: `sessions.patient_id` is NOT NULL
-     * with a foreign key onto `patients`, so a session without one cannot be inserted. The
-     * *list* is still unscoped — PB-09c makes it show only this patient's sessions. This only
-     * settles what a newly created session is attributed to.
+     * Every session here belongs to that patient — both the ones listed and the ones created:
+     * `sessions.patient_id` is NOT NULL with a foreign key onto `patients`, and the list query
+     * scopes on it. A null is unreachable through the UI (nothing navigates here without a
+     * patient), so it renders an empty list with an error rather than crashing on a route
+     * that should not exist.
      */
     private val patientId: String? = savedStateHandle["patientId"]
+
+    init {
+        refreshSuggestedLabel()
+    }
 
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
@@ -140,6 +161,15 @@ class SessionsViewModel @Inject constructor(
      */
     val state: StateFlow<SessionsState> = queryInputs
         .flatMapLatest { inputs ->
+            // Unreachable through the UI. Emitting an empty, non-loading state keeps a
+            // malformed route from hanging on the loading skeleton forever, and keeps the
+            // patient id out of the SQL as a nullable that would silently match nothing.
+            val patient = patientId
+            if (patient.isNullOrBlank()) {
+                return@flatMapLatest internalState.map {
+                    it.copy(isLoading = false, errorMessage = PATIENT_REQUIRED)
+                }
+            }
             val zone = ZoneId.systemDefault()
             val sinceMillis = Instant.now().minus(Duration.ofDays(RECENT_WINDOW_DAYS)).toEpochMilli()
             val startMillis = inputs.start?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
@@ -155,12 +185,12 @@ class SessionsViewModel @Inject constructor(
 
             combine(
                 sessionRepository.observeVisibleSessionsPage(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped, inputs.limit,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped, inputs.limit,
                 ),
                 sessionRepository.observeVisibleSessionsCounts(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped,
                 ),
                 internalState,
                 searchQuery,
@@ -174,6 +204,7 @@ class SessionsViewModel @Inject constructor(
                     totalCount = counts.totalCount,
                     unverifiedCount = counts.unverifiedCount,
                     canLoadMore = sessions.size >= inputs.limit,
+                    activeSessionId = inputs.activeSessionId,
                 )
             }
         }
@@ -234,11 +265,32 @@ class SessionsViewModel @Inject constructor(
                 sessionManager.startSession(label = label.trim(), patientId = patient)
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
+                // The smear just created holds the suggestion that was on screen, so the next
+                // one has to move on. Recomputed from the database rather than incremented
+                // locally: the medtech may have edited the label before submitting it, and a
+                // local counter would then hand out a number that is already in use.
+                refreshSuggestedLabel()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
                 internalState.update {
                     it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
                 }
+            }
+        }
+    }
+
+    /**
+     * Recomputes the label the New Session sheet pre-fills with.
+     *
+     * Silent on failure. The sheet falls back to an empty field, which is what it had before
+     * the generator existed; surfacing an error banner for a suggestion the medtech can type
+     * over themselves would be noise on a screen they came to to start a smear.
+     */
+    private fun refreshSuggestedLabel() {
+        val patient = patientId ?: return
+        viewModelScope.launch {
+            generateSessionLabelUseCase(patient).onSuccess { label ->
+                internalState.update { it.copy(suggestedLabel = label) }
             }
         }
     }
