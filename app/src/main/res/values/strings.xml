@@ -269,32 +269,17 @@
     <string name="session_detail_infectivity_extreme_body">The %1$s egg count estimate for this session is in the WHO high-intensity reference range. This is an algorithmic indicator, not a diagnosis — please refer this patient to a qualified health professional for clinical confirmation and follow-up.</string>
     <string name="session_detail_infectivity_disclaimer">This is an algorithmic estimate for reference only, not a medical diagnosis. All findings require confirmation by a qualified health professional.</string>
 
-    <string name="sample_detail_title">Sample Detail</string>
-    <string name="sample_detail_missing">Sample not found</string>
-    <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
-    <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
-    <string name="sample_detail_tab_image">Image</string>
-    <string name="sample_detail_tab_detections">Detections</string>
-    <string name="sample_detail_tab_metadata">Metadata</string>
-    <string name="sample_detail_image_desc">Verified microscopy sample image</string>
-    <string name="sample_detail_no_detections">No detections recorded</string>
-    <string name="sample_detail_detection_title">Detection %1$d</string>
-    <string name="sample_detail_verdict">Verdict: %1$s</string>
-    <string name="sample_detail_box">Box: x=%1$.2f y=%2$.2f w=%3$.2f h=%4$.2f</string>
-    <string name="sample_detail_box_none">Box: none (manual capture)</string>
-    <string name="sample_detail_sample_id">Sample ID</string>
-    <string name="sample_detail_session_id">Session ID</string>
-    <string name="sample_detail_device_id">Device ID</string>
-    <string name="sample_detail_user_note">User note</string>
-    <string name="sample_detail_status">Status</string>
-    <string name="sample_detail_captured_at">Captured at</string>
-    <string name="sample_detail_verified_at">Verified at</string>
-    <string name="sample_detail_storage_path">Storage path</string>
-    <string name="sample_detail_model_version">Model version</string>
-    <string name="sample_detail_needs_reannotation">Needs reannotation</string>
+    <!-- Also used by Settings for plain yes/no rows. -->
     <string name="sample_detail_yes">Yes</string>
     <string name="sample_detail_no">No</string>
-    <string name="sample_detail_back">Back to session</string>
+    <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
+    <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
+    <string name="sample_detail_image_desc">Verified microscopy sample image</string>
+    <string name="sample_detail_no_detections">No detections recorded on this sample.</string>
+    <string name="sample_detail_detections_heading">DETECTIONS</string>
+    <string name="sample_detail_image_unavailable">Image unavailable on this device.</string>
+    <string name="sample_detail_hide_box">Hide the box for %1$s</string>
+    <string name="sample_detail_show_box">Show the box for %1$s</string>
 
     <!-- Patient form (PB-07c) -->
     <string name="patient_form_new_title">New patient</string>
