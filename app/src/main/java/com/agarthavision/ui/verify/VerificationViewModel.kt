@@ -11,10 +11,13 @@ import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.totalsAreConsistent
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -72,7 +75,35 @@ data class VerificationUiState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
+    /**
+     * Species already recorded on this device that match what is being typed into a free-text
+     * "Other species" field, with the field they were fetched for and the text they answer.
+     *
+     * All three, because the screen has **two** free-text fields — Current Detection and every
+     * added species — and only one is ever being typed into. Carrying the target and the query
+     * alongside the names lets [suggestionsFor] *derive* whether a list still belongs where it
+     * is about to render, instead of the view model having to remember to clear it on every
+     * path that moves the medtech elsewhere. A suggestion list rendered under the wrong row
+     * would be worse than no suggestions at all: it invites a tap that writes one row's species
+     * into another.
+     */
+    val speciesSuggestions: List<String> = emptyList(),
+    val speciesSuggestionTarget: SuggestionTarget? = null,
+    val speciesSuggestionQuery: String = "",
 ) {
+    /**
+     * The suggestions to show under [target]'s free-text field, given what it currently holds.
+     *
+     * Empty unless the last lookup was for this field *and* for this exact text, so a stale list
+     * cannot outlive the keystroke that produced it.
+     */
+    fun suggestionsFor(target: SuggestionTarget, query: String): List<String> =
+        if (target == speciesSuggestionTarget && query == speciesSuggestionQuery) {
+            speciesSuggestions
+        } else {
+            emptyList()
+        }
+
     /**
      * Q4 — "did the model miss any eggs in this frame?" — **derived, never asked.**
      *
@@ -159,6 +190,22 @@ data class VerificationUiState(
  */
 data class DrawTarget(val findingIndex: Int, val slot: Int? = null)
 
+/**
+ * Which free-text species field a suggestion list was fetched for.
+ *
+ * Not an `Int?` index with null meaning "the current detection". The two fields are different
+ * things — one names the egg in a box the model drew, the other names a species the model never
+ * boxed — and a nullable index makes "the current detection" and "some added row" the same type,
+ * which is how a list ends up rendering under the wrong one.
+ */
+sealed interface SuggestionTarget {
+    /** The "Other species" field under Q3, for the box currently on screen. */
+    data object CurrentDetection : SuggestionTarget
+
+    /** The "Other species" field on the added species at [index]. */
+    data class AddedFinding(val index: Int) : SuggestionTarget
+}
+
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
@@ -188,6 +235,7 @@ sealed interface VerificationEvent {
 class VerificationViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,
     private val submitVerificationUseCase: SubmitVerificationUseCase,
+    private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VerificationUiState())
@@ -197,6 +245,9 @@ class VerificationViewModel @Inject constructor(
     val events: SharedFlow<VerificationEvent> = _events.asSharedFlow()
 
     private var currentFrame: FlaggedFrame? = null
+
+    /** The in-flight suggestion lookup, cancelled by the next keystroke. */
+    private var suggestionJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -382,6 +433,7 @@ class VerificationViewModel @Inject constructor(
 
     fun onOtherSpeciesChanged(text: String) {
         updateCurrentAnswer { it.copy(otherSpeciesText = text) }
+        searchSuggestions(SuggestionTarget.CurrentDetection, text)
     }
 
     /**
@@ -517,6 +569,39 @@ class VerificationViewModel @Inject constructor(
 
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
+        searchSuggestions(SuggestionTarget.AddedFinding(index), text)
+    }
+
+    /**
+     * Looks up species already on this device for whichever free-text field is being typed into.
+     *
+     * One job, cancelled on every keystroke, so a burst of typing costs one query at the end of
+     * it rather than one per character. The debounce is also what keeps the results honest: an
+     * in-flight lookup for "asc" must never land after the one for "ascar" and put the wider
+     * list back on screen.
+     *
+     * A failed lookup shows nothing rather than leaving the previous names up. The index is a
+     * local table read, so a failure here is not a transient offline blip that is worth riding
+     * out - it means the query did not answer, and stale names under a live field would be a
+     * suggestion the device cannot stand behind.
+     *
+     * Nothing is written from here. A suggestion is a convenience: the medtech's typing is the
+     * answer, and a name absent from the index has to keep working, since that is the only way a
+     * species new to this device ever enters the corpus.
+     */
+    private fun searchSuggestions(target: SuggestionTarget, query: String) {
+        suggestionJob?.cancel()
+        suggestionJob = viewModelScope.launch {
+            delay(SUGGESTION_DEBOUNCE_MS)
+            val names = searchSpeciesSuggestions(query).getOrDefault(emptyList())
+            _state.update {
+                it.copy(
+                    speciesSuggestions = names,
+                    speciesSuggestionTarget = target,
+                    speciesSuggestionQuery = query,
+                )
+            }
+        }
     }
 
     // The manual species checklist is gone, and with it onManualNoDetectionSelected,
@@ -687,6 +772,14 @@ class VerificationViewModel @Inject constructor(
     private companion object {
         /** [VerificationUiState.frameIndexInQueue] when the open frame left the cycle. */
         const val OUT_OF_CYCLE = 0
+
+        /**
+         * How long typing has to pause before the suggestion index is queried.
+         *
+         * Long enough that a species name typed straight through costs one lookup, short enough
+         * that a medtech who pauses to think sees the list without wondering whether it works.
+         */
+        const val SUGGESTION_DEBOUNCE_MS = 250L
     }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {

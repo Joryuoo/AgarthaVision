@@ -5,6 +5,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -20,6 +21,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -51,7 +53,17 @@ class VerificationNoModelOutputTest {
     }
     private val submitVerificationUseCase: SubmitVerificationUseCase = mock()
 
-    private fun viewModel() = VerificationViewModel(flaggedFrameStore, submitVerificationUseCase)
+    // Stubbed to answer with nothing: these suites are not about suggestions, but the free-text
+    // handlers query the index now and an unstubbed mock would answer null.
+    private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase = mock {
+        onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+    }
+
+    private fun viewModel() = VerificationViewModel(
+        flaggedFrameStore,
+        submitVerificationUseCase,
+        searchSpeciesSuggestions,
+    )
 
     private fun noModelOutputFrame() = FlaggedFrame(
         sampleId = "sample-1",

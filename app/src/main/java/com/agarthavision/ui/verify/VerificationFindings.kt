@@ -178,6 +178,14 @@ internal fun AddedFindings(
     boxCount: Int,
     actions: VerificationSheetActions,
     modifier: Modifier = Modifier,
+    /**
+     * Species already on this device matching what the added row at this index is typing.
+     *
+     * A lookup rather than a list, because the rows are addressed by index and only one of them
+     * is ever being typed into. Defaults to nothing, so a caller with no index to consult - a
+     * preview, a screenshot test - needs no change.
+     */
+    suggestionsFor: (Int) -> List<String> = { emptyList() },
 ) {
     val addedIndices = findings.indices.filter { it >= boxCount }
 
@@ -196,6 +204,7 @@ internal fun AddedFindings(
                 floor = findings.floorFor(findings[index].answers.speciesLabel),
                 boxed = findings.boxedCountOf(findings[index].answers.speciesLabel),
                 actions = actions,
+                suggestions = suggestionsFor(index),
             )
         }
 
@@ -221,6 +230,7 @@ private fun AddedFindingCard(
     floor: Int,
     boxed: Int,
     actions: VerificationSheetActions,
+    suggestions: List<String> = emptyList(),
 ) {
     val total = finding.answers.fieldTotal
     val belowFloor = (total ?: 0) < floor
@@ -251,6 +261,7 @@ private fun AddedFindingCard(
             otherText = finding.answers.otherSpeciesText,
             onSpeciesSelected = { actions.onAddedSpeciesSelected(index, it) },
             onOtherTextChanged = { actions.onAddedOtherSpeciesChanged(index, it) },
+            suggestions = suggestions,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.addedSpeciesDropdown(index))

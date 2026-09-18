@@ -73,6 +73,7 @@ class VerificationSheetContentTest {
         val speciesConfirmed = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
         val notes = mutableListOf<String>()
+        val otherSpecies = mutableListOf<String>()
         var detectionPrev = 0
         var detectionNext = 0
         var framePrev = 0
@@ -95,7 +96,7 @@ class VerificationSheetContentTest {
         onQ2Selected = { r.q2 += it },
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
-        onOtherSpeciesChanged = {},
+        onOtherSpeciesChanged = { r.otherSpecies += it },
         onDetectionPrev = { r.detectionPrev++ },
         onDetectionNext = { r.detectionNext++ },
         onFramePrev = { r.framePrev++ },
@@ -960,5 +961,61 @@ class VerificationSheetContentTest {
         // pass or fail by machine, so this asserts the labels it replaced are gone instead.
         composeRule.onNodeWithText("Label sample").assertDoesNotExist()
         composeRule.onNodeWithText("Verify detection").assertDoesNotExist()
+    }
+
+    // ── the Other species suggestions ────────────────────────────────────────
+
+    /** Q3 unchecked, species OTHER, three characters typed: the state the index answers to. */
+    private fun typingOther(vararg names: String) = state(
+        answers = listOf(
+            VerificationAnswers(
+                isEgg = true,
+                isBoxCorrect = true,
+                speciesConfirmed = false,
+                species = EggSpecies.OTHER,
+                otherSpeciesText = "fas",
+            ),
+        ),
+    ).copy(
+        speciesSuggestions = names.toList(),
+        speciesSuggestionTarget = SuggestionTarget.CurrentDetection,
+        speciesSuggestionQuery = "fas",
+    )
+
+    @Test
+    fun `species already on this device are offered under the Other field`() {
+        setContent(typingOther("Fasciola hepatica"))
+
+        sheetNode(VerifyTestTags.otherSpeciesSuggestion("Fasciola hepatica")).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping a suggestion fills the field`() {
+        val recorder = setContent(typingOther("Fasciola hepatica"))
+
+        sheetNode(VerifyTestTags.otherSpeciesSuggestion("Fasciola hepatica")).performClick()
+
+        // Reported as ordinary text, through the same handler typing uses. Nothing is committed
+        // and nothing is locked: the medtech can type straight over it.
+        assertEquals(listOf("Fasciola hepatica"), recorder.otherSpecies)
+    }
+
+    @Test
+    fun `a suggestion identical to what is typed is not offered`() {
+        // It answers nothing, and reads as the field failing to notice it has been answered.
+        setContent(typingOther("fas"))
+
+        composeRule.onNodeWithTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a list fetched for another row is not offered here`() {
+        // The staleness rule, from the rendering side: same names, same text, different owner.
+        setContent(
+            typingOther("Fasciola hepatica")
+                .copy(speciesSuggestionTarget = SuggestionTarget.AddedFinding(1)),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS).assertDoesNotExist()
     }
 }
