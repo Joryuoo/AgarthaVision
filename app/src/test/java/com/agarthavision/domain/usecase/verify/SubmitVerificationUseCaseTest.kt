@@ -21,6 +21,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
@@ -39,7 +40,13 @@ class SubmitVerificationUseCaseTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val sampleDao: SampleDao = mock()
-    private val detectionDao: DetectionDao = mock()
+    // Room returns an empty list for a sample with no detection rows, never null, but
+    // Mockito's default for a suspend function is null. Unstubbed, the prune block in
+    // SubmitVerificationUseCase throws an NPE that runCatching swallows, so every assertion
+    // sited after it passes vacuously instead of failing.
+    private val detectionDao: DetectionDao = mock {
+        onBlocking { getDetectionsForSample(any()) } doReturn emptyList()
+    }
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val findingDao: SampleSpeciesFindingDao = mock()
