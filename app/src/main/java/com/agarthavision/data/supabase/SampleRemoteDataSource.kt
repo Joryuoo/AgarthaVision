@@ -274,8 +274,8 @@ class SampleRemoteDataSource @Inject constructor(
         sessionId = sessionId,
         userId = userId,
         deviceId = "",   // D2: device identity not stored in remote
-        timestamp = Instant.parse(capturedAt).toEpochMilli(),
-        verifiedAt = verifiedAt?.let { Instant.parse(it).toEpochMilli() } ?: 0L,
+        timestamp = parseSupabaseInstant(capturedAt).toEpochMilli(),
+        verifiedAt = verifiedAt?.let { parseSupabaseInstant(it).toEpochMilli() } ?: 0L,
         imagePath = "",  // D1: image is in Storage, not local disk
         storagePath = storagePath,
         inferenceModelVersion = inferenceModelVersion,
@@ -286,7 +286,7 @@ class SampleRemoteDataSource @Inject constructor(
         predictionsJson = null,
         imageWidth = null,
         imageHeight = null,
-        deletedAt = deletedAt?.let { Instant.parse(it).toEpochMilli() },
+        deletedAt = deletedAt?.let { parseSupabaseInstant(it).toEpochMilli() },
     )
 
     private fun DetectionRow.toEntity(): DetectionEntity = DetectionEntity(

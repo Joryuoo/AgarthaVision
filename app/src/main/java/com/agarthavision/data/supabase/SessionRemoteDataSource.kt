@@ -105,7 +105,7 @@ class SessionRemoteDataSource @Inject constructor(
         userId = userId,
         patientId = patientId,
         deviceId = deviceId,
-        startedAt = Instant.parse(startedAt).toEpochMilli(),
+        startedAt = parseSupabaseInstant(startedAt).toEpochMilli(),
         label = label,
         supabaseStatus = SessionSyncStatus.SYNCED.value,
     )

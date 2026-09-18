@@ -132,7 +132,7 @@ open class ReportRemoteDataSource @Inject constructor(
     )
 
     private fun ReportRow.toEntity(): ReportEntity {
-        val generatedAtMs = Instant.parse(generatedAt).toEpochMilli()
+        val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
         val positiveSpeciesJson = gson.toJson(positiveSpecies)
         val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
             val obj = v as JsonObject
