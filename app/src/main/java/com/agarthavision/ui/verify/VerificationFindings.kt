@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -28,10 +27,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
-import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.toFindingRows
 import com.agarthavision.ui.theme.AgarthaTheme
 
@@ -145,15 +141,20 @@ internal fun ModelOutputSection(
 }
 
 /**
- * The species the medtech added on top of whatever the model boxed.
+ * Add Egg: the eggs the medtech recorded on top of whatever the model boxed.
+ *
+ * **Always present, with or without model output.** It is the only path by which a frame
+ * captured while the inference container was unreachable can be verified at all, and a frame
+ * with model output still needs it for an egg the model missed. Adding one here is also what
+ * answers Q4 — see `VerificationUiState.missedEgg`.
  *
  * Rendered as a stacked, always-visible list rather than the one-at-a-time carousel the model's
  * boxes use. A box row is paged because `FrameWithBoxes` highlights exactly one box at a time
  * and the highlight is the point; an added row has no box to highlight and has to be scanned as
  * a set, because the whole reason it exists is that a field can hold several species at once.
  *
- * A manual capture therefore renders one card and no carousel — which is the ManualSheet
- * experience, unified rather than merged.
+ * An added egg needs no bounding box to be complete — `detections.bbox_*` is nullable precisely
+ * for this. Drawing one is optional (PB-14).
  */
 @Composable
 internal fun AddedFindings(
@@ -166,7 +167,7 @@ internal fun AddedFindings(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (addedIndices.isNotEmpty()) {
-            SectionLabel(stringResource(R.string.verify_species_you_added))
+            SectionLabel(stringResource(R.string.verify_eggs_you_added))
         }
 
         addedIndices.forEach { index ->
@@ -186,12 +187,12 @@ internal fun AddedFindings(
         }
 
         Text(
-            text = stringResource(R.string.verify_add_species),
+            text = stringResource(R.string.verify_add_egg),
             color = AgarthaTheme.colors.accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
-                .testTag(VerifyTestTags.ADD_SPECIES)
+                .testTag(VerifyTestTags.ADD_EGG)
                 .clickable { actions.onAddFinding() }
                 .padding(vertical = 10.dp),
         )
@@ -225,7 +226,7 @@ private fun AddedFindingCard(
                 fontSize = 12.sp,
             )
             Text(
-                text = stringResource(R.string.verify_remove_species),
+                text = stringResource(R.string.verify_remove_egg),
                 color = AgarthaTheme.colors.danger,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -326,130 +327,11 @@ private fun SectionLabel(text: String) {
     )
 }
 
-/**
- * Manual-capture species selection UI.
- *
- * Replaces the AI-path Q1→Q2→Q3 chain and AddedFindings entirely for frames whose source
- * is [FrameSource.MANUAL]. The medtech either asserts nothing was present (no-detection row)
- * or checks off whichever species they observed and types a count per species. The "Other…"
- * option reveals a free-text name field above its count field, reusing [EggSpecies.OTHER]
- * and [com.agarthavision.domain.usecase.verify.VerificationAnswers.otherSpeciesText].
- */
-@Composable
-internal fun ManualSpeciesChecklist(
-    findings: List<Finding>,
-    noDetectionSelected: Boolean,
-    actions: VerificationSheetActions,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        SectionLabel(stringResource(R.string.verify_select_species))
-
-        // Radio-like no-detection row — mutually exclusive with any species selection.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .background(
-                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.surface,
-                    RoundedCornerShape(8.dp),
-                )
-                .border(
-                    1.dp,
-                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
-                    RoundedCornerShape(8.dp),
-                )
-                .clickable { actions.onManualNoDetectionSelected() }
-                .testTag(VerifyTestTags.MANUAL_NO_DETECTION)
-                .padding(vertical = 12.dp, horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.verify_no_detection),
-                color = if (noDetectionSelected) AgarthaTheme.colors.onAccent else AgarthaTheme.colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
-        listOf(EggSpecies.ASCARIS, EggSpecies.TRICHURIS, EggSpecies.HOOKWORM, EggSpecies.OTHER)
-            .forEach { species ->
-                val checked = findings.any { it.answers.species == species }
-                val finding = findings.find { it.answers.species == species }
-                ManualSpeciesRow(
-                    species = species,
-                    checked = checked,
-                    finding = finding,
-                    actions = actions,
-                )
-            }
-    }
-}
-
-@Composable
-private fun ManualSpeciesRow(
-    species: EggSpecies,
-    checked: Boolean,
-    finding: Finding?,
-    actions: VerificationSheetActions,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = { actions.onManualSpeciesToggled(species, it) },
-                modifier = Modifier.testTag(VerifyTestTags.manualSpeciesCheckbox(species)),
-            )
-            Text(
-                text = species.displayName,
-                color = AgarthaTheme.colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        if (checked) {
-            // For OTHER: reveal the free-text name field above the count field.
-            if (species == EggSpecies.OTHER) {
-                OutlinedTextField(
-                    value = finding?.answers?.otherSpeciesText.orEmpty(),
-                    onValueChange = actions.onManualOtherNameChanged,
-                    label = { Text(stringResource(R.string.verify_other_label)) },
-                    placeholder = {
-                        Text(
-                            stringResource(R.string.verify_other_hint),
-                            color = AgarthaTheme.colors.textTertiary,
-                            fontSize = 13.sp,
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(VerifyTestTags.MANUAL_OTHER_NAME_FIELD)
-                        .padding(bottom = 8.dp),
-                )
-            }
-
-            // Count field — starts empty, "0" as placeholder (D1).
-            OutlinedTextField(
-                value = finding?.answers?.eggCount?.toString().orEmpty(),
-                onValueChange = { actions.onManualCountChanged(species, it) },
-                label = { Text(stringResource(R.string.verify_manual_count_label)) },
-                placeholder = { Text("0", color = AgarthaTheme.colors.textTertiary) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier
-                    .width(180.dp)
-                    .testTag(VerifyTestTags.manualCountField(species)),
-            )
-        }
-    }
-}
+// ManualSpeciesChecklist and ManualSpeciesRow are gone.
+//
+// They were a second, parallel way to say what is in a field, reached only when the inference
+// container had been unreachable at capture time. Add Egg says the same thing for every frame,
+// so a medtech working a smear with the container down now uses the screen they already know
+// instead of a different one that happens to look similar. The "no eggs / species detected"
+// row went with it: submitting an empty list is that assertion, and a tap asking the medtech to
+// restate the absence of work is a tap the screen can do without.

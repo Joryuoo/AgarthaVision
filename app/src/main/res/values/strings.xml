@@ -39,7 +39,6 @@
     <string name="verify_q2">Is the bounding box correctly placed?</string>
     <string name="verify_q3">Is this egg %1$s?</string>
     <string name="verify_species_picker_label">Which species is it?</string>
-    <string name="verify_q4">Did the model miss any eggs in this frame?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
@@ -47,9 +46,9 @@
     <string name="verify_show_boxes_label">Show bounding boxes</string>
 
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
-    <string name="verify_species_you_added">SPECIES YOU ADDED</string>
-    <string name="verify_add_species">+ Add species</string>
-    <string name="verify_remove_species">Remove</string>
+    <string name="verify_eggs_you_added">EGGS YOU ADDED</string>
+    <string name="verify_add_egg">+ Add egg</string>
+    <string name="verify_remove_egg">Remove</string>
     <string name="verify_not_boxed">Not boxed by the model</string>
     <string name="verify_egg_count_label">Eggs in this field</string>
     <string name="verify_egg_count_addendum">In addition to the %1$d the model boxed</string>
@@ -84,14 +83,7 @@
     <string name="connection_lost_probing">Checking connection…</string>
     <string name="connection_lost_collapse">Hide this message</string>
 
-    <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
     <!-- Shown instead of a position when the open frame is no longer in the queue. -->
-    <string name="verify_frame_meta_out_of_cycle">Not in queue · %1$s</string>
-    <string name="manual_frame_meta">Manual %1$d/%2$d · %3$s</string>
-    <string name="verify_manual_title">Label sample</string>
-    <string name="verify_select_species">Select species present in frame:</string>
-    <string name="verify_no_detection">No eggs / species detected</string>
-    <string name="verify_manual_count_label">Count</string>
     <string name="verify_species_label">SPECIES</string>
     <string name="verify_remarks_label">REMARKS</string>
     <string name="verify_remarks_placeholder">Remarks for this sample</string>

@@ -70,7 +70,6 @@ class VerificationSheetContentTest {
         val q1 = mutableListOf<Boolean>()
         val q2 = mutableListOf<Boolean>()
         val speciesConfirmed = mutableListOf<Boolean>()
-        val q4 = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
         val notes = mutableListOf<String>()
         var detectionPrev = 0
@@ -85,10 +84,6 @@ class VerificationSheetContentTest {
         val removedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
-        var manualNoDetections = 0
-        val manualSpeciesToggled = mutableListOf<Pair<EggSpecies, Boolean>>()
-        val manualCounts = mutableListOf<Pair<EggSpecies, String>>()
-        val manualOtherNames = mutableListOf<String>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -97,7 +92,6 @@ class VerificationSheetContentTest {
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
         onOtherSpeciesChanged = {},
-        onQ4Selected = { r.q4 += it },
         onDetectionPrev = { r.detectionPrev++ },
         onDetectionNext = { r.detectionNext++ },
         onFramePrev = { r.framePrev++ },
@@ -112,10 +106,6 @@ class VerificationSheetContentTest {
         onEggCountChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
-        onManualNoDetectionSelected = { r.manualNoDetections++ },
-        onManualSpeciesToggled = { species, checked -> r.manualSpeciesToggled += species to checked },
-        onManualCountChanged = { species, text -> r.manualCounts += species to text },
-        onManualOtherNameChanged = { r.manualOtherNames += it },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -435,23 +425,23 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
     }
 
+    /**
+     * An AI capture the model returned nothing for is a normal negative result and the most
+     * common one in surveillance. It has nothing to fill in, so it must be recordable as it
+     * stands - first the "answers must be non-empty" gate made it permanently un-submittable,
+     * then a missed-egg answer was demanded of it, which was a tap asking the medtech to restate
+     * the absence of work.
+     */
     @Test
-    fun `a clean field blocks submit until the missed-egg question is answered`() {
-        // With no findings, that question is the entire content of the review, so it must not
-        // default through as null.
+    fun `a clean field submits as it stands`() {
         setContent(state(answers = emptyList(), frame = frame(predictions = 0)))
 
-        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
 
     @Test
-    fun `a clean field submits on the missed-egg answer alone`() {
-        // An AI capture the model returned nothing for is a normal negative result and has to
-        // be recordable. The old "answers must be non-empty" gate made it permanently
-        // un-submittable, which is the bug this flips.
-        setContent(
-            state(answers = emptyList(), frame = frame(predictions = 0)).copy(missedEgg = false),
-        )
+    fun `a frame with no model output submits as it stands too`() {
+        setContent(noModelOutputState())
 
         sheetNode(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsEnabled()
     }
@@ -474,19 +464,23 @@ class VerificationSheetContentTest {
         option(VerifyTestTags.QUESTION_Q2, "No").performClick()
 
         assertEquals(listOf(false), r.q2)
-        // The chain question and the missed-egg question must not be confused for it.
+        // Q1 must not be reported for a Q2 tap. Both questions render the same Yes/No labels.
         assertEquals(emptyList<Boolean>(), r.q1)
-        assertEquals(emptyList<Boolean>(), r.q4)
     }
 
+    /**
+     * "Did the model miss any eggs in this frame?" is derived from the findings, not asked.
+     *
+     * Recording an egg the model never boxed already says the model missed one, so a second
+     * control asking the same thing is a place for the two to disagree. There is no Q4 tag left
+     * to look up, so this asserts on the question's text instead.
+     */
     @Test
-    fun `the missed-egg question is answerable while the chain is untouched`() {
-        val r = setContent(state())
+    fun `there is no missed-egg question to answer`() {
+        setContent(state())
 
-        option(VerifyTestTags.QUESTION_Q4, "Yes").performClick()
-
-        assertEquals(listOf(true), r.q4)
-        assertEquals(emptyList<Boolean>(), r.q1)
+        composeRule.onNodeWithText("Did the model miss any eggs in this frame?")
+            .assertDoesNotExist()
     }
 
     // Detection navigation
@@ -740,50 +734,71 @@ class VerificationSheetContentTest {
         assertEquals(1, r.cancels)
     }
 
-    // Manual capture — species checklist UI
+    // No model output — verified through the same Add Egg section as every other frame
 
-    /** A minimal state for a fresh manual frame with no selections. */
-    private fun manualState(
-        findings: List<Finding> = emptyList(),
-        noDetectionSelected: Boolean = false,
-    ) = VerificationUiState(
+    /** A frame captured while the inference container was unreachable. */
+    private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(
         frame = frame(source = FrameSource.MANUAL, predictions = 0),
         frameIndexInQueue = 1,
         queueSize = 1,
         findings = findings,
-        noDetectionSelected = noDetectionSelected,
     )
 
+    /**
+     * Add Egg is present on a frame with no model output, and it is the only way to verify one.
+     *
+     * The species checklist this replaced was a second, parallel set of controls reached only on
+     * this kind of frame. Losing this path would silently strand every field a medtech captured
+     * during an outage.
+     */
     @Test
-    fun `a manual frame shows the no-detection row and four species rows`() {
-        setContent(manualState())
+    fun `a frame with no model output still offers Add Egg`() {
+        setContent(noModelOutputState())
 
-        sheetNode(VerifyTestTags.MANUAL_NO_DETECTION).assertIsDisplayed()
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.ASCARIS)).assertIsDisplayed()
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.TRICHURIS)).assertIsDisplayed()
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.HOOKWORM)).assertIsDisplayed()
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.OTHER)).assertIsDisplayed()
+        sheetNode(VerifyTestTags.ADD_EGG).assertIsDisplayed()
     }
 
     @Test
-    fun `a manual frame does not render Q4 or the added-findings or findings-summary sections`() {
-        setContent(manualState())
+    fun `a frame with model output offers Add Egg too`() {
+        setContent(state())
+
+        sheetNode(VerifyTestTags.ADD_EGG).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping Add Egg reports it`() {
+        val r = setContent(noModelOutputState())
+
+        sheetNode(VerifyTestTags.ADD_EGG).performClick()
+
+        assertEquals(1, r.addFindings)
+    }
+
+    /**
+     * A frame with no model output has no boxes, so none of the box questions are asked - they
+     * are questions about a box. What it has is the model-output section saying the container
+     * never answered, and Add Egg.
+     */
+    @Test
+    fun `a frame with no model output asks no box questions`() {
+        setContent(noModelOutputState())
 
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q4, "Yes"),
+            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q1, "Yes"),
         ).assertDoesNotExist()
-        composeRule.onNodeWithTag(VerifyTestTags.ADD_SPECIES).assertDoesNotExist()
-        composeRule.onNodeWithTag(VerifyTestTags.FINDINGS_SUMMARY).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.BOXES_TOGGLE).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
     }
 
     @Test
-    fun `a checked species row reveals its count field`() {
+    fun `an added egg shows its species picker and its count`() {
         setContent(
-            manualState(
+            noModelOutputState(
                 findings = listOf(
                     Finding(
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
+                            eggCount = 1,
                             speciesTouched = true,
                         ),
                     ),
@@ -791,83 +806,32 @@ class VerificationSheetContentTest {
             ),
         )
 
-        sheetNode(VerifyTestTags.manualCountField(EggSpecies.ASCARIS)).assertIsDisplayed()
-        // Unchecked species must not show a count field.
-        composeRule.onNodeWithTag(VerifyTestTags.manualCountField(EggSpecies.HOOKWORM)).assertDoesNotExist()
+        sheetNode(VerifyTestTags.addedSpeciesDropdown(0)).assertIsDisplayed()
+        sheetNode(VerifyTestTags.countField(0)).assertIsDisplayed()
     }
 
     @Test
-    fun `checking OTHER reveals both the name field and the count field`() {
-        setContent(
-            manualState(
-                findings = listOf(
-                    Finding(
-                        answers = VerificationAnswers(
-                            species = EggSpecies.OTHER,
-                            speciesTouched = true,
-                            otherSpeciesText = "",
-                        ),
-                    ),
-                ),
-            ),
-        )
-
-        sheetNode(VerifyTestTags.MANUAL_OTHER_NAME_FIELD).assertIsDisplayed()
-        sheetNode(VerifyTestTags.manualCountField(EggSpecies.OTHER)).assertIsDisplayed()
-    }
-
-    @Test
-    fun `tapping the no-detection row fires onManualNoDetectionSelected`() {
-        val r = setContent(manualState())
-
-        sheetNode(VerifyTestTags.MANUAL_NO_DETECTION).performClick()
-
-        assertEquals(1, r.manualNoDetections)
-    }
-
-    @Test
-    fun `tapping a species checkbox fires onManualSpeciesToggled with the species and new state`() {
-        val r = setContent(manualState())
-
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.TRICHURIS)).performClick()
-
-        assertEquals(1, r.manualSpeciesToggled.size)
-        assertEquals(EggSpecies.TRICHURIS, r.manualSpeciesToggled[0].first)
-        // Compose Checkbox: clicking an unchecked box reports true.
-        assertEquals(true, r.manualSpeciesToggled[0].second)
-    }
-
-    @Test
-    fun `unchecking a checked species fires onManualSpeciesToggled with false`() {
+    fun `an added egg can be removed`() {
         val r = setContent(
-            manualState(
-                findings = listOf(
-                    Finding(
-                        answers = VerificationAnswers(
-                            species = EggSpecies.HOOKWORM,
-                            speciesTouched = true,
-                        ),
-                    ),
-                ),
+            noModelOutputState(
+                findings = listOf(Finding(answers = VerificationAnswers(eggCount = 1))),
             ),
         )
 
-        sheetNode(VerifyTestTags.manualSpeciesCheckbox(EggSpecies.HOOKWORM)).performClick()
+        sheetNode(VerifyTestTags.removeFinding(0)).performClick()
 
-        assertEquals(1, r.manualSpeciesToggled.size)
-        assertEquals(EggSpecies.HOOKWORM, r.manualSpeciesToggled[0].first)
-        assertEquals(false, r.manualSpeciesToggled[0].second)
+        assertEquals(listOf(0), r.removedFindings)
     }
 
     /**
-     * The top bar carries the sample's label, which is the time it was captured — the same
-     * label the queue row leads with, so the row the medtech tapped names the screen they land
-     * on. It used to read "Verify detection" or "Label sample" depending on the source, which
-     * told the medtech what kind of screen they were on rather than which sample they were on.
+     * The top bar carries the sample's label, which is the time it was captured — the same label
+     * the queue row leads with, so the row the medtech tapped names the screen they land on. It
+     * used to read "Verify detection" or "Label sample" depending on the source, which told the
+     * medtech what kind of screen they were on rather than which sample they were on.
      */
     @Test
     fun `the top bar is the sample's captured-at label, whatever the source`() {
-        setContent(manualState())
+        setContent(noModelOutputState())
 
         // Instant.EPOCH formatted in the default zone — asserting the literal string would
         // pass or fail by machine, so this asserts the labels it replaced are gone instead.

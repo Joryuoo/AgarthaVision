@@ -1,7 +1,5 @@
 package com.agarthavision.ui.verify
 
-import com.agarthavision.domain.model.EggSpecies
-
 /**
  * Stable handles for the verification sheets' UI tests.
  *
@@ -58,7 +56,9 @@ internal object VerifyTestTags {
 
     /** "Is this egg <suggested species>?" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"
-    const val QUESTION_Q4 = "q4"
+
+    // There is no QUESTION_Q4. "Did the model miss any eggs in this frame?" is derived from the
+    // findings rather than asked, so there is no control to tag.
 
     /**
      * Species picker, shown once Q1 and Q2 are both yes and either the medtech said the
@@ -86,17 +86,15 @@ internal object VerifyTestTags {
     /** The spinner inside the model-output section while inference has not come back. */
     const val MODEL_OUTPUT_SPINNER = "model_output_spinner"
 
-    /** "Add species" button beneath the added-findings list. */
-    const val ADD_SPECIES = "add_species"
+    /** "Add egg" button beneath the added-eggs list. Present on every frame. */
+    const val ADD_EGG = "add_egg"
 
     /** The live per-species summary of what submitting would write. */
     const val FINDINGS_SUMMARY = "findings_summary"
 
-    const val MANUAL_NO_DETECTION = "manual_no_detection"
-    const val MANUAL_OTHER_NAME_FIELD = "manual_other_name_field"
-
-    fun manualSpeciesCheckbox(species: EggSpecies): String = "manual_species_" + species.name
-    fun manualCountField(species: EggSpecies): String = "manual_count_" + species.name
+    // The manual-capture checklist tags went with the checklist. A frame captured while the
+    // inference container was unreachable is verified through the same Add Egg section as every
+    // other frame, so there is no separate set of controls to address.
 
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
 

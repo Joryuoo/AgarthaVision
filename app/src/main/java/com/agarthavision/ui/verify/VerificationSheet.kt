@@ -48,7 +48,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -105,7 +104,6 @@ fun VerificationSheet(
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
-                onQ4Selected = viewModel::onQ4Selected,
                 onDetectionPrev = viewModel::onDetectionPrev,
                 onDetectionNext = viewModel::onDetectionNext,
                 onFramePrev = viewModel::onFramePrev,
@@ -120,10 +118,6 @@ fun VerificationSheet(
                 onEggCountChanged = viewModel::onEggCountChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
-                onManualNoDetectionSelected = viewModel::onManualNoDetectionSelected,
-                onManualSpeciesToggled = viewModel::onManualSpeciesToggled,
-                onManualCountChanged = viewModel::onManualCountChanged,
-                onManualOtherNameChanged = viewModel::onManualOtherNameChanged,
             ),
         )
     }
@@ -241,39 +235,19 @@ internal fun VerificationSheetContent(
             }
 
             // 5. Add Egg. Always present, with or without model output - it is the only path by
-            //    which a frame captured with the container down can be verified at all.
-            //
-            //    A manual capture still renders the species checklist rather than this list.
-            //    PB-13b replaces it: pulling it out here, before Add Egg can accept an egg with
-            //    no box behind it, would leave a No-Model-Output frame unsubmittable.
-            if (frame.source == FrameSource.MANUAL) {
-                ManualSpeciesChecklist(
-                    findings = state.findings,
-                    noDetectionSelected = state.noDetectionSelected,
-                    actions = actions,
-                )
-            } else {
-                AddedFindings(
-                    findings = state.findings,
-                    boxCount = boxCount,
-                    actions = actions,
-                )
-            }
+            //    which a frame captured with the container unreachable can be verified at all,
+            //    and a frame with model output still needs it for an egg the model missed.
+            AddedFindings(
+                findings = state.findings,
+                boxCount = boxCount,
+                actions = actions,
+            )
 
             FindingsSummary(findings = state.findings)
 
-            // Q4 is asked only where there is a model claim to have missed something. PB-13b
-            // derives it instead of asking; until then this is the condition the manual branch
-            // used to express by not rendering it.
-            if (frame.source == FrameSource.MODEL) {
-                QuestionSection(
-                    title = stringResource(R.string.verify_q4),
-                    tag = VerifyTestTags.QUESTION_Q4,
-                    options = listOf(true to "Yes", false to "No"),
-                    selected = state.missedEgg,
-                    onSelect = actions.onQ4Selected,
-                )
-            }
+            // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
+            // findings, not asked - see VerificationUiState.missedEgg. Adding an egg the model
+            // never boxed already answers it, and asking again lets the two disagree.
 
             // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
             SheetSectionLabel(
