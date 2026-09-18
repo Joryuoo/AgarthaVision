@@ -10,10 +10,12 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -408,7 +410,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao).insertSample(sample)
+        verify(sampleDao).upsertSample(sample)
     }
 
     @Test
@@ -421,7 +423,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao).insertSample(sample)
+        verify(sampleDao).upsertSample(sample)
     }
 
     @Test
@@ -434,7 +436,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -447,7 +449,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -460,7 +462,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -478,6 +480,9 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource, never()).fetchFindings(any())
         verify(detectionDao, never()).insertDetections(any())
         verify(sampleSpeciesFindingDao, never()).insertFindings(any())
+        // The findings replace is scoped to written ids, so a skipped sample must not appear in
+        // one at all - it clears rows, and this sample's are unsynced work.
+        verify(sampleSpeciesFindingDao, never()).replaceFindingsForSamples(any(), any())
     }
 
     @Test
@@ -494,6 +499,7 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource, never()).fetchFindings(any())
         verify(detectionDao, never()).insertDetections(any())
         verify(sampleSpeciesFindingDao, never()).insertFindings(any())
+        verify(sampleSpeciesFindingDao, never()).replaceFindingsForSamples(any(), any())
     }
 
     @Test
@@ -545,6 +551,73 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource).fetchFindings(listOf("smp-inserted"))
     }
 
+    // ── child reconciliation under @Upsert (86d4bx196) ───────────────────────
+
+    @Test
+    fun `a sample the server holds no findings for has its local findings cleared`() = runTest {
+        // The case the naive @Upsert swap would have got wrong. Under the old
+        // @Insert(REPLACE) the parent write cascaded the findings away before this ran, so a
+        // species removed on another device disappeared here for free. @Upsert leaves them, so
+        // the replace has to be keyed on the written sample ids rather than on the ids present
+        // in the fetched findings - otherwise a cleared field keeps its stale count forever.
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleRemoteDataSource.fetchFindings(listOf("smp-1"))).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        verify(sampleSpeciesFindingDao).replaceFindingsForSamples(listOf("smp-1"), emptyList())
+    }
+
+    @Test
+    fun `fetched findings are replaced against the sample they belong to`() = runTest {
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        val finding = SampleSpeciesFindingEntity(
+            findingId = "fnd-1",
+            sampleId = "smp-1",
+            species = "Ascaris lumbricoides",
+            eggCount = 23,
+        )
+        whenever(sampleRemoteDataSource.fetchFindings(listOf("smp-1"))).thenReturn(listOf(finding))
+
+        useCase.invoke()
+
+        verify(sampleSpeciesFindingDao).replaceFindingsForSamples(listOf("smp-1"), listOf(finding))
+    }
+
+    @Test
+    fun `detections merge rather than being replaced`() = runTest {
+        // The asymmetry is deliberate: detections are the retraining corpus C8 protects, and the
+        // push side never deletes one, so the server's set is a superset of anything this device
+        // pushed. Nothing in the pull path is allowed to remove a detection row - and DetectionDao
+        // exposes no delete for one to call, which is the structural half of the same rule.
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        val detection = DetectionEntity(
+            detectionId = "det-1",
+            sampleId = "smp-1",
+            classLabel = "Ascaris lumbricoides",
+            confidence = 0.9f,
+            bboxX = 1f,
+            bboxY = 2f,
+            bboxW = 3f,
+            bboxH = 4f,
+        )
+        whenever(sampleRemoteDataSource.fetchDetections(listOf("smp-1")))
+            .thenReturn(listOf(detection))
+
+        useCase.invoke()
+
+        verify(detectionDao).insertDetections(listOf(detection))
+    }
+
     // ── Child-fetch chunking (isIn URL-length guard) ─────────────────────────
 
     @Test
@@ -593,7 +666,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao).insertSession(session)
+        verify(sessionDao).upsertSession(session)
     }
 
     @Test
@@ -608,7 +681,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao).insertSession(session)
+        verify(sessionDao).upsertSession(session)
     }
 
     @Test
@@ -623,7 +696,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao, never()).insertSession(any())
+        verify(sessionDao, never()).upsertSession(any())
     }
 
     // ── Pagination ───────────────────────────────────────────────────────────

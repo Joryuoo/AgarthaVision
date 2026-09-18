@@ -196,9 +196,9 @@ class FetchRemoteDataUseCase @Inject constructor(
         val sessions = sessionRemoteDataSource.fetchSessions(userId)
         for (remote in sessions) {
             val local = sessionDao.getSessionById(remote.sessionId)
-            // E4 guard: only insert when absent or already synced; skip pending/sync_failed
+            // E4 guard: only write when absent or already synced; skip pending/sync_failed
             if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                sessionDao.insertSession(remote)
+                sessionDao.upsertSession(remote)
                 fetched++
             }
         }
@@ -212,22 +212,29 @@ class FetchRemoteDataUseCase @Inject constructor(
         while (true) {
             val page = sampleRemoteDataSource.fetchSamples(userId, offset, PAGE_SIZE.toLong())
 
-            // Collect only the IDs whose parent row was actually inserted (E4 guard).
+            // Collect only the IDs whose parent row was actually written (E4 guard).
             // VERIFIED / SYNC_FAILED samples are skipped here AND their child rows must
             // not be overwritten — fetching detections/findings for them would silently
             // clobber the expert verdict / expertClass payload that hasn't uploaded yet.
-            val insertedSampleIds = mutableListOf<String>()
+            //
+            // That guard is now the *only* thing standing between a skipped sample and its
+            // children. It used to be doubled by accident: the parent write was a REPLACE, so
+            // it deleted the row and cascaded the children away before re-inserting it, and
+            // pullChildRowsFor then rebuilt them from the server. `upsertSample` updates in
+            // place and touches no child row, which is the point of 86d4bx196 — so what the
+            // children end up as is decided below, deliberately, per table.
+            val writtenSampleIds = mutableListOf<String>()
             for (remote in page) {
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
                 val local = sampleDao.getSampleByIdIncludingDeleted(remote.sampleId)
                 if (local == null || local.status == SampleStatus.SYNCED.value) {
-                    sampleDao.insertSample(remote)
+                    sampleDao.upsertSample(remote)
                     fetched++
-                    insertedSampleIds.add(remote.sampleId)
+                    writtenSampleIds.add(remote.sampleId)
                 }
             }
 
-            pullChildRowsFor(insertedSampleIds)
+            pullChildRowsFor(writtenSampleIds)
 
             if (page.size < PAGE_SIZE) break
             offset += PAGE_SIZE.toLong()
@@ -236,20 +243,51 @@ class FetchRemoteDataUseCase @Inject constructor(
     }
 
     /**
-     * Fetch+insert detections and findings only for samples that were actually inserted.
-     * Chunk the id list to stay well under server/proxy URL-length limits (E5).
+     * Fetch the detections and findings of the samples whose parent row was actually written,
+     * and reconcile them against what is already on the device.
+     *
+     * Chunked to stay well under server/proxy URL-length limits (E5), and the same chunks are
+     * reused for the local writes so the SQLite host-parameter bound is respected too.
+     *
+     * **The two tables reconcile differently, and that asymmetry is the whole point.** Until
+     * 86d4bx196 the parent write was an `@Insert(REPLACE)`, which deleted the sample row and
+     * cascaded both child tables away before re-inserting it, so this function always ran
+     * against an empty slate and "merge" and "replace" were the same thing. Under `@Upsert`
+     * they are not, so each table gets the rule its own writer already uses:
+     *
+     * - **Detections merge.** They are the retraining corpus C8 protects, and the push side
+     *   (`SampleRemoteDataSource.syncSample`) upserts them and never deletes, so the server's
+     *   set is a superset of anything this device pushed — a merge keyed on the derived
+     *   detection id lands on exactly the rows a REPLACE-and-refetch used to produce, without
+     *   ever deleting one. Nothing here is allowed to remove a detection.
+     * - **Findings are replaced wholesale**, per sample, which is what both other writers of
+     *   this table already do (`SampleSpeciesFindingDao.replaceFindingsForSample` locally, a
+     *   delete-then-insert remotely). A per-species count is a *current statement*, not a
+     *   record: a species removed on another device has to actually disappear here, and a
+     *   merge would leave the stale row behind to inflate the count. This is the one place the
+     *   naive swap would have changed behaviour, and it is not a C8 deletion — the detections
+     *   and the Storage object C8 covers are untouched.
+     *
+     * The replace is keyed on [writtenSampleIds] rather than on the ids present in the fetched
+     * findings, so a sample the server holds no findings for — a clean field — has its local
+     * rows cleared rather than left behind.
      */
-    private suspend fun pullChildRowsFor(insertedSampleIds: List<String>) {
-        if (insertedSampleIds.isEmpty()) return
-        val detections = insertedSampleIds.chunked(CHILD_BATCH_SIZE)
-            .flatMap { chunk -> sampleRemoteDataSource.fetchDetections(chunk) }
+    private suspend fun pullChildRowsFor(writtenSampleIds: List<String>) {
+        if (writtenSampleIds.isEmpty()) return
+        val chunks = writtenSampleIds.chunked(CHILD_BATCH_SIZE)
+
+        val detections = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchDetections(chunk) }
         if (detections.isNotEmpty()) {
             detectionDao.insertDetections(detections)
         }
-        val findings = insertedSampleIds.chunked(CHILD_BATCH_SIZE)
-            .flatMap { chunk -> sampleRemoteDataSource.fetchFindings(chunk) }
-        if (findings.isNotEmpty()) {
-            sampleSpeciesFindingDao.insertFindings(findings)
+
+        val findings = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchFindings(chunk) }
+        val findingsBySample = findings.groupBy { it.sampleId }
+        chunks.forEach { chunk ->
+            sampleSpeciesFindingDao.replaceFindingsForSamples(
+                sampleIds = chunk,
+                findings = chunk.flatMap { sampleId -> findingsBySample[sampleId].orEmpty() },
+            )
         }
     }
 
