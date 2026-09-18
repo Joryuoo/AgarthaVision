@@ -5,6 +5,7 @@ import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.PatientSyncStatus
 import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.exceptions.RestException
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import java.time.Instant
@@ -29,19 +30,55 @@ class PatientRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
 ) {
     /**
-     * Writes the patient row, inserting or updating on primary-key conflict.
+     * Writes the patient row: insert first, update on primary-key conflict.
      *
-     * **Upsert, not insert.** A patient is editable, so the same row syncs more than once;
-     * `patients_update_linked` exists precisely so a re-sync is not rejected. An
-     * insert-only path works exactly until the first patient edit, then fails quietly.
+     * **Deliberately not a single `upsert`.** PostgREST compiles an upsert to
+     * `INSERT ... ON CONFLICT DO UPDATE`, and Postgres then applies the UPDATE policy's
+     * `WITH CHECK` as well as the INSERT one. `patients_update_linked`
+     * (`0001_init.sql:375-387`) resolves through `patient_users`, and that link row is
+     * written by the `on_patient_created` trigger **after** the insert - so a brand-new
+     * patient can never satisfy it, and every first push failed with
+     * `new row violates row-level security policy for table "patients"`. Confirmed against
+     * the live project: the same row, same token, succeeded as a plain insert and was
+     * rejected as an upsert.
+     *
+     * Splitting the two keeps each statement inside one policy. A new patient takes the
+     * insert path and satisfies `patients_insert_own` (`auth.uid() = created_by`). An edit
+     * conflicts, falls through to the update, and by then the link row exists so
+     * `patients_update_linked` passes. A patient is editable, so the update path is not
+     * optional - an insert-only version works until the first correction.
+     *
+     * `sessions`, `samples` and `reports` need none of this: their update policies are
+     * `auth.uid() = user_id`, the same condition as their inserts, so an upsert satisfies
+     * both at once. This table is the only one whose UPDATE policy depends on a row a
+     * trigger writes.
      *
      * The `patient_users` row is **not** written from here. The `on_patient_created`
      * trigger is `security definer` and writes it server-side; a client insert races the
      * trigger and, on conflict, does nothing useful.
      */
     suspend fun upsertPatient(patient: PatientEntity) {
-        supabase.postgrest[PATIENTS_TABLE].upsert(patient.toRow())
+        val row = patient.toRow()
+        try {
+            supabase.postgrest[PATIENTS_TABLE].insert(row)
+        } catch (error: RestException) {
+            if (!error.isDuplicateKey()) throw error
+            supabase.postgrest[PATIENTS_TABLE].update(row) {
+                filter { eq("id", patient.patientId) }
+            }
+        }
     }
+
+    /**
+     * Whether a failed write was a primary-key collision rather than a real error.
+     *
+     * Matched on the SQLSTATE Postgres reports for a unique violation. supabase-kt surfaces
+     * a conflict as the same `RestException` type as everything else, so there is no class
+     * to catch instead; the code is checked rather than the prose because the prose is
+     * localisable and names the constraint.
+     */
+    private fun RestException.isDuplicateKey(): Boolean =
+        message?.contains(UNIQUE_VIOLATION) == true
 
     // ── Pull (read from server) ───────────────────────────────────────────────
 
@@ -112,8 +149,8 @@ class PatientRemoteDataSource @Inject constructor(
         birthdate = LocalDate.parse(birthdate).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
         psgcBarangayCode = psgcBarangayCode,
         createdBy = createdBy,
-        createdAt = Instant.parse(createdAt).toEpochMilli(),
-        updatedAt = Instant.parse(updatedAt).toEpochMilli(),
+        createdAt = parseSupabaseInstant(createdAt).toEpochMilli(),
+        updatedAt = parseSupabaseInstant(updatedAt).toEpochMilli(),
         supabaseStatus = PatientSyncStatus.SYNCED.value,
     )
 
@@ -127,11 +164,14 @@ class PatientRemoteDataSource @Inject constructor(
     private fun PatientUserRow.toEntity(): PatientUserEntity = PatientUserEntity(
         patientId = patientId,
         userId = userId,
-        linkedAt = Instant.parse(linkedAt).toEpochMilli(),
+        linkedAt = parseSupabaseInstant(linkedAt).toEpochMilli(),
     )
 
     private companion object {
         const val PATIENTS_TABLE = "patients"
         const val PATIENT_USERS_TABLE = "patient_users"
+
+        /** Postgres SQLSTATE for a unique violation - a primary-key collision here. */
+        const val UNIQUE_VIOLATION = "23505"
     }
 }
