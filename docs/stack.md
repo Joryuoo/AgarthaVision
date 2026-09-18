@@ -43,9 +43,11 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | Location | play-services-location | 21.3.0 | `libs.versions.toml:24` |
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:21` |
 
-**WorkManager is a ghost.** It is declared as a dependency (`app/build.gradle.kts:164`) but no
-`Worker` exists anywhere in `app/src/main/`. Phase 1 sync is foreground and trigger-based;
-the durable queue is Phase 2. See `map/processes/sync.md`.
+**WorkManager runs sync** as of 86d4brr1f. `data/sync/SyncWorker` is a `@HiltWorker` behind
+the pure-Kotlin `domain/sync/SyncScheduler` port, enqueued as unique work with a network
+constraint and exponential backoff. `androidx.hilt:hilt-work` supplies `@HiltWorker`, and
+WorkManager's default initializer is removed in the manifest so `AgarthaVisionApp`'s
+`Configuration.Provider` can hand it the `HiltWorkerFactory`. See `map/processes/sync.md`.
 
 Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrofit converter
 (`core/di/InferenceModule.kt:35`, `:69`), **kotlinx.serialization** for Supabase row shapes

@@ -118,11 +118,21 @@ sensitive code in the repo.
 
 Push order is FK-safe and not incidental: sessions → samples → reports.
 
-**The non-obvious break:** there are **no retries and no `Worker`**. WorkManager is a declared
-dependency with no implementation (`app/build.gradle.kts:164`). A `sync_failed` row waits for a
-foreground trigger — login, app start while authenticated, or connectivity returning. Also,
-claim runs *before* sync and is what lets a nullable local `user_id` satisfy a NOT NULL remote
-column.
+**The non-obvious break:** sync is scheduled, not called. Everything except login goes through
+`SyncScheduler.requestSync()` and lands in `data/sync/SyncWorker`, so a change here runs on
+WorkManager's thread with WorkManager's retry policy, not on the caller's scope. Login is the
+one direct awaited call and is deliberately so.
+
+`WorkManagerSyncScheduler.isSyncing` is a **cold** flow and must stay one. Built eagerly it
+touches `WorkManager.getInstance()` while Hilt is still field-injecting `AgarthaVisionApp`,
+which calls back for a `HiltWorkerFactory` that the same pass has not assigned yet, and the app
+dies at launch.
+
+**Corrected 86d4brr1f:** this section used to say a failed row waits for "login, app start while
+authenticated, or connectivity returning". Login was real; **app start did not exist** until
+86d4brr1f added it, and **connectivity returning still does not** — nothing observes
+`ConnectivityObserver` to trigger a pass. The network constraint on the work request is the
+closest thing, and it gates a pass that was already requested rather than starting one.
 
 ## Changing report generation, CSV, or EPG
 

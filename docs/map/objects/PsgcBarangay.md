@@ -64,7 +64,8 @@ No index, deliberately. Every query is a primary-key lookup or the infix `LIKE` 
 | Code system | Current **10-digit** PSGC, zero-padded |
 | Barangays | 42,010 |
 | Regions | 18 |
-| Asset | `app/src/main/assets/psgc/psgc-barangays-q2_2026.csvgz`, 342 KB |
+| Asset | `app/src/main/assets/psgc/psgc-barangays-q2_2026.db`, 6.6 MB (≈1.2 MB in the APK) |
+| Source | `tools/psgc/psgc-barangays-q2_2026.csvgz`, 342 KB — in the repo, **not** packaged |
 
 Codes are revised as barangays are created, split, merged and renamed, and as whole provinces
 are moved between regions. **If the bundled code list and the boundary GeoJSON come from
@@ -115,7 +116,7 @@ change on the four affected units rather than a re-survey.
 
 **Changing the vintage again** is a dataset swap plus four constants, with no migration: see
 `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
-(`data/local/psgc/PsgcSeeder.kt:63-66`); `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT`
+(`data/local/psgc/PsgcSeeder.kt:72-75`); `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT`
 move with it, and `PsgcAssetPackagingTest` and `PsgcDatasetIntegrityTest` fail until they do.
 
 ### Aggregate before display — the privacy rule
@@ -154,15 +155,22 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 
 **Hits**
 - `PsgcSeeder`. The seed gate is `count() == 0 || storedVintage != VINTAGE`
-  (`data/local/psgc/PsgcSeeder.kt:63-66`). **Both halves are load-bearing** — see "Does not
+  (`data/local/psgc/PsgcSeeder.kt:72-75`). **Both halves are load-bearing** — see "Does not
   hit" below.
-- `PsgcCsvParser`, which is strict on purpose: a malformed row aborts rather than seeding a
-  barangay with no city (`data/local/psgc/PsgcCsvParser.kt:57-67`).
-- The asset generator and the upstream shapes it handles (`tools/psgc/build-psgc-asset.py`):
+- The bundled SQLite asset. `PsgcSeeder` stages it out of assets and moves the rows with one
+  `INSERT ... SELECT` over an `ATTACH`, which replaced gunzipping a CSV and building 42,010
+  entities in Kotlin — about a minute on a low-end device. `ATTACH` is issued outside a
+  transaction because SQLite rejects it inside one; the replacement still gets its own.
+- The asset generators. `tools/psgc/build-psgc-asset.py` fetches upstream and writes the CSV to
+  `tools/psgc/`, which is **not packaged**; `tools/psgc/build-psgc-db.py` reads that committed
+  file offline and writes the `.db` the APK ships. Only the first needs the network. Upstream
+  shapes the first one handles:
   units with no `geographic_level`, Manila's sub-municipalities, and chartered cities with no
   province. Its dependencies are pinned in `tools/psgc/requirements.txt`.
-- `search_text`, built in the parser. Case is folded **in Kotlin**, not by SQL `lower()`,
-  which is ASCII-only — 438 barangay names in this vintage carry non-ASCII characters.
+- `search_text`, built by the generator. Case is folded **in Python**, not by SQL `lower()`,
+  which is ASCII-only — 438 barangay names in this vintage carry non-ASCII characters. It was
+  folded in Kotlin until 86d4brr1f moved generation off the device; the two were proved
+  identical over all 42,010 rows before `PsgcCsvParser` was deleted.
 - Search matches **each whitespace-separated term** (`data/local/dao/PsgcBarangayDao.kt:50-53`).
   PSA spells the city "City of Cebu", so a contiguous match on "cebu city" — what a medtech
   types — finds nothing.

@@ -72,10 +72,27 @@ Only then does the sync pass run. Claim-exempt sessions are never pushed
 
 ## Does not hit
 
-- **Retries.** There are none. A `sync_failed` row waits for the next trigger; there is no
-  backoff, no scheduler, and **no `Worker`** — WorkManager is a declared dependency with no
-  implementation (`app/build.gradle.kts:164`, and see `../../features.md`). The durable queue
-  is Phase 2.
+- **Retries** are WorkManager's, not this use case's. A pass that fails returns
+  `Result.retry()` from `data/sync/SyncWorker`, which backs off exponentially from 30s. The
+  use case itself still tolerates individual row failures without failing the pass, so a
+  single `sync_failed` row is not what triggers a retry — an unexpected error reading the
+  queues is.
+
+  `SyncSummary.Skipped` (unauthenticated or offline) reports **success**, not retry: there is
+  no credential to acquire by trying again, and backing off against a signed-out device would
+  delay the pass that matters after login.
+
+  **Triggers:** app start, login, both "Sync now" buttons, and every local write — patient
+  insert and update, session start, verification submit, report generate. All but login go
+  through `SyncScheduler.requestSync()`, which is idempotent: one unique work name with
+  `ExistingWorkPolicy.KEEP`, so several writes in a minute collapse into one pass. Login is
+  the exception and stays a direct awaited call, because PB-08a depends on the medtech having
+  their patients on the device before they leave the clinic.
+
+  **On the target fleet this will not always run.** MIUI gates background work behind a
+  per-app "Background autostart" permission that is off by default, and Xiaomi handsets are
+  what the medtechs carry. Nothing is load-bearing on it: the queue is durable in Room, and a
+  missed pass is caught by the next foreground trigger.
 - **Recording.** Losing Supabase mid-session does not stop capture. Only losing the inference
   container does — see [`infer`](infer.md).
 - **Deletion.** Sync only inserts and upserts. Nothing here can remove a remote row or a
