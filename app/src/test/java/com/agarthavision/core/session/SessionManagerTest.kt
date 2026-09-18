@@ -21,6 +21,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionManagerTest {
@@ -42,12 +43,15 @@ class SessionManagerTest {
         }
     }
 
+    private val syncScheduler = RecordingSyncScheduler()
+
     private val manager = SessionManager(
         sessionDao = sessionDao,
         remoteDataSource = remoteDataSource,
         authRepository = authRepository,
         deviceIdProvider = deviceIdProvider,
         activeSessionIdStore = activeSessionIdStore,
+        syncScheduler = syncScheduler,
     )
 
     @Test

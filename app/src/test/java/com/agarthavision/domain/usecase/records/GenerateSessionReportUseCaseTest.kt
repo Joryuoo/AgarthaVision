@@ -32,6 +32,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 class GenerateSessionReportUseCaseTest {
     @Test
@@ -123,6 +124,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.CSV)
@@ -150,6 +152,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.PDF)
@@ -197,6 +200,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
     }
 }

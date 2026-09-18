@@ -18,6 +18,7 @@ import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.sync.SyncScheduler
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
@@ -41,6 +42,7 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val reportPdfBuilder: ReportPdfBuilder,
     private val reportPdfRenderer: ReportPdfRenderer,
     private val syncReportUseCase: SyncReportUseCase,
+    private val syncScheduler: SyncScheduler,
 ) {
     suspend operator fun invoke(sessionId: String, format: ReportFormat): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
@@ -93,7 +95,10 @@ class GenerateSessionReportUseCase @Inject constructor(
             supabaseStatus = ReportSyncStatus.PENDING,
         )
         reportRepository.insert(report)
+        // Direct push first, as before. The scheduler is the fallback for when it does not
+        // land: a report left PENDING otherwise waits for someone to open Settings.
         syncReportUseCase(reportId)
+        syncScheduler.requestSync()
         report
     }
 

@@ -21,6 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 /**
  * In-memory Room tests for [PatientRepositoryImpl].
@@ -37,6 +38,8 @@ class PatientRepositoryImplTest {
 
     private lateinit var db: AgarthaDatabase
     private lateinit var dao: PatientDao
+    private val syncScheduler = RecordingSyncScheduler()
+
     private lateinit var repository: PatientRepositoryImpl
 
     @Before
@@ -46,7 +49,7 @@ class PatientRepositoryImplTest {
             .allowMainThreadQueries()
             .build()
         dao = db.patientDao()
-        repository = PatientRepositoryImpl(dao)
+        repository = PatientRepositoryImpl(dao, syncScheduler)
     }
 
     @After
@@ -76,6 +79,18 @@ class PatientRepositoryImplTest {
         repository.observePatients(userId, query, limit = 50).first()
 
     // ── visibility resolves through patient_users ─────────────────────────────
+
+    @Test
+    fun `saving a patient asks for a sync pass`() = runTest {
+        // A patient is the first thing the server needs: sessions.patient_id references it,
+        // so a session pushed ahead of its patient is rejected. Asking here is what stops
+        // that wait being "until somebody opens Settings".
+        repository.insert(patient())
+        assertEquals(1, syncScheduler.requests)
+
+        repository.update(patient().copy(lastname = "Reyes"))
+        assertEquals(2, syncScheduler.requests)
+    }
 
     @Test
     fun `a patient created by user A is visible to user A`() = runTest {

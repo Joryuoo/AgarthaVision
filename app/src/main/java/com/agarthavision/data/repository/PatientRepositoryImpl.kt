@@ -5,6 +5,7 @@ import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.data.local.mapper.toEntity
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.sync.SyncScheduler
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.map
  */
 class PatientRepositoryImpl @Inject constructor(
     private val patientDao: PatientDao,
+    private val syncScheduler: SyncScheduler,
 ) : PatientRepository {
 
     override fun observePatients(
@@ -52,6 +54,10 @@ class PatientRepositoryImpl @Inject constructor(
             patient = patient.toEntity(),
             linkedAt = patient.createdAt.toEpochMilli(),
         )
+        // A patient is the first thing a session needs on the server, so the sooner this
+        // lands the sooner everything under it can. Fire-and-forget: the row is already
+        // committed, and a save must not fail because the network did.
+        syncScheduler.requestSync()
     }
 
     /**
@@ -62,5 +68,6 @@ class PatientRepositoryImpl @Inject constructor(
      */
     override suspend fun update(patient: Patient) {
         patientDao.updatePatient(patient.toEntity())
+        syncScheduler.requestSync()
     }
 }

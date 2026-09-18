@@ -40,6 +40,24 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+            WorkManager's on-demand initialisation. AgarthaVisionApp implements
+            Configuration.Provider so it can supply the HiltWorkerFactory that constructs
+            @HiltWorker workers; leaving the default initializer in place would have
+            WorkManager configure itself first, without that factory, and every SyncWorker
+            would fail to instantiate.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
     </application>
 
 </manifest>

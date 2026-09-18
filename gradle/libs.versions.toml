@@ -3,6 +3,7 @@ kotlin = "2.2.10"
 agp = "9.2.1"
 compose-bom = "2026.02.01"
 hilt = "2.59.2"
+androidx-hilt = "1.2.0"
 room = "2.7.0"
 retrofit = "2.11.0"
 okhttp = "4.12.0"
@@ -51,7 +52,11 @@ activity-compose = { group = "androidx.activity", name = "activity-compose", ver
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }
 hilt-compiler = { group = "com.google.dagger", name = "hilt-android-compiler", version.ref = "hilt" }
-hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version = "1.2.0" }
+hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-compose", version.ref = "androidx-hilt" }
+# Constructor injection into a Worker. androidx.hilt's compiler is separate from Dagger's
+# and both run under KSP; @HiltWorker needs this one.
+hilt-work = { group = "androidx.hilt", name = "hilt-work", version.ref = "androidx-hilt" }
+androidx-hilt-compiler = { group = "androidx.hilt", name = "hilt-compiler", version.ref = "androidx-hilt" }
 
 # Room
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

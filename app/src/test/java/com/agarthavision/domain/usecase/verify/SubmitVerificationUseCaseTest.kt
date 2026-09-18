@@ -26,6 +26,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SubmitVerificationUseCaseTest {
@@ -39,11 +40,14 @@ class SubmitVerificationUseCaseTest {
 
     private val findingDao: SampleSpeciesFindingDao = mock()
 
+    private val syncScheduler = RecordingSyncScheduler()
+
     private val useCase = SubmitVerificationUseCase(
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         findingDao = findingDao,
         syncSampleUseCase = syncSampleUseCase,
+        syncScheduler = syncScheduler,
     )
 
     private val prediction = Prediction(
@@ -63,6 +67,18 @@ class SubmitVerificationUseCaseTest {
         predictions = listOf(prediction),
         inferenceModelVersion = "v2",
     )
+
+    @Test
+    fun `submitting a verification asks for a sync pass`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Verification works offline by design, so syncSampleUseCase often cannot land.
+            // The request is what gets the sample up once there is a network, with backoff.
+            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
+
+            useCase(frame, findings = emptyList(), missedEgg = false)
+
+            assertEquals(1, syncScheduler.requests)
+        }
 
     @Test
     fun `submit persists sample with VERIFIED status and one detection per box`() =

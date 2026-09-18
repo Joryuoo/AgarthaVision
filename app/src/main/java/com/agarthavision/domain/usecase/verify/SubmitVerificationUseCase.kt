@@ -8,6 +8,7 @@ import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.sync.SyncScheduler
 import java.time.Instant
 import javax.inject.Inject
 
@@ -29,6 +30,7 @@ class SubmitVerificationUseCase @Inject constructor(
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
     private val syncSampleUseCase: SyncSampleUseCase,
+    private val syncScheduler: SyncScheduler,
 ) {
     suspend operator fun invoke(
         frame: FlaggedFrame,
@@ -70,6 +72,10 @@ class SubmitVerificationUseCase @Inject constructor(
         )
 
         syncSampleUseCase.invoke(sampleId)
+        // Verification works offline by design, so the direct push above often cannot land.
+        // The scheduler is what gets the sample up once there is a network, with backoff,
+        // rather than it waiting for the next time someone opens Settings.
+        syncScheduler.requestSync()
 
         sampleId
     }

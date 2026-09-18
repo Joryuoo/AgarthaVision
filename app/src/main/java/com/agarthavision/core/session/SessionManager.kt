@@ -6,6 +6,7 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.SessionRemoteDataSource
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +42,7 @@ class SessionManager @Inject constructor(
     private val authRepository: AuthRepository,
     private val deviceIdProvider: DeviceIdProvider,
     private val activeSessionIdStore: ActiveSessionIdStore,
+    private val syncScheduler: SyncScheduler,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
 
@@ -89,6 +91,10 @@ class SessionManager @Inject constructor(
         sessionDao.insertSession(entity)
         val synced = pushSessionInsert(entity)
         activate(synced, now)
+        // pushSessionInsert already tried the server directly. This is for the case where it
+        // could not: the row stays PENDING and the scheduler retries it with backoff instead
+        // of leaving it for whenever someone next opens Settings.
+        syncScheduler.requestSync()
         return synced
     }
 
