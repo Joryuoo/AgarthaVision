@@ -79,6 +79,7 @@
     <string name="connection_lost_body">Captures are still recorded, as Manual. Verify them as usual.</string>
     <string name="connection_lost_resume">Retry</string>
     <string name="connection_lost_probing">Checking connection…</string>
+    <string name="connection_lost_collapse">Hide this message</string>
 
     <string name="verify_frame_meta">Frame %1$d/%2$d · %3$s</string>
     <!-- Shown instead of a position when the open frame is no longer in the queue. -->
@@ -179,6 +180,7 @@
     <string name="capture_verify_action_desc">Verify flagged frames</string>
     <string name="capture_reports_action_desc">View session reports</string>
     <string name="capture_records_action_desc">View session records</string>
+    <string name="capture_back_desc">Back</string>
     <string name="capture_shutter_desc">Capture sample</string>
     <string name="capture_shutter_busy_desc">Capturing sample</string>
     <string name="capture_permission_required">Camera permission is required for recording.</string>
@@ -411,6 +413,7 @@
          on the patient and the note was an ad-hoc patient identifier the patient record
          replaces. Only the label is left. -->
     <string name="session_new_sheet_subtitle">Name this smear before scanning</string>
+    <string name="session_new_sheet_close">Close</string>
     <string name="session_new_label_required">Please fill in the label field to continue.</string>
     <string name="session_new_char_counter">%1$d / %2$d</string>
     <!-- Sessions empty state (86d4apzf5) -->
