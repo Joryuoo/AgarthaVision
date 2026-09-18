@@ -145,6 +145,10 @@ fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
 }
 
 /** Persists one finding as one detection row. See [toDetectionEntities] for the shapes. */
+// The branch count is the answer matrix itself - verdict, species, box origin and the
+// touched flags each read from a different answer. Flattening it would hide the mapping
+// that C7 depends on being auditable.
+@Suppress("CyclomaticComplexMethod")
 private fun Finding.toDetectionEntity(
     sampleId: String,
     ordinal: Int,

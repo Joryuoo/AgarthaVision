@@ -210,6 +210,9 @@ class OpenVerificationTargetUseCase @Inject constructor(
      *
      * Null for a row written with no box at all — an egg the medtech added and did not draw.
      */
+    // Four guard-clause returns for the four nullable columns read far more clearly than a
+    // nested let-chain, and any one being null means the same thing: no stored box.
+    @Suppress("ReturnCount")
     private fun DetectionEntity.storedBox(): ImageBox? {
         val x = bboxX ?: return null
         val y = bboxY ?: return null

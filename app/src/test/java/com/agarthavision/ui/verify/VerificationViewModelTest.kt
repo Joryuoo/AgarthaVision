@@ -28,6 +28,9 @@ import org.mockito.kotlin.whenever
 import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
+// One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
+// files and make the question-chain cases harder to read against each other.
+@Suppress("LargeClass")
 class VerificationViewModelTest {
 
     @get:Rule

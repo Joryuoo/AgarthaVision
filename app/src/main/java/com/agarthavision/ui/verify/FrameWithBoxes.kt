@@ -1,4 +1,13 @@
-@file:Suppress("FunctionNaming", "LongParameterList")
+@file:Suppress(
+    "FunctionNaming",
+    "LongParameterList",
+    // The branches here are render states over one frame - boxes shown, drawing, no source
+    // size yet - rather than logic. Splitting them out would thread the transform and the
+    // gesture state through several signatures for no gain, the same call CaptureScreen and
+    // SessionDetailScreen already made.
+    "CyclomaticComplexMethod",
+    "ComplexCondition",
+)
 
 package com.agarthavision.ui.verify
 

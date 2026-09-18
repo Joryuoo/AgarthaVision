@@ -28,6 +28,9 @@ class DetectionOverlayGeometryTest {
     private val source = CAPTURE_FRAME_SIZE_PX.toFloat()
 
     /** The corner the overlay draws from, for a centre-based box. */
+    // Canvas and box geometry are six independent floats; a holder here would obscure what
+    // each case varies.
+    @Suppress("LongParameterList")
     private fun topLeftOf(
         canvasW: Float,
         canvasH: Float,
