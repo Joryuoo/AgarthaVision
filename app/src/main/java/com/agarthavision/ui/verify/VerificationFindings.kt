@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,9 +28,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -36,32 +36,24 @@ import com.agarthavision.domain.usecase.verify.toFindingRows
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
- * What the model said about this frame, or a plain statement that it said nothing.
+ * What the model said about this frame — one of exactly three states, never collapsed to two.
  *
- * **Never silently hidden.** The three states below mean different things to a reviewer and to
- * the training corpus, and the last two are deliberately not collapsed into one "no model
- * output" line: "no signal was ever collected" and "the model looked and asserted nothing was
- * there" are different facts, and the second is itself a labelled datapoint.
+ * The distinction the medtech has to be able to make here is between **a clean field** and **a
+ * container that never answered**. A clean field is a real clinical result and the most common
+ * one in surveillance; "no model output" means the server was unreachable. Collapsing them would
+ * make a negative smear indistinguishable from a broken container, and 86d4a6prb persists a
+ * zero-detection frame with an empty predictions list precisely so the clean field is recorded.
  *
- * Derived from [FlaggedFrame.source] and the prediction list on every recomposition. There is
- * deliberately no `hasModelOutput` flag stored beside the source — that would be a second
- * source of truth for the same fact, and it would drift.
+ * What it reports is the **model's own claim**, before any human answer — deliberately not the
+ * same number as [FindingsSummary], which shows what submitting would write. The gap between the
+ * two is what the medtech is here to create.
  */
 @Composable
-internal fun ModelOutputPanel(
-    frame: FlaggedFrame,
+internal fun ModelOutputSection(
+    output: ModelOutput,
     modifier: Modifier = Modifier,
 ) {
-    val message = when {
-        frame.source == FrameSource.MANUAL -> stringResource(R.string.verify_model_none_manual)
-        frame.predictions.isEmpty() ->
-            stringResource(
-                R.string.verify_model_clean_field,
-                frame.inferenceModelVersion.orEmpty(),
-            )
-        else -> return
-    }
-
+    val colors = AgarthaTheme.colors
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -69,15 +61,86 @@ internal fun ModelOutputPanel(
             .padding(bottom = 14.dp),
     ) {
         SectionLabel(stringResource(R.string.verify_model_output))
-        Text(
-            text = message,
-            color = AgarthaTheme.colors.textSecondary,
-            fontSize = 13.sp,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(12.dp))
+                .background(colors.surfaceMuted, RoundedCornerShape(12.dp))
                 .padding(12.dp),
-        )
+        ) {
+            when (output) {
+                ModelOutput.InProgress -> CircularProgressIndicator(
+                    color = colors.accent,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .testTag(VerifyTestTags.MODEL_OUTPUT_SPINNER)
+                        .size(24.dp),
+                )
+
+                ModelOutput.Unavailable -> Text(
+                    text = stringResource(R.string.verify_model_unavailable),
+                    color = colors.textSecondary,
+                    fontSize = 13.sp,
+                )
+
+                is ModelOutput.Read -> if (output.species.isEmpty()) {
+                    // A result, not a failure. The wording says what the model did, not what it
+                    // failed to do.
+                    Text(
+                        text = stringResource(R.string.verify_model_no_eggs),
+                        color = colors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                } else {
+                    output.species.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(row.label, color = colors.textPrimary, fontSize = 13.sp)
+                            Text(
+                                row.count.toString(),
+                                color = colors.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            stringResource(R.string.verify_model_total),
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            output.total.toString(),
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+        // The C7 caution, moved here from the detection card it used to sit under. It is a
+        // caution about model output, so it belongs to the section that reports model output -
+        // and it is now shown once per frame rather than once per box.
+        if (output is ModelOutput.Read && output.species.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.verify_ai_suggestion_note),
+                color = colors.textTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
+                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            )
+        }
     }
 }
 

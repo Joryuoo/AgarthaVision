@@ -70,17 +70,21 @@ internal object VerifyTestTags {
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
-    /** Card naming the species under review, with the provenance pill inside it. */
-    const val DETECTION_CARD = "detection_card"
-
-    /** Caution line under the card, present only for model frames. */
+    /**
+     * Caution line under the model-output summary, present only when the model named something.
+     *
+     * It used to sit under a maroon card naming the current detection's species, once per box.
+     * The card went with the section restructure - the species it announced is asked about
+     * directly by Q3, and the source it badged is now the whole point of the model-output
+     * section's three states.
+     */
     const val AI_SUGGESTION_NOTE = "ai_suggestion_note"
 
-    /** AI-suggested vs Manual provenance pill. */
-    const val SOURCE_BADGE = "source_badge"
-
-    /** The model-output panel. Present for every frame; its text differs by source. */
+    /** The model-output section. Present for every frame; its body is one of three states. */
     const val MODEL_OUTPUT_PANEL = "model_output_panel"
+
+    /** The spinner inside the model-output section while inference has not come back. */
+    const val MODEL_OUTPUT_SPINNER = "model_output_spinner"
 
     /** "Add species" button beneath the added-findings list. */
     const val ADD_SPECIES = "add_species"

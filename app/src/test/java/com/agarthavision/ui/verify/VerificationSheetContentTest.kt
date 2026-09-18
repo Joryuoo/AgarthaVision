@@ -6,12 +6,10 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
-import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onChild
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -531,14 +529,20 @@ class VerificationSheetContentTest {
         composeRule.onNodeWithText("Detection 1 of 2").performScrollTo().assertIsDisplayed()
     }
 
+    /**
+     * A single-box frame keeps the cycle controls and dims both ends.
+     *
+     * They used to be hidden below two boxes. Present-and-dead is the same rule the sample
+     * cycle above already follows, and one rule for both is what keeps the row from moving
+     * under the medtech's thumb as they page between frames with different box counts.
+     */
     @Test
-    fun `a single-box frame still says which detection it is but offers no egg buttons`() {
+    fun `a single-box frame says which detection it is and dims both cycle ends`() {
         setContent(state())
 
-        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
         composeRule.onNodeWithText("Detection 1 of 1").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
-        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_NEXT).assertDoesNotExist()
+        sheetNode(VerifyTestTags.DETECTION_PREV).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.DETECTION_NEXT).assertIsNotEnabled()
     }
 
     // Bounding boxes
@@ -573,44 +577,67 @@ class VerificationSheetContentTest {
         assertEquals(1, r.boxToggles)
     }
 
-    // Provenance and repeat
+    // Model output - the three states, which must never collapse into two
+
+    /**
+     * The distinction this suite exists to protect.
+     *
+     * A clean field and an unreachable container both leave the medtech with no boxes to answer
+     * questions about, and they mean opposite things: one is a real negative result, the most
+     * common one in surveillance, and the other is a broken container. If these two assertions
+     * ever pass against the same string, a negative smear has become indistinguishable from an
+     * outage on the screen where the medtech decides what to record.
+     */
+    @Test
+    fun `a clean field reads as a result, not as a missing one`() {
+        setContent(state(frame = frame(source = FrameSource.MODEL, predictions = 0), answers = emptyList()))
+
+        sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithText("No eggs detected.").performScrollTo().assertIsDisplayed()
+    }
 
     @Test
-    fun `a model frame is badged as AI-suggested`() {
-        setContent(state(frame = frame(source = FrameSource.MODEL)))
+    fun `an unreachable container says so, and says the field was still recorded`() {
+        setContent(state(frame = frame(source = FrameSource.MANUAL, predictions = 0), answers = emptyList()))
 
-        sheetNode(VerifyTestTags.SOURCE_BADGE).onChild().assertTextEquals("AI-suggested")
+        sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithText("No model output.", substring = true)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("No eggs detected.").assertDoesNotExist()
+    }
+
+    @Test
+    fun `model output summarises the classes it named and totals them`() {
+        setContent(state(answers = listOf(answered(), answered()), frame = frame(predictions = 2)))
+
+        sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).assertIsDisplayed()
+        composeRule.onNodeWithText("Ascaris").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("TOTAL").performScrollTo().assertIsDisplayed()
     }
 
     /**
-     * SOURCE_BADGE lives inside DetectionCard, which is only rendered for AI frames with
-     * boxes. A manual frame renders the species checklist instead, so no badge is present.
-     * Coverage: the badge content and the manual checklist are each tested separately.
+     * The model names a species before the medtech has answered anything, so a frame with model
+     * output must carry the caution that it is a suggestion, not a finding (C7). A frame with no
+     * model output has nothing to caution about.
      */
     @Test
-    fun `a manual frame does not render the detection card or its source badge`() {
-        setContent(state(frame = frame(source = FrameSource.MANUAL), answers = emptyList()))
-
-        composeRule.onNodeWithTag(VerifyTestTags.DETECTION_CARD).assertDoesNotExist()
-        composeRule.onNodeWithTag(VerifyTestTags.SOURCE_BADGE).assertDoesNotExist()
-    }
-
-    /**
-     * The card names the model's class before the medtech has answered anything, so a model
-     * frame must carry the caution that it is a suggestion, not a finding (C7). A manual
-     * frame has no model output to caution about.
-     */
-    @Test
-    fun `a model frame carries the AI-suggestion caution under the detection card`() {
+    fun `a frame with model output carries the AI-suggestion caution`() {
         setContent(state(frame = frame(source = FrameSource.MODEL)))
 
-        sheetNode(VerifyTestTags.DETECTION_CARD).assertIsDisplayed()
         sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).assertIsDisplayed()
     }
 
     @Test
-    fun `a manual frame does not render the AI-suggestion caution`() {
+    fun `an unreachable container renders no AI-suggestion caution`() {
         setContent(state(frame = frame(source = FrameSource.MANUAL), answers = emptyList()))
+
+        composeRule.onNodeWithTag(VerifyTestTags.AI_SUGGESTION_NOTE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a clean field renders no AI-suggestion caution either`() {
+        setContent(state(frame = frame(source = FrameSource.MODEL, predictions = 0), answers = emptyList()))
 
         composeRule.onNodeWithTag(VerifyTestTags.AI_SUGGESTION_NOTE).assertDoesNotExist()
     }
@@ -618,13 +645,18 @@ class VerificationSheetContentTest {
     @Test
     fun `a frame out of the queue shows that instead of a position`() {
         // frameIndexInQueue 0 means the frame is no longer in the queue - deleted from the
-        // queue screen, or tombstoned. Showing "Frame 0/4" was the bug.
+        // queue screen, or tombstoned. Showing "Sample 0 of 4" was the bug.
         setContent(state(frameIndexInQueue = 0, queueSize = 4))
 
-        // Matched on the label alone: the meta also carries a wall-clock time formatted in
-        // the default zone, so asserting the whole string would pass or fail by machine.
-        composeRule.onNodeWithText("NOT IN QUEUE", substring = true).assertIsDisplayed()
-        composeRule.onNodeWithText("FRAME 0/4", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Not in queue").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Sample 0 of 4").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the sample indicator says where in the queue this frame is`() {
+        setContent(state(frameIndexInQueue = 2, queueSize = 3))
+
+        composeRule.onNodeWithText("Sample 2 of 3").performScrollTo().assertIsDisplayed()
     }
 
     // Frame navigation
@@ -827,11 +859,19 @@ class VerificationSheetContentTest {
         assertEquals(false, r.manualSpeciesToggled[0].second)
     }
 
+    /**
+     * The top bar carries the sample's label, which is the time it was captured — the same
+     * label the queue row leads with, so the row the medtech tapped names the screen they land
+     * on. It used to read "Verify detection" or "Label sample" depending on the source, which
+     * told the medtech what kind of screen they were on rather than which sample they were on.
+     */
     @Test
-    fun `the title reads Label sample for a manual frame`() {
+    fun `the top bar is the sample's captured-at label, whatever the source`() {
         setContent(manualState())
 
-        // "Label sample" is the string resource verify_manual_title.
-        composeRule.onNodeWithText("Label sample").assertIsDisplayed()
+        // Instant.EPOCH formatted in the default zone — asserting the literal string would
+        // pass or fail by machine, so this asserts the labels it replaced are gone instead.
+        composeRule.onNodeWithText("Label sample").assertDoesNotExist()
+        composeRule.onNodeWithText("Verify detection").assertDoesNotExist()
     }
 }

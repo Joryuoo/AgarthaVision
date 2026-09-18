@@ -11,10 +11,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -23,9 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.outlined.CropSquare
-import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -43,7 +39,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -58,9 +53,7 @@ import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
-import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.DialogShape
-import com.agarthavision.ui.theme.MonoDataStyle
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -144,14 +137,16 @@ internal fun VerificationSheetContent(
 ) {
     val frame = state.frame ?: return
     val showDiscardConfirm = remember { mutableStateOf(false) }
-    val timeLabel = remember(frame.capturedAt) {
+    // The sample's label is the moment it was captured. The same label the queue row carries,
+    // so the row the medtech tapped names the screen they land on.
+    val capturedAtLabel = remember(frame.capturedAt) {
         DateTimeFormatter.ofPattern("HH:mm:ss")
             .withZone(ZoneId.systemDefault())
             .format(frame.capturedAt)
     }
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
-    val speciesName = currentPrediction?.classLabel ?: "Unknown"
+    val boxCount = frame.predictions.size
 
     Column(
         modifier = Modifier
@@ -159,43 +154,16 @@ internal fun VerificationSheetContent(
             .padding(bottom = 32.dp)
             .verticalScroll(rememberScrollState()),
     ) {
+        // 1. Top bar: back, and the sample's label. The frame counter that used to live in the
+        //    meta line is now the Current Sample indicator, beneath the frame it counts.
         ScreenTopBar(
-            title = if (frame.source == FrameSource.MANUAL) {
-                stringResource(R.string.verify_manual_title)
-            } else {
-                "Verify detection"
-            },
-            // A frame marked repeat leaves the cycle and has no position, so show what it
-            // is rather than "Frame 0/4". Manual frames use a distinct meta format.
-            metaText = if (frame.source == FrameSource.MANUAL) {
-                if (state.frameIndexInQueue > 0) {
-                    stringResource(
-                        R.string.manual_frame_meta,
-                        state.frameIndexInQueue,
-                        state.queueSize,
-                        timeLabel,
-                    )
-                } else {
-                    stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
-                }
-            } else {
-                if (state.frameIndexInQueue > 0) {
-                    stringResource(
-                        R.string.verify_frame_meta,
-                        state.frameIndexInQueue,
-                        state.queueSize,
-                        timeLabel,
-                    )
-                } else {
-                    stringResource(R.string.verify_frame_meta_out_of_cycle, timeLabel)
-                }
-            },
+            title = capturedAtLabel,
+            metaText = "",
             onBack = actions.onCancel,
         )
 
         Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-            // Full width between the side margins, at the frame's own aspect ratio, so the
-            // whole field is visible without letterboxing.
+            // 2. Frame section: the image, then one row carrying where you are and how to move.
             FrameWithBoxes(
                 jpegBytes = frame.jpegBytes,
                 predictions = frame.predictions,
@@ -211,7 +179,20 @@ internal fun VerificationSheetContent(
                     .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
             )
 
-            FrameNavRow(
+            CycleRow(
+                indicator = if (state.frameIndexInQueue > 0) {
+                    stringResource(
+                        R.string.verify_sample_indicator,
+                        state.frameIndexInQueue,
+                        state.queueSize,
+                    )
+                } else {
+                    stringResource(R.string.verify_sample_out_of_queue)
+                },
+                prevDescription = stringResource(R.string.verify_prev_frame),
+                nextDescription = stringResource(R.string.verify_next_frame),
+                prevTag = VerifyTestTags.FRAME_PREV,
+                nextTag = VerifyTestTags.FRAME_NEXT,
                 canGoPrev = state.canGoPrev,
                 canGoNext = state.canGoNext,
                 onPrev = actions.onFramePrev,
@@ -219,83 +200,72 @@ internal fun VerificationSheetContent(
                 modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
             )
 
+            // 3. Model output: what the container said, or that it said nothing, or that it has
+            //    not answered yet. Always present, never collapsed to two states.
+            ModelOutputSection(output = frame.modelOutput())
+
+            // 4. Current detection. Only when there is model output with at least one box -
+            //    every question in here is a question about a box.
+            if (boxCount > 0) {
+                CycleRow(
+                    indicator = stringResource(
+                        R.string.verify_detection_counter,
+                        state.currentDetectionIndex + 1,
+                        boxCount,
+                    ),
+                    prevDescription = stringResource(R.string.verify_prev_egg),
+                    nextDescription = stringResource(R.string.verify_next_egg),
+                    prevTag = VerifyTestTags.DETECTION_PREV,
+                    nextTag = VerifyTestTags.DETECTION_NEXT,
+                    // Counted from frame.predictions, never from the answer list: the medtech
+                    // can append a species the model never boxed, so the answer list is the
+                    // longer of the two and paging by it would walk off the end of the boxes.
+                    canGoPrev = state.currentDetectionIndex > 0,
+                    canGoNext = state.currentDetectionIndex < boxCount - 1,
+                    onPrev = actions.onDetectionPrev,
+                    onNext = actions.onDetectionNext,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+
+                BoundingBoxesToggle(
+                    checked = state.showBoundingBoxes,
+                    onToggle = actions.onToggleBoundingBoxes,
+                )
+
+                BoxQuestionChain(
+                    answers = currentAnswers,
+                    suggestedSpecies = currentPrediction
+                        ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                    actions = actions,
+                )
+            }
+
+            // 5. Add Egg. Always present, with or without model output - it is the only path by
+            //    which a frame captured with the container down can be verified at all.
+            //
+            //    A manual capture still renders the species checklist rather than this list.
+            //    PB-13b replaces it: pulling it out here, before Add Egg can accept an egg with
+            //    no box behind it, would leave a No-Model-Output frame unsubmittable.
             if (frame.source == FrameSource.MANUAL) {
-                // Manual-capture path: checklist UI, no model output, no detection chain.
                 ManualSpeciesChecklist(
                     findings = state.findings,
                     noDetectionSelected = state.noDetectionSelected,
                     actions = actions,
                 )
             } else {
-                // AI path (with or without detections).
-
-                // Says what the model produced when it produced nothing to review. Returns
-                // without drawing when there are boxes - the card below is the model's output
-                // in that case.
-                ModelOutputPanel(frame = frame)
-
-                // Everything in this block is about a model box. A model frame the model
-                // called clean has no boxes, so none of it is drawn: no card, no egg pager,
-                // no boxes toggle, and none of the per-box questions. What those frames get
-                // is the added-findings list below, which carries the medtech's own additions.
-                val boxCount = frame.predictions.size
-                if (boxCount > 0) {
-                    DetectionCard(
-                        speciesName = speciesName,
-                        detectionLabel = stringResource(
-                            R.string.verify_detection_counter,
-                            state.currentDetectionIndex + 1,
-                            boxCount,
-                        ),
-                        source = frame.source,
-                        modifier = Modifier.padding(bottom = 12.dp),
-                    )
-
-                    // Steps between the boxes on this frame. Only drawn when there is more
-                    // than one box, and each side goes dead at its end of the range, so it
-                    // cannot read as a way to leave the frame.
-                    //
-                    // Counted from `frame.predictions`, never from the answer list: the
-                    // medtech can append a species the model never boxed, so the answer list
-                    // is the longer of the two and paging by it would walk off the end of the
-                    // boxes.
-                    if (boxCount > 1) {
-                        NavPairRow(
-                            state = NavPairState(
-                                prevLabel = stringResource(R.string.verify_prev_egg),
-                                nextLabel = stringResource(R.string.verify_next_egg),
-                                prevTag = VerifyTestTags.DETECTION_PREV,
-                                nextTag = VerifyTestTags.DETECTION_NEXT,
-                                canGoPrev = state.currentDetectionIndex > 0,
-                                canGoNext = state.currentDetectionIndex < boxCount - 1,
-                                onPrev = actions.onDetectionPrev,
-                                onNext = actions.onDetectionNext,
-                            ),
-                            modifier = Modifier.padding(bottom = 12.dp),
-                        )
-                    }
-
-                    BoundingBoxesToggle(
-                        checked = state.showBoundingBoxes,
-                        onToggle = actions.onToggleBoundingBoxes,
-                    )
-
-                    BoxQuestionChain(
-                        answers = currentAnswers,
-                        suggestedSpecies = currentPrediction
-                            ?.let { EggSpecies.fromClassLabel(it.classLabel) },
-                        actions = actions,
-                    )
-                }
-
                 AddedFindings(
                     findings = state.findings,
                     boxCount = boxCount,
                     actions = actions,
                 )
+            }
 
-                FindingsSummary(findings = state.findings)
+            FindingsSummary(findings = state.findings)
 
+            // Q4 is asked only where there is a model claim to have missed something. PB-13b
+            // derives it instead of asking; until then this is the condition the manual branch
+            // used to express by not rendering it.
+            if (frame.source == FrameSource.MODEL) {
                 QuestionSection(
                     title = stringResource(R.string.verify_q4),
                     tag = VerifyTestTags.QUESTION_Q4,
@@ -305,6 +275,7 @@ internal fun VerificationSheetContent(
                 )
             }
 
+            // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
             SheetSectionLabel(
                 text = stringResource(R.string.verify_remarks_label),
                 modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
@@ -473,103 +444,14 @@ private fun BoxQuestionChain(
     }
 }
 
-/**
- * Highlights what the model (or the medtech, for a manual capture) put in front of the
- * reviewer: the species large, which box this is beneath it, and the provenance pill.
- * A model frame carries a caution line under the card, because the name on it is a
- * suggestion the medtech is about to confirm or correct — not a finding (C7).
- */
-@Composable
-private fun DetectionCard(
-    speciesName: String,
-    detectionLabel: String,
-    source: FrameSource,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AgarthaTheme.colors
-    // Maroon brand surface, like Session Detail's hero card: everything on it reads in
-    // onAccent tints, and the provenance pill becomes a light chip so it stays legible.
-    val onCard = colors.onAccent
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag(VerifyTestTags.DETECTION_CARD)
-                .background(colors.accent, RoundedCornerShape(14.dp))
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.verify_species_label),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = onCard.copy(alpha = 0.72f),
-                    letterSpacing = 0.5.sp,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = speciesName,
-                    style = AppTypography.headlineSmall,
-                    color = onCard,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = detectionLabel,
-                    color = onCard.copy(alpha = 0.72f),
-                    fontSize = 12.sp,
-                    style = MonoDataStyle,
-                )
-            }
-            SourceBadge(source = source, onAccentSurface = true)
-        }
-        if (source == FrameSource.MODEL) {
-            Text(
-                text = stringResource(R.string.verify_ai_suggestion_note),
-                color = colors.textTertiary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                modifier = Modifier
-                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
-                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
-            )
-        }
-    }
-}
-
-/**
- * Provenance pill. On the maroon [DetectionCard] ([onAccentSurface]) it is a translucent
- * light chip; elsewhere it keeps the tinted accent/warning treatment.
- */
-@Composable
-private fun SourceBadge(source: FrameSource, onAccentSurface: Boolean = false) {
-    val colors = AgarthaTheme.colors
-    val isModelSource = source == FrameSource.MODEL
-    val background = when {
-        onAccentSurface -> colors.onAccent.copy(alpha = 0.18f)
-        isModelSource -> colors.accentTint
-        else -> colors.warningTint
-    }
-    val textColor = when {
-        onAccentSurface -> colors.onAccent
-        isModelSource -> colors.accent
-        else -> colors.warningText
-    }
-
-    Box(
-        modifier = Modifier
-            .testTag(VerifyTestTags.SOURCE_BADGE)
-            .background(color = background, shape = RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 4.dp),
-    ) {
-        Text(
-            text = if (isModelSource) "AI-suggested" else "Manual",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = textColor,
-        )
-    }
-}
+// DetectionCard and SourceBadge are gone with the section restructure.
+//
+// The card announced the current detection's species in large type above the questions; Q3 now
+// asks about that species directly, one line below, and two statements of the same name is one
+// more thing to read on a screen a medtech works through ten times a smear. The provenance pill
+// it carried said AI-suggested or Manual, which is exactly what the model-output section's three
+// states now say at greater length and in the place the medtech looks for it. The C7 caution the
+// card sat above moved there with it.
 
 @Composable
 internal fun <T> QuestionSection(

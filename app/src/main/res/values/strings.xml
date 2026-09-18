@@ -59,8 +59,11 @@
       Kept distinct on purpose: "no signal was collected" and "the model looked and found
       nothing" are different facts, and the second is itself a labelled datapoint.
     -->
-    <string name="verify_model_none_manual">No model output — captured manually.</string>
-    <string name="verify_model_clean_field">Model output: 0 detections (%1$s).</string>
+    <string name="verify_model_unavailable">No model output. The inference server could not be reached, so this field was recorded without it. Add the eggs you see below.</string>
+    <string name="verify_model_no_eggs">No eggs detected.</string>
+    <string name="verify_model_total">TOTAL</string>
+    <string name="verify_sample_indicator">Sample %1$d of %2$d</string>
+    <string name="verify_sample_out_of_queue">Not in queue</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
