@@ -56,7 +56,15 @@ object DatabaseModule {
             "agarthavision.db",
         )
             // Phase 1 has no production data — destructive migrations are acceptable.
-            .fallbackToDestructiveMigration(dropAllTables = true)
+            //
+            // dropAllTables = false, deliberately. On Room 2.7.0 `true` drops every table in
+            // the file including Room's own `room_table_modification_log`, and does not
+            // recreate it, so the first Flow collected after a destructive migration dies
+            // with `no such table: room_table_modification_log` from the invalidation
+            // tracker. Reproduced on the 15 -> 16 upgrade: the app crashes on first launch
+            // and only recovers on the second. `false` drops the tables Room knows about,
+            // which is every table this schema declares, and leaves its bookkeeping alone.
+            .fallbackToDestructiveMigration(dropAllTables = false)
             .build()
 
     @Provides
