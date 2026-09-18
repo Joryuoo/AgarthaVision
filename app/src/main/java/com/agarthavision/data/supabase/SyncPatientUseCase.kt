@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.domain.model.PatientSyncStatus
 import javax.inject.Inject
@@ -33,7 +34,12 @@ class SyncPatientUseCase @Inject constructor(
             remoteDataSource.upsertPatient(patient)
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNCED.value)
         }.onFailure {
+            Log.e(TAG, "Sync patient failed for $patientId", it)
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNC_FAILED.value)
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncPatientUseCase"
     }
 }

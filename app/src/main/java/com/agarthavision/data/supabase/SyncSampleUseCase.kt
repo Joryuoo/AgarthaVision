@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.agarthavision.data.local.dao.DetectionDao
@@ -50,6 +51,7 @@ class SyncSampleUseCase @Inject constructor(
                 storagePath = storagePath,
             )
         }.onFailure {
+            Log.e(TAG, "Sync sample failed for $sampleId", it)
             sampleDao.updateStatus(sampleId, SampleStatus.SYNC_FAILED.value)
         }
     }
@@ -85,6 +87,7 @@ class SyncSampleUseCase @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "SyncSampleUseCase"
         private const val SYNC_IMAGE_SIZE_PX = 640
         private const val JPEG_QUALITY = 80
     }

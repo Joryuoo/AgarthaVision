@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.domain.model.ReportSyncStatus
 import javax.inject.Inject
@@ -30,7 +31,12 @@ class SyncReportUseCase @Inject constructor(
             remoteDataSource.upsertReport(report)
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNCED.value)
         }.onFailure {
+            Log.e(TAG, "Sync report failed for $reportId", it)
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNC_FAILED.value)
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncReportUseCase"
     }
 }

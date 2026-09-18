@@ -11,8 +11,18 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import org.mockito.kotlin.mock
 
+/**
+ * Robolectric because the use case now logs a push failure, and `android.util.Log`
+ * throws in a plain JVM test. Same reason and same shape as FetchRemoteDataUseCaseTest,
+ * which has logged its pull failures all along.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class SyncReportUseCaseTest {
     @Test
     fun `marks report SYNCED when remote upsert succeeds`() = runTest {
