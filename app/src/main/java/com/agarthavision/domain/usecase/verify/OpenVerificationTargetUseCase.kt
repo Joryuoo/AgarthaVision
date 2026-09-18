@@ -5,6 +5,7 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.data.remote.dto.PredictionDto
@@ -74,21 +75,32 @@ class OpenVerificationTargetUseCase @Inject constructor(
             val stored = detections[detectionIdFor(sampleId, ordinal)]
             Finding(
                 prediction = prediction,
+                // The fallback covers an ordinal with no stored row — a sample opened before
+                // it was ever submitted. It seeds the same way `initialFindings` does rather
+                // than leaving the booleans null, because the questions are checkboxes now and
+                // a checkbox has no way to draw "unanswered": a null would render unchecked,
+                // which reads as "not an egg" — an answer nobody gave.
                 answers = stored?.toAnswers(prediction, reconstructed) ?: VerificationAnswers(
+                    isEgg = true,
+                    isBoxCorrect = true,
+                    speciesConfirmed = EggSpecies.fromClassLabel(prediction.classLabel)
+                        ?.let { true },
                     species = EggSpecies.fromClassLabel(prediction.classLabel),
+                    speciesTouched = false,
                 ),
             )
         }
 
-        // Everything the medtech added on top of the model's boxes, recovered by subtracting
-        // what the boxes already account for from the stored per-species totals.
+        // Everything the medtech added on top of the model's boxes. `sample_species_findings`
+        // stores the field total per species — which is exactly what the added row now holds,
+        // so it is carried across rather than subtracted down to a remainder. A species whose
+        // total the boxes already account for needs no added row at all.
         val boxedCounts = boxFindings
-            .filter { it.eggContribution > 0 }
+            .filter { it.countsAsEgg }
             .groupingBy { it.answers.speciesLabel }
             .eachCount()
         val addedFindings = findingDao.getFindingsForSample(sampleId).mapNotNull { row ->
-            val remainder = row.eggCount - (boxedCounts[row.species] ?: 0)
-            if (remainder <= 0) return@mapNotNull null
+            if (row.eggCount <= (boxedCounts[row.species] ?: 0)) return@mapNotNull null
             Finding(
                 prediction = null,
                 answers = VerificationAnswers(
@@ -96,8 +108,9 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     otherSpeciesText = row.species.takeIf {
                         EggSpecies.fromClassLabel(it) == null
                     }.orEmpty(),
-                    eggCount = remainder,
+                    fieldTotal = row.eggCount,
                     speciesTouched = true,
+                    drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
                 ),
             )
         }
@@ -218,6 +231,25 @@ class OpenVerificationTargetUseCase @Inject constructor(
      * [BOX_TOLERANCE_PX] absorbs the float round-trip through Room and Postgres rather than any
      * real movement; a hand-drawn box is never within half a pixel of the model's.
      */
+    /**
+     * The boxes the medtech drew for an added species, in slot order.
+     *
+     * Added eggs are one detection row each, keyed `#finding#<species>#<slot>`, and the drawn
+     * ones occupy the front slots — so this walks up from zero and stops at the first row with
+     * no geometry, which is where the drawn ones end. Stopping there rather than scanning the
+     * whole species is what keeps the round trip stable: the list that comes back is the list
+     * that went out, and re-submitting writes the same slots to the same ids.
+     */
+    private fun recoverDrawnBoxes(
+        sampleId: String,
+        species: String,
+        storedById: Map<String, DetectionEntity>,
+    ): List<ImageBox> = generateSequence(0) { it + 1 }
+        .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot)]?.storedBox() }
+        .takeWhile { it != null }
+        .filterNotNull()
+        .toList()
+
     private fun DetectionEntity.replacesBoxOf(prediction: Prediction): Boolean {
         val stored = storedBox() ?: return false
         return abs(stored.x - prediction.x) > BOX_TOLERANCE_PX ||

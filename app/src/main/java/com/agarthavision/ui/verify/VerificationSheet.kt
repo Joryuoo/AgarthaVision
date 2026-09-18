@@ -7,7 +7,6 @@ import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,6 +22,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -119,9 +120,9 @@ fun VerificationSheet(
                 onSubmit = viewModel::onSubmit,
                 onCancel = viewModel::onCancel,
                 onUserNoteChanged = viewModel::onUserNoteChanged,
-                onAddFinding = viewModel::onAddFinding,
+                onAddSpecies = viewModel::onAddSpecies,
                 onRemoveFinding = viewModel::onRemoveFinding,
-                onEggCountChanged = viewModel::onEggCountChanged,
+                onFieldTotalChanged = viewModel::onFieldTotalChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
                 onBeginDraw = viewModel::onBeginDraw,
@@ -264,9 +265,9 @@ internal fun VerificationSheetContent(
                 )
             }
 
-            // 5. Add Egg. Always present, with or without model output - it is the only path by
-            //    which a frame captured with the container unreachable can be verified at all,
-            //    and a frame with model output still needs it for an egg the model missed.
+            // 5. Add Species. Always present, with or without model output - it is the only
+            //    path by which a frame captured with the container unreachable can be verified
+            //    at all, and a frame with model output still needs it for eggs the model missed.
             AddedFindings(
                 findings = state.findings,
                 boxCount = boxCount,
@@ -276,8 +277,9 @@ internal fun VerificationSheetContent(
             FindingsSummary(findings = state.findings)
 
             // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
-            // findings, not asked - see VerificationUiState.missedEgg. Adding an egg the model
-            // never boxed already answers it, and asking again lets the two disagree.
+            // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
+            // species than the model boxed already answers it, and asking again lets the two
+            // disagree.
 
             // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
             SheetSectionLabel(
@@ -389,12 +391,25 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
 }
 
 /**
- * The per-box questions, each revealed by the previous answer: is it an egg → is the box
- * placed right → is it the species the model named. The species step is a confirmation
- * before a picker: the common answer is yes, and a yes should not cost a pick from a list
- * the medtech has just agreed with. Only a no opens [SpeciesDropdown]. A model class the
- * app cannot map to an [EggSpecies] ([suggestedSpecies] null) has nothing to confirm, so
- * the picker is offered directly.
+ * The per-box statements, each revealed by the one above it: there is an egg → the box is placed
+ * right → it is the species the model named. All three arrive pre-filled from model output, so a
+ * frame the model got right is submitted without a tap, and unchecking is how the medtech
+ * disagrees.
+ *
+ * The species step is a confirmation before a picker: the common answer is agreement, and
+ * agreeing should not cost a pick from a list the medtech has just agreed with. Only unchecking
+ * opens [SpeciesDropdown]. A model class the app cannot map to an [EggSpecies]
+ * ([suggestedSpecies] null) has nothing to confirm, so the picker is offered directly.
+ *
+ * Q2 has three states worth naming, because the middle one is the whole point of the redraw
+ * affordance and the last is what the checkbox made newly visible:
+ *
+ * - **Checked** — nothing under it. There is nothing to correct while the box is agreed to be
+ *   right, which is why redrawing is not offered here.
+ * - **Unchecked** — "Redraw the box", and it stays optional: unchecked with no redraw is a
+ *   complete answer that records a localisation error on its own.
+ * - **Unchecked, box replaced** — the affordance is gone (drawing over a drawn box belongs to
+ *   the Sample Data Screen) and the checkbox is disabled, because the answer is latched.
  */
 @Composable
 private fun BoxQuestionChain(
@@ -403,21 +418,24 @@ private fun BoxQuestionChain(
     detectionIndex: Int,
     actions: VerificationSheetActions,
 ) {
-    QuestionSection(
+    CheckQuestion(
         title = stringResource(R.string.verify_q1),
         tag = VerifyTestTags.QUESTION_Q1,
-        options = listOf(true to "Yes", false to "No"),
-        selected = answers?.isEgg,
-        onSelect = actions.onQ1Selected,
+        checked = answers?.isEgg == true,
+        onToggle = { actions.onQ1Selected(answers?.isEgg != true) },
     )
     if (answers?.isEgg != true) return
 
-    QuestionSection(
+    CheckQuestion(
         title = stringResource(R.string.verify_q2),
         tag = VerifyTestTags.QUESTION_Q2,
-        options = listOf(true to "Yes", false to "No"),
-        selected = answers.isBoxCorrect,
-        onSelect = actions.onQ2Selected,
+        checked = answers.isBoxCorrect == true,
+        // Latched once a box has been replaced: "the model placed this right" is false and stays
+        // false, whoever fixed it afterwards. `onQ2Selected` already refuses the tap, but a
+        // Yes/No pair showed that honestly - as a Yes button that would not take - and a
+        // checkbox silently ignoring a tap reads as a bug, so it says so instead.
+        enabled = !answers.boxReplaced,
+        onToggle = { actions.onQ2Selected(answers.isBoxCorrect != true) },
     )
 
     // Offered once the medtech says the box is misplaced, and never before - there is nothing to
@@ -430,7 +448,7 @@ private fun BoxQuestionChain(
         DrawBoxAction(
             label = stringResource(R.string.verify_redraw_box),
             tag = VerifyTestTags.REDRAW_BOX,
-            onClick = { actions.onBeginDraw(detectionIndex) },
+            onClick = { actions.onBeginDraw(detectionIndex, null) },
         )
     }
     if (answers.boxReplaced) {
@@ -451,12 +469,11 @@ private fun BoxQuestionChain(
     if (answers.isBoxCorrect == null) return
 
     if (suggestedSpecies != null) {
-        QuestionSection(
+        CheckQuestion(
             title = stringResource(R.string.verify_q3, suggestedSpecies.displayName),
             tag = VerifyTestTags.QUESTION_Q3,
-            options = listOf(true to "Yes", false to "No"),
-            selected = answers.speciesConfirmed,
-            onSelect = actions.onSpeciesConfirmed,
+            checked = answers.speciesConfirmed == true,
+            onToggle = { actions.onSpeciesConfirmed(answers.speciesConfirmed != true) },
         )
     }
     if (suggestedSpecies == null || answers.speciesConfirmed == false) {
@@ -560,50 +577,58 @@ internal fun DrawBoxAction(label: String, tag: String, onClick: () -> Unit) {
     )
 }
 
+/**
+ * One thing the medtech is agreeing or disagreeing with, as a checkbox on a tappable row.
+ *
+ * Replaced a title over a Yes/No button pair, which cost about 80dp three times over on a screen
+ * a medtech works through ten times a smear. The copy moved with it, from a question to a
+ * statement, because that is what a checkbox reads as.
+ *
+ * **A checkbox has two states where the buttons had three**, and that is only safe because the
+ * screen pre-fills every answer from model output (86d4bk51w): nothing prediction-backed reaches
+ * here unanswered, so there is no third state left to draw. What keeps it honest in the corpus
+ * is `detections.species_touched`, false on a row nobody touched — the cheap control is paid for
+ * by the provenance flag, not by the tap.
+ *
+ * The whole row is the target, not the 24dp box (Fitts), and [enabled] is for an answer that is
+ * latched rather than merely set — a disabled box says the tap will not take, where one that
+ * silently ignores it reads as a bug.
+ */
 @Composable
-internal fun <T> QuestionSection(
+internal fun CheckQuestion(
     title: String,
     tag: String,
-    options: List<Pair<T, String>>,
-    selected: T?,
-    onSelect: (T) -> Unit,
+    checked: Boolean,
+    onToggle: () -> Unit,
+    enabled: Boolean = true,
 ) {
-    SheetSectionLabel(
-        text = title,
-        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
-    )
+    val colors = AgarthaTheme.colors
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+            .testTag(tag)
+            .clickable(enabled = enabled, onClick = onToggle)
+            .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        options.forEach { (value, label) ->
-            val isSelected = selected == value
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(
-                        if (isSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.surface,
-                        RoundedCornerShape(8.dp)
-                    )
-                    .border(
-                        1.dp,
-                        if (isSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
-                        RoundedCornerShape(8.dp)
-                    )
-                    .clickable { onSelect(value) }
-                    .testTag(VerifyTestTags.questionOption(tag, label))
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = label,
-                    color = if (isSelected) AgarthaTheme.colors.onAccent else AgarthaTheme.colors.textPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
+        Checkbox(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            enabled = enabled,
+            colors = CheckboxDefaults.colors(
+                checkedColor = colors.accent,
+                uncheckedColor = colors.borderStrong,
+                checkmarkColor = colors.onAccent,
+            ),
+        )
+        Text(
+            text = title,
+            color = if (enabled) colors.textPrimary else colors.textTertiary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(start = 4.dp),
+        )
     }
 }
 

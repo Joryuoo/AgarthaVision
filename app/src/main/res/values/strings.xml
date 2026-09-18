@@ -35,9 +35,9 @@
     <string name="verify_title">Flagged Frame · %1$s</string>
     <string name="verify_detection_header">Detection %1$d of %2$d</string>
     <string name="verify_predicted">Model predicted: %1$s</string>
-    <string name="verify_q1">Is there a parasitic egg in this bounding box?</string>
-    <string name="verify_q2">Is the bounding box correctly placed?</string>
-    <string name="verify_q3">Is this egg %1$s?</string>
+    <string name="verify_q1">There is a parasitic egg in this box</string>
+    <string name="verify_q2">The bounding box is correctly placed</string>
+    <string name="verify_q3">This egg is %1$s</string>
     <string name="verify_species_picker_label">Which species is it?</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
@@ -46,12 +46,15 @@
     <string name="verify_show_boxes_label">Show bounding boxes</string>
 
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
-    <string name="verify_eggs_you_added">EGGS YOU ADDED</string>
-    <string name="verify_add_egg">+ Add egg</string>
-    <string name="verify_remove_egg">Remove</string>
-    <string name="verify_not_boxed">Not boxed by the model</string>
-    <string name="verify_egg_count_label">Eggs in this field</string>
-    <string name="verify_egg_count_addendum">In addition to the %1$d the model boxed</string>
+    <string name="verify_species_you_added">SPECIES YOU ADDED</string>
+    <string name="verify_add_species">+ Add species</string>
+    <string name="verify_remove_species">Remove</string>
+    <string name="verify_field_total_label">Eggs of this species in this field</string>
+    <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>
+    <string name="verify_field_total_floor">Cannot be below %1$d — that many are already boxed or drawn</string>
+    <string name="verify_locate_eggs">Locate eggs · %1$d of %2$d located</string>
+    <string name="verify_locate_eggs_note">Optional. Drawing where they are improves future results.</string>
+    <string name="verify_locate_egg_row">%1$s · egg %2$d of %3$d</string>
     <string name="verify_will_be_saved">WILL BE SAVED</string>
     <string name="verify_model_output">MODEL OUTPUT</string>
     <!--

@@ -90,15 +90,15 @@ class VerificationNoModelOutputTest {
         }
 
     @Test
-    fun `an added egg opens holding one, so a species is all it needs`() =
+    fun `an added species opens holding one egg, so a name is all it needs`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(noModelOutputFrame())
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             advanceUntilIdle()
             // A species is still required: an egg nobody named is not a finding.
-            assertEquals(1, vm.state.value.findings[0].answers.eggCount)
+            assertEquals(1, vm.state.value.findings[0].answers.fieldTotal)
             assertFalse(vm.state.value.canSubmit)
 
             vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
@@ -114,11 +114,11 @@ class VerificationNoModelOutputTest {
      * drawing a box is optional, and may be deferred to the Sample Data Screen entirely.
      */
     @Test
-    fun `an added egg needs no box behind it to be complete`() =
+    fun `an added species needs no box behind it to be complete`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(noModelOutputFrame())
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
             advanceUntilIdle()
 
@@ -128,22 +128,22 @@ class VerificationNoModelOutputTest {
         }
 
     @Test
-    fun `several species in one field are several added eggs`() =
+    fun `several species in one field are several added cards`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(noModelOutputFrame())
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
-            vm.onEggCountChanged(0, "3")
-            vm.onAddFinding()
+            vm.onFieldTotalChanged(0, "3")
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.TRICHURIS)
             advanceUntilIdle()
 
             val findings = vm.state.value.findings
             assertEquals(2, findings.size)
-            assertEquals(3, findings[0].answers.eggCount)
-            assertEquals(1, findings[1].answers.eggCount)
+            assertEquals(3, findings[0].answers.fieldTotal)
+            assertEquals(1, findings[1].answers.fieldTotal)
             assertTrue(vm.state.value.canSubmit)
         }
 
@@ -152,7 +152,7 @@ class VerificationNoModelOutputTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(noModelOutputFrame())
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
             advanceUntilIdle()
             assertFalse("OTHER carries no canonical class of its own.", vm.state.value.canSubmit)
@@ -176,7 +176,7 @@ class VerificationNoModelOutputTest {
             frames.value = listOf(frame)
             val vm = viewModel()
             vm.setFrame(frame)
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
             advanceUntilIdle()
 

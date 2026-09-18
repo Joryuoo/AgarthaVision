@@ -64,7 +64,7 @@ class BoxRedrawTest {
             advanceUntilIdle()
 
             assertFalse(vm.state.value.isDrawing)
-            assertNull(vm.state.value.drawingFindingIndex)
+            assertNull(vm.state.value.drawTarget)
         }
 
     @Test
@@ -74,7 +74,7 @@ class BoxRedrawTest {
             vm.setFrame(frame())
             vm.onQ2Selected(false)
 
-            vm.onBeginDraw(0)
+            vm.onBeginDraw(0, null)
             vm.onBoxDrawn(drawn)
             advanceUntilIdle()
 
@@ -94,7 +94,7 @@ class BoxRedrawTest {
             val vm = viewModel()
             vm.setFrame(frame())
             vm.onQ2Selected(false)
-            vm.onBeginDraw(0)
+            vm.onBeginDraw(0, null)
             vm.onBoxDrawn(drawn)
 
             vm.onQ2Selected(true)
@@ -120,7 +120,7 @@ class BoxRedrawTest {
             vm.setFrame(frame())
             assertEquals(true, vm.state.value.findings[0].answers.isBoxCorrect)
 
-            vm.onBeginDraw(0)
+            vm.onBeginDraw(0, null)
             vm.onBoxDrawn(drawn)
             advanceUntilIdle()
 
@@ -133,33 +133,76 @@ class BoxRedrawTest {
      * localised anything.
      */
     @Test
-    fun `drawing a box for an added egg leaves Q2 alone`() =
+    fun `locating an added egg leaves Q2 alone`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
 
-            vm.onBeginDraw(1)
+            vm.onBeginDraw(1, 0)
             vm.onBoxDrawn(drawn)
             advanceUntilIdle()
 
             val added = vm.state.value.findings[1].answers
-            assertEquals(drawn, added.drawnBox)
-            assertNull(added.isBoxCorrect)
+            assertEquals(listOf(drawn), added.drawnBoxes)
+            assertNull("There was never a model box here to be wrong about.", added.isBoxCorrect)
             assertFalse(added.boxReplaced)
+            assertNull("And the replacement slot stays empty.", added.drawnBox)
+        }
+
+    /**
+     * **The regression the species-first rewrite exists for.**
+     *
+     * Two eggs of one species used to be two findings sharing one derived detection id, so the
+     * second box replaced the first on submit — silently, with no error anywhere. They are now
+     * two slots under one card, and both boxes have to survive.
+     */
+    @Test
+    fun `two eggs of one species keep two separate boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val second = ImageBox(x = 40f, y = 40f, width = 10f, height = 10f)
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(1, "2")
+
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(drawn)
+            vm.onBeginDraw(1, 1)
+            vm.onBoxDrawn(second)
+            advanceUntilIdle()
+
+            assertEquals(listOf(drawn, second), vm.state.value.findings[1].answers.drawnBoxes)
         }
 
     @Test
-    fun `an added egg with no box is still complete`() =
+    fun `a slot beyond the eggs that species claims cannot be drawn for`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // One unboxed egg means one slot. Slot 1 does not exist, and drawing into it would
+            // write geometry the mapper never emits a row for.
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+
+            vm.onBeginDraw(1, 1)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDrawing)
+        }
+
+    @Test
+    fun `an added species with no box is still complete`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(frame())
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[1].answers.drawnBox)
+            assertTrue(vm.state.value.findings[1].answers.drawnBoxes.isEmpty())
             assertTrue(vm.state.value.findings[1].isComplete)
             assertTrue(vm.state.value.canSubmit)
         }
@@ -172,7 +215,7 @@ class BoxRedrawTest {
             vm.onQ2Selected(false)
             val before = vm.state.value.findings[0].answers
 
-            vm.onBeginDraw(0)
+            vm.onBeginDraw(0, null)
             vm.onCancelDraw()
             advanceUntilIdle()
 
@@ -191,7 +234,7 @@ class BoxRedrawTest {
             val vm = viewModel()
             vm.setFrame(frame())
             vm.onQ2Selected(false)
-            vm.onBeginDraw(0)
+            vm.onBeginDraw(0, null)
             vm.onBoxDrawn(drawn)
 
             vm.onQ1Selected(false)
@@ -209,7 +252,7 @@ class BoxRedrawTest {
             val vm = viewModel()
             vm.setFrame(frame())
 
-            vm.onBeginDraw(7)
+            vm.onBeginDraw(7, null)
             advanceUntilIdle()
 
             assertFalse(vm.state.value.isDrawing)

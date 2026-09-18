@@ -5,6 +5,8 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.SampleStatus
@@ -102,6 +104,90 @@ class OpenVerificationTargetUseCaseTest {
             SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "user-1/$sampleId.jpg"),
         )
     }
+
+    private fun addedDetection(species: String, slot: Int, x: Float? = null) = DetectionEntity(
+        detectionId = addedDetectionIdFor(sampleId, species, slot),
+        sampleId = sampleId,
+        classLabel = species,
+        confidence = 1.0f,
+        bboxX = x,
+        bboxY = x,
+        bboxW = x?.let { 12f },
+        bboxH = x?.let { 12f },
+        verdict = DetectionVerdict.CONFIRMED.value,
+        expertClass = species,
+        verifiedByUser = true,
+        speciesTouched = true,
+    )
+
+    /**
+     * An added species comes back as **one card carrying the field total**, not as the remainder
+     * it used to be rebuilt as — the stored total is the medtech's own assertion and survives
+     * whatever happens to the boxes under it.
+     */
+    @Test
+    fun `an added species reopens holding its field total and its drawn boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    boxDetection(0),
+                    // Drawn boxes pack to the front; the third egg was never located.
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f),
+                    addedDetection("Ascaris lumbricoides", 1, x = 80f),
+                    addedDetection("Ascaris lumbricoides", 2),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = null,
+                        eggCount = 4,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals("The medtech's own total, carried across whole.", 4, added.answers.fieldTotal)
+            assertEquals(
+                "Both located eggs come back, and the undrawn one stops the walk.",
+                listOf(10f, 80f),
+                added.answers.drawnBoxes.map { it.x },
+            )
+        }
+
+    /** A species the boxes already account for needs no card of its own. */
+    @Test
+    fun `a total the boxes cover reopens with no added card`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(listOf(boxDetection(0)))
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val target = useCase(sampleId).getOrThrow()
+
+            assertTrue(target.findings.none { it.prediction == null })
+        }
 
     /**
      * The boxes come back, rebuilt from the detection rows — which *are* pulled down, and carry

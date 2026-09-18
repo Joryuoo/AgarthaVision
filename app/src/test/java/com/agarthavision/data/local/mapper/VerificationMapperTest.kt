@@ -52,7 +52,7 @@ class VerificationMapperTest {
             species = EggSpecies.TRICHURIS,
         )
         assertEquals(DetectionVerdict.WRONG_CLASS, computeVerdict(answers, "Ascaris"))
-        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(Finding(prediction, answers)).toDetectionEntities("sample-1").single()
         assertEquals("Trichuris trichiura", entity.expertClass)
     }
 
@@ -64,7 +64,7 @@ class VerificationMapperTest {
             species = EggSpecies.OTHER,
             otherSpeciesText = "Enterobius",
         )
-        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(Finding(prediction, answers)).toDetectionEntities("sample-1").single()
         assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
         assertEquals("Enterobius", entity.expertClass)
     }
@@ -76,7 +76,7 @@ class VerificationMapperTest {
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
         )
-        val entity = Finding(prediction, answers).toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(Finding(prediction, answers)).toDetectionEntities("sample-1").single()
         assertNull(entity.expertClass)
         assertEquals(DetectionVerdict.CONFIRMED.value, entity.verdict)
     }
@@ -105,7 +105,7 @@ class VerificationMapperTest {
             ),
         )
 
-        val entity = finding.toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertEquals(310f, entity.bboxX)
         assertEquals(240f, entity.bboxY)
@@ -135,7 +135,7 @@ class VerificationMapperTest {
             ),
         )
 
-        assertEquals(0.9f, finding.toDetectionEntity("sample-1", ordinal = 0).confidence)
+        assertEquals(0.9f, listOf(finding).toDetectionEntities("sample-1").single().confidence)
     }
 
     /** An untouched box keeps the model's own geometry, byte for byte. */
@@ -151,7 +151,7 @@ class VerificationMapperTest {
             ),
         )
 
-        val entity = finding.toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertEquals(prediction.x, entity.bboxX)
         assertEquals(prediction.y, entity.bboxY)
@@ -170,13 +170,13 @@ class VerificationMapperTest {
             prediction = null,
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
-                eggCount = 1,
+                fieldTotal = 1,
                 speciesTouched = true,
-                drawnBox = drawn,
+                drawnBoxes = listOf(drawn),
             ),
         )
 
-        val entity = finding.toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertEquals(1.0f, entity.confidence)
         assertTrue(entity.speciesTouched)
@@ -190,14 +190,80 @@ class VerificationMapperTest {
             prediction = null,
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
-                eggCount = 1,
+                fieldTotal = 1,
                 speciesTouched = true,
             ),
         )
 
-        val entity = finding.toDetectionEntity("sample-1", ordinal = 0)
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertNull(entity.bboxX)
         assertNull(entity.bboxY)
+    }
+
+    /**
+     * **The regression this whole change exists for.**
+     *
+     * Two eggs of one species used to derive one detection id, because the key was the species
+     * alone. While added rows carried no geometry that was invisible; the moment they could,
+     * REPLACE turned two hand-drawn boxes into one, silently, on submit.
+     */
+    @Test
+    fun `two eggs of one species keep two distinct rows and two distinct boxes`() {
+        val first = ImageBox(x = 10f, y = 10f, width = 4f, height = 4f)
+        val second = ImageBox(x = 80f, y = 80f, width = 4f, height = 4f)
+        val finding = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                fieldTotal = 2,
+                speciesTouched = true,
+                drawnBoxes = listOf(first, second),
+            ),
+        )
+
+        val entities = listOf(finding).toDetectionEntities("sample-1")
+
+        assertEquals(2, entities.size)
+        assertEquals(2, entities.map { it.detectionId }.distinct().size)
+        assertEquals(listOf(10f, 80f), entities.map { it.bboxX })
+    }
+
+    /** One row per egg, boxed or not — which is what makes the exhaustiveness rule queryable. */
+    @Test
+    fun `an added species writes one row per unboxed egg`() {
+        val ascaris = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            speciesTouched = true,
+        )
+        val findings = listOf(
+            Finding(prediction, ascaris),
+            Finding(prediction = null, answers = ascaris.copy(fieldTotal = 4)),
+        )
+
+        val entities = findings.toDetectionEntities("sample-1")
+
+        // One for the model's box, three for the eggs it missed.
+        assertEquals(4, entities.size)
+        assertEquals(3, entities.count { it.bboxX == null })
+    }
+
+    /** A total the boxes already cover adds nothing — there is no missed egg to write. */
+    @Test
+    fun `a total matching the boxes writes no extra rows`() {
+        val ascaris = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            speciesTouched = true,
+        )
+        val findings = listOf(
+            Finding(prediction, ascaris),
+            Finding(prediction = null, answers = ascaris.copy(fieldTotal = 1)),
+        )
+
+        assertEquals(1, findings.toDetectionEntities("sample-1").size)
     }
 }
