@@ -95,7 +95,7 @@
     <string name="verify_draw_accept">Save box</string>
     <string name="verify_draw_box">Draw its box</string>
     <string name="verify_redraw_box">Redraw the box</string>
-    <string name="verify_box_replaced">You replaced this box, so the model's placement stays recorded as wrong.</string>
+    <string name="verify_box_replaced">You replaced this box, so the model\'s placement stays recorded as wrong.</string>
     <string name="verify_draw_cancel">Cancel</string>
     <string name="verify_prev_egg">Previous egg</string>
     <string name="verify_next_egg">Next egg</string>
