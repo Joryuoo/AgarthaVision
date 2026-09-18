@@ -115,9 +115,9 @@
       Two buckets, not four. Source (AI vs Manual) is shown on the row and decides what the
       verification screen renders, but it files nothing (revised 2026-09-12, 86d4ab4vm).
     -->
-    <string name="queue_bucket_unverified">Unverified</string>
-    <string name="queue_bucket_verified">Verified</string>
-    <string name="queue_row_awaiting_review">Awaiting review</string>
+    <string name="queue_row_elapsed_hours">%1$dh ago</string>
+    <string name="queue_row_elapsed_minutes">%1$dm ago</string>
+    <string name="queue_row_elapsed_seconds">%1$ds ago</string>
     <string name="queue_selection_clear">Clear selection</string>
     <string name="queue_selection_delete">Delete selected</string>
     <plurals name="queue_selection_count">
@@ -142,12 +142,6 @@
         <item quantity="other">%1$d verified samples will be hidden from every queue, count and report. Their detections are kept for model training.</item>
     </plurals>
     <string name="delete_samples_confirm">Delete</string>
-    <string name="queue_status_unverified">Pending</string>
-    <string name="queue_status_verified">Verified</string>
-    <plurals name="queue_row_confirmed">
-        <item quantity="one">%1$d confirmed egg</item>
-        <item quantity="other">%1$d confirmed eggs</item>
-    </plurals>
     <string name="queue_row_delete">Remove from queue</string>
     <string name="queue_row_unknown_class">Unknown detection</string>
     <string name="queue_row_subtitle">%1$d detection(s) · %2$s</string>
@@ -427,12 +421,15 @@
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
-    <string name="verify_queue_empty_title">Queue is clear</string>
-    <string name="verify_queue_empty_body">Nothing to verify right now.</string>
-    <string name="verify_queue_none_verified_title">No verified samples yet</string>
-    <string name="verify_queue_none_verified_body">Samples you verify will appear here.</string>
-    <string name="verify_queue_done_title">All items verified</string>
-    <string name="verify_queue_done_body">Every egg in this session has been checked.</string>
+    <string name="verify_queue_title">Verify Queue</string>
+    <plurals name="verify_queue_subtitle">
+        <item quantity="one">%1$d awaiting review</item>
+        <item quantity="other">%1$d awaiting review</item>
+    </plurals>
+    <string name="verify_queue_empty_title">Nothing captured yet</string>
+    <string name="verify_queue_empty_body">Tap the shutter to record a field. Frames wait here until you verify them.</string>
+    <string name="verify_queue_done_title">All frames verified</string>
+    <string name="verify_queue_done_body">Every frame captured in this session has been checked.</string>
     <string name="verify_queue_view_records">View session records</string>
     <!-- Verify entry point from Session Detail (86d4ayefd) -->
     <string name="session_detail_open_verify">Verify flagged frames</string>
