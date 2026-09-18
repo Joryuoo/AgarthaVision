@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.sync
 
 import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -30,14 +31,26 @@ sealed interface FetchSummary {
 
     /**
      * Ran the pass. Counts are rows inserted or updated locally from the remote.
+     *
+     * [failed] is the point of this type. Each entity pulls under its own `runCatching`, so a
+     * count of zero means "nothing new" and "threw four times" alike, and for a long while the
+     * pass reported success while every pull was failing. Carrying the failures makes the
+     * caller able to tell those apart - and lets the worker ask WorkManager to try again.
      */
     data class Ran(
         val patientsFetched: Int,
         val sessionsFetched: Int,
         val samplesFetched: Int,
         val reportsFetched: Int,
-    ) : FetchSummary
+        val failed: Set<FetchType> = emptySet(),
+    ) : FetchSummary {
+        /** True when all four entity types pulled without throwing. */
+        val isComplete: Boolean get() = failed.isEmpty()
+    }
 }
+
+/** The entity types a pull pass covers, so a failure can name itself. */
+enum class FetchType { PATIENTS, SESSIONS, SAMPLES, REPORTS }
 
 /**
  * Pulls all remote rows from Supabase into the local Room database for the signed-in
@@ -74,6 +87,7 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao,
     private val reportDao: ReportDao,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val fetchOutcomeStore: FetchOutcomeStore,
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
 ) {
     /**
@@ -115,10 +129,19 @@ class FetchRemoteDataUseCase @Inject constructor(
 
         // Mark completed only when all four types succeeded (E2). Listed rather than chained
         // so a fifth entity type is one entry, not a longer boolean expression.
-        val everyTypeSucceeded = listOf(patientsOk, sessionsOk, samplesOk, reportsOk).all { it }
-        if (everyTypeSucceeded) {
+        val failed = buildSet {
+            if (!patientsOk) add(FetchType.PATIENTS)
+            if (!sessionsOk) add(FetchType.SESSIONS)
+            if (!samplesOk) add(FetchType.SAMPLES)
+            if (!reportsOk) add(FetchType.REPORTS)
+        }
+        if (failed.isEmpty()) {
             initialFetchStateStore.markCompleted(userId)
         }
+        // Recorded rather than only returned: most passes run in the worker now, with no
+        // caller on screen to see the result, and the Settings card has to be able to say so
+        // afterwards.
+        fetchOutcomeStore.record(userId = userId, complete = failed.isEmpty())
 
         // Fold any species that arrived with this pass into the offline suggestion index, so
         // the two reference caches stay in step (PB-08a). Ungated on purpose: the seeder
@@ -132,6 +155,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             sessionsFetched = sessionsFetched,
             samplesFetched = samplesFetched,
             reportsFetched = reportsFetched,
+            failed = failed,
         )
     }
 

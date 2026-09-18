@@ -1,6 +1,7 @@
 package com.agarthavision.domain.usecase.sync
 
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -26,6 +27,7 @@ import com.agarthavision.domain.repository.AuthRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -63,6 +65,7 @@ class FetchRemoteDataUseCaseTest {
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao = mock()
     private val reportDao: ReportDao = mock()
     private val initialFetchStateStore: InitialFetchStateStore = mock()
+    private val fetchOutcomeStore: FetchOutcomeStore = mock()
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder = mock()
 
     private val useCase = FetchRemoteDataUseCase(
@@ -79,6 +82,7 @@ class FetchRemoteDataUseCaseTest {
         sampleSpeciesFindingDao = sampleSpeciesFindingDao,
         reportDao = reportDao,
         initialFetchStateStore = initialFetchStateStore,
+        fetchOutcomeStore = fetchOutcomeStore,
         speciesSuggestionSeeder = speciesSuggestionSeeder,
     )
 
@@ -221,6 +225,37 @@ class FetchRemoteDataUseCaseTest {
         // device does not have. The medtech finds out where there is no signal.
         assertTrue(result.isSuccess)
         verify(initialFetchStateStore, never()).markCompleted(any())
+    }
+
+    @Test
+    fun `a failed pull names the type that failed and records the pass as incomplete`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenThrow(RuntimeException("boom"))
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        // A count of zero used to be the only evidence, and it reads the same whether nothing
+        // was new or everything threw. The worker decides whether to retry on this.
+        assertEquals(setOf(FetchType.PATIENTS), summary.failed)
+        assertFalse(summary.isComplete)
+        verify(fetchOutcomeStore).record(userId = "user-1", complete = false)
+    }
+
+    @Test
+    fun `a clean pull reports complete and clears the flag`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        assertTrue(summary.isComplete)
+        verify(fetchOutcomeStore).record(userId = "user-1", complete = true)
     }
 
     @Test

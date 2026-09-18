@@ -6,6 +6,7 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import dagger.assisted.Assisted
@@ -43,9 +44,20 @@ class SyncWorker @AssistedInject constructor(
         // simply signed out, which would then delay the pass that matters after login.
         if (push.getOrNull() is SyncSummary.Skipped) return Result.success()
 
+        // A pull that lost some entity types reports Result.success, because each type is
+        // caught individually so one bad type cannot abort the rest. That tolerance is right,
+        // but it made the backoff below unreachable: every pull could fail and the pass still
+        // ended clean, so nothing ever tried again until some other trigger fired. Ask for the
+        // retry explicitly instead.
+        val fetchIncomplete = (fetch.getOrNull() as? FetchSummary.Ran)?.isComplete == false
+
         // Anything else that failed is worth another attempt with backoff — a dropped
         // connection mid-push, a server that was briefly unavailable.
-        return if (push.isSuccess && fetch.isSuccess) Result.success() else Result.retry()
+        return if (push.isSuccess && fetch.isSuccess && !fetchIncomplete) {
+            Result.success()
+        } else {
+            Result.retry()
+        }
     }
 
     private companion object {
