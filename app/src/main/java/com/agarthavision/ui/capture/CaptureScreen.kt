@@ -285,6 +285,7 @@ fun CaptureScreen(
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
     val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
+    val frameCapturedNoModelMessage = stringResource(R.string.capture_frame_captured_no_model_message)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -319,23 +320,31 @@ fun CaptureScreen(
         }
     }
 
+    // One confirmation per successful tap, driven by the tap's own outcome rather than by
+    // watching the queue: a Room-backed list moves on its own, and a toast derived from its head
+    // announced frames the medtech had not just captured. Exactly one toast fires per capture —
+    // a frame with detections does not get a second, competing message.
     LaunchedEffect(viewModel) {
-        viewModel.state
-            // Keyed on the id, not capturedAt: two frames sharing a millisecond used to
-            // look like one arrival to distinctUntilChanged, and neither got a toast.
-            .map { it.flaggedFrames.firstOrNull()?.sampleId }
-            .distinctUntilChanged()
-            .collect { sampleId ->
-                if (sampleId == null) return@collect
-                val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-
-                toastState.show(
-                    message = frameCapturedMessage,
-                    variant = AgarthaToastVariant.Default,
-                    actionLabel = detectionView,
-                    onAction = { viewModel.onDetectionToastTap(frame) },
-                )
+        viewModel.events.collect { event ->
+            when (event) {
+                is CaptureEvent.FrameCaptured -> {
+                    val outcome = event.outcome
+                    toastState.show(
+                        // Not Destructive, and deliberately: an unreachable container still
+                        // recorded the field, and the medtech's next action is the same either
+                        // way. It is named, because ten identical confirmations would otherwise
+                        // be the only sign that no model ran on any of them.
+                        message = when (outcome.source) {
+                            FrameSource.MODEL -> frameCapturedMessage
+                            FrameSource.MANUAL -> frameCapturedNoModelMessage
+                        },
+                        variant = AgarthaToastVariant.Default,
+                        actionLabel = detectionView,
+                        onAction = { viewModel.onCapturedFrameToastTap(outcome.sampleId) },
+                    )
+                }
             }
+        }
     }
 
     // Surface capture errors ("No active session", "Waiting for a live frame", or an
@@ -486,9 +495,8 @@ fun CaptureScreen(
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: the verification queue. Its badge counts unverified frames only - verified
-            // samples live in the queue too now, and including them would inflate a "needs
-            // review" number into a "how much is in here" number.
+            // Left: the verification queue. The badge is a "needs review" number, so it counts
+            // flagged frames only - the same set the queue itself lists.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,

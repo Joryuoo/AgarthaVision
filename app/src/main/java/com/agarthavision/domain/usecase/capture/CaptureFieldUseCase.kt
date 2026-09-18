@@ -22,10 +22,10 @@ import javax.inject.Inject
  * inference was measured and deferred, so there is one backend and a selector would be
  * ceremony. See `docs/map/processes/infer.md`.
  *
- * Returns `Result<FrameSource>` (C4): success carries the persisted frame's source so the caller
- * can react without re-reading the store. Only an *unexpected* failure propagates as
- * [Result.failure]: a lost connection is not one (it becomes a Manual Capture), but a
- * persistence error or a non-connectivity HTTP error is.
+ * Returns `Result<CaptureOutcome>` (C4): success carries the persisted row's id and source, so
+ * the caller can confirm the tap and offer a way into that exact sample without re-reading the
+ * store. Only an *unexpected* failure propagates as [Result.failure]: a lost connection is not
+ * one (it becomes a Manual Capture), but a persistence error or a non-connectivity HTTP error is.
  */
 class CaptureFieldUseCase @Inject constructor(
     private val inferenceEngine: InferenceEngine,
@@ -35,11 +35,11 @@ class CaptureFieldUseCase @Inject constructor(
      * @param sessionId the active recording session ID.
      * @param jpegBytes the snapshot of [FrameSampler.latestFrame] to analyze. The caller is
      *   responsible for having checked it is fresh — see `CaptureViewModel.onCapture`.
-     * @return the persisted frame's [FrameSource] on success; [Result.failure] on an unexpected
-     *   error.
+     * @return the persisted frame's [CaptureOutcome] on success; [Result.failure] on an
+     *   unexpected error.
      */
     @Suppress("SwallowedException")
-    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<FrameSource> =
+    suspend operator fun invoke(sessionId: String, jpegBytes: ByteArray): Result<CaptureOutcome> =
         runCatching {
             val result = try {
                 inferenceEngine.infer(jpegBytes)
@@ -49,7 +49,7 @@ class CaptureFieldUseCase @Inject constructor(
                 // is deliberately not rethrown or logged here — domain/ has no Android logging
                 // API (C2), and RemoteInferenceEngine already surfaces the underlying network
                 // failure to Retrofit's own logging interceptor.
-                flaggedFrameStore.add(
+                val sampleId = flaggedFrameStore.add(
                     FlaggedFrame(
                         sessionId = sessionId,
                         capturedAt = Instant.now(),
@@ -61,12 +61,12 @@ class CaptureFieldUseCase @Inject constructor(
                         imageHeight = null,
                     ),
                 )
-                return@runCatching FrameSource.MANUAL
+                return@runCatching CaptureOutcome(sampleId, FrameSource.MANUAL)
             }
 
             // Every server response is recorded, zero detections included: a clean field is a
             // normal negative result, not a reason to skip persisting.
-            flaggedFrameStore.add(
+            val sampleId = flaggedFrameStore.add(
                 FlaggedFrame(
                     sessionId = sessionId,
                     capturedAt = Instant.now(),
@@ -78,6 +78,24 @@ class CaptureFieldUseCase @Inject constructor(
                     imageHeight = result.imageHeight,
                 ),
             )
-            FrameSource.MODEL
+            CaptureOutcome(sampleId, FrameSource.MODEL)
         }
 }
+
+/**
+ * What one shutter tap produced.
+ *
+ * [sampleId] is carried out deliberately rather than left for the caller to pick off the head of
+ * `FlaggedFrameStore.state`. The head is whatever row is newest *now*, and it moves on its own:
+ * verifying or deleting a sample takes a row out of the flagged set and promotes an older one.
+ * A confirmation that reads the head is therefore a confirmation about an arbitrary frame, which
+ * is exactly the bug this return value exists to make impossible.
+ *
+ * @property sampleId primary key of the row this tap wrote.
+ * @property source whether the inference container answered ([FrameSource.MODEL], zero detections
+ *   included) or was unreachable ([FrameSource.MANUAL]).
+ */
+data class CaptureOutcome(
+    val sampleId: String,
+    val source: FrameSource,
+)

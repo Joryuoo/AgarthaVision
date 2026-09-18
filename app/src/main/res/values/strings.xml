@@ -186,6 +186,7 @@
     <string name="capture_permission_required">Camera permission is required for recording.</string>
     <string name="capture_allow_camera">Allow Camera</string>
     <string name="capture_frame_captured_message">Frame captured</string>
+    <string name="capture_frame_captured_no_model_message">Frame captured · model unavailable</string>
     <string name="capture_detection_view">View</string>
 
     <string name="records_title">Records</string>

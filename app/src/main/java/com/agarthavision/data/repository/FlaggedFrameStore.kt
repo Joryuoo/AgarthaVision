@@ -74,9 +74,8 @@ class FlaggedFrameStore @Inject constructor(
         .flowOn(Dispatchers.IO)
         .stateIn(scope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    suspend fun add(frame: FlaggedFrame) {
-        persistFlaggedFrameUseCase(frame)
-    }
+    /** Persists [frame] and returns the id of the row it wrote. */
+    suspend fun add(frame: FlaggedFrame): String = persistFlaggedFrameUseCase(frame)
 
     suspend fun remove(frame: FlaggedFrame) {
         if (frame.sampleId.isNotBlank()) {
