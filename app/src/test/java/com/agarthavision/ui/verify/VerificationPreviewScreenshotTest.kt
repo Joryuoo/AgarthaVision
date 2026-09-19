@@ -110,6 +110,9 @@ class VerificationPreviewScreenshotTest {
         onEggCountChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onBeginDraw = {},
+        onBoxDrawn = {},
+        onCancelDraw = {},
     )
 
     @Test

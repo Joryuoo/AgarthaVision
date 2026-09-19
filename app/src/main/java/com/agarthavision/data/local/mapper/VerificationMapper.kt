@@ -116,11 +116,17 @@ fun Finding.toDetectionEntity(sampleId: String, ordinal: Int): DetectionEntity {
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }
             ?: label.orEmpty(),
+        // A hand-drawn box wins over the model's, because that is what replacing one means.
+        // The model's confidence is NOT overwritten with 1.0 on a replaced box: "the model was
+        // this sure and still localised it wrong" is the training signal, and a BOX_INCORRECT
+        // verdict already says a human supplied the geometry. An added row has no prediction to
+        // take a confidence from and so is written at 1.0 anyway, which is the shape a manual
+        // finding has always had.
         confidence = prediction?.confidence ?: 1.0f,
-        bboxX = prediction?.x,
-        bboxY = prediction?.y,
-        bboxW = prediction?.width,
-        bboxH = prediction?.height,
+        bboxX = answers.drawnBox?.x ?: prediction?.x,
+        bboxY = answers.drawnBox?.y ?: prediction?.y,
+        bboxW = answers.drawnBox?.width ?: prediction?.width,
+        bboxH = answers.drawnBox?.height ?: prediction?.height,
         verdict = verdict.value,
         expertClass = expertClass,
         verifiedByUser = true,

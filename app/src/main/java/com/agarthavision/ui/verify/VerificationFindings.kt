@@ -247,6 +247,21 @@ private fun AddedFindingCard(
                 .padding(bottom = 10.dp),
         )
 
+        // Optional, on purpose: an added egg with no box is a complete finding, and the medtech
+        // may defer drawing to the Sample Data Screen entirely. Says which state it is in rather
+        // than leaving a blank the reader has to interpret.
+        DrawBoxAction(
+            label = stringResource(
+                if (finding.answers.drawnBox == null) {
+                    R.string.verify_draw_box
+                } else {
+                    R.string.verify_redraw_box
+                },
+            ),
+            tag = VerifyTestTags.drawBox(index),
+            onClick = { actions.onBeginDraw(index) },
+        )
+
         OutlinedTextField(
             value = finding.answers.eggCount?.toString().orEmpty(),
             onValueChange = { actions.onEggCountChanged(index, it) },
