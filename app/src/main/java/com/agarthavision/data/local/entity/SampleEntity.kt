@@ -100,7 +100,7 @@ data class SampleEntity(
     /**
      * `true` when this sample was taken via the Capture button on
      * `CaptureScreen` (no AI inference involved). Syncs to Supabase via
-     * migration `0006_sample_is_manual.sql`. Counted in EPG identically to
+     * migration `0006_sample_is_manual.sql`. Counted identically to
      * AI-confirmed samples. Per ADR-005.
      */
     @ColumnInfo(name = "is_manual", defaultValue = "0")

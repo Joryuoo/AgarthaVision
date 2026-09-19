@@ -59,7 +59,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * from rows the device already holds.
  *
  * Version 15 carries `reports.lpf_per_species_json` in from `staging` (86d4a6jxw) — the
- * per-species min-max larvae-per-field range that replaced EPG for direct smear. It is a
+ * per-species min-max low-power-field range that replaced EPG for direct smear. It is a
  * new number rather than a reshaped 14 for the reason immediately below: 14 is already
  * committed and installed, and changing its shape in place is the collision, not the bump.
  *

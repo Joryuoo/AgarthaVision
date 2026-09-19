@@ -12,16 +12,13 @@ data class EggCount(
      * resolved through [EggSpecies] alias matching. Falls back to the raw [species] label when
      * it isn't recognized, so an unmapped/"Other" label still groups and displays as itself.
      *
-     * Shared by [com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase] and the
-     * infectivity-tier computation so both normalize species labels the same single way.
+     * Used by [com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase] so every
+     * reader normalizes species labels the same single way.
      */
     fun canonicalSpecies(): String = EggSpecies.fromClassLabel(species)?.canonicalClass ?: species
-
-    /**
-     * The recognized [EggSpecies] this count belongs to, or null when [species] doesn't match
-     * any known alias. Kept distinct from [canonicalSpecies] because WHO infectivity tiers only
-     * exist for recognized species — "Other"/unrecognized labels must be excluded rather than
-     * silently grouped under their raw string.
-     */
-    fun canonicalEggSpecies(): EggSpecies? = EggSpecies.fromClassLabel(species)
 }
+
+// `canonicalEggSpecies()` went with the WHO infectivity tier (PB-16). It existed to exclude
+// unrecognized labels from a tier lookup that only had thresholds for the three named species;
+// with no tier to look up, a raw label groups and displays as itself through `canonicalSpecies`,
+// which is all any remaining reader wants.
