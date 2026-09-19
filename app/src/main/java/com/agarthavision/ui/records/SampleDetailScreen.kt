@@ -408,8 +408,19 @@ private fun DetectionsTab(detections: List<Detection>) {
 @Composable
 private fun DetectionCard(index: Int, detection: Detection) {
     val isVerified = detection.verifiedByUser
-    val aiGenerated = detection.bboxX != null
-    val provenanceText = if (aiGenerated) "AI DETECTION" else "MANUAL ANNOTATION"
+    // No provenance badge. It read "AI DETECTION" whenever a detection had coordinates and
+    // "MANUAL ANNOTATION" when it did not - a heuristic that only worked because a manually
+    // added finding wrote bbox_* = null. Hand-drawn boxes now carry real coordinates, so it
+    // would label every one of them "AI DETECTION": the precise inverse of the truth, on a
+    // clinical screen, with nothing failing and nothing thrown.
+    //
+    // It is not replaced by a better heuristic, because it should not be here at all. Whether a
+    // box came from the model or a human hand is metadata, and metadata is the admin's concern;
+    // for the clinical read - counting eggs, LPF, the report - a box is a box, and it does not
+    // change what the medtech does next. Provenance already has a home in the retraining corpus
+    // and needs no UI surface: a drawn box is distinguishable there by confidence together with
+    // species_touched, and samples.is_manual covers the sample-level case. A new column for it
+    // would mean a Room version bump, which is the one change this project has been burned by.
     val speciesLabel = detection.expertClass ?: detection.classLabel
     val isItalic = speciesLabel.contains("Ascaris") ||
         speciesLabel.contains("Trichuris") ||
@@ -437,7 +448,7 @@ private fun DetectionCard(index: Int, detection: Detection) {
                     modifier = Modifier
                         .size(24.dp)
                         .background(
-                            if (aiGenerated) AgarthaTheme.colors.accent else AgarthaTheme.colors.accent,
+                            AgarthaTheme.colors.accent,
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -457,27 +468,12 @@ private fun DetectionCard(index: Int, detection: Detection) {
                     fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
                 )
             }
-            Box(
-                modifier = Modifier
-                    .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(100.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    text = provenanceText,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AgarthaTheme.colors.textSecondary,
-                    letterSpacing = 0.4.sp
-                )
-            }
         }
 
         HorizontalDivider(thickness = 0.5.dp, color = AgarthaTheme.colors.border)
 
         // Fields
         Column(modifier = Modifier.padding(start = 16.dp)) {
-            val sourceStr = if (aiGenerated) "AI-suggested" else "Manual"
-            DetailRow(label = "Source", value = sourceStr, isLast = false)
             DetailRow(
                 label = "Verdict",
                 value = if (isVerified) "Verified" else "Rejected",

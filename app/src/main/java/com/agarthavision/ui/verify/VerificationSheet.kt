@@ -118,6 +118,9 @@ fun VerificationSheet(
                 onEggCountChanged = viewModel::onEggCountChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
+                onBeginDraw = viewModel::onBeginDraw,
+                onBoxDrawn = viewModel::onBoxDrawn,
+                onCancelDraw = viewModel::onCancelDraw,
             ),
         )
     }
@@ -165,6 +168,9 @@ internal fun VerificationSheetContent(
                 showBoxes = state.showBoundingBoxes,
                 inferenceImageWidth = frame.imageWidth,
                 inferenceImageHeight = frame.imageHeight,
+                isDrawing = state.isDrawing,
+                onBoxDrawn = actions.onBoxDrawn,
+                onDrawCancelled = actions.onCancelDraw,
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(frame.previewAspectRatio())
@@ -230,6 +236,7 @@ internal fun VerificationSheetContent(
                     answers = currentAnswers,
                     suggestedSpecies = currentPrediction
                         ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                    detectionIndex = state.currentDetectionIndex,
                     actions = actions,
                 )
             }
@@ -370,6 +377,7 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
 private fun BoxQuestionChain(
     answers: VerificationAnswers?,
     suggestedSpecies: EggSpecies?,
+    detectionIndex: Int,
     actions: VerificationSheetActions,
 ) {
     QuestionSection(
@@ -388,6 +396,30 @@ private fun BoxQuestionChain(
         selected = answers.isBoxCorrect,
         onSelect = actions.onQ2Selected,
     )
+
+    // Offered once the medtech says the box is misplaced, and never before - there is nothing to
+    // correct while the model's box is agreed to be right. Optional: answering "No" without
+    // redrawing is a complete answer that records a localisation error on its own.
+    //
+    // It disappears once a box has been replaced, because Q2 is latched at "No" from then on and
+    // re-drawing over a drawn box is a different operation (the Sample Data Screen owns that).
+    if (answers.isBoxCorrect == false && !answers.boxReplaced) {
+        DrawBoxAction(
+            label = stringResource(R.string.verify_redraw_box),
+            tag = VerifyTestTags.REDRAW_BOX,
+            onClick = { actions.onBeginDraw(detectionIndex) },
+        )
+    }
+    if (answers.boxReplaced) {
+        Text(
+            text = stringResource(R.string.verify_box_replaced),
+            color = AgarthaTheme.colors.textTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier
+                .testTag(VerifyTestTags.BOX_REPLACED_NOTE)
+                .padding(start = 4.dp, bottom = 12.dp),
+        )
+    }
     // Deliberately `== null`, not `!= true`. A box in the wrong place still contains a real
     // egg, and that egg still has to be named and counted - short-circuiting on a no dropped
     // it from the low-power-field count, and left the frame permanently unsubmittable, because
@@ -426,6 +458,26 @@ private fun BoxQuestionChain(
 // it carried said AI-suggested or Manual, which is exactly what the model-output section's three
 // states now say at greater length and in the place the medtech looks for it. The C7 caution the
 // card sat above moved there with it.
+
+/**
+ * A text affordance that starts a drawing gesture on the frame above.
+ *
+ * Text rather than a button, and low-key on purpose: drawing is always optional, on both call
+ * sites, and a prominent control would read as something the medtech has to do.
+ */
+@Composable
+internal fun DrawBoxAction(label: String, tag: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = AgarthaTheme.colors.accent,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .testTag(tag)
+            .clickable(onClick = onClick)
+            .padding(start = 4.dp, top = 2.dp, bottom = 14.dp),
+    )
+}
 
 @Composable
 internal fun <T> QuestionSection(

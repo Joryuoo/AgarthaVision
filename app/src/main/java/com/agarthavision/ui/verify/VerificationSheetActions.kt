@@ -1,5 +1,6 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
 /**
@@ -31,4 +32,12 @@ data class VerificationSheetActions(
     val onEggCountChanged: (Int, String) -> Unit,
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
     val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
+    /**
+     * Starts drawing a box for the finding at this index — a redraw on a model box, or a first
+     * box on an added egg. Both optional.
+     */
+    val onBeginDraw: (Int) -> Unit,
+    /** The medtech accepted a drawn box, already in the model's centre-based image space. */
+    val onBoxDrawn: (ImageBox) -> Unit,
+    val onCancelDraw: () -> Unit,
 )

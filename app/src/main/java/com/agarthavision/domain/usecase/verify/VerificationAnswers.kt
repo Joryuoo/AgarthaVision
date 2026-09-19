@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
 /**
@@ -50,6 +51,34 @@ data class VerificationAnswers(
      * flag is here to tell apart.
      */
     val speciesTouched: Boolean = false,
+    /**
+     * A box the medtech drew by hand, in the model's own coordinate space.
+     *
+     * On a prediction-backed row this **replaces** the model's box: the model boxed a real egg
+     * badly, and this is where it actually is. On an added row it is simply where the egg is,
+     * and it stays null when the medtech did not bother — an added egg with no box is a complete
+     * finding, which is what `detections.bbox_*` is nullable for.
+     *
+     * Deliberately not a synthesised [com.agarthavision.domain.inference.Prediction]: that would
+     * need a class label and a confidence the model never assigned, and both feed the retraining
+     * corpus.
+     */
+    val drawnBox: ImageBox? = null,
+    /**
+     * The model put this box in the wrong place, and that does not stop being true because a
+     * human fixed it.
+     *
+     * Set when a redraw is committed, and **it locks Q2 to "No"**. This is the training signal
+     * the whole drawing feature exists to capture: an implementation that lets Q2 flip back to
+     * "Yes" after a redraw destroys the label, silently, leaving a frame that claims the model
+     * localised correctly while carrying the human's geometry.
+     *
+     * A frame reopened for editing reconstructs this by comparing the stored `bbox_*` against
+     * the prediction it belongs to. That is the only durable record: the alternative is a new
+     * column, which means a Room version bump, and this project has already been burned once by
+     * a version collision (`core/database/AgarthaDatabase.kt` records it).
+     */
+    val boxReplaced: Boolean = false,
 ) {
     /**
      * True when the species question is answered.
