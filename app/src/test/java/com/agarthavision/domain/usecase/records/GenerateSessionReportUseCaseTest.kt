@@ -56,8 +56,14 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(2, report.totalSamples)
         assertEquals(3, report.totalEggsConfirmed)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
-        assertEquals(1.0f, report.lpfPerSpecies["Ascaris lumbricoides"]!!.mean)
-        assertEquals(0.5f, report.lpfPerSpecies["Trichuris trichiura"]!!.mean)
+        // The range, not a mean, and the report path now computes it through the same
+        // aggregation the screen uses rather than its own copy of the arithmetic.
+        val ascaris = report.lpfPerSpecies["Ascaris lumbricoides"]!!
+        assertEquals(0, ascaris.min)
+        assertEquals(2, ascaris.max)
+        val trichuris = report.lpfPerSpecies["Trichuris trichiura"]!!
+        assertEquals(0, trichuris.min)
+        assertEquals(1, trichuris.max)
         assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
         // CSV-format report carries no PDF, and the PDF renderer was never invoked.
         assertNull(report.pdfFilePath)

@@ -37,11 +37,13 @@ data class ReportPdfHeader(
  * One row of the per-species findings table.
  *
  * Density is reported per Low Power Field (LPF), calculated as the mean egg count across all 
- * fields examined in a session, alongside the observed range (min-max).
+ * fields examined in a session, as the observed range (min-max).
+ *
+ * The mean went with PB-17: the session figure is a range, and a mean averages a single heavy
+ * field away under nine clean ones - which is the field a medtech most needs to see.
  */
 data class ReportPdfSpeciesRow(
     val speciesDisplayName: String,
-    val mean: Float,
     val min: Int,
     val max: Int,
 )

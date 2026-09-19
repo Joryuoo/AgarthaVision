@@ -261,14 +261,8 @@
     <string name="session_detail_lpf_title">LPF Density</string>
     <string name="session_detail_eggs_total_label">Total eggs: %1$d</string>
     <string name="session_detail_eggs_empty">No confirmed eggs yet</string>
-    <string name="session_detail_infectivity_low">Low Infectivity</string>
-    <string name="session_detail_infectivity_moderate">Moderate Infectivity</string>
-    <string name="session_detail_infectivity_extreme">Extreme Infectivity</string>
-    <string name="session_detail_infectivity_extreme_title">Elevated Parasite Load Detected</string>
     <string name="session_detail_species_detected">Detected</string>
     <string name="session_detail_species_more">+%1$d more</string>
-    <string name="session_detail_infectivity_extreme_body">The %1$s egg count estimate for this session is in the WHO high-intensity reference range. This is an algorithmic indicator, not a diagnosis — please refer this patient to a qualified health professional for clinical confirmation and follow-up.</string>
-    <string name="session_detail_infectivity_disclaimer">This is an algorithmic estimate for reference only, not a medical diagnosis. All findings require confirmation by a qualified health professional.</string>
 
     <string name="sample_detail_title">Sample Detail</string>
     <string name="sample_detail_missing">Sample not found</string>

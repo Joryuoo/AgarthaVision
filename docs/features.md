@@ -96,7 +96,7 @@ as working.
   frames are hard-deleted; a verified sample is tombstoned via `samples.deleted_at`, which hides
   it from every queue, count and report while its detections stay in the retraining corpus (C8).
   This replaced the **Repeat flag** (86d4ab4vm), which existed only because deletion was not
-  possible. That flag was excluded from EPG, never synced,
+  possible. That flag was excluded from the session's egg counts, never synced,
   and it does not block ending a session
   (`data/local/dao/SampleDao.kt:84-85`, `data/local/entity/SampleEntity.kt:83-90`).
 - **Per-sample free-text note** (`data/local/dao/SampleDao.kt:93-122`).
@@ -189,10 +189,25 @@ as working.
 ## Phase 2 — deferred by decision, not oversight
 
 Self-hosted FastAPI + PostgreSQL + MinIO on owned hardware; a DOH-validated `prep_methods`
-table replacing the hardcoded EPG multiplier; a durable offline sync queue with backoff; a
+table describing how a smear was prepared; a durable offline sync queue with backoff; a
 per-account persistent flagged-frame queue; capture moving off the phone camera onto dedicated
 hardware over USB OTG, with the phone becoming a verification and reporting client only.
 
 PDF report export is no longer deferred (ticket 86d4a6jyy) — see "Records and reports" above.
-Its per-species number still reports EPG rather than a DOH-validated density; that swap is
-ticket 86d4a6jxw's separate work.
+Its per-species number is an **LPF range**, not EPG: the lowest and highest count of that
+species in any single field of the session, with a qualitative descriptor read off the highest
+one (PB-17). A field holding none of a species contributes a zero, not a gap, so a species seen
+in 3 of 10 fields reads `0–4` rather than `1–4`. The denominator is however many fields the
+medtech recorded — ten is typical practice, not a rule the app enforces. **It is not a mean:**
+a mean averages a single heavy field away under nine clean ones, which is the field that most
+needs to be seen. **Eggs per gram is gone** (PB-16): it is
+defined for Kato-Katz, Philippine medtechs use Direct Smear, and the ×24 volumetric multiplier
+the app applied was simply wrong for the method in use — its constant carried an unresolved
+`TODO` asking for the citation that was never supplied.
+
+The WHO light/moderate/heavy tier went with it rather than being rescaled. That classification
+is defined only as eggs-per-gram measured by Kato-Katz; there is no WHO or DOH intensity table
+for direct fecal smear, and the thresholds are EPG-scale, so they cannot be mapped onto a
+per-field count — they would have to be replaced by a table that does not exist in the
+literature. What stands in its place is the conventional semi-quantitative wet-mount descriptor
+attached to the LPF range.

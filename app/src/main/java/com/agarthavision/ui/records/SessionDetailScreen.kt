@@ -520,7 +520,7 @@ internal fun LpfHeroCard(
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            "%.2f/LPF (%d-%d)".format(density.mean, density.min, density.max),
+                            "%d-%d LPF".format(density.min, density.max),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = onCard,

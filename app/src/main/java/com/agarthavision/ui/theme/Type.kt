@@ -11,7 +11,7 @@ import com.agarthavision.R
 
 // ── Inter font family (Google Fonts) ──────────────────────────────────────────
 // Replaces the retired Geist + JetBrains Mono families. Inter ships tabular
-// figures via `fontFeatureSettings = "tnum"`, so the EPG / mono readouts below
+// figures via `fontFeatureSettings = "tnum"`, so the numeric readouts below
 // no longer need a separate monospaced family.
 
 val GoogleFontProvider = GoogleFont.Provider(
