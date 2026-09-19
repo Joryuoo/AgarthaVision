@@ -132,6 +132,14 @@ class OpenVerificationTargetUseCase @Inject constructor(
 data class VerificationTarget(
     val frame: FlaggedFrame,
     val findings: List<Finding>,
+    /**
+     * What `samples.needs_reannotation` holds for this sample.
+     *
+     * Kept as a faithful record of the stored row, but **not what the screen renders**: Q4 is
+     * derived from the findings now, so a reopened sample re-derives it from the rows it carries
+     * and the two cannot disagree. Null when the sample has no detections to have missed
+     * anything alongside.
+     */
     val missedEgg: Boolean?,
     val userNote: String,
 )
