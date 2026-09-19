@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -84,6 +85,9 @@ class VerificationSheetContentTest {
         val removedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
+        val beganDraw = mutableListOf<Int>()
+        val drawnBoxes = mutableListOf<ImageBox>()
+        var cancelledDraws = 0
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -106,6 +110,9 @@ class VerificationSheetContentTest {
         onEggCountChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onBeginDraw = { r.beganDraw += it },
+        onBoxDrawn = { r.drawnBoxes += it },
+        onCancelDraw = { r.cancelledDraws++ },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */

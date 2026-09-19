@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod", "TooManyFunctions")
+@file:Suppress("FunctionNaming", "LongMethod")
 
 package com.agarthavision.ui.records
 
@@ -9,52 +9,45 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.SearchOff
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Scaffold
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.TabRowDefaults
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -64,24 +57,37 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.agarthavision.domain.model.Detection
-import com.agarthavision.domain.model.Sample
-import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.usecase.records.SampleImageSource
-import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.R
+import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
+import com.agarthavision.domain.model.Detection
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
+import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.Spacing
-import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.AppTypography
+import com.agarthavision.ui.theme.Spacing
+import com.agarthavision.ui.theme.detectionBoxColor
+import com.agarthavision.ui.verify.frameTransform
+import com.agarthavision.ui.verify.toCanvasX
+import com.agarthavision.ui.verify.toCanvasY
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-import java.util.Locale
 
+/**
+ * The Sample Data Screen: where a **verified** sample is reviewed and corrected.
+ *
+ * This is where the capability PB-12 removed from the Verification Queue lands. The queue means
+ * one thing again — work still to do — and re-opening something already checked happens here.
+ *
+ * **The medtech does not see the sample's metadata.** Storage path, sync status, model version,
+ * ids: all gone with the tab that held them. That is the admin's concern. All the medtech does
+ * here is annotate and correct the sample they took, so what is left is the frame, when it was
+ * captured, and one row per detection.
+ */
 @Composable
 fun SampleDetailScreen(
     onBack: () -> Unit,
@@ -89,44 +95,293 @@ fun SampleDetailScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val item = state.item
-    var selectedTab by remember { mutableIntStateOf(0) }
+    val unavailable = state.unavailable
 
-    Box(modifier = Modifier.fillMaxSize().background(AgarthaTheme.colors.surfaceVariant)) {
-        val unavailable = state.unavailable
+    Box(modifier = Modifier.fillMaxSize().background(AgarthaTheme.colors.background)) {
         when {
             !state.itemResolved -> SampleDetailSkeleton(onBack = onBack)
             unavailable != null -> SampleDetailUnavailableScreen(
                 unavailable = unavailable,
                 onBack = onBack,
             )
-            item != null -> {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(top = 80.dp) // Leave space for nav bar
-                ) {
-                    // Segmented Control (Tabs)
-                    SampleSegmentedControl(
-                        selectedTab = selectedTab,
-                        onTabSelected = { selectedTab = it }
-                    )
-
-                    // Tab Content
-                    when (selectedTab) {
-                        0 -> ImageTab(item = item, imageSource = state.imageSource)
-                        1 -> DetectionsTab(detections = item.detections)
-                        else -> MetadataTab(sample = item.sample)
-                    }
-                }
-
-                // Top Navigation Bar
-                SampleDetailNavBar(
-                    title = "Sample #${item.sample.id.take(4)}",
-                    onBack = onBack
-                )
-            }
+            item != null -> SampleDetailContent(
+                item = item,
+                imageSource = state.imageSource,
+                onBack = onBack,
+            )
             else -> SampleDetailSkeleton(onBack = onBack)
         }
+    }
+}
+
+@Composable
+private fun SampleDetailContent(
+    item: SampleRecordItem,
+    imageSource: SampleImageSource,
+    onBack: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    val capturedAt = remember(item.sample.timestamp) {
+        Instant.ofEpochMilli(item.sample.timestamp)
+            .atZone(ZoneId.systemDefault())
+            .format(CAPTURED_AT_FORMAT)
+    }
+
+    // Which boxes are drawn, by detection index. Held here rather than in the ViewModel because
+    // it is a way of looking at the frame, not a fact about the sample: it has no business
+    // surviving the screen, and nothing else in the app can read it.
+    var hidden by remember(item.sample.id) { mutableStateOf(emptySet<Int>()) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SampleDetailNavBar(title = capturedAt, onBack = onBack)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Square, because every frame the capture pipeline emits is square.
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(colors.surfaceVariant),
+                ) {
+                    SampleFrame(imageSource = imageSource)
+                    DetectionOverlay(
+                        detections = item.detections,
+                        hiddenIndices = hidden,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag(SampleDetailTestTags.DETECTION_OVERLAY),
+                    )
+                }
+            }
+
+            if (item.detections.isEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.sample_detail_no_detections),
+                        color = colors.textSecondary,
+                        fontSize = 15.sp,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            } else {
+                item {
+                    Text(
+                        text = stringResource(R.string.sample_detail_detections_heading),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary,
+                        letterSpacing = 0.5.sp,
+                        modifier = Modifier.padding(start = 4.dp),
+                    )
+                }
+                itemsIndexed(item.detections) { index, detection ->
+                    DetectionRow(
+                        index = index,
+                        detection = detection,
+                        visible = index !in hidden,
+                        onToggle = {
+                            hidden = if (index in hidden) hidden - index else hidden + index
+                        },
+                    )
+                }
+            }
+
+            item { Spacer(modifier = Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun SampleFrame(imageSource: SampleImageSource) {
+    when (imageSource) {
+        is SampleImageSource.Local -> AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(File(imageSource.path))
+                .crossfade(true)
+                .build(),
+            contentDescription = stringResource(R.string.sample_detail_image_desc),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+        // Local file first, then a 15-minute signed Storage URL - kept, because a synced sample
+        // on a re-installed device has no local file. Keyed on the stable storage path rather
+        // than the URL, which carries a fresh token every time it is minted, so the disk cache
+        // outlives the signature instead of missing on every open.
+        is SampleImageSource.RemoteSignedUrl -> AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(imageSource.url)
+                .memoryCacheKey(imageSource.cacheKey)
+                .diskCacheKey(imageSource.cacheKey)
+                .crossfade(true)
+                .build(),
+            contentDescription = stringResource(R.string.sample_detail_image_desc),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
+        // Says which kind of unavailable, because the two need different things from the
+        // medtech: one waits for a sync, the other for a connection. A blank frame they might
+        // annotate into the void is the bug underneath both.
+        is SampleImageSource.Unavailable -> Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(
+                    when (imageSource.reason) {
+                        SampleImageUnavailableReason.NO_STORAGE_PATH ->
+                            R.string.sample_detail_image_no_storage_path
+                        SampleImageUnavailableReason.REMOTE_LOAD_FAILED ->
+                            R.string.sample_detail_image_remote_failed
+                        SampleImageUnavailableReason.SAMPLE_NOT_FOUND ->
+                            R.string.sample_detail_image_unavailable
+                    },
+                ),
+                color = AgarthaTheme.colors.textSecondary,
+                fontSize = 15.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+    }
+}
+
+/**
+ * The detection boxes, each in its own colour, over the frame.
+ *
+ * ## This was drawing every box in the wrong place
+ *
+ * The overlay this replaces treated `bbox_*` as **normalised 0–1 with a top-left origin**:
+ *
+ * ```
+ * val left = bx.coerceIn(0f, 1f) * size.width
+ * ```
+ *
+ * What is stored is **centre-based pixels in the source image's space**.
+ * `VerificationMapper` copies `Prediction.x/y/width/height` straight through, and
+ * `Prediction`'s own KDoc says so. For a real detection at `x = 320f`, `coerceIn(0f, 1f)`
+ * clamped it to `1.0` and the box landed in the bottom-right corner of the frame. Every box.
+ *
+ * **The `coerceIn` is what hid it** — it turned an out-of-range number into a plausible-looking
+ * rectangle instead of anything visible as wrong. It is gone, not widened: a box outside the
+ * frame means the data is wrong and should look wrong.
+ *
+ * The arithmetic below is the same `frameTransform` the Verification Screen draws with, imported
+ * rather than copied. Two screens computing the same letterbox two ways is how the boxes drift
+ * apart again.
+ *
+ * ## Dimensions
+ *
+ * The domain `Sample` carries no image dimensions at all, so this defaults to
+ * [CAPTURE_FRAME_SIZE_PX]. That is safe by construction rather than a guess: `toJpegBytes()`
+ * centre-crops and downscales every frame to a 640 square before it is ever posted, so 640 is
+ * the only value a stored dimension holds in practice.
+ *
+ * **One exception, and it is the reason to read this twice:** a device whose camera cannot supply
+ * a 640 stream encodes at its own smaller native square rather than upscaling
+ * (`ImageExtensions.kt`). A sample from such a device renders its boxes slightly off here.
+ * Carrying the real dimensions down would mean adding them to the domain `Sample` and to
+ * `SampleRemoteDataSource.toEntity()`, which sets `imageWidth = null` on **every** sample pulled
+ * from Supabase. That is the fix; this comment is the placeholder for it. Silently assuming 640
+ * for every sample is how the bug above happened the first time.
+ */
+@Composable
+private fun DetectionOverlay(
+    detections: List<Detection>,
+    hiddenIndices: Set<Int>,
+    modifier: Modifier = Modifier,
+) {
+    // Capture colours at composition time — DrawScope inside Canvas is not @Composable.
+    val colors = remember(detections.size) { List(detections.size) { detectionBoxColor(it) } }
+    Canvas(modifier = modifier) {
+        val transform = frameTransform(
+            canvasWidth = size.width,
+            canvasHeight = size.height,
+            sourceWidth = CAPTURE_FRAME_SIZE_PX.toFloat(),
+            sourceHeight = CAPTURE_FRAME_SIZE_PX.toFloat(),
+        ) ?: return@Canvas
+
+        detections.forEachIndexed { index, detection ->
+            if (index in hiddenIndices) return@forEachIndexed
+            // A detection with no box is a valid finding - an egg the medtech added and did not
+            // draw - and simply has nothing to render.
+            val cx = detection.bboxX ?: return@forEachIndexed
+            val cy = detection.bboxY ?: return@forEachIndexed
+            val bw = detection.bboxW ?: return@forEachIndexed
+            val bh = detection.bboxH ?: return@forEachIndexed
+            drawRect(
+                color = colors[index],
+                topLeft = Offset(
+                    transform.toCanvasX(cx - bw / 2f),
+                    transform.toCanvasY(cy - bh / 2f),
+                ),
+                size = Size(bw * transform.scale, bh * transform.scale),
+                style = Stroke(width = 3f),
+            )
+        }
+    }
+}
+
+/**
+ * One detection: its colour, what it was called, and whether its box is drawn.
+ *
+ * The swatch is what ties the row to the rectangle on the frame, which is the whole reason no
+ * two boxes share a colour. There is no verdict, no confidence and no coordinates here — those
+ * are the admin's concern, and for the clinical read a box is a box.
+ */
+@Composable
+private fun DetectionRow(
+    index: Int,
+    detection: Detection,
+    visible: Boolean,
+    onToggle: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    val label = detection.expertClass ?: detection.classLabel
+    val isBinomial = label.contains(' ') || label.contains('.')
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.surface)
+            .border(0.5.dp, colors.border, RoundedCornerShape(12.dp))
+            .clickable(onClick = onToggle)
+            .testTag(SampleDetailTestTags.detectionRow(index))
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(14.dp)
+                .clip(CircleShape)
+                .background(detectionBoxColor(index))
+                .border(0.5.dp, colors.border, CircleShape),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textPrimary,
+            fontStyle = if (isBinomial) FontStyle.Italic else FontStyle.Normal,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = if (visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+            contentDescription = stringResource(
+                if (visible) R.string.sample_detail_hide_box else R.string.sample_detail_show_box,
+                label,
+            ),
+            tint = if (visible) colors.accent else colors.textTertiary,
+            modifier = Modifier.size(22.dp),
+        )
     }
 }
 
@@ -142,14 +397,14 @@ private fun SampleDetailUnavailableScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(colors.surfaceVariant)
+                    .background(colors.background)
                     .statusBarsPadding()
                     .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
             ) {
                 BackArrow(onBack = onBack)
             }
         },
-        containerColor = colors.surfaceVariant,
+        containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
         Box(
@@ -174,476 +429,39 @@ private fun SampleDetailUnavailableScreen(
     }
 }
 
+/**
+ * Back, and the sample's label.
+ *
+ * The label is the time the frame was captured — the same one the verification queue row and the
+ * Verification Screen lead with, rather than the "Sample #a1b2" id fragment this used to show.
+ * An id fragment is metadata, and it is also not something a medtech can recognise.
+ */
 @Composable
 fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(80.dp)
-            .background(AgarthaTheme.colors.surfaceVariant)
-            .padding(top = 32.dp, start = 8.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(AgarthaTheme.colors.background)
+            .statusBarsPadding()
+            .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         BackArrow(onBack = onBack)
-
-        Spacer(Modifier.weight(1f))
-
+        Spacer(Modifier.width(8.dp))
         Text(
             text = title,
             style = AppTypography.titleLarge,
             color = AgarthaTheme.colors.textPrimary,
         )
-
-        Spacer(Modifier.weight(1f))
     }
 }
 
-@Composable
-fun SampleSegmentedControl(selectedTab: Int, onTabSelected: (Int) -> Unit) {
-    val tabs = listOf("IMAGE", "DETECTIONS", "METADATA")
+/** Stable handles for this screen's UI tests. */
+internal object SampleDetailTestTags {
+    const val DETECTION_OVERLAY = "sample_detection_overlay"
 
-    TabRow(
-        selectedTabIndex = selectedTab,
-        containerColor = AgarthaTheme.colors.surfaceVariant,
-        contentColor = AgarthaTheme.colors.accent,
-        indicator = { tabPositions ->
-            if (selectedTab < tabPositions.size) {
-                TabRowDefaults.SecondaryIndicator(
-                    modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
-                    color = AgarthaTheme.colors.accent,
-                    height = 2.dp
-                )
-            }
-        },
-        divider = {
-            HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 0.5.dp)
-        }
-    ) {
-        tabs.forEachIndexed { index, label ->
-            Tab(
-                selected = selectedTab == index,
-                onClick = { onTabSelected(index) },
-                text = {
-                    Text(
-                        text = label,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (selectedTab == index) {
-                            AgarthaTheme.colors.accent
-                        } else {
-                            AgarthaTheme.colors.textSecondary
-                        },
-                        letterSpacing = 0.8.sp
-                    )
-                }
-            )
-        }
-    }
+    fun detectionRow(index: Int): String = "sample_detection_row_$index"
 }
 
-@Composable
-private fun ImageTab(item: SampleRecordItem, imageSource: SampleImageSource) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Image Card
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp)
-                .aspectRatio(1f) // Changed to 1f based on screenshot
-                .background(AgarthaTheme.colors.surfaceVariant, RoundedCornerShape(16.dp))
-                .clip(RoundedCornerShape(16.dp))
-        ) {
-            when (imageSource) {
-                is SampleImageSource.Local -> {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(File(imageSource.path))
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Sample Image",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    NormalizedDetectionOverlay(
-                        detections = item.detections,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                is SampleImageSource.RemoteSignedUrl -> {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(imageSource.url)
-                            // Signed URLs expire (15 min) and carry a fresh token each time
-                            // they are generated, so key the cache on the stable storage path
-                            // instead of the URL — otherwise every open is a cache miss and
-                            // re-downloads the same image.
-                            .memoryCacheKey(imageSource.cacheKey)
-                            .diskCacheKey(imageSource.cacheKey)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Sample Image",
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    NormalizedDetectionOverlay(
-                        detections = item.detections,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-                is SampleImageSource.Unavailable -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = "Image Unavailable",
-                            color = Color.White.copy(alpha = 0.5f),
-                            fontSize = 15.sp
-                        )
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Capture Metadata Strip
-        val timeStr = Instant.ofEpochMilli(item.sample.timestamp)
-            .atZone(ZoneId.systemDefault())
-            .format(DateTimeFormatter.ofPattern("MMM dd, yyyy · HH:mm:ss"))
-
-        val provenanceText = if (item.sample.isManual) "Manually Captured" else "AI-Captured"
-
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 18.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-                .background(AgarthaTheme.colors.surface)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Capture Type", fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
-                Text(provenanceText, fontSize = 15.sp, color = AgarthaTheme.colors.textSecondary)
-            }
-            HorizontalDivider(
-                modifier = Modifier.padding(start = 16.dp),
-                thickness = 0.5.dp,
-                color = AgarthaTheme.colors.border
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Timestamp", fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
-                Text(
-                    timeStr,
-                    fontSize = 15.sp,
-                    color = AgarthaTheme.colors.textSecondary,
-                    style = TextStyle(fontFeatureSettings = "tnum")
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NormalizedDetectionOverlay(detections: List<Detection>, modifier: Modifier = Modifier) {
-    // Capture tokens at composition time — DrawScope inside Canvas is not @Composable.
-    val verifiedColor = AgarthaTheme.colors.accent
-    val unverifiedColor = AgarthaTheme.colors.danger
-    Canvas(modifier = modifier) {
-        detections.forEach { detection ->
-            val bx = detection.bboxX ?: return@forEach
-            val by = detection.bboxY ?: return@forEach
-            val bw = detection.bboxW ?: return@forEach
-            val bh = detection.bboxH ?: return@forEach
-            val left = bx.coerceIn(0f, 1f) * size.width
-            val top = by.coerceIn(0f, 1f) * size.height
-            val width = bw.coerceIn(0f, 1f) * size.width
-            val height = bh.coerceIn(0f, 1f) * size.height
-            val color = if (detection.verifiedByUser) verifiedColor else unverifiedColor
-            drawRect(
-                color = color,
-                topLeft = Offset(left, top),
-                size = Size(width, height),
-                style = Stroke(width = 3f),
-            )
-        }
-    }
-}
-
-@Composable
-private fun DetectionsTab(detections: List<Detection>) {
-    if (detections.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize().padding(top = 40.dp), contentAlignment = Alignment.TopCenter) {
-            Text(
-                text = "No detections on this sample.",
-                color = AgarthaTheme.colors.textSecondary,
-                fontSize = 15.sp
-            )
-        }
-        return
-    }
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        itemsIndexed(detections) { index, detection ->
-            DetectionCard(index = index, detection = detection)
-        }
-    }
-}
-
-@Composable
-private fun DetectionCard(index: Int, detection: Detection) {
-    val isVerified = detection.verifiedByUser
-    val aiGenerated = detection.bboxX != null
-    val provenanceText = if (aiGenerated) "AI DETECTION" else "MANUAL ANNOTATION"
-    val speciesLabel = detection.expertClass ?: detection.classLabel
-    val isItalic = speciesLabel.contains("Ascaris") ||
-        speciesLabel.contains("Trichuris") ||
-        speciesLabel.contains("Necator") ||
-        speciesLabel.contains("Hymenolepis") ||
-        speciesLabel.contains(".")
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(AgarthaTheme.colors.surface)
-            .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(14.dp))
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(24.dp)
-                        .background(
-                            if (aiGenerated) AgarthaTheme.colors.accent else AgarthaTheme.colors.accent,
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        (index + 1).toString(),
-                        color = AgarthaTheme.colors.surface,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                Text(
-                    text = speciesLabel,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AgarthaTheme.colors.textPrimary,
-                    fontStyle = if (isItalic) FontStyle.Italic else FontStyle.Normal
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(100.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    text = provenanceText,
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = AgarthaTheme.colors.textSecondary,
-                    letterSpacing = 0.4.sp
-                )
-            }
-        }
-
-        HorizontalDivider(thickness = 0.5.dp, color = AgarthaTheme.colors.border)
-
-        // Fields
-        Column(modifier = Modifier.padding(start = 16.dp)) {
-            val sourceStr = if (aiGenerated) "AI-suggested" else "Manual"
-            DetailRow(label = "Source", value = sourceStr, isLast = false)
-            DetailRow(
-                label = "Verdict",
-                value = if (isVerified) "Verified" else "Rejected",
-                valueColor = if (isVerified) AgarthaTheme.colors.success else AgarthaTheme.colors.danger,
-                isLast = false,
-            )
-
-            val bboxStr = if (detection.bboxX != null) {
-                String.format(
-                    Locale.US,
-                    "[%.3f, %.3f, %.3f, %.3f]",
-                    detection.bboxX,
-                    detection.bboxY,
-                    detection.bboxW,
-                    detection.bboxH,
-                )
-            } else {
-                "None"
-            }
-            DetailRow(label = "Bounding Box", value = bboxStr, isLast = true, valueFontFamily = FontFamily.Monospace)
-        }
-    }
-}
-
-@Composable
-private fun MetadataTab(sample: Sample) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item {
-            GroupedList(title = "IDENTITY") {
-                DetailRow(
-                    label = "Sample ID",
-                    value = sample.id,
-                    isLast = false,
-                    valueFontFamily = FontFamily.Monospace
-                )
-                DetailRow(
-                    label = "Session ID",
-                    value = sample.sessionId,
-                    isLast = false,
-                    valueFontFamily = FontFamily.Monospace
-                )
-                DetailRow(
-                    label = "Device ID",
-                    value = sample.deviceId,
-                    isLast = true,
-                    valueFontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        item {
-            GroupedList(title = "STATUS & TIMING") {
-                val statusStr = sample.status.name.uppercase()
-                val isSynced = sample.status == SampleStatus.SYNCED
-                DetailRow(
-                    label = "Sync Status",
-                    value = statusStr,
-                    isLast = false,
-                    valueColor = if (isSynced) AgarthaTheme.colors.success else AgarthaTheme.colors.textSecondary
-                )
-
-                val capturedAt = Instant.ofEpochMilli(sample.timestamp)
-                    .atZone(ZoneId.systemDefault())
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
-                DetailRow(
-                    label = "Captured At",
-                    value = capturedAt,
-                    isLast = false,
-                    valueFontFamily = FontFamily.Monospace
-                )
-
-                val verifiedAt = Instant.ofEpochMilli(sample.verifiedAt)
-                    .atZone(ZoneId.systemDefault())
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd  HH:mm:ss"))
-                DetailRow(
-                    label = "Verified At",
-                    value = verifiedAt,
-                    isLast = true,
-                    valueFontFamily = FontFamily.Monospace
-                )
-            }
-        }
-
-        item {
-            GroupedList(title = "CAPTURE DATA") {
-                DetailRow(label = "Model Version", value = sample.inferenceModelVersion, isLast = false)
-                DetailRow(
-                    label = "Needs Reannotation",
-                    value = if (sample.needsReannotation) "Yes" else "No",
-                    isLast = true
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun GroupedList(title: String, content: @Composable ColumnScope.() -> Unit) {
-    Column {
-        Text(
-            text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textSecondary,
-            letterSpacing = 0.5.sp,
-            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp)
-        )
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-                .background(AgarthaTheme.colors.surface)
-        ) {
-            content()
-        }
-    }
-}
-
-@Composable
-fun DetailRow(
-    label: String,
-    value: String,
-    isLast: Boolean,
-    valueColor: Color = AgarthaTheme.colors.textSecondary,
-    valueFontFamily: FontFamily = FontFamily.Default
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, fontSize = 15.sp, color = AgarthaTheme.colors.textPrimary)
-
-        // Handle long monospace strings like UUIDs by breaking them
-        val textModifier = if (valueFontFamily == FontFamily.Monospace) {
-            Modifier.fillMaxWidth(0.6f)
-        } else {
-            Modifier
-        }
-
-        Text(
-            text = value,
-            fontSize = 15.sp,
-            color = valueColor,
-            fontFamily = valueFontFamily,
-            textAlign = TextAlign.End,
-            modifier = textModifier,
-            style = if (valueFontFamily == FontFamily.Monospace) {
-                TextStyle(fontFeatureSettings = "tnum")
-            } else {
-                TextStyle.Default
-            }
-        )
-    }
-    if (!isLast) {
-        HorizontalDivider(
-            modifier = Modifier.padding(start = 16.dp),
-            thickness = 0.5.dp,
-            color = AgarthaTheme.colors.border,
-        )
-    }
-}
+private val CAPTURED_AT_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("d MMM yyyy · HH:mm:ss")
