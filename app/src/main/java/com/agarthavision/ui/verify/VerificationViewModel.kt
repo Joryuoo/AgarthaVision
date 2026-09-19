@@ -3,10 +3,14 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.totalsAreConsistent
+import com.agarthavision.domain.usecase.verify.unboxedCountOf
+import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -48,9 +52,23 @@ data class VerificationUiState(
     val frameIndexInQueue: Int = 0,
     val queueSize: Int = 0,
     val frame: FlaggedFrame? = null,
+    /**
+     * Where the frame's image can be loaded from, when it did not come with its own bytes.
+     *
+     * Null on the capture path, where the frame carries the JPEG it was just taken from.
+     */
+    val imageSource: SampleImageSource? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
     val findings: List<Finding> = emptyList(),
+    /**
+     * What the medtech is drawing a box for, or null when nobody is drawing.
+     *
+     * An address rather than a boolean, because one gesture serves two jobs — replacing a box
+     * the model got wrong, and locating an egg it never boxed — and the frame can only host one
+     * at a time.
+     */
+    val drawTarget: DrawTarget? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
@@ -77,7 +95,9 @@ data class VerificationUiState(
         get() = when {
             frame == null -> null
             frame.source == FrameSource.MANUAL -> null
-            else -> findings.any { it.prediction == null && it.eggContribution > 0 }
+            else -> findings.any {
+                it.prediction == null && findings.unboxedCountOf(it.answers.speciesLabel) > 0
+            }
         }
 
     val isManual: Boolean
@@ -97,6 +117,12 @@ data class VerificationUiState(
      * field and an explicit no-detection assertion on a manual one, both of which were a tap
      * asking the medtech to restate the absence of work.
      *
+     * The one thing it does hold for is a contradiction: an added species whose typed total is
+     * lower than the eggs the frame already accounts for — the boxes kept, plus the boxes the
+     * medtech drew themselves. Submitting that would write fewer slots than there are drawn
+     * boxes and quietly lose hand-placed geometry, so it is refused rather than clamped as they
+     * type. See `List<Finding>.totalsAreConsistent`.
+     *
      * C7 is unaffected: nothing reaches `samples` except through `SubmitVerificationUseCase`,
      * and a row nobody touched carries `species_touched = false` into the corpus, so an
      * unopposed model answer stays distinguishable from a confirmed one.
@@ -105,8 +131,12 @@ data class VerificationUiState(
         get() = when {
             isSubmitting -> false
             frame == null -> false
-            else -> findings.all { it.isComplete }
+            else -> findings.all { it.isComplete } && findings.totalsAreConsistent()
         }
+
+    /** True while a box is being drawn, which is what dims every existing box on the frame. */
+    val isDrawing: Boolean
+        get() = drawTarget != null
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -116,6 +146,18 @@ data class VerificationUiState(
     val canGoNext: Boolean
         get() = frameIndexInQueue in 1 until queueSize
 }
+
+/**
+ * What a box being drawn is for.
+ *
+ * @property findingIndex the row in `findings` the box belongs to.
+ * @property slot which egg of an added species, when [findingIndex] names an added row. Null on
+ *   a prediction-backed row, where there is exactly one box and drawing replaces it. The two
+ *   cases commit differently — a replacement latches `boxReplaced` and holds Q2 at "No", a
+ *   location has no model claim to contradict — so the address has to carry which one it is
+ *   rather than leaving `onBoxDrawn` to guess from the row.
+ */
+data class DrawTarget(val findingIndex: Int, val slot: Int? = null)
 
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
@@ -218,10 +260,12 @@ class VerificationViewModel @Inject constructor(
             it.copy(
                 isVisible = true,
                 frame = frame,
+                imageSource = prior?.imageSource,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
                 findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
                     ?: frame.initialFindings(),
+                drawTarget = null,
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = prior?.userNote.orEmpty(),
@@ -252,12 +296,22 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * **A replaced box cannot be told it was placed correctly.**
+     *
+     * Once the medtech has redrawn a box, "yes the model placed it right" is false, and it stays
+     * false — the model did put the box in the wrong place, and a human fixing it does not undo
+     * that. Letting Q2 flip back would leave a detection claiming correct localisation while
+     * carrying the human's geometry, which is exactly the label the drawing feature exists to
+     * produce. Refused silently, because the screen does not offer the affordance on a replaced
+     * row; this is the backstop.
+     */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            if (it.isBoxCorrect == isBoxCorrect) {
-                it
-            } else {
-                it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+            when {
+                it.boxReplaced && isBoxCorrect -> it
+                it.isBoxCorrect == isBoxCorrect -> it
+                else -> it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
             }
         }
     }
@@ -301,7 +355,14 @@ class VerificationViewModel @Inject constructor(
      * it: whatever was asserted no longer applies to the question now being asked.
      */
     private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
-        eggCount = eggCount,
+        fieldTotal = fieldTotal,
+        // Geometry is not an answer to any of the questions being cleared. A medtech who redrew
+        // a box and then changed their mind about the species has not un-drawn the box, and
+        // dropping it here would quietly restore the model's own geometry under them. The same
+        // holds for the boxes on an added species: the eggs are still where they were put.
+        drawnBox = drawnBox,
+        drawnBoxes = drawnBoxes,
+        boxReplaced = boxReplaced,
     )
 
     /**
@@ -374,9 +435,9 @@ class VerificationViewModel @Inject constructor(
      * finding — `detections.bbox_*` is nullable precisely for this
      * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
-    fun onAddFinding() {
+    fun onAddSpecies() {
         _state.update {
-            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(eggCount = 1)))
+            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(fieldTotal = 1)))
         }
     }
 
@@ -399,15 +460,58 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    /** Eggs of this species the medtech counted in the field. */
-    fun onEggCountChanged(index: Int, text: String) {
+    /**
+     * Eggs of this species the medtech counted in the field, **the model's boxes included**.
+     *
+     * Taken as typed. It is not clamped up to the floor here, because the floor is often above
+     * the first digit of the number being typed — heading for 23 against nine boxed eggs, a
+     * clamp would snap "2" to 9 and the 3 would land on the wrong number. A total below the
+     * floor holds submit and says why instead; see `List<Finding>.totalsAreConsistent`.
+     */
+    fun onFieldTotalChanged(index: Int, text: String) {
         val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
-        updateAnswerAt(index) { it.copy(eggCount = parsed) }
+        updateAnswerAt(index) { it.copy(fieldTotal = parsed) }
     }
 
+    /**
+     * Names the species on an added card, merging it into an existing card for the same species.
+     *
+     * The merge is not tidiness. `sample_species_findings` is unique on `(sample_id, species)`,
+     * the detection ids derive from the species, and the reopen path rebuilds one card per
+     * species — two cards naming one species have nowhere to be stored separately and would come
+     * back as one anyway. The card that already held the species survives; the one just renamed
+     * into it adds its total and hands over its drawn boxes, so nothing the medtech placed is
+     * dropped by renaming a card into a collision.
+     */
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
-        updateAnswerAt(index) {
-            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+        _state.update { current ->
+            val named = current.findings.getOrNull(index)?.answers
+                ?.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+                ?: return@update current
+            val twinIndex = current.findings.indexOfFirst { other ->
+                other.prediction == null && other.answers.speciesLabel == named.speciesLabel
+            }
+            if (twinIndex == -1 || twinIndex == index) {
+                current.copy(
+                    findings = current.findings.mapIndexed { i, finding ->
+                        if (i == index) finding.copy(answers = named) else finding
+                    },
+                )
+            } else {
+                val twin = current.findings[twinIndex].answers
+                val merged = twin.copy(
+                    fieldTotal = (twin.fieldTotal ?: 0) + (named.fieldTotal ?: 0),
+                    drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
+                    speciesTouched = true,
+                )
+                current.copy(
+                    findings = current.findings
+                        .mapIndexed { i, finding ->
+                            if (i == twinIndex) finding.copy(answers = merged) else finding
+                        }
+                        .filterIndexed { i, _ -> i != index },
+                )
+            }
         }
     }
 
@@ -469,6 +573,72 @@ class VerificationViewModel @Inject constructor(
                 currentFrame = null
                 _events.emit(VerificationEvent.Dismiss)
             }
+        }
+    }
+
+    /**
+     * Starts drawing a box for the finding at [index].
+     *
+     * Two call sites, one capability: replacing the model's box after Q2 is answered "No", and
+     * giving an added egg a box. Both are optional — answering "No" without redrawing is a
+     * complete, valid answer that records a localisation error, and an added egg with no box is
+     * a complete finding whose drawing may be deferred to the Sample Data Screen entirely.
+     */
+    fun onBeginDraw(findingIndex: Int, slot: Int? = null) {
+        val findings = _state.value.findings
+        val finding = findings.getOrNull(findingIndex) ?: return
+        // A slot may sit one past the drawn boxes (the next egg to locate) but never beyond the
+        // eggs that species actually claims, and a prediction-backed row has no slots at all.
+        val slotIsValid = when {
+            slot == null -> finding.prediction != null
+            finding.prediction != null -> false
+            else -> slot in 0 until findings.unboxedCountOf(finding.answers.speciesLabel)
+        }
+        if (slotIsValid) {
+            _state.update { it.copy(drawTarget = DrawTarget(findingIndex, slot)) }
+        }
+    }
+
+    fun onCancelDraw() {
+        _state.update { it.copy(drawTarget = null) }
+    }
+
+    /**
+     * Records a box the medtech drew.
+     *
+     * The geometry arrives already in the model's coordinate space — centre-based pixels in the
+     * source image — from `FrameWithBoxes`. **Nothing is converted here.** If a box lands half
+     * its own size out of place, the bug is in that transform, and patching it at this layer
+     * would hide it behind a second, disagreeing convention.
+     *
+     * Committing a redraw sets Q2 to "No" and latches it there. On an added row there is no Q2
+     * to set: there was never a model box to be wrong about.
+     */
+    fun onBoxDrawn(box: ImageBox) {
+        val target = _state.value.drawTarget ?: return
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            val finding = updated.getOrNull(target.findingIndex)
+            if (finding != null) {
+                updated[target.findingIndex] = if (target.slot == null) {
+                    finding.copy(
+                        answers = finding.answers.copy(
+                            drawnBox = box,
+                            isBoxCorrect = false,
+                            boxReplaced = true,
+                        ),
+                    )
+                } else {
+                    // Drawn boxes stay packed at the front, so a slot either replaces one that
+                    // is already there or lands next in line. Nothing is ever written past the
+                    // end, which is what keeps "lowering the count drops undrawn eggs first"
+                    // true without a second rule to enforce it.
+                    val boxes = finding.answers.drawnBoxes.toMutableList()
+                    if (target.slot in boxes.indices) boxes[target.slot] = box else boxes += box
+                    finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+                }
+            }
+            current.copy(findings = updated, drawTarget = null)
         }
     }
 

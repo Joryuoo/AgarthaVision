@@ -22,6 +22,12 @@ internal object VerifyTestTags {
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
 
+    /**
+     * Shown in the preview's place when there is no image to load at all — neither local bytes,
+     * nor a local file, nor a signed Storage URL.
+     */
+    const val FRAME_UNAVAILABLE = "frame_unavailable"
+
     /** Detection-level navigation within a frame (AI sheet only). */
     const val DETECTION_PREV = "detection_prev"
     const val DETECTION_NEXT = "detection_next"
@@ -48,13 +54,14 @@ internal object VerifyTestTags {
     const val CUSTOM_SPECIES_DISMISS = "custom_species_dismiss"
 
     /**
-     * The AI sheet's three yes/no questions. All three render the same "Yes"/"No" labels,
-     * so a test that looked them up by text would match whichever came first.
+     * The AI sheet's three checkboxes. They carry statements rather than questions now, but the
+     * tags keep the Q names: they are what the constraint docs and the tickets call them, and
+     * the chain's order is still Q1 gates Q2 gates Q3.
      */
     const val QUESTION_Q1 = "q1"
     const val QUESTION_Q2 = "q2"
 
-    /** "Is this egg <suggested species>?" — shown only when the model's class is a known species. */
+    /** "This egg is <suggested species>" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"
 
     // There is no QUESTION_Q4. "Did the model miss any eggs in this frame?" is derived from the
@@ -77,6 +84,12 @@ internal object VerifyTestTags {
     const val DRAW_ACCEPT = "draw_accept"
     const val DRAW_CANCEL = "draw_cancel"
 
+    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    const val REDRAW_BOX = "redraw_box"
+
+    /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
+    const val BOX_REPLACED_NOTE = "box_replaced_note"
+
     /**
      * Caution line under the model-output summary, present only when the model named something.
      *
@@ -93,8 +106,16 @@ internal object VerifyTestTags {
     /** The spinner inside the model-output section while inference has not come back. */
     const val MODEL_OUTPUT_SPINNER = "model_output_spinner"
 
-    /** "Add egg" button beneath the added-eggs list. Present on every frame. */
-    const val ADD_EGG = "add_egg"
+    /** "Add species" button beneath the added-species cards. Present on every frame. */
+    const val ADD_SPECIES = "add_species"
+
+    /**
+     * The disclosure that reveals the added eggs still waiting for a box.
+     *
+     * Present only when at least one added egg has no box. Its label carries "n of m located",
+     * which is the whole reason it is a disclosure and not a hidden screen.
+     */
+    const val LOCATE_TOGGLE = "locate_toggle"
 
     /** The live per-species summary of what submitting would write. */
     const val FINDINGS_SUMMARY = "findings_summary"
@@ -108,13 +129,20 @@ internal object VerifyTestTags {
     /** Remove button on the added finding at [index]. */
     fun removeFinding(index: Int): String = "remove_finding_" + index
 
-    /** Egg-count field on the added finding at [index]. */
+    /** Field-total field on the added species at [index]. */
     fun countField(index: Int): String = "count_field_" + index
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
 
-    /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
-    fun questionOption(question: String, label: String): String =
-        question + "_" + label.lowercase()
+    /**
+     * Draw / redraw affordance for egg [slot] of the added species at [findingIndex].
+     *
+     * Keyed on both, because an added species is one row holding several eggs now, and a tag
+     * naming only the row would collide across every egg under it.
+     */
+    fun drawBox(findingIndex: Int, slot: Int): String = "draw_box_" + findingIndex + "_" + slot
+
+    // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
+    // so a question has one control and its own tag is enough to reach it.
 }

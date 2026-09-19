@@ -3,7 +3,8 @@ package com.agarthavision.domain.usecase.verify
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
-import com.agarthavision.data.local.mapper.toDetectionEntity
+import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
@@ -58,9 +59,27 @@ class SubmitVerificationUseCase @Inject constructor(
         // A rejected box still persists, as a labelled FALSE_POSITIVE row — that is what makes
         // detections a retraining corpus instead of a results table (C8). So every finding is
         // written, not just the ones that counted.
-        detectionDao.insertDetections(
-            findings.mapIndexed { ordinal, finding -> finding.toDetectionEntity(sampleId, ordinal) },
-        )
+        val detections = findings.toDetectionEntities(sampleId)
+        detectionDao.insertDetections(detections)
+
+        // An added species the medtech counted down on re-open — 23 Ascaris, then 20 — leaves
+        // three slots behind, because the insert above replaces and never deletes. Left alone
+        // they stay as null-bbox rows for eggs nobody claims any more, inflating the corpus and
+        // making the frame read as un-localised forever.
+        //
+        // Not a C8 deletion, on the same reading `replaceFindingsForSample` below already works
+        // on: what C8 protects is the clinical record and the model's own claims — the JPEG and
+        // every prediction-backed row, rejections included — and a slot from an edit the medtech
+        // has since revised is neither. The model's boxes are excluded by id rather than by
+        // trusting the diff, so this cannot reach one even if the finding list is wrong.
+        val modelBoxIds = frame.predictions.indices.map { detectionIdFor(sampleId, it) }.toSet()
+        val written = detections.mapTo(mutableSetOf()) { it.detectionId }
+        val stale = detectionDao.getDetectionsForSample(sampleId)
+            .map { it.detectionId }
+            .filter { it !in written && it !in modelBoxIds }
+        if (stale.isNotEmpty()) {
+            detectionDao.deleteDetectionsByIds(stale)
+        }
 
         // Wholesale replace, so a species the medtech removed on re-open actually disappears
         // instead of lingering and inflating the count. Not a C8 deletion: a count is a current

@@ -14,10 +14,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -27,8 +33,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.boxedCountOf
+import com.agarthavision.domain.usecase.verify.fieldTotalOf
+import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.toFindingRows
+import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -141,20 +152,25 @@ internal fun ModelOutputSection(
 }
 
 /**
- * Add Egg: the eggs the medtech recorded on top of whatever the model boxed.
+ * Add Species: what the medtech says is in this field, on top of whatever the model boxed.
  *
  * **Always present, with or without model output.** It is the only path by which a frame
  * captured while the inference container was unreachable can be verified at all, and a frame
- * with model output still needs it for an egg the model missed. Adding one here is also what
- * answers Q4 — see `VerificationUiState.missedEgg`.
+ * with model output still needs it for eggs the model missed. Claiming more of a species than
+ * the model boxed is also what answers Q4 — see `VerificationUiState.missedEgg`.
+ *
+ * **One card per species with a count, not one row per egg.** A Kato-Katz field can hold twenty
+ * Ascaris, and a medtech counts them with a tally, not by adding twenty rows. The data agrees:
+ * `sample_species_findings` is unique on `(sample_id, species)`, the detection ids derive from
+ * the species, and the reopen path already rebuilt one row per species — the per-egg list was
+ * the only part of the system that thought otherwise, and two cards naming one species came back
+ * merged anyway.
  *
  * Rendered as a stacked, always-visible list rather than the one-at-a-time carousel the model's
  * boxes use. A box row is paged because `FrameWithBoxes` highlights exactly one box at a time
- * and the highlight is the point; an added row has no box to highlight and has to be scanned as
- * a set, because the whole reason it exists is that a field can hold several species at once.
- *
- * An added egg needs no bounding box to be complete — `detections.bbox_*` is nullable precisely
- * for this. Drawing one is optional (PB-14).
+ * and the highlight is the point; an added species has no single box to highlight and has to be
+ * scanned as a set, because the whole reason it exists is that a field can hold several species
+ * at once.
  */
 @Composable
 internal fun AddedFindings(
@@ -167,35 +183,34 @@ internal fun AddedFindings(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (addedIndices.isNotEmpty()) {
-            SectionLabel(stringResource(R.string.verify_eggs_you_added))
+            SectionLabel(stringResource(R.string.verify_species_you_added))
         }
 
         addedIndices.forEach { index ->
             AddedFindingCard(
                 index = index,
                 finding = findings[index],
-                // Counted separately from this row: the boxes the model already drew for this
-                // same species. Shown so the medtech types the additional eggs rather than
-                // the field total, which would double-count.
-                alreadyBoxed = findings.take(boxCount).count { boxed ->
-                    boxed.eggContribution > 0 &&
-                        boxed.answers.speciesLabel != null &&
-                        boxed.answers.speciesLabel == findings[index].answers.speciesLabel
-                },
+                // The eggs of this species the frame already accounts for: boxes the medtech
+                // kept, plus boxes they drew themselves. Shown under the field as context, and
+                // it is the floor the typed total may not go below.
+                floor = findings.floorFor(findings[index].answers.speciesLabel),
+                boxed = findings.boxedCountOf(findings[index].answers.speciesLabel),
                 actions = actions,
             )
         }
 
         Text(
-            text = stringResource(R.string.verify_add_egg),
+            text = stringResource(R.string.verify_add_species),
             color = AgarthaTheme.colors.accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
-                .testTag(VerifyTestTags.ADD_EGG)
-                .clickable { actions.onAddFinding() }
+                .testTag(VerifyTestTags.ADD_SPECIES)
+                .clickable { actions.onAddSpecies() }
                 .padding(vertical = 10.dp),
         )
+
+        LocateEggsSection(findings = findings, boxCount = boxCount, actions = actions)
     }
 }
 
@@ -203,9 +218,12 @@ internal fun AddedFindings(
 private fun AddedFindingCard(
     index: Int,
     finding: Finding,
-    alreadyBoxed: Int,
+    floor: Int,
+    boxed: Int,
     actions: VerificationSheetActions,
 ) {
+    val total = finding.answers.fieldTotal
+    val belowFloor = (total ?: 0) < floor
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -215,18 +233,10 @@ private fun AddedFindingCard(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End,
         ) {
-            // States plainly that there is no model output behind this row, rather than
-            // leaving a blank the reader has to interpret.
             Text(
-                text = stringResource(R.string.verify_not_boxed),
-                color = AgarthaTheme.colors.textSecondary,
-                fontSize = 12.sp,
-            )
-            Text(
-                text = stringResource(R.string.verify_remove_egg),
+                text = stringResource(R.string.verify_remove_species),
                 color = AgarthaTheme.colors.danger,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -247,23 +257,156 @@ private fun AddedFindingCard(
                 .padding(bottom = 10.dp),
         )
 
+        // The field asks for the **total** for this species, not the eggs beyond the model's
+        // boxes. A medtech counting 23 Ascaris against nine boxed ones would otherwise have to
+        // work out 14 in their head, under time pressure, with nothing anywhere to catch a slip
+        // - and the wrong number reaches the low-power-field count in silence.
         OutlinedTextField(
-            value = finding.answers.eggCount?.toString().orEmpty(),
-            onValueChange = { actions.onEggCountChanged(index, it) },
-            label = { Text(stringResource(R.string.verify_egg_count_label)) },
-            supportingText = if (alreadyBoxed > 0) {
-                { Text(stringResource(R.string.verify_egg_count_addendum, alreadyBoxed)) }
-            } else {
-                null
+            value = total?.toString().orEmpty(),
+            onValueChange = { actions.onFieldTotalChanged(index, it) },
+            label = { Text(stringResource(R.string.verify_field_total_label)) },
+            isError = belowFloor,
+            supportingText = when {
+                belowFloor -> { { Text(stringResource(R.string.verify_field_total_floor, floor)) } }
+                boxed > 0 -> { { Text(stringResource(R.string.verify_field_total_boxed, boxed)) } }
+                else -> null
             },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             modifier = Modifier
-                .width(180.dp)
+                .width(220.dp)
                 .testTag(VerifyTestTags.countField(index)),
         )
     }
 }
+
+/**
+ * The eggs with no box yet, hidden behind one line until the medtech asks for them.
+ *
+ * **Why it is optional, and must stay optional.** Locating an egg is what turns a count into
+ * something a detector can train on, and this is the only place a missed egg gets geometry at
+ * all. But gating submit on it would make declaring fourteen missed eggs cost fourteen drawings,
+ * and the medtech's way out of that is to stop declaring them — at which point the app loses the
+ * count *and* records that the model was complete. Never make the honest answer more expensive
+ * than the lazy one.
+ *
+ * **Why the label carries the count.** A closed disclosure only pulls at someone (Zeigarnik) if
+ * the unfinished work is visible while it is shut. "0 of 14 located" does that; a bare "Show
+ * list" hides the fact that there is anything to do.
+ */
+@Composable
+private fun LocateEggsSection(
+    findings: List<Finding>,
+    boxCount: Int,
+    actions: VerificationSheetActions,
+) {
+    val slots = findings.locatableSlots(boxCount)
+    if (slots.isEmpty()) return
+
+    val expanded = rememberSaveable { mutableStateOf(false) }
+    val located = slots.count { it.box != null }
+    val colors = AgarthaTheme.colors
+
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.LOCATE_TOGGLE)
+                .clickable { expanded.value = !expanded.value }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = if (expanded.value) {
+                    Icons.Outlined.ExpandLess
+                } else {
+                    Icons.Outlined.ExpandMore
+                },
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(modifier = Modifier.padding(start = 6.dp)) {
+                Text(
+                    text = stringResource(R.string.verify_locate_eggs, located, slots.size),
+                    color = colors.accent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(R.string.verify_locate_eggs_note),
+                    color = colors.textTertiary,
+                    fontSize = 11.sp,
+                    lineHeight = 14.sp,
+                )
+            }
+        }
+
+        if (expanded.value) {
+            slots.forEach { slot ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 26.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.verify_locate_egg_row,
+                            slot.species,
+                            slot.ordinalInField,
+                            slot.fieldTotal,
+                        ),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    DrawBoxAction(
+                        label = stringResource(
+                            if (slot.box == null) R.string.verify_draw_box else R.string.verify_redraw_box,
+                        ),
+                        tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
+                        onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One egg of an added species that has no box from the model — drawn or still to draw.
+ *
+ * [ordinalInField] counts within the species across the whole frame, so the eggs the model boxed
+ * take the first numbers and these carry on from there: "egg 10 of 23" means what it says to
+ * someone looking down a microscope, where "unboxed egg 1" would not.
+ */
+private data class LocatableSlot(
+    val findingIndex: Int,
+    val slot: Int,
+    val species: String,
+    val ordinalInField: Int,
+    val fieldTotal: Int,
+    val box: ImageBox?,
+)
+
+private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
+    indices.filter { it >= boxCount }.flatMap { index ->
+        val answers = this[index].answers
+        val species = answers.speciesLabel ?: return@flatMap emptyList<LocatableSlot>()
+        val boxed = boxedCountOf(species)
+        (0 until unboxedCountOf(species)).map { slot ->
+            LocatableSlot(
+                findingIndex = index,
+                slot = slot,
+                species = species,
+                ordinalInField = boxed + slot + 1,
+                fieldTotal = fieldTotalOf(species),
+                box = answers.drawnBoxes.getOrNull(slot),
+            )
+        }
+    }
 
 /**
  * What submitting would actually write, recomputed as the medtech answers.
