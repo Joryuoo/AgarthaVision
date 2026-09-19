@@ -66,9 +66,9 @@ class SessionDaoOwnerVisibilityTest {
                 updatedAt = 1_000L,
             ),
         )
-        dao.insertSession(sessionEntity(id = "s-a",        userId = "user-a"))
-        dao.insertSession(sessionEntity(id = "s-b",        userId = "user-b"))
-        dao.insertSession(sessionEntity(id = "s-unowned",  userId = null))
+        dao.upsertSession(sessionEntity(id = "s-a",        userId = "user-a"))
+        dao.upsertSession(sessionEntity(id = "s-b",        userId = "user-b"))
+        dao.upsertSession(sessionEntity(id = "s-unowned",  userId = null))
     }
 
     // ─────────────────── null caller sees only unowned rows ──────────────────

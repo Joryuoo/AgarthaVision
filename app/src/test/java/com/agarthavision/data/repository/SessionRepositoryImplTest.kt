@@ -116,7 +116,7 @@ class SessionRepositoryImplTest {
     fun `the list is scoped to the patient in the route`() = runTest {
         givenPatientWithSessions()
         patientDao.upsertPatient(patient(id = OTHER_PATIENT).toEntity())
-        sessionDao.insertSession(session("s-a3", USER_A, OTHER_PATIENT))
+        sessionDao.upsertSession(session("s-a3", USER_A, OTHER_PATIENT))
 
         assertEquals(listOf("s-a1", "s-a2"), page(USER_A).map { it.session.id }.sorted())
     }
@@ -137,9 +137,9 @@ class SessionRepositoryImplTest {
     /** One patient, two smears by medtech A and one by medtech B. */
     private suspend fun givenPatientWithSessions() {
         patientDao.upsertPatient(patient(id = PATIENT).toEntity())
-        sessionDao.insertSession(session("s-a1", USER_A, PATIENT))
-        sessionDao.insertSession(session("s-a2", USER_A, PATIENT))
-        sessionDao.insertSession(session("s-b1", USER_B, PATIENT))
+        sessionDao.upsertSession(session("s-a1", USER_A, PATIENT))
+        sessionDao.upsertSession(session("s-a2", USER_A, PATIENT))
+        sessionDao.upsertSession(session("s-b1", USER_B, PATIENT))
     }
 
     private fun session(id: String, userId: String, patientId: String) = SessionEntity(

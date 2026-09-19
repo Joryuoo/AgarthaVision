@@ -16,7 +16,7 @@ class SampleRepositoryImpl @Inject constructor(
     private val sampleDao: SampleDao,
 ) : SampleRepository {
     override suspend fun saveSample(sample: Sample) {
-        sampleDao.insertSample(sample.toEntity())
+        sampleDao.upsertSample(sample.toEntity())
     }
 
     override fun observeLatestSample(userId: String): Flow<Sample?> =

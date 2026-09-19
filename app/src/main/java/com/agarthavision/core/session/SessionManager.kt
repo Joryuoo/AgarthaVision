@@ -88,7 +88,7 @@ class SessionManager @Inject constructor(
             label = label,
             supabaseStatus = SessionSyncStatus.PENDING.value,
         )
-        sessionDao.insertSession(entity)
+        sessionDao.upsertSession(entity)
         val synced = pushSessionInsert(entity)
         activate(synced, now)
         // pushSessionInsert already tried the server directly. This is for the case where it
