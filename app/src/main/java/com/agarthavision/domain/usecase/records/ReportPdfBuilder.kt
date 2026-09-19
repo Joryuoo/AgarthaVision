@@ -48,7 +48,7 @@ class ReportPdfBuilder @Inject constructor() {
      * Mucus, blood, and WBC findings aren't egg species — they have no [EggSpecies] entry — so
      * they can never surface here, matching this table's egg-only scope.
      *
-     * The reported number is LPF (Low Power Field) density (mean and range).
+     * The reported figure is the LPF (Low Power Field) range across the session's fields.
      */
     private fun buildSpeciesRows(metadata: ReportMetadata): List<ReportPdfSpeciesRow> {
         val knownCanonicalSpecies = EggSpecies.entries.mapNotNull { it.canonicalClass }.toSet()
@@ -57,9 +57,8 @@ class ReportPdfBuilder @Inject constructor() {
             .map { (canonical, density) ->
                 ReportPdfSpeciesRow(
                     speciesDisplayName = canonical,
-                    mean = density.mean,
                     min = density.min,
-                    max = density.max
+                    max = density.max,
                 )
             }
             .sortedBy { it.speciesDisplayName }

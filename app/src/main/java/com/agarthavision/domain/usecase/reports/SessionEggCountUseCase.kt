@@ -9,10 +9,11 @@ import com.agarthavision.domain.repository.SampleRepository
 import javax.inject.Inject
 
 /**
- * Computes per-session Low Power Field (LPF) density from medtech findings.
+ * The per-species LPF range for a session, for the screen.
  *
- * Philippine medtechs use Direct Smear rather than Kato-Katz, so EPG is retired (86d4a6jxw) in
- * favour of LPF density.
+ * Philippine medtechs use Direct Smear rather than Kato-Katz, so there is no eggs-per-gram to
+ * report (PB-16). The aggregation itself lives in [aggregateLpfPerSpecies], which the report
+ * path calls too — the two used to compute it separately, from copied code.
  */
 class SessionEggCountUseCase @Inject constructor(
     private val authRepository: AuthRepository,
@@ -25,40 +26,27 @@ class SessionEggCountUseCase @Inject constructor(
      */
     suspend operator fun invoke(sessionId: String): Result<SessionEggCounts> = runCatching {
         val userId = authRepository.currentLocalUserId()
-        
-        // The denominator is the total number of fields (samples) examined in the session,
-        // including clean fields (zero eggs).
+
+        // Every field the medtech recorded, clean ones included. A field with none of a species
+        // contributes a zero to that species' range, so leaving them out of the denominator
+        // would raise every minimum off the floor it belongs on.
+        //
+        // No `coerceAtLeast(1)`. It was there to keep a mean from dividing by zero; with the
+        // mean gone there is nothing to divide, and a session with no fields correctly produces
+        // no ranges rather than a denominator invented to avoid an exception.
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
-        val fieldCount = samples.size.coerceAtLeast(1)
+        val fieldCount = samples.size
 
         val confirmedCounts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
         val total = confirmedCounts.sumOf { it.count }
 
         val findings = findingDao.getFindingsForSession(sessionId, userId)
-        
-        // Density is per species: sum of eggs of that species divided by fields examined.
-        // We also track the min/max egg count seen in any single field for the range.
-        val lpfPerSpecies = findings.groupBy { it.species }.mapValues { (_, speciesFindings) ->
-            val countsByField = speciesFindings.groupBy { it.sampleId }
-                .mapValues { it.value.sumOf { f -> f.eggCount } }
-            
-            val totalEggs = countsByField.values.sum()
-            val maxEggs = countsByField.values.maxOrNull() ?: 0
-            // If any field in the session had zero eggs of this species, min is 0.
-            val minEggs = if (countsByField.size < fieldCount) 0 else countsByField.values.minOrNull() ?: 0
-
-            LpfDensity(
-                mean = totalEggs.toFloat() / fieldCount,
-                min = minEggs,
-                max = maxEggs
-            )
-        }
 
         SessionEggCounts(
             counts = confirmedCounts,
             totalEggCount = total,
-            lpfPerSpecies = lpfPerSpecies,
-            fieldCount = fieldCount
+            lpfPerSpecies = aggregateLpfPerSpecies(findings, fieldCount),
+            fieldCount = fieldCount,
         )
     }
 }

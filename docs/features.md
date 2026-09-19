@@ -194,7 +194,13 @@ per-account persistent flagged-frame queue; capture moving off the phone camera 
 hardware over USB OTG, with the phone becoming a verification and reporting client only.
 
 PDF report export is no longer deferred (ticket 86d4a6jyy) — see "Records and reports" above.
-Its per-species number is an LPF density, not EPG. **Eggs per gram is gone** (PB-16): it is
+Its per-species number is an **LPF range**, not EPG: the lowest and highest count of that
+species in any single field of the session, with a qualitative descriptor read off the highest
+one (PB-17). A field holding none of a species contributes a zero, not a gap, so a species seen
+in 3 of 10 fields reads `0–4` rather than `1–4`. The denominator is however many fields the
+medtech recorded — ten is typical practice, not a rule the app enforces. **It is not a mean:**
+a mean averages a single heavy field away under nine clean ones, which is the field that most
+needs to be seen. **Eggs per gram is gone** (PB-16): it is
 defined for Kato-Katz, Philippine medtechs use Direct Smear, and the ×24 volumetric multiplier
 the app applied was simply wrong for the method in use — its constant carried an unresolved
 `TODO` asking for the citation that was never supplied.

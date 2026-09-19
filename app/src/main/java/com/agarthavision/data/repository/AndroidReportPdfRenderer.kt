@@ -133,7 +133,7 @@ class AndroidReportPdfRenderer @Inject constructor(
         val rowPaint = paintFor(PdfTextStyle.VALUE)
         rows.forEach { row ->
             canvas.drawText(row.speciesDisplayName, MARGIN, y, rowPaint)
-            val densityText = "%.2f (%d-%d)".format(row.mean, row.min, row.max)
+            val densityText = "%d-%d".format(row.min, row.max)
         canvas.drawText(densityText, LPF_COLUMN_X, y, rowPaint)
             y += LINE_HEIGHT
         }

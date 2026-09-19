@@ -81,7 +81,6 @@ open class ReportRemoteDataSource @Inject constructor(
         buildJsonObject {
             forEach { (species, density) ->
                 put(species, buildJsonObject {
-                    put("mean", density.mean)
                     put("min", density.min)
                     put("max", density.max)
                 })
@@ -136,10 +135,12 @@ open class ReportRemoteDataSource @Inject constructor(
         val positiveSpeciesJson = gson.toJson(positiveSpecies)
         val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
             val obj = v as JsonObject
+            // `mean` is not read even when an older row still carries it: PB-17 made the
+            // range the figure, and reviving a superseded number from storage is how the wrong
+            // definition comes back.
             LpfDensity(
-                mean = (obj["mean"] as JsonPrimitive).content.toFloat(),
                 min = (obj["min"] as JsonPrimitive).content.toInt(),
-                max = (obj["max"] as JsonPrimitive).content.toInt()
+                max = (obj["max"] as JsonPrimitive).content.toInt(),
             )
         }
         val lpfPerSpeciesJson = gson.toJson(lpfMap)

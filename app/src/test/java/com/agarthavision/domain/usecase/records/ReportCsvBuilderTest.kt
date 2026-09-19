@@ -76,7 +76,7 @@ class ReportCsvBuilderTest {
             totalEggsConfirmed = 3,
             positiveSpecies = listOf("Ascaris lumbricoides"),
             lpfPerSpecies = mapOf(
-                "Ascaris lumbricoides" to LpfDensity(mean = 1.5f, min = 1, max = 2)
+                "Ascaris lumbricoides" to LpfDensity(min = 1, max = 2)
             ),
         )
         val csv = builder.build(
@@ -98,11 +98,8 @@ class ReportCsvBuilderTest {
             # total_samples: 2
             # total_eggs_confirmed: 3
             # positive_species: Ascaris lumbricoides
-            # lpf_mean_ascaris_lumbricoides: 1.5
             # lpf_range_ascaris_lumbricoides: 1-2
-            # lpf_mean_trichuris_trichiura: 0.0
             # lpf_range_trichuris_trichiura: 0-0
-            # lpf_mean_hookworm: 0.0
             # lpf_range_hookworm: 0-0
 
             sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,is_manual,user_note,model_version

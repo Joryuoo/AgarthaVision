@@ -87,9 +87,9 @@ class ReportPdfBuilderTest {
             // Deliberately unsorted, plus a non-egg finding, to prove buildSpeciesRows both
             // sorts and filters down to recognized egg species only.
             lpfPerSpecies = mapOf(
-                "Trichuris trichiura" to LpfDensity(mean = 0.5f, min = 0, max = 1),
-                "Ascaris lumbricoides" to LpfDensity(mean = 1.0f, min = 0, max = 2),
-                "Mucus" to LpfDensity(mean = 1.0f, min = 1, max = 1),
+                "Trichuris trichiura" to LpfDensity(min = 0, max = 1),
+                "Ascaris lumbricoides" to LpfDensity(min = 0, max = 2),
+                "Mucus" to LpfDensity(min = 1, max = 1),
             ),
         )
 
@@ -112,8 +112,8 @@ class ReportPdfBuilderTest {
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             ),
             speciesRows = listOf(
-                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", mean = 1.0f, min = 0, max = 2),
-                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", mean = 0.5f, min = 0, max = 1),
+                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", min = 0, max = 2),
+                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", min = 0, max = 1),
             ),
         )
         assertEquals(expected, document)
@@ -138,9 +138,9 @@ class ReportPdfBuilderTest {
             totalEggsConfirmed = 0,
             positiveSpecies = emptyList(),
             lpfPerSpecies = mapOf(
-                "Mucus" to LpfDensity(5f, 5, 5),
-                "Blood" to LpfDensity(2f, 2, 2),
-                "WBC" to LpfDensity(1f, 1, 1),
+                "Mucus" to LpfDensity(5, 5),
+                "Blood" to LpfDensity(2, 2),
+                "WBC" to LpfDensity(1, 1),
             ),
         )
 
