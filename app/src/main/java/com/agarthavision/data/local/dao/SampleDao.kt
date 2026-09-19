@@ -3,9 +3,8 @@ package com.agarthavision.data.local.dao
 import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Embedded
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import com.agarthavision.data.local.entity.SampleEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -19,8 +18,32 @@ import kotlinx.coroutines.flow.Flow
 @Suppress("TooManyFunctions")
 @Dao
 interface SampleDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSample(sample: SampleEntity)
+    /**
+     * Writes a sample, inserting or updating in place.
+     *
+     * **`@Upsert`, not `@Insert(REPLACE)`, and that is not a style choice.** SQLite resolves a
+     * REPLACE conflict by *deleting* the existing row and inserting a new one, and that delete
+     * fires every foreign-key cascade hanging off it. `detections.sample_id` and
+     * `sample_species_findings.sample_id` are both `onDelete = CASCADE`, so re-inserting a
+     * sample the device already holds silently took its detections and its per-species counts
+     * with it — including the rows C8 exists to protect, since `detections` doubles as the
+     * retraining corpus.
+     *
+     * Nothing threw and nothing logged. The parent row read back correctly updated and the
+     * children were simply gone.
+     *
+     * `@Upsert` compiles to INSERT-then-UPDATE and never deletes, so no cascade fires. The
+     * written columns are identical either way — the entity covers every column, so a REPLACE
+     * and an UPDATE leave the same row behind. Only the children differ.
+     * `SampleDaoUpsertCascadeTest` pins this; it fails on REPLACE.
+     *
+     * The safety used to live in the caller: the two pull paths in `FetchRemoteDataUseCase`
+     * carry an E4 guard that happened to keep them off this edge. That is what made it a
+     * defect rather than an outage — the next call site would have got silent data loss with
+     * no compile error and no runtime error.
+     */
+    @Upsert
+    suspend fun upsertSample(sample: SampleEntity)
 
     /**
      * Moves a sample between the non-flagged statuses (verified / synced / sync_failed).
@@ -40,6 +63,37 @@ interface SampleDao {
         """,
     )
     suspend fun updateStatus(sampleId: String, status: String)
+
+    /**
+     * Points a sample's row at the JPEG now held on this device.
+     *
+     * Needed because a pulled row arrives with `image_path` empty — the server has no notion
+     * of this device's disk — so caching the image has to tell the row where it went.
+     */
+    @Query("UPDATE samples SET image_path = :imagePath WHERE sample_id = :sampleId")
+    suspend fun updateImagePath(sampleId: String, imagePath: String)
+
+    /**
+     * Live samples whose frame exists in Storage, newest verification first.
+     *
+     * The ordering **is** the retention policy: the prefetch fills from the top and the
+     * eviction trims from the bottom, so a device that cannot hold everything holds the most
+     * recent work rather than an arbitrary slice of it.
+     *
+     * Deleted rows are excluded. A tombstoned sample keeps its detections (C8), but no screen
+     * can open its frame, so holding the JPEG buys nothing and spends the budget.
+     */
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId
+          AND deleted_at IS NULL
+          AND storage_path IS NOT NULL
+          AND TRIM(storage_path) <> ''
+        ORDER BY verified_at DESC, timestamp DESC
+        """,
+    )
+    suspend fun getCacheableSamples(userId: String): List<SampleEntity>
 
     @Query(
         """

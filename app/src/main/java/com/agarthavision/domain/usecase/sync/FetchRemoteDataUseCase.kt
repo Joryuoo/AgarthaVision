@@ -4,12 +4,14 @@ import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -43,14 +45,31 @@ sealed interface FetchSummary {
         val samplesFetched: Int,
         val reportsFetched: Int,
         val failed: Set<FetchType> = emptySet(),
+        /** Sample frames brought onto the device by this pass (86d4by5n9). */
+        val imagesFetched: Int = 0,
     ) : FetchSummary {
-        /** True when all four entity types pulled without throwing. */
+        /** True when every entity type pulled without throwing and no frame is still missing. */
         val isComplete: Boolean get() = failed.isEmpty()
     }
 }
 
 /** The entity types a pull pass covers, so a failure can name itself. */
-enum class FetchType { PATIENTS, SESSIONS, SAMPLES, REPORTS }
+enum class FetchType {
+    PATIENTS,
+    SESSIONS,
+    SAMPLES,
+    REPORTS,
+
+    /**
+     * The sample frames themselves (86d4by5n9).
+     *
+     * Present in [FetchSummary.Ran.failed] whenever the device still lacks a frame it should
+     * hold — a download that failed, or one the per-pass ceiling deferred. Rows without frames
+     * is not a synced device: a sample whose image is missing cannot be opened and therefore
+     * cannot be corrected, which is the whole point of holding it.
+     */
+    SAMPLE_IMAGES,
+}
 
 /**
  * Pulls all remote rows from Supabase into the local Room database for the signed-in
@@ -89,6 +108,8 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val initialFetchStateStore: InitialFetchStateStore,
     private val fetchOutcomeStore: FetchOutcomeStore,
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
+    private val cacheSampleImages: CacheSampleImagesUseCase,
+    private val sampleImageStore: SampleImageStore,
 ) {
     /**
      * Runs one fetch pass.
@@ -127,15 +148,32 @@ class FetchRemoteDataUseCase @Inject constructor(
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
 
-        // Mark completed only when all four types succeeded (E2). Listed rather than chained
-        // so a fifth entity type is one entry, not a longer boolean expression.
-        val failed = buildSet {
+        // Frames last: every one of them hangs off a sample row, so there is nothing to cache
+        // until the rows are down. It never throws — an unreachable object is counted, not
+        // raised — so it needs no runCatching of its own.
+        val images = cacheSampleImages(userId)
+
+        // Mark completed only when all four row types succeeded (E2). Listed rather than
+        // chained so a fifth entity type is one entry, not a longer boolean expression.
+        val rowFailures = buildSet {
             if (!patientsOk) add(FetchType.PATIENTS)
             if (!sessionsOk) add(FetchType.SESSIONS)
             if (!samplesOk) add(FetchType.SAMPLES)
             if (!reportsOk) add(FetchType.REPORTS)
         }
-        if (failed.isEmpty()) {
+
+        // **Two different questions, deliberately answered from two different sets.**
+        //
+        // `markCompleted` asks "did this account's rows finish arriving" - it is what stops the
+        // badge reading NOT_YET_SYNCED forever, and it must not be held hostage by images. A
+        // frame whose Storage object is gone would otherwise pin the flag shut for good, and a
+        // device that has every row would keep claiming it has none.
+        //
+        // The Settings card asks the harder question: "is this device ready to work offline?"
+        // Rows without frames is not ready, so images count there. A pass that fetched every
+        // row and no image must not read as All synced.
+        val failed = rowFailures + if (images.isComplete) emptySet() else setOf(FetchType.SAMPLE_IMAGES)
+        if (rowFailures.isEmpty()) {
             initialFetchStateStore.markCompleted(userId)
         }
         // Recorded rather than only returned: most passes run in the worker now, with no
@@ -156,6 +194,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             samplesFetched = samplesFetched,
             reportsFetched = reportsFetched,
             failed = failed,
+            imagesFetched = images.downloaded,
         )
     }
 
@@ -196,9 +235,9 @@ class FetchRemoteDataUseCase @Inject constructor(
         val sessions = sessionRemoteDataSource.fetchSessions(userId)
         for (remote in sessions) {
             val local = sessionDao.getSessionById(remote.sessionId)
-            // E4 guard: only insert when absent or already synced; skip pending/sync_failed
+            // E4 guard: only write when absent or already synced; skip pending/sync_failed
             if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                sessionDao.insertSession(remote)
+                sessionDao.upsertSession(remote)
                 fetched++
             }
         }
@@ -212,22 +251,29 @@ class FetchRemoteDataUseCase @Inject constructor(
         while (true) {
             val page = sampleRemoteDataSource.fetchSamples(userId, offset, PAGE_SIZE.toLong())
 
-            // Collect only the IDs whose parent row was actually inserted (E4 guard).
+            // Collect only the IDs whose parent row was actually written (E4 guard).
             // VERIFIED / SYNC_FAILED samples are skipped here AND their child rows must
             // not be overwritten — fetching detections/findings for them would silently
             // clobber the expert verdict / expertClass payload that hasn't uploaded yet.
-            val insertedSampleIds = mutableListOf<String>()
+            //
+            // That guard is now the *only* thing standing between a skipped sample and its
+            // children. It used to be doubled by accident: the parent write was a REPLACE, so
+            // it deleted the row and cascaded the children away before re-inserting it, and
+            // pullChildRowsFor then rebuilt them from the server. `upsertSample` updates in
+            // place and touches no child row, which is the point of 86d4bx196 — so what the
+            // children end up as is decided below, deliberately, per table.
+            val writtenSampleIds = mutableListOf<String>()
             for (remote in page) {
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
                 val local = sampleDao.getSampleByIdIncludingDeleted(remote.sampleId)
                 if (local == null || local.status == SampleStatus.SYNCED.value) {
-                    sampleDao.insertSample(remote)
+                    sampleDao.upsertSample(remote.withLocalImagePath(userId))
                     fetched++
-                    insertedSampleIds.add(remote.sampleId)
+                    writtenSampleIds.add(remote.sampleId)
                 }
             }
 
-            pullChildRowsFor(insertedSampleIds)
+            pullChildRowsFor(writtenSampleIds)
 
             if (page.size < PAGE_SIZE) break
             offset += PAGE_SIZE.toLong()
@@ -236,20 +282,70 @@ class FetchRemoteDataUseCase @Inject constructor(
     }
 
     /**
-     * Fetch+insert detections and findings only for samples that were actually inserted.
-     * Chunk the id list to stay well under server/proxy URL-length limits (E5).
+     * Keeps a frame this device already holds attached to its row.
+     *
+     * `SampleRemoteDataSource` maps every pulled sample with `image_path = ""` — correctly, as
+     * the server has no notion of this device's disk. Writing that straight through orphaned
+     * the JPEG of every sample captured *here*: the row goes SYNCED the moment its push lands,
+     * the E4 guard therefore lets the next pull overwrite it, and the file stayed on disk with
+     * nothing pointing at it. The capturing device lost its own image after one sync pass and
+     * fell back to needing a network for a frame already in its hands.
+     *
+     * Resolved from the store's derived path rather than from `local.image_path`, so a row
+     * whose recorded path is stale — an eviction, a reinstall, a cleared cache — is corrected
+     * rather than preserved. The disk is the authority on what the disk holds.
      */
-    private suspend fun pullChildRowsFor(insertedSampleIds: List<String>) {
-        if (insertedSampleIds.isEmpty()) return
-        val detections = insertedSampleIds.chunked(CHILD_BATCH_SIZE)
-            .flatMap { chunk -> sampleRemoteDataSource.fetchDetections(chunk) }
+    private suspend fun SampleEntity.withLocalImagePath(userId: String): SampleEntity {
+        val cached = sampleImageStore.cachedPathOrNull(userId, sampleId) ?: return this
+        return copy(imagePath = cached)
+    }
+
+    /**
+     * Fetch the detections and findings of the samples whose parent row was actually written,
+     * and reconcile them against what is already on the device.
+     *
+     * Chunked to stay well under server/proxy URL-length limits (E5), and the same chunks are
+     * reused for the local writes so the SQLite host-parameter bound is respected too.
+     *
+     * **The two tables reconcile differently, and that asymmetry is the whole point.** Until
+     * 86d4bx196 the parent write was an `@Insert(REPLACE)`, which deleted the sample row and
+     * cascaded both child tables away before re-inserting it, so this function always ran
+     * against an empty slate and "merge" and "replace" were the same thing. Under `@Upsert`
+     * they are not, so each table gets the rule its own writer already uses:
+     *
+     * - **Detections merge.** They are the retraining corpus C8 protects, and the push side
+     *   (`SampleRemoteDataSource.syncSample`) upserts them and never deletes, so the server's
+     *   set is a superset of anything this device pushed — a merge keyed on the derived
+     *   detection id lands on exactly the rows a REPLACE-and-refetch used to produce, without
+     *   ever deleting one. Nothing here is allowed to remove a detection.
+     * - **Findings are replaced wholesale**, per sample, which is what both other writers of
+     *   this table already do (`SampleSpeciesFindingDao.replaceFindingsForSample` locally, a
+     *   delete-then-insert remotely). A per-species count is a *current statement*, not a
+     *   record: a species removed on another device has to actually disappear here, and a
+     *   merge would leave the stale row behind to inflate the count. This is the one place the
+     *   naive swap would have changed behaviour, and it is not a C8 deletion — the detections
+     *   and the Storage object C8 covers are untouched.
+     *
+     * The replace is keyed on [writtenSampleIds] rather than on the ids present in the fetched
+     * findings, so a sample the server holds no findings for — a clean field — has its local
+     * rows cleared rather than left behind.
+     */
+    private suspend fun pullChildRowsFor(writtenSampleIds: List<String>) {
+        if (writtenSampleIds.isEmpty()) return
+        val chunks = writtenSampleIds.chunked(CHILD_BATCH_SIZE)
+
+        val detections = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchDetections(chunk) }
         if (detections.isNotEmpty()) {
             detectionDao.insertDetections(detections)
         }
-        val findings = insertedSampleIds.chunked(CHILD_BATCH_SIZE)
-            .flatMap { chunk -> sampleRemoteDataSource.fetchFindings(chunk) }
-        if (findings.isNotEmpty()) {
-            sampleSpeciesFindingDao.insertFindings(findings)
+
+        val findings = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchFindings(chunk) }
+        val findingsBySample = findings.groupBy { it.sampleId }
+        chunks.forEach { chunk ->
+            sampleSpeciesFindingDao.replaceFindingsForSamples(
+                sampleIds = chunk,
+                findings = chunk.flatMap { sampleId -> findingsBySample[sampleId].orEmpty() },
+            )
         }
     }
 

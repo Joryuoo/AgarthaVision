@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.sync
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
@@ -10,10 +11,12 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -32,6 +35,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -68,6 +73,13 @@ class FetchRemoteDataUseCaseTest {
     private val fetchOutcomeStore: FetchOutcomeStore = mock()
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder = mock()
 
+    // Answers "nothing left to fetch" by default, so the suites that predate 86d4by5n9 keep
+    // asserting what they were written to assert. The image pass has its own suite.
+    private val cacheSampleImages: CacheSampleImagesUseCase = mock {
+        onBlocking { invoke(any()) } doReturn ImageCacheSummary()
+    }
+    private val sampleImageStore: SampleImageStore = mock()
+
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
@@ -84,6 +96,8 @@ class FetchRemoteDataUseCaseTest {
         initialFetchStateStore = initialFetchStateStore,
         fetchOutcomeStore = fetchOutcomeStore,
         speciesSuggestionSeeder = speciesSuggestionSeeder,
+        cacheSampleImages = cacheSampleImages,
+        sampleImageStore = sampleImageStore,
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -408,7 +422,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao).insertSample(sample)
+        verify(sampleDao).upsertSample(sample)
     }
 
     @Test
@@ -421,7 +435,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao).insertSample(sample)
+        verify(sampleDao).upsertSample(sample)
     }
 
     @Test
@@ -434,7 +448,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -447,7 +461,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -460,7 +474,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sampleDao, never()).insertSample(any())
+        verify(sampleDao, never()).upsertSample(any())
     }
 
     @Test
@@ -478,6 +492,9 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource, never()).fetchFindings(any())
         verify(detectionDao, never()).insertDetections(any())
         verify(sampleSpeciesFindingDao, never()).insertFindings(any())
+        // The findings replace is scoped to written ids, so a skipped sample must not appear in
+        // one at all - it clears rows, and this sample's are unsynced work.
+        verify(sampleSpeciesFindingDao, never()).replaceFindingsForSamples(any(), any())
     }
 
     @Test
@@ -494,6 +511,7 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource, never()).fetchFindings(any())
         verify(detectionDao, never()).insertDetections(any())
         verify(sampleSpeciesFindingDao, never()).insertFindings(any())
+        verify(sampleSpeciesFindingDao, never()).replaceFindingsForSamples(any(), any())
     }
 
     @Test
@@ -545,6 +563,73 @@ class FetchRemoteDataUseCaseTest {
         verify(sampleRemoteDataSource).fetchFindings(listOf("smp-inserted"))
     }
 
+    // ── child reconciliation under @Upsert (86d4bx196) ───────────────────────
+
+    @Test
+    fun `a sample the server holds no findings for has its local findings cleared`() = runTest {
+        // The case the naive @Upsert swap would have got wrong. Under the old
+        // @Insert(REPLACE) the parent write cascaded the findings away before this ran, so a
+        // species removed on another device disappeared here for free. @Upsert leaves them, so
+        // the replace has to be keyed on the written sample ids rather than on the ids present
+        // in the fetched findings - otherwise a cleared field keeps its stale count forever.
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleRemoteDataSource.fetchFindings(listOf("smp-1"))).thenReturn(emptyList())
+
+        useCase.invoke()
+
+        verify(sampleSpeciesFindingDao).replaceFindingsForSamples(listOf("smp-1"), emptyList())
+    }
+
+    @Test
+    fun `fetched findings are replaced against the sample they belong to`() = runTest {
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        val finding = SampleSpeciesFindingEntity(
+            findingId = "fnd-1",
+            sampleId = "smp-1",
+            species = "Ascaris lumbricoides",
+            eggCount = 23,
+        )
+        whenever(sampleRemoteDataSource.fetchFindings(listOf("smp-1"))).thenReturn(listOf(finding))
+
+        useCase.invoke()
+
+        verify(sampleSpeciesFindingDao).replaceFindingsForSamples(listOf("smp-1"), listOf(finding))
+    }
+
+    @Test
+    fun `detections merge rather than being replaced`() = runTest {
+        // The asymmetry is deliberate: detections are the retraining corpus C8 protects, and the
+        // push side never deletes one, so the server's set is a superset of anything this device
+        // pushed. Nothing in the pull path is allowed to remove a detection row - and DetectionDao
+        // exposes no delete for one to call, which is the structural half of the same rule.
+        setupOnlineSignedIn()
+        val sample = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(sample))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        val detection = DetectionEntity(
+            detectionId = "det-1",
+            sampleId = "smp-1",
+            classLabel = "Ascaris lumbricoides",
+            confidence = 0.9f,
+            bboxX = 1f,
+            bboxY = 2f,
+            bboxW = 3f,
+            bboxH = 4f,
+        )
+        whenever(sampleRemoteDataSource.fetchDetections(listOf("smp-1")))
+            .thenReturn(listOf(detection))
+
+        useCase.invoke()
+
+        verify(detectionDao).insertDetections(listOf(detection))
+    }
+
     // ── Child-fetch chunking (isIn URL-length guard) ─────────────────────────
 
     @Test
@@ -593,7 +678,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao).insertSession(session)
+        verify(sessionDao).upsertSession(session)
     }
 
     @Test
@@ -608,7 +693,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao).insertSession(session)
+        verify(sessionDao).upsertSession(session)
     }
 
     @Test
@@ -623,7 +708,7 @@ class FetchRemoteDataUseCaseTest {
 
         useCase.invoke()
 
-        verify(sessionDao, never()).insertSession(any())
+        verify(sessionDao, never()).upsertSession(any())
     }
 
     // ── Pagination ───────────────────────────────────────────────────────────
@@ -730,6 +815,14 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = supabaseStatus,
     )
 
+    /** Every pull answers with nothing, so a test only stubs the one it is about. */
+    private suspend fun stubEmptyPulls() {
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+    }
+
     private fun fakeSample(
         id: String,
         sessionId: String,
@@ -759,4 +852,77 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = ReportSyncStatus.SYNCED.value,
         createdAt = 1_000L,
     )
+\n
+    // ── Sample frames (86d4by5n9) ────────────────────────────────────────────
+
+    @Test
+    fun `a pull does not orphan the JPEG this device already holds`() = runTest {
+        // The live defect this ticket had to fix before it could cache anything. Every pulled
+        // sample is mapped with image_path = "" - correct, the server has no notion of this
+        // device's disk - and a sample captured *here* goes SYNCED the moment its push lands,
+        // so the E4 guard lets the next pull overwrite it. The JPEG stayed on disk with nothing
+        // pointing at it, and the capturing device fell back to needing a network for a frame
+        // already in its hands.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+            .thenReturn(listOf(fakeSample("smp-1", "session-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1"))
+            .thenReturn("/data/users/user-1/samples/smp-1.jpg")
+
+        useCase.invoke()
+
+        val written = argumentCaptor<SampleEntity>()
+        verify(sampleDao).upsertSample(written.capture())
+        assertEquals("/data/users/user-1/samples/smp-1.jpg", written.firstValue.imagePath)
+    }
+
+    @Test
+    fun `a frame the device does not hold leaves the path empty rather than inventing one`() =
+        runTest {
+            setupOnlineSignedIn()
+            stubEmptyPulls()
+            whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+                .thenReturn(listOf(fakeSample("smp-1", "session-1")))
+            whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+            whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1")).thenReturn(null)
+
+            useCase.invoke()
+
+            // A path to a file that is not there is worse than none: it is indistinguishable
+            // from a frame that is really held, and the screen would open blank.
+            val written = argumentCaptor<SampleEntity>()
+            verify(sampleDao).upsertSample(written.capture())
+            assertEquals("", written.firstValue.imagePath)
+        }
+
+    @Test
+    fun `rows without their frames does not read as a synced device`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(cacheSampleImages.invoke("user-1")).thenReturn(ImageCacheSummary(missing = 3))
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        // Every row type succeeded, and the device still cannot open three samples. Reporting
+        // that as All synced is how a medtech finds out in a barangay with no signal.
+        assertTrue(FetchType.SAMPLE_IMAGES in summary.failed)
+        assertFalse(summary.isComplete)
+        verify(fetchOutcomeStore).record(userId = "user-1", complete = false)
+    }
+
+    @Test
+    fun `a missing frame does not pin the initial-fetch flag shut`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(cacheSampleImages.invoke("user-1")).thenReturn(ImageCacheSummary(missing = 1))
+
+        useCase.invoke()
+
+        // Two different questions. "Did this account's rows arrive" is what clears
+        // NOT_YET_SYNCED, and a Storage object that is gone for good must not hold it closed
+        // forever - the device really does have every row.
+        verify(initialFetchStateStore).markCompleted("user-1")
+    }
 }

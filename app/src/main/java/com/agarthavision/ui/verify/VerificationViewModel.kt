@@ -3,11 +3,12 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -38,7 +39,6 @@ import javax.inject.Inject
  * @property findings what the medtech is asserting about this frame. The first
  *   `frame.predictions.size` entries are the model's boxes, in order; anything after them
  *   is a species the medtech added. An empty list on an AI frame is a clean field.
- * @property missedEgg frame-level Q4 answer — sets `samples.needs_reannotation`.
  * @property isSubmitting true while [SubmitVerificationUseCase] is in flight.
  * @property errorMessage submission failure message; surfaced inline.
  * @property canSubmit derived — true when every finding is complete and we're not already
@@ -50,36 +50,82 @@ data class VerificationUiState(
     val frameIndexInQueue: Int = 0,
     val queueSize: Int = 0,
     val frame: FlaggedFrame? = null,
+    /**
+     * Where the frame's image can be loaded from, when it did not come with its own bytes.
+     *
+     * Null on the capture path, where the frame carries the JPEG it was just taken from.
+     */
+    val imageSource: SampleImageSource? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
     val findings: List<Finding> = emptyList(),
-    val missedEgg: Boolean? = null,
+    /**
+     * Which finding the medtech is drawing a box for, or null when nobody is drawing.
+     *
+     * An index rather than a boolean, because a redraw and an Add Egg draw are the same gesture
+     * pointed at different rows, and the frame can only host one at a time.
+     */
+    val drawingFindingIndex: Int? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    val noDetectionSelected: Boolean = false,
 ) {
     /**
-     * A clean field — an AI capture the model returned no detections for — has no findings to
-     * complete, and the old `answers.isNotEmpty()` gate made it permanently un-submittable.
-     * It is a normal negative result and has to be recordable. But the missed-egg answer is
-     * then the entire content of the review, so it must be given rather than defaulting
-     * through as null.
+     * Q4 — "did the model miss any eggs in this frame?" — **derived, never asked.**
+     *
+     * The medtech already answers it by acting: recording an egg the model never boxed *is*
+     * saying the model missed one, and taking that egg away again says it did not. Asking a
+     * second time is asking them to restate what the screen can already see, and lets the two
+     * disagree.
+     *
+     * Read off the findings with no prediction behind them rather than by comparing totals
+     * against `frame.predictions.size`. The two agree on every transition the spec describes,
+     * and differ in one case the totals get wrong: a frame where the medtech rejects one of the
+     * model's boxes *and* adds an egg it missed nets out to the same count while both things
+     * are true.
+     *
+     * Null on a frame with no model output. There is no model claim there to have missed
+     * anything, so the question does not apply — which is also why it is never rendered for one.
+     * `samples.needs_reannotation` is nullable for exactly this.
      */
+    val missedEgg: Boolean?
+        get() = when {
+            frame == null -> null
+            frame.source == FrameSource.MANUAL -> null
+            else -> findings.any { it.prediction == null && it.eggContribution > 0 }
+        }
+
     val isManual: Boolean
         get() = frame?.source == FrameSource.MANUAL
 
+    /** An AI capture the model returned no detections for: a real negative result. */
     val isCleanField: Boolean
         get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
 
+    /**
+     * Submit unlocks when every row the medtech is asserting is finished.
+     *
+     * **An empty list qualifies, and that is the point.** A clean field the medtech agrees with,
+     * and a No-Model-Output field where they saw nothing, are both real results with nothing to
+     * fill in; the screen's governing principle is that a medtech whose model was right submits
+     * without tapping anything. The gate this replaced demanded a missed-egg answer on a clean
+     * field and an explicit no-detection assertion on a manual one, both of which were a tap
+     * asking the medtech to restate the absence of work.
+     *
+     * C7 is unaffected: nothing reaches `samples` except through `SubmitVerificationUseCase`,
+     * and a row nobody touched carries `species_touched = false` into the corpus, so an
+     * unopposed model answer stays distinguishable from a confirmed one.
+     */
     val canSubmit: Boolean
         get() = when {
             isSubmitting -> false
             frame == null -> false
-            isManual -> noDetectionSelected || (findings.isNotEmpty() && findings.all { it.isComplete })
-            isCleanField -> missedEgg != null && findings.all { it.isComplete }
-            else -> findings.isNotEmpty() && findings.all { it.isComplete }
+            else -> findings.all { it.isComplete }
         }
+
+    /** True while a box is being drawn, which is what dims every existing box on the frame. */
+    val isDrawing: Boolean
+        get() = drawingFindingIndex != null
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -104,7 +150,6 @@ sealed interface VerificationEvent {
  * - **Detection-level navigation** within the current frame
  *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
  *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
- * - **Frame-level Q4** ("did the model miss any eggs?", via [onQ4Selected]).
  * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
  *   the frame is removed from the store; the verdict model (per ADR-004)
  *   persists every detection regardless of mix (false positives, wrong
@@ -192,15 +237,15 @@ class VerificationViewModel @Inject constructor(
             it.copy(
                 isVisible = true,
                 frame = frame,
+                imageSource = prior?.imageSource,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
                 findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
                     ?: frame.initialFindings(),
-                missedEgg = prior?.missedEgg,
+                drawingFindingIndex = null,
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = prior?.userNote.orEmpty(),
-                noDetectionSelected = prior != null && frame.source == FrameSource.MANUAL && prior.findings.isEmpty(),
             )
         }
     }
@@ -213,15 +258,38 @@ class VerificationViewModel @Inject constructor(
         _state.update { it.copy(userNote = text) }
     }
 
+    /**
+     * Tapping the answer a row already holds does nothing.
+     *
+     * Not a nicety. Every row opens pre-filled from model output, and changing an earlier answer
+     * clears the later ones — so without this, re-affirming a correct "Yes" would wipe the
+     * pre-filled species underneath it and hand the medtech back the work the pre-fill saved
+     * them. A tap that asserts what is already asserted has changed nothing, so nothing
+     * downstream of it has gone stale.
+     */
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
+            if (it.isEgg == isEgg) it else it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
         }
     }
 
+    /**
+     * **A replaced box cannot be told it was placed correctly.**
+     *
+     * Once the medtech has redrawn a box, "yes the model placed it right" is false, and it stays
+     * false — the model did put the box in the wrong place, and a human fixing it does not undo
+     * that. Letting Q2 flip back would leave a detection claiming correct localisation while
+     * carrying the human's geometry, which is exactly the label the drawing feature exists to
+     * produce. Refused silently, because the screen does not offer the affordance on a replaced
+     * row; this is the backstop.
+     */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+            when {
+                it.boxReplaced && isBoxCorrect -> it
+                it.isBoxCorrect == isBoxCorrect -> it
+                else -> it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+            }
         }
     }
 
@@ -265,6 +333,11 @@ class VerificationViewModel @Inject constructor(
      */
     private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
         eggCount = eggCount,
+        // Geometry is not an answer to any of the questions being cleared. A medtech who redrew
+        // a box and then changed their mind about the species has not un-drawn the box, and
+        // dropping it here would quietly restore the model's own geometry under them.
+        drawnBox = drawnBox,
+        boxReplaced = boxReplaced,
     )
 
     /**
@@ -287,36 +360,60 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * What the screen opens with, for each of the three shapes a frame can take.
+     * What the screen opens with, for each of the shapes a frame can take.
      *
-     * A manual capture gets exactly one finding with no prediction: there is no box, so the
-     * isEgg and isBoxCorrect questions never render, and the medtech names a species and a
-     * count directly. An AI frame with boxes gets one empty finding per box, each carrying the
-     * prediction it is about. An AI frame with none gets an empty list — a clean field, which
-     * is a real result and is submittable on the missed-egg answer alone.
+     * **Every answer is pre-filled from model output.** A box the model drew opens as "yes there
+     * is an egg", "yes the box is placed right", and "yes it is the species the model named" —
+     * so a medtech whose model was right submits without tapping anything, and answering is only
+     * required where the model was wrong. That is the whole economics of the screen: ten fields
+     * a smear, most of them the model gets right.
      *
-     * **No answer is seeded.** The species used to be pre-filled from the model's class; that
-     * was replaced by the explicit confirm step (86d4auj84), which gets the same
-     * "correct what is wrong rather than retype what is right" benefit without ever putting an
-     * unreviewed model answer where a human answer is read from. isEgg, isBoxCorrect and
-     * missedEgg were never pre-filled and still are not: they are the active-judgment gates,
-     * and answering any of them would let a frame reach CONFIRMED with no engagement at all.
+     * **[VerificationAnswers.speciesTouched] stays false on every seeded row**, and that is the
+     * safeguard rather than an oversight. A seeded species is the model's own answer sitting in
+     * the slot a human answer is read from; the flag is what keeps "a human did not object"
+     * distinguishable from "a human confirmed this" in a table that doubles as the retraining
+     * corpus. The moment the medtech confirms or changes it, it flips.
+     *
+     * A model class this app cannot map to an [EggSpecies] seeds **nothing** for the species
+     * question — guessing OTHER would be wrong, because OTHER carries a free-text box only a
+     * human can fill, so the row would look answered while being incomplete. The chain offers
+     * the picker directly instead, and the row stays incomplete until a species is chosen.
+     *
+     * A frame with no boxes — a clean field, or one captured with the container unreachable —
+     * opens with nothing. There is no box to ask a question about; what it gets is the Add Egg
+     * section, which is always present.
      */
-    private fun FlaggedFrame.initialFindings(): List<Finding> = when {
-        predictions.isNotEmpty() -> predictions.map { Finding(prediction = it) }
-        source == FrameSource.MANUAL -> emptyList()
-        else -> emptyList()
+    private fun FlaggedFrame.initialFindings(): List<Finding> = predictions.map { prediction ->
+        val suggested = EggSpecies.fromClassLabel(prediction.classLabel)
+        Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(
+                isEgg = true,
+                isBoxCorrect = true,
+                speciesConfirmed = if (suggested != null) true else null,
+                species = suggested,
+                speciesTouched = false,
+            ),
+        )
     }
 
     /**
-     * Appends a species the model never boxed.
+     * Adds an egg the model never boxed.
      *
-     * The new row has no prediction, which is the same shape a manual capture has: a human
-     * assertion with no box. It is asked for a species and a count, and never for the
-     * isEgg / isBoxCorrect questions, which are questions about a box.
+     * The new row has no prediction, which is the same shape a frame captured with the container
+     * unreachable has: a human assertion with no box. It is asked for a species and a count, and
+     * never for the isEgg / isBoxCorrect questions, which are questions about a box.
+     *
+     * **It opens holding one egg**, because the button says Add Egg and one egg is what the
+     * medtech just said they saw. The count stays editable: a field with five of the same species
+     * is one row reading 5, not five taps. An added egg needs no bounding box to be a complete
+     * finding — `detections.bbox_*` is nullable precisely for this
+     * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
     fun onAddFinding() {
-        _state.update { it.copy(findings = it.findings + Finding()) }
+        _state.update {
+            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(eggCount = 1)))
+        }
     }
 
     /**
@@ -354,51 +451,16 @@ class VerificationViewModel @Inject constructor(
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
     }
 
-    fun onManualNoDetectionSelected() {
-        _state.update { it.copy(noDetectionSelected = true, findings = emptyList()) }
-    }
-
-    fun onManualSpeciesToggled(species: EggSpecies, checked: Boolean) {
-        _state.update { current ->
-            val withoutSpecies = current.findings.filter { it.answers.species != species }
-            val newFindings = if (checked) {
-                withoutSpecies + Finding(answers = VerificationAnswers(species = species, speciesTouched = true))
-            } else {
-                withoutSpecies
-            }
-            current.copy(findings = newFindings, noDetectionSelected = false)
-        }
-    }
-
-    fun onManualCountChanged(species: EggSpecies, text: String) {
-        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
-        updateFindingForSpecies(species) { it.copy(eggCount = parsed) }
-    }
-
-    fun onManualOtherNameChanged(text: String) {
-        updateFindingForSpecies(EggSpecies.OTHER) { it.copy(otherSpeciesText = text) }
-    }
-
-    private fun updateFindingForSpecies(
-        species: EggSpecies,
-        transform: (VerificationAnswers) -> VerificationAnswers,
-    ) {
-        _state.update { current ->
-            current.copy(
-                findings = current.findings.map { finding ->
-                    if (finding.answers.species == species) {
-                        finding.copy(answers = transform(finding.answers))
-                    } else {
-                        finding
-                    }
-                },
-            )
-        }
-    }
-
-    fun onQ4Selected(missedEgg: Boolean) {
-        _state.update { it.copy(missedEgg = missedEgg) }
-    }
+    // The manual species checklist is gone, and with it onManualNoDetectionSelected,
+    // onManualSpeciesToggled, onManualCountChanged, onManualOtherNameChanged and
+    // updateFindingForSpecies. A frame captured with the inference container unreachable is no
+    // longer a different kind of screen with its own controls: it is a frame whose Model Output
+    // section says the container never answered, verified through the same always-present Add
+    // Egg section every other frame uses. One path, so there is one place for it to be wrong.
+    //
+    // onQ4Selected went with them. Q4 is derived from the findings now - see
+    // VerificationUiState.missedEgg - because recording an egg the model never boxed already
+    // says the model missed one, and asking again lets the two disagree.
 
     fun onDetectionPrev() {
         _state.update { current ->
@@ -443,6 +505,54 @@ class VerificationViewModel @Inject constructor(
                 currentFrame = null
                 _events.emit(VerificationEvent.Dismiss)
             }
+        }
+    }
+
+    /**
+     * Starts drawing a box for the finding at [index].
+     *
+     * Two call sites, one capability: replacing the model's box after Q2 is answered "No", and
+     * giving an added egg a box. Both are optional — answering "No" without redrawing is a
+     * complete, valid answer that records a localisation error, and an added egg with no box is
+     * a complete finding whose drawing may be deferred to the Sample Data Screen entirely.
+     */
+    fun onBeginDraw(index: Int) {
+        if (index in _state.value.findings.indices) {
+            _state.update { it.copy(drawingFindingIndex = index) }
+        }
+    }
+
+    fun onCancelDraw() {
+        _state.update { it.copy(drawingFindingIndex = null) }
+    }
+
+    /**
+     * Records a box the medtech drew.
+     *
+     * The geometry arrives already in the model's coordinate space — centre-based pixels in the
+     * source image — from `FrameWithBoxes`. **Nothing is converted here.** If a box lands half
+     * its own size out of place, the bug is in that transform, and patching it at this layer
+     * would hide it behind a second, disagreeing convention.
+     *
+     * Committing a redraw sets Q2 to "No" and latches it there. On an added row there is no Q2
+     * to set: there was never a model box to be wrong about.
+     */
+    fun onBoxDrawn(box: ImageBox) {
+        val index = _state.value.drawingFindingIndex ?: return
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            if (index in updated.indices) {
+                val finding = updated[index]
+                val isRedraw = finding.prediction != null
+                updated[index] = finding.copy(
+                    answers = finding.answers.copy(
+                        drawnBox = box,
+                        isBoxCorrect = if (isRedraw) false else finding.answers.isBoxCorrect,
+                        boxReplaced = isRedraw || finding.answers.boxReplaced,
+                    ),
+                )
+            }
+            current.copy(findings = updated, drawingFindingIndex = null)
         }
     }
 

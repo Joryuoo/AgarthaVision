@@ -1,14 +1,21 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
+/**
+ * Everything the Verification Screen can report back.
+ *
+ * There is no Q4 entry: Q4 is derived from the findings, not asked. There are no manual-capture
+ * entries either - a frame captured with the inference container unreachable is verified through
+ * the same Add Egg section as any other frame, so it needs no controls of its own.
+ */
 data class VerificationSheetActions(
     val onQ1Selected: (Boolean) -> Unit,
     val onQ2Selected: (Boolean) -> Unit,
     val onSpeciesConfirmed: (Boolean) -> Unit,
     val onSpeciesSelected: (EggSpecies) -> Unit,
     val onOtherSpeciesChanged: (String) -> Unit,
-    val onQ4Selected: (Boolean) -> Unit,
     val onDetectionPrev: () -> Unit,
     val onDetectionNext: () -> Unit,
     val onFramePrev: () -> Unit,
@@ -18,15 +25,19 @@ data class VerificationSheetActions(
     val onSubmit: () -> Unit,
     val onCancel: () -> Unit,
     val onUserNoteChanged: (String) -> Unit,
-    /** Appends a species the model never boxed. */
+    /** Adds an egg the model never boxed. Opens holding one. */
     val onAddFinding: () -> Unit,
-    /** Removes an added species. Never offered on a prediction-backed row. */
+    /** Removes an added egg. Never offered on a prediction-backed row. */
     val onRemoveFinding: (Int) -> Unit,
     val onEggCountChanged: (Int, String) -> Unit,
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
     val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
-    val onManualNoDetectionSelected: () -> Unit,
-    val onManualSpeciesToggled: (EggSpecies, Boolean) -> Unit,
-    val onManualCountChanged: (EggSpecies, String) -> Unit,
-    val onManualOtherNameChanged: (String) -> Unit,
+    /**
+     * Starts drawing a box for the finding at this index — a redraw on a model box, or a first
+     * box on an added egg. Both optional.
+     */
+    val onBeginDraw: (Int) -> Unit,
+    /** The medtech accepted a drawn box, already in the model's centre-based image space. */
+    val onBoxDrawn: (ImageBox) -> Unit,
+    val onCancelDraw: () -> Unit,
 )

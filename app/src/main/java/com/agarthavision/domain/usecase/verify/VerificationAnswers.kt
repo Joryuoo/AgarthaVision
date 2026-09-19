@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
 /**
@@ -32,20 +33,52 @@ data class VerificationAnswers(
      * suggestion, or by picking one themselves.
      *
      * Persisted to `detections.species_touched`
-     * (`supabase/migrations/0012_polyparasitism_findings.sql`). It was added when the sheet
-     * pre-filled the model's species silently, to keep "a human did not object" distinguishable
-     * from "a human confirmed this" in a table that doubles as the retraining corpus.
+     * (`supabase/migrations/0012_polyparasitism_findings.sql`). It exists to keep **"a human did
+     * not object"** distinguishable from **"a human confirmed this"** in a table that doubles as
+     * the retraining corpus, where a species with no human behind it must never be
+     * indistinguishable from one with.
      *
-     * 86d4auj84 then removed the silent pre-fill: the sheet now *asks*, so under the current
-     * flow every submitted species is a deliberate assertion and this is true on every row. It
-     * is kept, and asserted in `SubmitVerificationUseCaseTest`, precisely because that is an
-     * invariant worth catching the loss of — a future path that writes a species without
-     * asking would show up here as a false, rather than silently entering the corpus as a
-     * human judgement.
+     * That distinction is load-bearing again. 86d4auj84 had removed the silent pre-fill and made
+     * the sheet ask, at which point every submitted species was a deliberate assertion and this
+     * was true on every row — a flag recording nothing. The screen now pre-fills every answer
+     * from model output, so that a medtech whose model was right submits without tapping
+     * anything, and the flag carries real information once more: false on a row nobody touched,
+     * true the moment they confirm or change it.
      *
-     * **Invariant:** any path that sets [species] must set this true.
+     * **Invariant:** every path by which the *medtech* sets [species] sets this true. Seeding a
+     * row from the model's own class does not, and must not — a seeded species is the model's
+     * answer sitting in the slot a human answer is read from, which is precisely the thing this
+     * flag is here to tell apart.
      */
     val speciesTouched: Boolean = false,
+    /**
+     * A box the medtech drew by hand, in the model's own coordinate space.
+     *
+     * On a prediction-backed row this **replaces** the model's box: the model boxed a real egg
+     * badly, and this is where it actually is. On an added row it is simply where the egg is,
+     * and it stays null when the medtech did not bother — an added egg with no box is a complete
+     * finding, which is what `detections.bbox_*` is nullable for.
+     *
+     * Deliberately not a synthesised [com.agarthavision.domain.inference.Prediction]: that would
+     * need a class label and a confidence the model never assigned, and both feed the retraining
+     * corpus.
+     */
+    val drawnBox: ImageBox? = null,
+    /**
+     * The model put this box in the wrong place, and that does not stop being true because a
+     * human fixed it.
+     *
+     * Set when a redraw is committed, and **it locks Q2 to "No"**. This is the training signal
+     * the whole drawing feature exists to capture: an implementation that lets Q2 flip back to
+     * "Yes" after a redraw destroys the label, silently, leaving a frame that claims the model
+     * localised correctly while carrying the human's geometry.
+     *
+     * A frame reopened for editing reconstructs this by comparing the stored `bbox_*` against
+     * the prediction it belongs to. That is the only durable record: the alternative is a new
+     * column, which means a Room version bump, and this project has already been burned once by
+     * a version collision (`core/database/AgarthaDatabase.kt` records it).
+     */
+    val boxReplaced: Boolean = false,
 ) {
     /**
      * True when the species question is answered.

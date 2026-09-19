@@ -2,10 +2,9 @@ package com.agarthavision.data.local.dao
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.room.Embedded
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
@@ -20,8 +19,25 @@ import kotlinx.coroutines.flow.Flow
 @Suppress("TooManyFunctions")
 @Dao
 interface SessionDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSession(session: SessionEntity)
+    /**
+     * Writes a session, inserting or updating in place.
+     *
+     * **`@Upsert`, not `@Insert(REPLACE)`**, for the reason spelled out on
+     * [SampleDao.upsertSample]: a REPLACE conflict deletes the existing row before re-inserting
+     * it, and `reports.session_id` is `onDelete = CASCADE`. Re-inserting a session the device
+     * already holds silently deleted its reports — the row, not the CSV or PDF on disk, so the
+     * files stayed behind orphaned and unreachable while every list that reads them went empty.
+     *
+     * Note what does *not* save this. `samples.session_id` is `NO_ACTION`, which refuses a
+     * delete that would orphan samples — but REPLACE re-inserts the parent under the same id
+     * inside the same statement, so the constraint is satisfied by the time it is checked and
+     * the statement succeeds. The samples survive; the reports are already gone. A NO_ACTION
+     * key is not a guard against this.
+     *
+     * `SampleDaoUpsertCascadeTest` pins it.
+     */
+    @Upsert
+    suspend fun upsertSession(session: SessionEntity)
 
     @Update
     suspend fun updateSession(session: SessionEntity)
@@ -97,9 +113,11 @@ interface SessionDao {
      * Hard-deletes a session and, by cascade, its reports (`ReportEntity` declares
      * `onDelete = CASCADE`).
      *
-     * **Samples are deliberately untouched.** `SampleEntity` declares no foreign key to
-     * `sessions` at all, so nothing cascades into the verified samples and detections that C8
-     * protects. Sign-out tombstones those separately rather than deleting them.
+     * **Samples are deliberately untouched.** `SampleEntity` declares its `session_id` foreign
+     * key as `NO_ACTION` (added in Room 16), so this refuses outright rather than cascading into
+     * the verified samples and detections that C8 protects — the caller has to deal with the
+     * samples first, and `DiscardUnsyncedDataUseCase` already does. Sign-out tombstones those
+     * separately rather than deleting them.
      */
     @Query("DELETE FROM sessions WHERE session_id = :sessionId")
     suspend fun deleteSession(sessionId: String)

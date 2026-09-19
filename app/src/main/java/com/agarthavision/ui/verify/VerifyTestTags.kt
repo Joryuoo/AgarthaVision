@@ -1,7 +1,5 @@
 package com.agarthavision.ui.verify
 
-import com.agarthavision.domain.model.EggSpecies
-
 /**
  * Stable handles for the verification sheets' UI tests.
  *
@@ -23,6 +21,12 @@ internal object VerifyTestTags {
 
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
+
+    /**
+     * Shown in the preview's place when there is no image to load at all — neither local bytes,
+     * nor a local file, nor a signed Storage URL.
+     */
+    const val FRAME_UNAVAILABLE = "frame_unavailable"
 
     /** Detection-level navigation within a frame (AI sheet only). */
     const val DETECTION_PREV = "detection_prev"
@@ -58,7 +62,9 @@ internal object VerifyTestTags {
 
     /** "Is this egg <suggested species>?" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"
-    const val QUESTION_Q4 = "q4"
+
+    // There is no QUESTION_Q4. "Did the model miss any eggs in this frame?" is derived from the
+    // findings rather than asked, so there is no control to tag.
 
     /**
      * Species picker, shown once Q1 and Q2 are both yes and either the medtech said the
@@ -70,29 +76,44 @@ internal object VerifyTestTags {
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
-    /** Card naming the species under review, with the provenance pill inside it. */
-    const val DETECTION_CARD = "detection_card"
+    /** The overlay the boxes are drawn on, and the surface a new box is dragged out on. */
+    const val FRAME_CANVAS = "frame_canvas"
 
-    /** Caution line under the card, present only for model frames. */
+    /** Accept and cancel for a box being drawn. */
+    const val DRAW_ACCEPT = "draw_accept"
+    const val DRAW_CANCEL = "draw_cancel"
+
+    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    const val REDRAW_BOX = "redraw_box"
+
+    /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
+    const val BOX_REPLACED_NOTE = "box_replaced_note"
+
+    /**
+     * Caution line under the model-output summary, present only when the model named something.
+     *
+     * It used to sit under a maroon card naming the current detection's species, once per box.
+     * The card went with the section restructure - the species it announced is asked about
+     * directly by Q3, and the source it badged is now the whole point of the model-output
+     * section's three states.
+     */
     const val AI_SUGGESTION_NOTE = "ai_suggestion_note"
 
-    /** AI-suggested vs Manual provenance pill. */
-    const val SOURCE_BADGE = "source_badge"
-
-    /** The model-output panel. Present for every frame; its text differs by source. */
+    /** The model-output section. Present for every frame; its body is one of three states. */
     const val MODEL_OUTPUT_PANEL = "model_output_panel"
 
-    /** "Add species" button beneath the added-findings list. */
-    const val ADD_SPECIES = "add_species"
+    /** The spinner inside the model-output section while inference has not come back. */
+    const val MODEL_OUTPUT_SPINNER = "model_output_spinner"
+
+    /** "Add egg" button beneath the added-eggs list. Present on every frame. */
+    const val ADD_EGG = "add_egg"
 
     /** The live per-species summary of what submitting would write. */
     const val FINDINGS_SUMMARY = "findings_summary"
 
-    const val MANUAL_NO_DETECTION = "manual_no_detection"
-    const val MANUAL_OTHER_NAME_FIELD = "manual_other_name_field"
-
-    fun manualSpeciesCheckbox(species: EggSpecies): String = "manual_species_" + species.name
-    fun manualCountField(species: EggSpecies): String = "manual_count_" + species.name
+    // The manual-capture checklist tags went with the checklist. A frame captured while the
+    // inference container was unreachable is verified through the same Add Egg section as every
+    // other frame, so there is no separate set of controls to address.
 
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
 
@@ -104,6 +125,9 @@ internal object VerifyTestTags {
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
+
+    /** Draw / redraw affordance on the added finding at [index]. */
+    fun drawBox(index: Int): String = "draw_box_" + index
 
     /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
     fun questionOption(question: String, label: String): String =

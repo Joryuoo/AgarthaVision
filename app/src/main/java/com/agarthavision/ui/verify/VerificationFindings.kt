@@ -10,10 +10,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,42 +27,29 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.domain.inference.Prediction
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
-import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.toFindingRows
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
- * What the model said about this frame, or a plain statement that it said nothing.
+ * What the model said about this frame — one of exactly three states, never collapsed to two.
  *
- * **Never silently hidden.** The three states below mean different things to a reviewer and to
- * the training corpus, and the last two are deliberately not collapsed into one "no model
- * output" line: "no signal was ever collected" and "the model looked and asserted nothing was
- * there" are different facts, and the second is itself a labelled datapoint.
+ * The distinction the medtech has to be able to make here is between **a clean field** and **a
+ * container that never answered**. A clean field is a real clinical result and the most common
+ * one in surveillance; "no model output" means the server was unreachable. Collapsing them would
+ * make a negative smear indistinguishable from a broken container, and 86d4a6prb persists a
+ * zero-detection frame with an empty predictions list precisely so the clean field is recorded.
  *
- * Derived from [FlaggedFrame.source] and the prediction list on every recomposition. There is
- * deliberately no `hasModelOutput` flag stored beside the source — that would be a second
- * source of truth for the same fact, and it would drift.
+ * What it reports is the **model's own claim**, before any human answer — deliberately not the
+ * same number as [FindingsSummary], which shows what submitting would write. The gap between the
+ * two is what the medtech is here to create.
  */
 @Composable
-internal fun ModelOutputPanel(
-    frame: FlaggedFrame,
+internal fun ModelOutputSection(
+    output: ModelOutput,
     modifier: Modifier = Modifier,
 ) {
-    val message = when {
-        frame.source == FrameSource.MANUAL -> stringResource(R.string.verify_model_none_manual)
-        frame.predictions.isEmpty() ->
-            stringResource(
-                R.string.verify_model_clean_field,
-                frame.inferenceModelVersion.orEmpty(),
-            )
-        else -> return
-    }
-
+    val colors = AgarthaTheme.colors
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -69,28 +57,104 @@ internal fun ModelOutputPanel(
             .padding(bottom = 14.dp),
     ) {
         SectionLabel(stringResource(R.string.verify_model_output))
-        Text(
-            text = message,
-            color = AgarthaTheme.colors.textSecondary,
-            fontSize = 13.sp,
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(AgarthaTheme.colors.surfaceMuted, RoundedCornerShape(12.dp))
+                .background(colors.surfaceMuted, RoundedCornerShape(12.dp))
                 .padding(12.dp),
-        )
+        ) {
+            when (output) {
+                ModelOutput.InProgress -> CircularProgressIndicator(
+                    color = colors.accent,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier
+                        .testTag(VerifyTestTags.MODEL_OUTPUT_SPINNER)
+                        .size(24.dp),
+                )
+
+                ModelOutput.Unavailable -> Text(
+                    text = stringResource(R.string.verify_model_unavailable),
+                    color = colors.textSecondary,
+                    fontSize = 13.sp,
+                )
+
+                is ModelOutput.Read -> if (output.species.isEmpty()) {
+                    // A result, not a failure. The wording says what the model did, not what it
+                    // failed to do.
+                    Text(
+                        text = stringResource(R.string.verify_model_no_eggs),
+                        color = colors.textSecondary,
+                        fontSize = 13.sp,
+                    )
+                } else {
+                    output.species.forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(row.label, color = colors.textPrimary, fontSize = 13.sp)
+                            Text(
+                                row.count.toString(),
+                                color = colors.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            stringResource(R.string.verify_model_total),
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text(
+                            output.total.toString(),
+                            color = colors.textSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            }
+        }
+        // The C7 caution, moved here from the detection card it used to sit under. It is a
+        // caution about model output, so it belongs to the section that reports model output -
+        // and it is now shown once per frame rather than once per box.
+        if (output is ModelOutput.Read && output.species.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.verify_ai_suggestion_note),
+                color = colors.textTertiary,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
+                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+            )
+        }
     }
 }
 
 /**
- * The species the medtech added on top of whatever the model boxed.
+ * Add Egg: the eggs the medtech recorded on top of whatever the model boxed.
+ *
+ * **Always present, with or without model output.** It is the only path by which a frame
+ * captured while the inference container was unreachable can be verified at all, and a frame
+ * with model output still needs it for an egg the model missed. Adding one here is also what
+ * answers Q4 — see `VerificationUiState.missedEgg`.
  *
  * Rendered as a stacked, always-visible list rather than the one-at-a-time carousel the model's
  * boxes use. A box row is paged because `FrameWithBoxes` highlights exactly one box at a time
  * and the highlight is the point; an added row has no box to highlight and has to be scanned as
  * a set, because the whole reason it exists is that a field can hold several species at once.
  *
- * A manual capture therefore renders one card and no carousel — which is the ManualSheet
- * experience, unified rather than merged.
+ * An added egg needs no bounding box to be complete — `detections.bbox_*` is nullable precisely
+ * for this. Drawing one is optional (PB-14).
  */
 @Composable
 internal fun AddedFindings(
@@ -103,7 +167,7 @@ internal fun AddedFindings(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (addedIndices.isNotEmpty()) {
-            SectionLabel(stringResource(R.string.verify_species_you_added))
+            SectionLabel(stringResource(R.string.verify_eggs_you_added))
         }
 
         addedIndices.forEach { index ->
@@ -123,12 +187,12 @@ internal fun AddedFindings(
         }
 
         Text(
-            text = stringResource(R.string.verify_add_species),
+            text = stringResource(R.string.verify_add_egg),
             color = AgarthaTheme.colors.accent,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
-                .testTag(VerifyTestTags.ADD_SPECIES)
+                .testTag(VerifyTestTags.ADD_EGG)
                 .clickable { actions.onAddFinding() }
                 .padding(vertical = 10.dp),
         )
@@ -162,7 +226,7 @@ private fun AddedFindingCard(
                 fontSize = 12.sp,
             )
             Text(
-                text = stringResource(R.string.verify_remove_species),
+                text = stringResource(R.string.verify_remove_egg),
                 color = AgarthaTheme.colors.danger,
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -181,6 +245,21 @@ private fun AddedFindingCard(
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.addedSpeciesDropdown(index))
                 .padding(bottom = 10.dp),
+        )
+
+        // Optional, on purpose: an added egg with no box is a complete finding, and the medtech
+        // may defer drawing to the Sample Data Screen entirely. Says which state it is in rather
+        // than leaving a blank the reader has to interpret.
+        DrawBoxAction(
+            label = stringResource(
+                if (finding.answers.drawnBox == null) {
+                    R.string.verify_draw_box
+                } else {
+                    R.string.verify_redraw_box
+                },
+            ),
+            tag = VerifyTestTags.drawBox(index),
+            onClick = { actions.onBeginDraw(index) },
         )
 
         OutlinedTextField(
@@ -263,130 +342,11 @@ private fun SectionLabel(text: String) {
     )
 }
 
-/**
- * Manual-capture species selection UI.
- *
- * Replaces the AI-path Q1→Q2→Q3 chain and AddedFindings entirely for frames whose source
- * is [FrameSource.MANUAL]. The medtech either asserts nothing was present (no-detection row)
- * or checks off whichever species they observed and types a count per species. The "Other…"
- * option reveals a free-text name field above its count field, reusing [EggSpecies.OTHER]
- * and [com.agarthavision.domain.usecase.verify.VerificationAnswers.otherSpeciesText].
- */
-@Composable
-internal fun ManualSpeciesChecklist(
-    findings: List<Finding>,
-    noDetectionSelected: Boolean,
-    actions: VerificationSheetActions,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        SectionLabel(stringResource(R.string.verify_select_species))
-
-        // Radio-like no-detection row — mutually exclusive with any species selection.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp)
-                .background(
-                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.surface,
-                    RoundedCornerShape(8.dp),
-                )
-                .border(
-                    1.dp,
-                    if (noDetectionSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.borderStrong,
-                    RoundedCornerShape(8.dp),
-                )
-                .clickable { actions.onManualNoDetectionSelected() }
-                .testTag(VerifyTestTags.MANUAL_NO_DETECTION)
-                .padding(vertical = 12.dp, horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = stringResource(R.string.verify_no_detection),
-                color = if (noDetectionSelected) AgarthaTheme.colors.onAccent else AgarthaTheme.colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
-        listOf(EggSpecies.ASCARIS, EggSpecies.TRICHURIS, EggSpecies.HOOKWORM, EggSpecies.OTHER)
-            .forEach { species ->
-                val checked = findings.any { it.answers.species == species }
-                val finding = findings.find { it.answers.species == species }
-                ManualSpeciesRow(
-                    species = species,
-                    checked = checked,
-                    finding = finding,
-                    actions = actions,
-                )
-            }
-    }
-}
-
-@Composable
-private fun ManualSpeciesRow(
-    species: EggSpecies,
-    checked: Boolean,
-    finding: Finding?,
-    actions: VerificationSheetActions,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 8.dp)
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Checkbox(
-                checked = checked,
-                onCheckedChange = { actions.onManualSpeciesToggled(species, it) },
-                modifier = Modifier.testTag(VerifyTestTags.manualSpeciesCheckbox(species)),
-            )
-            Text(
-                text = species.displayName,
-                color = AgarthaTheme.colors.textPrimary,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-        }
-
-        if (checked) {
-            // For OTHER: reveal the free-text name field above the count field.
-            if (species == EggSpecies.OTHER) {
-                OutlinedTextField(
-                    value = finding?.answers?.otherSpeciesText.orEmpty(),
-                    onValueChange = actions.onManualOtherNameChanged,
-                    label = { Text(stringResource(R.string.verify_other_label)) },
-                    placeholder = {
-                        Text(
-                            stringResource(R.string.verify_other_hint),
-                            color = AgarthaTheme.colors.textTertiary,
-                            fontSize = 13.sp,
-                        )
-                    },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag(VerifyTestTags.MANUAL_OTHER_NAME_FIELD)
-                        .padding(bottom = 8.dp),
-                )
-            }
-
-            // Count field — starts empty, "0" as placeholder (D1).
-            OutlinedTextField(
-                value = finding?.answers?.eggCount?.toString().orEmpty(),
-                onValueChange = { actions.onManualCountChanged(species, it) },
-                label = { Text(stringResource(R.string.verify_manual_count_label)) },
-                placeholder = { Text("0", color = AgarthaTheme.colors.textTertiary) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier
-                    .width(180.dp)
-                    .testTag(VerifyTestTags.manualCountField(species)),
-            )
-        }
-    }
-}
+// ManualSpeciesChecklist and ManualSpeciesRow are gone.
+//
+// They were a second, parallel way to say what is in a field, reached only when the inference
+// container had been unreachable at capture time. Add Egg says the same thing for every frame,
+// so a medtech working a smear with the container down now uses the screen they already know
+// instead of a different one that happens to look similar. The "no eggs / species detected"
+// row went with it: submitting an empty list is that assertion, and a tap asking the medtech to
+// restate the absence of work is a tap the screen can do without.
