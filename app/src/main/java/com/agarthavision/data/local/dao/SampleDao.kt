@@ -64,6 +64,37 @@ interface SampleDao {
     )
     suspend fun updateStatus(sampleId: String, status: String)
 
+    /**
+     * Points a sample's row at the JPEG now held on this device.
+     *
+     * Needed because a pulled row arrives with `image_path` empty — the server has no notion
+     * of this device's disk — so caching the image has to tell the row where it went.
+     */
+    @Query("UPDATE samples SET image_path = :imagePath WHERE sample_id = :sampleId")
+    suspend fun updateImagePath(sampleId: String, imagePath: String)
+
+    /**
+     * Live samples whose frame exists in Storage, newest verification first.
+     *
+     * The ordering **is** the retention policy: the prefetch fills from the top and the
+     * eviction trims from the bottom, so a device that cannot hold everything holds the most
+     * recent work rather than an arbitrary slice of it.
+     *
+     * Deleted rows are excluded. A tombstoned sample keeps its detections (C8), but no screen
+     * can open its frame, so holding the JPEG buys nothing and spends the budget.
+     */
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId
+          AND deleted_at IS NULL
+          AND storage_path IS NOT NULL
+          AND TRIM(storage_path) <> ''
+        ORDER BY verified_at DESC, timestamp DESC
+        """,
+    )
+    suspend fun getCacheableSamples(userId: String): List<SampleEntity>
+
     @Query(
         """
         UPDATE samples

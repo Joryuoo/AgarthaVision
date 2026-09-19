@@ -47,6 +47,41 @@ Session pushes are upserts so a pending row can be re-sent carrying an `ended_at
 offline (`data/supabase/SessionRemoteDataSource.kt:38-40`). Report pushes are row-only — the
 CSV never leaves the device (`data/supabase/SyncReportUseCase.kt:25-35`).
 
+## Frames on the device — the image cache
+
+The pull brings rows; `CacheSampleImagesUseCase` brings the JPEGs they point at, in the same
+pass, after the rows are down (86d4by5n9). Fetching on open was not enough: editing a sample
+means placing a box against its frame, so a sample with no image cannot be corrected at all,
+and the barangay with no signal is exactly where that bites.
+
+**The retention policy, and it is a decision rather than a side effect.** A byte budget —
+`MAX_CACHE_BYTES`, 256 MB — spent newest-verification-first. The pull fills from the top of
+that list and the eviction trims from the bottom, so a device that cannot hold everything holds
+the most recent work. "Every verified sample ever" bounds nothing, and a device that fills up
+in the field is its own outage; a last-N-days or per-patient rule bounds nothing either on a
+device that works one barangay all quarter.
+
+Two rules the budget never breaks:
+
+- **An unpushed sample is never evicted.** Its local JPEG is the only copy in existence until
+  it reaches Storage. `SampleDao.getCacheableSamples` filters on a non-empty `storage_path`, so
+  such a sample cannot reach the eviction loop at all.
+- **Eviction removes a copy, never a record.** The row, its detections and the Storage object
+  all survive (C8); only this device's duplicate goes, and re-syncing brings it back.
+
+`MAX_IMAGES_PER_PASS` caps one pass at 50 frames, so a first sign-in against a year of history
+does not spend an hour of radio. The rest come down on later passes, and until they do
+`FetchType.SAMPLE_IMAGES` sits in `FetchSummary.Ran.failed`, which is what stops the Settings
+card reading "All synced" on a device holding rows it cannot open.
+
+`markCompleted` is deliberately **not** gated on images: it answers "did this account's rows
+arrive", and a Storage object that is gone for good must not pin the badge at NOT_YET_SYNCED
+forever on a device that really does have every row.
+
+Whether a frame is held is answered by the disk — `SampleImageStore.pathFor` is derived from
+the user and sample ids — not by `samples.image_path`, which arrives empty on every pulled row
+and is repaired from the disk rather than trusted.
+
 ## Claim before sync
 
 A row with `user_id = NULL` cannot satisfy the remote NOT NULL constraint, so login claims
