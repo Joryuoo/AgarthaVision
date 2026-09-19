@@ -92,6 +92,11 @@ internal const val NO_HIGHLIGHT = -1
  * box *means* is the caller's business (PB-14b wires it to a Q2 redraw and to Add Egg), which is
  * why this emits geometry and nothing else.
  *
+ * @param imageModel what Coil should load: the frame's own JPEG bytes on the device that
+ *   captured it, or an `ImageRequest` built from a local file or a signed Storage URL for a
+ *   sample synced from another device. Not a `ByteArray`, because on any device but the
+ *   capturing one there are no bytes — `SampleRemoteDataSource` writes an empty image path, and
+ *   a frame rebuilt from it is zero bytes that render as nothing at all.
  * @param inferenceImageWidth the source image's width. Null falls back to
  *   [com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX], which is safe by construction rather
  *   than a guess: `toJpegBytes()` centre-crops and downscales every frame to a 640 square before
@@ -109,7 +114,7 @@ internal const val NO_HIGHLIGHT = -1
  */
 @Composable
 fun FrameWithBoxes(
-    jpegBytes: ByteArray,
+    imageModel: Any,
     predictions: List<Prediction>,
     highlightedIndex: Int,
     showBoxes: Boolean,
@@ -152,7 +157,7 @@ fun FrameWithBoxes(
         },
     ) {
         AsyncImage(
-            model = jpegBytes,
+            model = imageModel,
             contentDescription = null,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize(),

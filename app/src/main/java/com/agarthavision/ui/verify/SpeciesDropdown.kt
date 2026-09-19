@@ -3,8 +3,10 @@
 
 package com.agarthavision.ui.verify
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -21,7 +23,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -33,6 +38,15 @@ fun SpeciesDropdown(
     onSpeciesSelected: (EggSpecies) -> Unit,
     onOtherTextChanged: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Species already recorded on this device that match what is being typed into "Other".
+     *
+     * Empty by default, so a caller with no suggestions to offer needs no change. The list is
+     * only ever a convenience: typing a name the index has never seen has to keep working,
+     * because free text is the sole path by which a species outside [EggSpecies] enters the
+     * corpus at all.
+     */
+    suggestions: List<String> = emptyList(),
 ) {
     var expanded by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf(selected?.displayName ?: "") }
@@ -115,7 +129,66 @@ fun SpeciesDropdown(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            OtherSpeciesSuggestions(
+                // A suggestion identical to what is already typed offers nothing, and reads as
+                // the field failing to notice it has been answered.
+                suggestions = suggestions.filterNot { it.equals(otherText.trim(), ignoreCase = true) },
+                onPick = onOtherTextChanged,
+            )
         }
     }
 }
+
+/**
+ * The species this device already holds, offered under the free-text field.
+ *
+ * **Rendered inline rather than in a popup menu**, for the reason `SearchableDropdown` records:
+ * a popup inside a `ModalBottomSheet` competes with the sheet for the IME, and this is that
+ * exact context. The species picker above still uses `ExposedDropdownMenu`, which predates that
+ * finding - worth watching on a device, but not something to change from here.
+ *
+ * Tapping a name only fills the field. Nothing is committed, and the medtech can keep typing
+ * over it, because the index is a record of what has been entered before and not a vocabulary
+ * the corpus is limited to.
+ */
+@Composable
+private fun OtherSpeciesSuggestions(
+    suggestions: List<String>,
+    onPick: (String) -> Unit,
+) {
+    if (suggestions.isEmpty()) return
+    val colors = AgarthaTheme.colors
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS)
+            .padding(top = 6.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.verify_other_suggestions_label),
+            color = colors.textTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(start = 4.dp, bottom = 2.dp),
+        )
+        // Capped well below the use case's own limit. A prefix match over a device-local index
+        // rarely returns more than a few, and a long list inside a bottom sheet pushes the field
+        // being typed into off the screen - which costs more than the matches it would show.
+        suggestions.take(DISPLAY_LIMIT).forEach { name ->
+            Text(
+                text = name,
+                color = colors.accent,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(VerifyTestTags.otherSpeciesSuggestion(name))
+                    .clickable { onPick(name) }
+                    .padding(vertical = 6.dp, horizontal = 4.dp),
+            )
+        }
+    }
+}
+
+/** Matches shown at once. See [OtherSpeciesSuggestions]. */
+private const val DISPLAY_LIMIT = 5
 

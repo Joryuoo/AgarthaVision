@@ -22,6 +22,19 @@ interface DetectionDao {
     @Query("SELECT * FROM detections WHERE sample_id = :sampleId")
     suspend fun getDetectionsForSample(sampleId: String): List<DetectionEntity>
 
+    /**
+     * Removes detection rows by id.
+     *
+     * Exists for one narrow job: an added species whose count the medtech lowered on re-open
+     * leaves slots behind, because [insertDetections] replaces and never deletes, and a stale
+     * slot would keep a null-`bbox_*` row alive for an egg that is no longer claimed. The caller
+     * (`SubmitVerificationUseCase`) computes the ids and excludes every prediction-backed one, so
+     * a box the model produced cannot reach this even in principle — those are the rows C8
+     * protects, and a rejection is kept as a labelled FALSE_POSITIVE rather than deleted.
+     */
+    @Query("DELETE FROM detections WHERE detection_id IN (:detectionIds)")
+    suspend fun deleteDetectionsByIds(detectionIds: List<String>)
+
     @Query("SELECT * FROM detections WHERE sample_id = :sampleId")
     fun observeDetectionsForSample(sampleId: String): Flow<List<DetectionEntity>>
 

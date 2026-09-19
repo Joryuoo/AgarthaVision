@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -72,6 +73,7 @@ class VerificationSheetContentTest {
         val speciesConfirmed = mutableListOf<Boolean>()
         val species = mutableListOf<EggSpecies>()
         val notes = mutableListOf<String>()
+        val otherSpecies = mutableListOf<String>()
         var detectionPrev = 0
         var detectionNext = 0
         var framePrev = 0
@@ -84,6 +86,9 @@ class VerificationSheetContentTest {
         val removedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
+        val beganDraw = mutableListOf<Pair<Int, Int?>>()
+        val drawnBoxes = mutableListOf<ImageBox>()
+        var cancelledDraws = 0
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -91,7 +96,7 @@ class VerificationSheetContentTest {
         onQ2Selected = { r.q2 += it },
         onSpeciesConfirmed = { r.speciesConfirmed += it },
         onSpeciesSelected = { r.species += it },
-        onOtherSpeciesChanged = {},
+        onOtherSpeciesChanged = { r.otherSpecies += it },
         onDetectionPrev = { r.detectionPrev++ },
         onDetectionNext = { r.detectionNext++ },
         onFramePrev = { r.framePrev++ },
@@ -101,11 +106,14 @@ class VerificationSheetContentTest {
         onSubmit = { r.submits++ },
         onCancel = { r.cancels++ },
         onUserNoteChanged = { r.notes += it },
-        onAddFinding = { r.addFindings++ },
+        onAddSpecies = { r.addFindings++ },
         onRemoveFinding = { r.removedFindings += it },
-        onEggCountChanged = { index, text -> r.counts += index to text },
+        onFieldTotalChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onBeginDraw = { index, slot -> r.beganDraw += index to slot },
+        onBoxDrawn = { r.drawnBoxes += it },
+        onCancelDraw = { r.cancelledDraws++ },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -139,8 +147,11 @@ class VerificationSheetContentTest {
     /** A node in a dialog window, which is not scrollable and must not be scrolled to. */
     private fun dialogNode(tag: String) = composeRule.onNodeWithTag(tag)
 
-    private fun option(question: String, label: String) =
-        sheetNode(VerifyTestTags.questionOption(question, label))
+    /**
+     * A question's control. One node per question now: the Yes/No pair became a checkbox, so
+     * there is nothing left to disambiguate by label and the question's own tag reaches it.
+     */
+    private fun question(tag: String) = sheetNode(tag)
 
     /**
      * Types into a text field and then stops the test clock. A focused Compose text field
@@ -182,9 +193,9 @@ class VerificationSheetContentTest {
     fun `an unanswered detection shows only the first question`() {
         setContent(state())
 
-        option(VerifyTestTags.QUESTION_Q1, "Yes").assertIsDisplayed()
+        question(VerifyTestTags.QUESTION_Q1).assertIsDisplayed()
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q2, "Yes"),
+            VerifyTestTags.QUESTION_Q2,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
@@ -194,7 +205,7 @@ class VerificationSheetContentTest {
         setContent(state(answers = listOf(answered(isEgg = false))))
 
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q2, "Yes"),
+            VerifyTestTags.QUESTION_Q2,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
@@ -203,7 +214,7 @@ class VerificationSheetContentTest {
     fun `answering the first question yes reveals the second`() {
         setContent(state(answers = listOf(answered(isEgg = true))))
 
-        option(VerifyTestTags.QUESTION_Q2, "Yes").assertIsDisplayed()
+        question(VerifyTestTags.QUESTION_Q2).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
@@ -216,7 +227,7 @@ class VerificationSheetContentTest {
         // recorded for the box is still BOX_INCORRECT.
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false))))
 
-        option(VerifyTestTags.QUESTION_Q3, "Yes").assertIsDisplayed()
+        question(VerifyTestTags.QUESTION_Q3).assertIsDisplayed()
     }
 
     /**
@@ -228,18 +239,24 @@ class VerificationSheetContentTest {
     fun `a correct box asks whether the suggested species is right, not for a pick`() {
         setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
 
-        composeRule.onNodeWithText("Is this egg ${EggSpecies.ASCARIS.displayName}?")
+        composeRule.onNodeWithText("This egg is ${EggSpecies.ASCARIS.displayName}")
             .performScrollTo()
             .assertIsDisplayed()
-        option(VerifyTestTags.QUESTION_Q3, "Yes").assertIsDisplayed()
+        question(VerifyTestTags.QUESTION_Q3).assertIsDisplayed()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
     @Test
-    fun `answering the species question reports the answer`() {
-        val r = setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+    fun `unchecking the species question reports the disagreement`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true),
+                ),
+            ),
+        )
 
-        option(VerifyTestTags.QUESTION_Q3, "No").performClick()
+        question(VerifyTestTags.QUESTION_Q3).performClick()
 
         assertEquals(listOf(false), r.speciesConfirmed)
     }
@@ -249,7 +266,7 @@ class VerificationSheetContentTest {
         setContent(state(answers = listOf(answered(isEgg = true))))
 
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+            VerifyTestTags.QUESTION_Q3,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
@@ -295,7 +312,7 @@ class VerificationSheetContentTest {
         )
 
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q3, "Yes"),
+            VerifyTestTags.QUESTION_Q3,
         ).assertDoesNotExist()
         sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
@@ -452,20 +469,56 @@ class VerificationSheetContentTest {
     fun `answering the first question reports the choice`() {
         val r = setContent(state())
 
-        option(VerifyTestTags.QUESTION_Q1, "Yes").performClick()
+        question(VerifyTestTags.QUESTION_Q1).performClick()
 
         assertEquals(listOf(true), r.q1)
     }
 
     @Test
-    fun `answering the second question reports the choice`() {
-        val r = setContent(state(answers = listOf(answered(isEgg = true))))
+    fun `unchecking the second question reports the disagreement`() {
+        // The state the screen actually opens in: pre-filled from model output. Unchecking is
+        // how the medtech says the box is misplaced, and it must report false, not toggle
+        // something else - each question owns one control now, but they sit in one column.
+        val r = setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
 
-        option(VerifyTestTags.QUESTION_Q2, "No").performClick()
+        question(VerifyTestTags.QUESTION_Q2).performClick()
 
         assertEquals(listOf(false), r.q2)
-        // Q1 must not be reported for a Q2 tap. Both questions render the same Yes/No labels.
-        assertEquals(emptyList<Boolean>(), r.q1)
+        assertEquals("A Q2 tap is not a Q1 answer.", emptyList<Boolean>(), r.q1)
+    }
+
+    @Test
+    fun `checking an unanswered question reports agreement`() {
+        val r = setContent(state(answers = listOf(answered(isEgg = true))))
+
+        question(VerifyTestTags.QUESTION_Q2).performClick()
+
+        assertEquals(listOf(true), r.q2)
+    }
+
+    /**
+     * A replaced box latches Q2 at "No", and the checkbox has to say so.
+     *
+     * `onQ2Selected` already refuses the tap, but a Yes/No pair showed that honestly — as a Yes
+     * button that would not take. A checkbox that silently ignores a tap reads as a bug, so the
+     * latch is rendered as a disabled control rather than left to be discovered.
+     */
+    @Test
+    fun `a replaced box disables the second question instead of ignoring taps`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = false).copy(
+                        drawnBox = ImageBox(x = 1f, y = 2f, width = 3f, height = 4f),
+                        boxReplaced = true,
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.QUESTION_Q2).assertIsNotEnabled()
+        sheetNode(VerifyTestTags.BOX_REPLACED_NOTE).assertIsDisplayed()
+        assertEquals(emptyList<Boolean>(), r.q2)
     }
 
     /**
@@ -745,31 +798,31 @@ class VerificationSheetContentTest {
     )
 
     /**
-     * Add Egg is present on a frame with no model output, and it is the only way to verify one.
+     * Add Species is present on a frame with no model output, and it is the only way to verify one.
      *
      * The species checklist this replaced was a second, parallel set of controls reached only on
      * this kind of frame. Losing this path would silently strand every field a medtech captured
      * during an outage.
      */
     @Test
-    fun `a frame with no model output still offers Add Egg`() {
+    fun `a frame with no model output still offers Add Species`() {
         setContent(noModelOutputState())
 
-        sheetNode(VerifyTestTags.ADD_EGG).assertIsDisplayed()
+        sheetNode(VerifyTestTags.ADD_SPECIES).assertIsDisplayed()
     }
 
     @Test
-    fun `a frame with model output offers Add Egg too`() {
+    fun `a frame with model output offers Add Species too`() {
         setContent(state())
 
-        sheetNode(VerifyTestTags.ADD_EGG).assertIsDisplayed()
+        sheetNode(VerifyTestTags.ADD_SPECIES).assertIsDisplayed()
     }
 
     @Test
-    fun `tapping Add Egg reports it`() {
+    fun `tapping Add Species reports it`() {
         val r = setContent(noModelOutputState())
 
-        sheetNode(VerifyTestTags.ADD_EGG).performClick()
+        sheetNode(VerifyTestTags.ADD_SPECIES).performClick()
 
         assertEquals(1, r.addFindings)
     }
@@ -784,21 +837,21 @@ class VerificationSheetContentTest {
         setContent(noModelOutputState())
 
         composeRule.onNodeWithTag(
-            VerifyTestTags.questionOption(VerifyTestTags.QUESTION_Q1, "Yes"),
+            VerifyTestTags.QUESTION_Q1,
         ).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.BOXES_TOGGLE).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.DETECTION_PREV).assertDoesNotExist()
     }
 
     @Test
-    fun `an added egg shows its species picker and its count`() {
+    fun `an added species shows its picker and its field total`() {
         setContent(
             noModelOutputState(
                 findings = listOf(
                     Finding(
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
-                            eggCount = 1,
+                            fieldTotal = 1,
                             speciesTouched = true,
                         ),
                     ),
@@ -810,11 +863,82 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.countField(0)).assertIsDisplayed()
     }
 
+    /**
+     * The disclosure only exists when there is optional work behind it, and its label says how
+     * much. A closed disclosure that hides the fact there is anything to do pulls at nobody.
+     */
     @Test
-    fun `an added egg can be removed`() {
+    fun `eggs with no box get a disclosure that counts them`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 3,
+                            speciesTouched = true,
+                            drawnBoxes = listOf(ImageBox(x = 1f, y = 1f, width = 2f, height = 2f)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).assertIsDisplayed()
+        composeRule.onNodeWithText("Locate eggs · 1 of 3 located").assertIsDisplayed()
+        // Closed to start with: the drawing affordances are optional work, kept out of the way.
+        composeRule.onNodeWithTag(VerifyTestTags.drawBox(0, 0)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `expanding the disclosure offers one draw action per egg, addressed by slot`() {
         val r = setContent(
             noModelOutputState(
-                findings = listOf(Finding(answers = VerificationAnswers(eggCount = 1))),
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 2,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).performClick()
+
+        sheetNode(VerifyTestTags.drawBox(0, 1)).performClick()
+
+        // The slot travels with the request. Addressing the row alone is what let two eggs of
+        // one species collide on a single box.
+        assertEquals(listOf(0 to 1), r.beganDraw)
+    }
+
+    /** A species the model's boxes already cover has nothing left to locate. */
+    @Test
+    fun `a total the boxes already cover shows no disclosure`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+                    VerificationAnswers(
+                        species = EggSpecies.ASCARIS,
+                        fieldTotal = 1,
+                        speciesTouched = true,
+                    ),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.LOCATE_TOGGLE).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an added species can be removed`() {
+        val r = setContent(
+            noModelOutputState(
+                findings = listOf(Finding(answers = VerificationAnswers(fieldTotal = 1))),
             ),
         )
 
@@ -837,5 +961,61 @@ class VerificationSheetContentTest {
         // pass or fail by machine, so this asserts the labels it replaced are gone instead.
         composeRule.onNodeWithText("Label sample").assertDoesNotExist()
         composeRule.onNodeWithText("Verify detection").assertDoesNotExist()
+    }
+
+    // ── the Other species suggestions ────────────────────────────────────────
+
+    /** Q3 unchecked, species OTHER, three characters typed: the state the index answers to. */
+    private fun typingOther(vararg names: String) = state(
+        answers = listOf(
+            VerificationAnswers(
+                isEgg = true,
+                isBoxCorrect = true,
+                speciesConfirmed = false,
+                species = EggSpecies.OTHER,
+                otherSpeciesText = "fas",
+            ),
+        ),
+    ).copy(
+        speciesSuggestions = names.toList(),
+        speciesSuggestionTarget = SuggestionTarget.CurrentDetection,
+        speciesSuggestionQuery = "fas",
+    )
+
+    @Test
+    fun `species already on this device are offered under the Other field`() {
+        setContent(typingOther("Fasciola hepatica"))
+
+        sheetNode(VerifyTestTags.otherSpeciesSuggestion("Fasciola hepatica")).assertIsDisplayed()
+    }
+
+    @Test
+    fun `tapping a suggestion fills the field`() {
+        val recorder = setContent(typingOther("Fasciola hepatica"))
+
+        sheetNode(VerifyTestTags.otherSpeciesSuggestion("Fasciola hepatica")).performClick()
+
+        // Reported as ordinary text, through the same handler typing uses. Nothing is committed
+        // and nothing is locked: the medtech can type straight over it.
+        assertEquals(listOf("Fasciola hepatica"), recorder.otherSpecies)
+    }
+
+    @Test
+    fun `a suggestion identical to what is typed is not offered`() {
+        // It answers nothing, and reads as the field failing to notice it has been answered.
+        setContent(typingOther("fas"))
+
+        composeRule.onNodeWithTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a list fetched for another row is not offered here`() {
+        // The staleness rule, from the rendering side: same names, same text, different owner.
+        setContent(
+            typingOther("Fasciola hepatica")
+                .copy(speciesSuggestionTarget = SuggestionTarget.AddedFinding(1)),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS).assertDoesNotExist()
     }
 }

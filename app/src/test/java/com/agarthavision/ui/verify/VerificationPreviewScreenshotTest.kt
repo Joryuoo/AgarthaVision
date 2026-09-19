@@ -105,11 +105,14 @@ class VerificationPreviewScreenshotTest {
         onSubmit = {},
         onCancel = {},
         onUserNoteChanged = {},
-        onAddFinding = {},
+        onAddSpecies = {},
         onRemoveFinding = {},
-        onEggCountChanged = { _, _ -> },
+        onFieldTotalChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },
+        onBeginDraw = { _, _ -> },
+        onBoxDrawn = {},
+        onCancelDraw = {},
     )
 
     @Test
