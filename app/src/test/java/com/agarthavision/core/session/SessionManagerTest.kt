@@ -66,7 +66,7 @@ class SessionManagerTest {
             assertThrows(IllegalArgumentException::class.java) {
                 runBlocking { manager.startSession(label = "Smear A", patientId = "patient-1") }
             }
-            verify(sessionDao, never()).insertSession(any())
+            verify(sessionDao, never()).upsertSession(any())
             verify(remoteDataSource, never()).upsertSession(any())
         }
 
