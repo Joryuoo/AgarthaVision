@@ -200,7 +200,12 @@ one (PB-17). A field holding none of a species contributes a zero, not a gap, so
 in 3 of 10 fields reads `0–4` rather than `1–4`. The denominator is however many fields the
 medtech recorded — ten is typical practice, not a rule the app enforces. **It is not a mean:**
 a mean averages a single heavy field away under nine clean ones, which is the field that most
-needs to be seen. **Eggs per gram is gone** (PB-16): it is
+needs to be seen.
+
+On screen and on the page it reads as one row per species found — the binomial in italics, the
+range, and the reading — and a **wholly negative session states "no parasites found" once**
+rather than listing every species at `0–0`. Both surfaces say it the same way, because the two
+are the same claim and a patient may be holding the second one. **Eggs per gram is gone** (PB-16): it is
 defined for Kato-Katz, Philippine medtechs use Direct Smear, and the ×24 volumetric multiplier
 the app applied was simply wrong for the method in use — its constant carried an unresolved
 `TODO` asking for the citation that was never supplied.
