@@ -171,6 +171,28 @@ can carry commits for several tickets, so an ID baked into the name is wrong the
 second ticket lands on it, and the ID is already captured per commit by the subject format
 above. Nothing enforces this at push time; it is a review check.
 
+**AI-assisted ticket writing: keep the ticket specific, not over-specified.** When using AI to
+investigate an issue and draft a ticket, keep the focus on the problem and expected outcome
+rather than prescribing exact implementation steps. Tickets must not dictate code edits (e.g.,
+instructing a developer to edit a specific function, rewrite an exact `runCatching` block, or inject
+checks at named lines) as hard requirements. Codebases evolve, early AI investigations can make
+faulty assumptions, and cleaner architectural homes for a fix often exist. An over-specified
+ticket leads the next engineer (or their agent) to follow outdated or suboptimal instructions
+instead of evaluating the real problem.
+
+A well-formed ticket focuses on:
+1. Problem / Context
+2. How to Reproduce (if applicable)
+3. Actual Behavior
+4. Expected Behavior
+5. Acceptance Criteria
+
+Suspected root causes, candidate file paths, and implementation ideas can still be provided, but
+they must be labeled as hints or exploratory findings rather than mandatory directives, unless a
+specific implementation detail is itself the requirement. Tickets are written for human
+developers to understand, verify, and decide how to solve.
+
+
 **Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
 above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
 because git writes those itself; only the first line is checked, so bodies are free-form.

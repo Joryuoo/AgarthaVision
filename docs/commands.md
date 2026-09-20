@@ -66,6 +66,7 @@ Installed by Husky into `.git/hooks` via `bun run prepare`.
 | Hook | Runs | File |
 |---|---|---|
 | `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
+| `commit-msg` | Validates subject format `[type][ClickUp-ID][Lastname]: Task title` against C9 | `.husky/commit-msg` |
 | `pre-push` | `assembleDebug` | `.husky/pre-push` |
 
 Both auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
@@ -80,9 +81,9 @@ before committing the new image.
 touches only Markdown, since the hook gates on a full Android build that such a change cannot
 affect. It is not a general-purpose escape hatch — see `constraints.md` C12.
 
-**There is no `commit-msg` hook.** It was removed (commit `172ab4d`), so nothing checks commit
-message format. `commitlint.config.js` and `lint-staged.config.js` are both committed and both
-unreferenced by any hook.
+**`commit-msg` hook enforces C9.** Replaced after commit `172ab4d` (`12509f8`), it validates
+the subject against `[type][ClickUp-ID][Lastname]: Task title`. `commitlint.config.js` and
+`lint-staged.config.js` are both committed and unreferenced by any hook.
 
 ## Node tooling
 

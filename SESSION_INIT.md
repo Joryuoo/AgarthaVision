@@ -34,7 +34,7 @@ to this repository.
 | Changing UI, theme, or design tokens | `docs/constraints.md` C11, then `docs/file-tree.md` |
 | Setting up the environment or picking a version | `docs/stack.md` |
 | Running a build, test, or lint | `docs/commands.md` |
-| Writing a commit, branch, or PR | `docs/non-negotiables.md`, then `docs/constraints.md` C9 |
+| Writing a ticket, branch, commit, or PR | `docs/non-negotiables.md`, then `docs/constraints.md` C9 |
 | Working out what a change breaks | `docs/map/effects/CONTEXT.md` |
 | Checking whether something already ships | `docs/features.md` |
 | Finding where a file lives | `docs/file-tree.md` |

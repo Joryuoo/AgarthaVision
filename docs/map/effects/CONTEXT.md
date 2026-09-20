@@ -173,7 +173,8 @@ lint, so any change that slows the build slows every commit. And there is **no C
 
 **Open:** `../../non-negotiables.md` · `../../constraints.md` C9.
 
-**The non-obvious break:** nothing enforces the convention. The `commit-msg` hook was removed,
-and the committed `commitlint.config.js` encodes a *conventional-commit* shape that
-contradicts the documented `[type][ClickUp-ID][Lastname]` format while being wired to no hook.
-Do not assume a tool will catch a mistake here.
+**The non-obvious break:** `.husky/commit-msg` enforces the commit subject line format, but
+branch names, ticket structure, and PR conventions are checked by review only. The committed
+`commitlint.config.js` encodes a *conventional-commit* shape that contradicts the documented
+`[type][ClickUp-ID][Lastname]` format while being wired to no hook.
+
