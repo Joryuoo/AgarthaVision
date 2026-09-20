@@ -95,18 +95,21 @@ index is a backstop, not the mechanism.
 
 - `domain/usecase/verify/SubmitVerificationUseCase.kt` — the only writer.
 - `data/local/dao/SampleSpeciesFindingDao.kt` — `replaceFindingsForSample` is wholesale, so a
-  species removed on re-open actually disappears.
+  species removed on re-open actually disappears; `getFindingsForSession` feeds reporting.
+- `domain/usecase/reports/LpfAggregation.kt` — `aggregateLpfPerSpecies` aggregates findings per
+  species across all session fields into `min..max` LPF ranges and qualitative descriptors.
+- `domain/usecase/reports/SessionEggCountUseCase.kt` & `domain/usecase/records/GenerateSessionReportUseCase.kt` —
+  fetch findings to compute the LPF range for the screen, CSV, and PDF reports.
 - `data/supabase/SampleRemoteDataSource.kt` — findings sync delete-then-insert, not upsert, for
   the same reason.
 - The verification screen's "add another species" row and its per-species count input.
 
 **Does not hit**
 
-- **EPG and the session report — not yet.** The obvious wrong guess is that adding this table
-  changed the numbers. It did not: `DetectionDao.getConfirmedEggCountsForSession` still counts
-  detection rows, and the report still reads that. Switching the aggregate over is deliberately
-  a separate change, because it would move every number in the report, the CSV and the
-  Dashboard at once. Tickets 86d4a6jxw (the unit) and 86d4a6jyy (the template) own it.
+- **Total confirmed egg counts.** The session's total egg count is still summed from
+  `DetectionDao.getConfirmedEggCountsForSession`. Findings rows provide the per-species per-field
+  distribution (LPF range) only. EPG and the WHO infectivity tier were deleted entirely (PB-16,
+  ticket 86d4be3wz).
 - **C8.** Deleting a findings row is not a rejection. A count is the medtech's *current
   statement*, like `samples.user_note` — the things C8 protects, the JPEG and the detection
   rows, are still never deleted. That is why this table has a DELETE policy and `detections`
@@ -115,11 +118,13 @@ index is a backstop, not the mechanism.
 ## Surfaces
 
 Written by the verification screen on submit, and read back by it when a verified sample is
-re-opened for editing. Synced to Supabase with its parent sample. Not yet read by any report or
-aggregate — see *Does not hit*.
+re-opened for editing. Synced to Supabase with its parent sample. Read by `SessionEggCountUseCase`
+and `GenerateSessionReportUseCase` to compute the per-species LPF range via `aggregateLpfPerSpecies`.
 
 ## See
 
 `supabase/migrations/0012_polyparasitism_findings.sql` owns the truth.
-`app/src/main/java/com/agarthavision/data/local/entity/SampleSpeciesFindingEntity.kt` mirrors
-it. Decision record: ticket 86d4ab4tq.
+`app/src/main/java/com/agarthavision/data/local/entity/SampleSpeciesFindingEntity.kt` mirrors it.
+Decision records: ticket 86d4ab4tq (findings shape); ticket 86d4be3zb (LPF range definition);
+ticket 86d4be3wz (removal of EPG and WHO infectivity tier).
+

@@ -127,11 +127,22 @@ as working.
 - **Session detail** with per-species counts and LPF density (`ui/records/SessionDetailViewModel.kt`).
   Shows `NOT_FOUND` / `NOT_VISIBLE` empty states instead of a perpetual skeleton when the session
   is absent or belongs to a different account.
-- **LPF Density** is the primary reported unit (Philippine Direct Smear method). It is calculated
-  per species as the mean egg count across all fields examined in a session, reported alongside
-  the observed range (min-max). Denominator is the total count of recorded frames, including
-  clean ones.
-  (`ui/records/SessionDetailScreen.kt:LpfHeroCard`, `domain/usecase/reports/SessionEggCountUseCase.kt`).
+- **LPF Range** is the primary reported unit (Philippine Direct Smear method). It is calculated
+  per species as the `min(eggCount)..max(eggCount)` range across all fields examined in a session,
+  reported alongside the qualitative descriptor read off the highest single field (rare / few /
+  moderate / numerous) (`domain/usecase/reports/LpfAggregation.kt`, `domain/model/LpfDensity.kt`,
+  `domain/usecase/reports/SessionEggCountUseCase.kt`). Denominator is whatever field count the
+  medtech recorded, and clean fields contribute 0. It is **deliberately not a mean**: a mean
+  averages a single heavy field away under nine clean ones.
+- **No WHO infectivity tier.** The app previously shipped an infectivity tier derived from
+  Kato-Katz EPG thresholds (`InfectivityLevelCalculator.kt:21-25`); it was deliberately deleted
+  (PB-16, ticket 86d4be3wz). WHO light/moderate/heavy classification is defined strictly for
+  Kato-Katz EPG; Philippine medtechs use Direct Smear, for which no WHO or DOH intensity table
+  exists. EPG-scale thresholds cannot be rescaled to LPF, and replacing them would mean inventing
+  an uncited cutoff table. What ships instead is the conventional wet-mount semi-quantitative
+  descriptor attached to the LPF range. A tier may return **only** with a cutoff table clinically
+  signed off for direct-smear LPF, by name and date — not by analogy to Kato-Katz and not by
+  rescaling.
 - **Sample detail with image fallback** — local file first, then a 15-minute signed Storage URL
   (`domain/usecase/records/ResolveSampleImageSourceUseCase.kt:17-41`,
   `data/supabase/SampleRemoteDataSource.kt:51-55`).
@@ -210,4 +221,6 @@ is defined only as eggs-per-gram measured by Kato-Katz; there is no WHO or DOH i
 for direct fecal smear, and the thresholds are EPG-scale, so they cannot be mapped onto a
 per-field count — they would have to be replaced by a table that does not exist in the
 literature. What stands in its place is the conventional semi-quantitative wet-mount descriptor
-attached to the LPF range.
+attached to the LPF range. The reopening condition is explicit: a tier may return **only** with a
+cutoff table signed off clinically for direct-smear LPF, by name and date — not by analogy to
+Kato-Katz, and not by rescaling.
