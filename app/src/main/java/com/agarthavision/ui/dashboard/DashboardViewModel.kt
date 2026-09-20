@@ -7,9 +7,10 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
-import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
@@ -23,7 +24,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -32,17 +32,21 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Duration
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
+/**
+ * `userName` and `dateString` are gone. Neither was ever assigned and neither was read by any
+ * composable - they were leftovers that would mislead the next person who greps for where the
+ * dashboard gets its user name, which is `ObserveLocalIdentityUseCase`.
+ *
+ * `eggsSparklineData` is gone with the card it fed. A seven-day trend of egg counts across
+ * different patients is not a meaningful aggregate, and the delta printed beside it was the
+ * string literal "+38%" - it had never reflected any data at all.
+ */
 data class DashboardUiState(
     val isLoading: Boolean = true,
-    val userName: String = "M. Santos",
-    val dateString: String = "Wednesday, May 28 · Day 12", // mocked date for now
     val activeSession: ActiveSessionState? = null,
     val kpis: KpiState = KpiState(),
-    val eggsSparklineData: List<Float> = emptyList(), // Array of exactly 7 items
     val topSpecies: List<SpeciesData> = emptyList(),
     val pendingReviewCount: Int = 0,
     val oldestPendingAgo: String = "",
@@ -70,11 +74,22 @@ data class ActiveSessionState(
     val pendingFrames: String,
 )
 
+/**
+ * The Home tab's counts. **Every one of these is a row count from the database.**
+ *
+ * Two fields went rather than being re-pointed. `verifiedRatio` returned "100%" whenever any
+ * sample existed and "0%" otherwise - a constant wearing a percent sign. `eggsAvgStatus`
+ * returned "Elevated" or "Baseline" from `totalSamples > 100`: a sample *count* dressed as a
+ * clinical intensity, and it read as one on a screen used during validation.
+ *
+ * The bar for anything added here: if a tile cannot be explained by pointing at a row, it does
+ * not ship.
+ */
 data class KpiState(
+    val patientsCount: String = "0",
     val sessionsCount: String = "0",
     val samplesCount: String = "0",
-    val verifiedRatio: String = "0%",
-    val eggsAvgStatus: String = "Normal"
+    val pendingCount: String = "0",
 )
 
 data class SpeciesData(
@@ -104,6 +119,8 @@ class DashboardViewModel @Inject constructor(
     private val sessionManager: SessionManager,
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
+    private val sampleDao: SampleDao,
+    private val patientRepository: PatientRepository,
     private val detectionRepository: DetectionRepository,
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
@@ -127,23 +144,18 @@ class DashboardViewModel @Inject constructor(
             flowOf(KpiState())
         } else {
             combine(
+                patientRepository.observePatientCount(userId, ""),
                 sessionRepository.observeAllSessions(userId),
-                sampleRepository.observeAllSamples(userId)
-            ) { sessions, verifiedSamples ->
-            val totalSessions = sessions.size
-            // Since observeAllSamples only gives verified samples based on its doc,
-            // wait, observeAllSamples docs say: "Observes all verified samples for the given user"
-            val totalSamples = verifiedSamples.size // Rough approximation for now
-            val verifiedRatio = if (totalSamples > 0) "100%" else "0%" // Mock calculation
-
+                // Verified samples only - that is what this query returns, and the tile is
+                // labelled for it rather than calling them "samples" and rounding the meaning.
+                sampleRepository.observeAllSamples(userId),
+                sampleDao.observePendingCount(userId),
+            ) { patients, sessions, verifiedSamples, pending ->
                 KpiState(
-                    sessionsCount = totalSessions.toString(),
-                    samplesCount = totalSamples.toString(),
-                    verifiedRatio = verifiedRatio,
-                    // Non-diagnostic wording only — "Heavy"/"Light" read as WHO clinical
-                    // intensity tiers, which this sample-count heuristic is not. This does not
-                    // touch the separate totalEggsCount=0 mock bug in activeSessionStateFlow below.
-                    eggsAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
+                    patientsCount = patients.toString(),
+                    sessionsCount = sessions.size.toString(),
+                    samplesCount = verifiedSamples.size.toString(),
+                    pendingCount = pending.toString(),
                 )
             }
         }
@@ -255,53 +267,31 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    // Historical charts — null identity yields empty species + a flat sparkline.
-    private val historicalDataFlow = userIdFlow.flatMapLatest { userId ->
+    /**
+     * The species mix across the last seven days. Real: a group-by over confirmed egg counts.
+     *
+     * The sparkline that used to share this flow is gone. A seven-day trend of egg counts
+     * across different patients is not a meaningful aggregate, and inventing one repeats the
+     * mistake PB-16 removed.
+     */
+    private val topSpeciesFlow = userIdFlow.flatMapLatest { userId ->
         if (userId == null) {
-            flowOf(Pair(emptyList<SpeciesData>(), List(HISTORICAL_DAYS) { 0f }))
+            flowOf(emptyList())
         } else {
-        val sevenDaysAgo = Instant.now().minus(Duration.ofDays(HISTORICAL_DAYS.toLong())).toEpochMilli()
-        combine(
-            detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo),
-            detectionRepository.observeDailyEggCountsSince(userId, sevenDaysAgo)
-        ) { eggCounts, dailyCounts ->
-            // Process Species
-            val totalEggs = eggCounts.sumOf { it.count }.coerceAtLeast(1)
-            val topSpecies = eggCounts.take(TOP_SPECIES_COUNT).map {
-                val ratio = it.count.toFloat() / totalEggs
-                SpeciesData(
-                    name = it.species,
-                    ratio = ratio,
-                    formattedPercentage = "${(ratio * 100).toInt()}%"
-                )
-            }
-
-            // Process Sparkline (7 days)
-            val sparkline = MutableList(HISTORICAL_DAYS) { 0f }
-            val startOfDay = Instant.now()
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
+            val sevenDaysAgo = Instant.now()
+                .minus(Duration.ofDays(HISTORICAL_DAYS.toLong()))
                 .toEpochMilli()
-            val dayMs = MILLIS_PER_DAY
-
-            for (daily in dailyCounts) {
-                // Determine which of the last 7 days this timestamp belongs to (0 = oldest, 6 = today)
-                val diffMs = startOfDay - daily.timestamp
-                val daysAgo = if (diffMs < 0) 0 else (diffMs / dayMs).toInt()
-                val index = SPARKLINE_LAST_INDEX - daysAgo
-                if (index in 0..SPARKLINE_LAST_INDEX) {
-                    sparkline[index] += daily.count.toFloat()
+            detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo).map { eggCounts ->
+                val totalEggs = eggCounts.sumOf { it.count }.coerceAtLeast(1)
+                eggCounts.take(TOP_SPECIES_COUNT).map {
+                    val ratio = it.count.toFloat() / totalEggs
+                    SpeciesData(
+                        name = it.species,
+                        ratio = ratio,
+                        formattedPercentage = "${(ratio * 100).toInt()}%",
+                    )
                 }
             }
-
-            // Normalize sparkline data (max = 1f, min = 0f) for the UI Canvas
-            val maxCount = sparkline.maxOrNull() ?: 1f
-            val normalizedSparkline = sparkline.map { if (maxCount > 0) it / maxCount else 0f }
-
-            Pair(topSpecies, normalizedSparkline)
-        }
         }
     }
 
@@ -322,7 +312,7 @@ class DashboardViewModel @Inject constructor(
         kpiStateFlow,
         pendingAndSyncFlow,
         activeSessionStateFlow,
-        historicalDataFlow,
+        topSpeciesFlow,
         themeModeFlow,
         accountSyncFlow,
     ) { flows ->
@@ -332,8 +322,7 @@ class DashboardViewModel @Inject constructor(
         val pendingSync = flows[1] as PendingAndSync
         val activeSession = flows[2] as ActiveSessionState?
         @Suppress("UNCHECKED_CAST")
-        val speciesAndSparkline = flows[HISTORICAL_DATA_FLOW_INDEX] as Pair<List<SpeciesData>, List<Float>>
-        val (topSpecies, sparkline) = speciesAndSparkline
+        val topSpecies = flows[TOP_SPECIES_FLOW_INDEX] as List<SpeciesData>
         val themeMode = flows[THEME_MODE_FLOW_INDEX] as ThemeMode
         @Suppress("UNCHECKED_CAST")
         val accountSync = flows[ACCOUNT_SYNC_FLOW_INDEX] as Triple<Boolean, Boolean, Boolean>
@@ -348,7 +337,6 @@ class DashboardViewModel @Inject constructor(
             syncedSamplesCount  = pendingSync.syncedSamplesCount,
             activeSession       = activeSession,
             topSpecies          = topSpecies,
-            eggsSparklineData    = sparkline,
             isDarkMode          = themeMode == ThemeMode.DARK,
             isSignedIn          = isSignedIn,
             isOffline           = isOffline,
@@ -413,12 +401,11 @@ class DashboardViewModel @Inject constructor(
         const val HOURS_PER_DAY = 24L
         const val HISTORICAL_DAYS = 7
         const val TOP_SPECIES_COUNT = 3
-        const val SPARKLINE_LAST_INDEX = HISTORICAL_DAYS - 1
 
         // Positional indices into the combine(...) `flows` array above (kpiStateFlow=0,
-        // pendingAndSyncFlow=1, activeSessionStateFlow=2, historicalDataFlow=3,
+        // pendingAndSyncFlow=1, activeSessionStateFlow=2, topSpeciesFlow=3,
         // themeModeFlow=4, accountSyncFlow=5).
-        const val HISTORICAL_DATA_FLOW_INDEX = 3
+        const val TOP_SPECIES_FLOW_INDEX = 3
         const val THEME_MODE_FLOW_INDEX = 4
         const val ACCOUNT_SYNC_FLOW_INDEX = 5
     }
