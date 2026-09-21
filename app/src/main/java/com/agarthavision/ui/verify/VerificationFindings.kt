@@ -223,6 +223,9 @@ internal fun AddedFindings(
     }
 }
 
+// `suggestions` is data and VerificationSheetActions is callbacks, so it cannot join the
+// holder already here. A second holder would exist only to satisfy the threshold.
+@Suppress("LongParameterList")
 @Composable
 private fun AddedFindingCard(
     index: Int,

@@ -47,6 +47,9 @@ import java.time.Instant
  *   a text field, the shape that never reaches idle under Robolectric. The tests assert
  *   that the picker appears and disappears with the chain, not what happens inside it.
  */
+// One composable, one fixture. Splitting by concern would duplicate the sheet setup across
+// files and make the suggestion cases harder to read against the rest of the sheet.
+@Suppress("LargeClass")
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
 class VerificationSheetContentTest {

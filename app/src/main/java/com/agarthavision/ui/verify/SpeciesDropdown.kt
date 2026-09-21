@@ -31,6 +31,9 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.ui.theme.AgarthaTheme
 
+// Selection state, the two callbacks it raises, the modifier and the suggestion list.
+// Bundling them would add a type that exists only to satisfy the threshold.
+@Suppress("LongParameterList")
 @Composable
 fun SpeciesDropdown(
     selected: EggSpecies?,
