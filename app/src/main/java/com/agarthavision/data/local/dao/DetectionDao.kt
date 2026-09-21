@@ -86,26 +86,8 @@ interface DetectionDao {
         sinceTimestamp: Long,
     ): Flow<List<SessionEggCountRow>>
 
-    /**
-     * Fetches counts per sample over a time window for bucketing into daily totals.
-     */
-    @Query(
-        """
-         SELECT s.timestamp, COUNT(*) AS eggCount
-        FROM detections d
-        JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.deleted_at is null
-          AND s.user_id = :userId
-          AND s.timestamp >= :sinceTimestamp
-          AND d.verdict = 'confirmed'
-        GROUP BY s.sample_id
-        ORDER BY s.timestamp ASC
-        """,
-    )
-    fun observeDailyEggCountsSince(
-        userId: String,
-        sinceTimestamp: Long,
-    ): Flow<List<DailyEggCountRow>>
+    // observeDailyEggCountsSince went with the Home tab's sparkline (PB-23). It bucketed
+    // counts per sample into daily totals for that chart and nothing else ever read it.
 
     /**
      * Bulk-fetches distinct species labels for a set of sessions, excluding deleted
@@ -139,12 +121,6 @@ interface DetectionDao {
  */
 data class SessionEggCountRow(
     val species: String,
-    @ColumnInfo(name = "eggCount")
-    val eggCount: Int,
-)
-
-data class DailyEggCountRow(
-    val timestamp: Long,
     @ColumnInfo(name = "eggCount")
     val eggCount: Int,
 )

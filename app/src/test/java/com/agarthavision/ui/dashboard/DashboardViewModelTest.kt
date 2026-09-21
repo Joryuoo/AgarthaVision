@@ -7,7 +7,9 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -72,7 +75,12 @@ class DashboardViewModelTest {
     }
     private val detectionRepository: DetectionRepository = mock<DetectionRepository>().also {
         whenever(it.observeConfirmedEggCountsSince(any(), any())).thenReturn(flowOf(emptyList()))
-        whenever(it.observeDailyEggCountsSince(any(), any())).thenReturn(flowOf(emptyList()))
+    }
+    private val sampleDao: SampleDao = mock<SampleDao>().also {
+        whenever(it.observePendingCount(any())).thenReturn(flowOf(0))
+    }
+    private val patientRepository: PatientRepository = mock<PatientRepository>().also {
+        whenever(it.observePatientCount(any(), any())).thenReturn(flowOf(0))
     }
     private val themeModeFlow = MutableStateFlow(ThemeMode.LIGHT)
     private val observeThemeModeUseCase: ObserveThemeModeUseCase = mock<ObserveThemeModeUseCase>().also {
@@ -89,6 +97,8 @@ class DashboardViewModelTest {
         sessionManager = sessionManager,
         sessionRepository = sessionRepository,
         sampleRepository = sampleRepository,
+        sampleDao = sampleDao,
+        patientRepository = patientRepository,
         detectionRepository = detectionRepository,
         observeThemeModeUseCase = observeThemeModeUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
@@ -203,4 +213,44 @@ class DashboardViewModelTest {
 
         verify(setThemeModeUseCase).invoke(eq(ThemeMode.LIGHT))
     }
+\n
+    @Test
+    fun `every KPI tile is a row count`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
+        // The bar PB-23 sets: if a tile cannot be explained by pointing at data, it does not
+        // ship. `verifiedRatio` returned "100%" whenever any sample existed - a constant
+        // wearing a percent sign - and `eggsAvgStatus` read "Elevated" off `totalSamples > 100`,
+        // a sample count dressed as a clinical intensity on a screen used during validation.
+        whenever(patientRepository.observePatientCount(any(), any())).thenReturn(flowOf(3))
+        whenever(sampleDao.observePendingCount(any())).thenReturn(flowOf(4))
+
+        val vm = viewModel()
+        vm.uiState.test {
+            var snapshot = awaitItem()
+            while (snapshot.isLoading) {
+                snapshot = awaitItem()
+            }
+
+            assertEquals("3", snapshot.kpis.patientsCount)
+            assertEquals("4", snapshot.kpis.pendingCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `a fresh account reads zero everywhere, with no percentage it cannot justify`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+
+                assertEquals("0", snapshot.kpis.patientsCount)
+                assertEquals("0", snapshot.kpis.sessionsCount)
+                assertEquals("0", snapshot.kpis.samplesCount)
+                assertEquals("0", snapshot.kpis.pendingCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
 }

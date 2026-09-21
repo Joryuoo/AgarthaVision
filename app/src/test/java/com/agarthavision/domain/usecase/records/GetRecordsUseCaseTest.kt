@@ -1,18 +1,14 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
-import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.model.Sample
-import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +18,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -626,8 +621,6 @@ internal class FakeDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         speciesMap.filterKeys { it in sessionIds }

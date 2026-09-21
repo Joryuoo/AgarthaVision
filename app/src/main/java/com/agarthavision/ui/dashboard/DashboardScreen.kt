@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -18,9 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -138,18 +135,12 @@ fun DashboardScreen(
                 )
             }
 
-            // 4. Sparkline card
-            item {
-                Spacer(Modifier.height(Spacing.lg))
-                SparklineCard(
-                    values = if (state.eggsSparklineData.size == 7) state.eggsSparklineData
-                             else List(7) { 0f },
-                    delta  = "+38%",
-                    modifier = Modifier.padding(horizontal = Spacing.xl)
-                )
-            }
-
-            // 5. Species mix card
+            // 4. Species mix card
+            //
+            // The seven-day sparkline that stood here is gone (PB-23). Its delta was the string
+            // literal "+38%" - it had never reflected any data - and a seven-day trend of egg
+            // counts across different patients is not a meaningful aggregate to rebuild it
+            // from. The species mix below is a real group-by and stays.
             if (state.topSpecies.isNotEmpty()) {
                 item {
                     Spacer(Modifier.height(Spacing.lg))

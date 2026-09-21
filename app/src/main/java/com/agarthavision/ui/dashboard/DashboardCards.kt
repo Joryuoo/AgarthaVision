@@ -6,14 +6,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -33,13 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.StrokeJoin
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -146,7 +138,7 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                     labelColor = colors.onAccent.copy(alpha = 0.8f),
                 ),
                 modifier = Modifier.weight(1f))
-            KpiTile("Samples", kpis.samplesCount, trend = null,
+            KpiTile("Verified", kpis.samplesCount, trend = null,
                 colors = KpiTileColors(
                     bgColor = AppColors.Gray700,
                     contentColor = AppColors.White,
@@ -155,7 +147,7 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Verified", kpis.verifiedRatio, trend = null,
+            KpiTile("Patients", kpis.patientsCount, trend = null,
                 colors = KpiTileColors(
                     bgColor = AppColors.Gray900,
                     contentColor = AppColors.White,
@@ -163,7 +155,7 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                     borderColor = colors.border,
                 ),
                 modifier = Modifier.weight(1f))
-            KpiTile("Eggs avg", kpis.eggsAvgStatus, trend = null,
+            KpiTile("To review", kpis.pendingCount, trend = null,
                 colors = KpiTileColors(
                     bgColor = colors.gold,
                     contentColor = colors.onGold,
@@ -228,120 +220,15 @@ private fun KpiTile(
     }
 }
 
-@Composable
-internal fun SparklineCard(
-    values: List<Float>,
-    delta: String,
-    modifier: Modifier = Modifier
-) {
-    val colors = AgarthaTheme.colors
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .padding(16.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("7-day activity", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
-                Text(
-                    "Eggs found per day",
-                    fontSize = 11.sp,
-                    color = colors.textSecondary,
-                    modifier = Modifier.padding(top = 2.dp)
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .background(colors.successTint, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 9.dp, vertical = 3.dp)
-            ) {
-                Text(
-                    "↑ $delta",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.successText,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                )
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Sparkline(values = values, modifier = Modifier.fillMaxWidth().height(56.dp))
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            listOf("Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Today").forEachIndexed { i, lbl ->
-                Text(
-                    lbl.uppercase(),
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (i == 6) colors.textPrimary else colors.textTertiary,
-                    letterSpacing = 0.6.sp
-                )
-            }
-        }
-    }
-}
+/*
+ * SparklineCard and Sparkline are gone (PB-23).
+ *
+ * The card showed a seven-day egg-count trend with a delta beside it, and that delta was the
+ * string literal "+38%" - it had never reflected any data. Deleted rather than re-pointed: a
+ * seven-day trend of egg counts across different patients is not a meaningful aggregate, and
+ * inventing one repeats the mistake PB-16 removed.
+ */
 
-@Composable
-private fun Sparkline(values: List<Float>, modifier: Modifier = Modifier) {
-    val lineColor = AgarthaTheme.colors.accent
-    val knockoutColor = AgarthaTheme.colors.surface
-    Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
-        val maxV = values.maxOrNull() ?: 1f
-        val minV = values.minOrNull() ?: 0f
-        val range = (maxV - minV).coerceAtLeast(1f)
-        val pad = 6.dp.toPx()
-
-        fun xAt(i: Int) = i.toFloat() * w / (values.size - 1)
-        fun yAt(v: Float) = pad + (h - 2 * pad) * (1f - (v - minV) / range)
-
-        val linePath = Path().apply {
-            values.forEachIndexed { i, v ->
-                val x = xAt(i); val y = yAt(v)
-                if (i == 0) moveTo(x, y) else lineTo(x, y)
-            }
-        }
-        val areaPath = Path().apply {
-            addPath(linePath)
-            lineTo(w, h); lineTo(0f, h); close()
-        }
-
-        drawPath(
-            path  = areaPath,
-            brush = Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.18f), Color.Transparent))
-        )
-        drawPath(
-            path  = linePath,
-            color = lineColor,
-            style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
-        )
-
-        val sx = xAt(0); val sy = yAt(values.first())
-        drawCircle(knockoutColor, radius = 2.5.dp.toPx(), center = Offset(sx, sy))
-        drawCircle(
-            lineColor,
-            radius = 2.5.dp.toPx(),
-            center = Offset(sx, sy),
-            style = Stroke(width = 1.5.dp.toPx())
-        )
-
-        val ex = xAt(values.lastIndex); val ey = yAt(values.last())
-        drawCircle(lineColor,     radius = 4.dp.toPx(), center = Offset(ex, ey))
-        drawCircle(knockoutColor, radius = 4.dp.toPx(), center = Offset(ex, ey), style = Stroke(width = 2.dp.toPx()))
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SpeciesMixCard(
     speciesData: List<SpeciesData>,
