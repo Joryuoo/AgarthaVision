@@ -59,6 +59,7 @@ class ReportPdfBuilder @Inject constructor() {
                     speciesDisplayName = canonical,
                     min = density.min,
                     max = density.max,
+                    descriptor = density.descriptor,
                 )
             }
             .sortedBy { it.speciesDisplayName }

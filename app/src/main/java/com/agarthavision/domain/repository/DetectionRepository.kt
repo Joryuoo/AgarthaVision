@@ -20,18 +20,8 @@ interface DetectionRepository {
     fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>>
 
     /**
-     * Observes daily egg counts (grouped by sample locally) over a specific time window.
-     */
-    fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>>
-
-    /**
      * Bulk-fetches distinct species labels for the given set of session IDs, grouped
      * into a [Map] keyed by session ID. Species within each list are sorted ascending.
      */
     suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>>
 }
-
-data class DailyEggCount(
-    val timestamp: Long,
-    val count: Int,
-)

@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.sync
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
@@ -34,6 +35,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -49,6 +52,10 @@ import org.robolectric.annotation.Config
  * Robolectric is required because the use case logs failures via [android.util.Log],
  * which throws RuntimeException("Stub!") in plain JVM tests without returnDefaultValues.
  */
+// One use case, one fixture of DAOs and remote sources. Splitting by entity type would
+// duplicate that fixture five times over and hide the cross-type rules - E2 completeness
+// and the E4 skip - which are the point of testing a pull pass whole.
+@Suppress("LargeClass")
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -70,6 +77,13 @@ class FetchRemoteDataUseCaseTest {
     private val fetchOutcomeStore: FetchOutcomeStore = mock()
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder = mock()
 
+    // Answers "nothing left to fetch" by default, so the suites that predate 86d4by5n9 keep
+    // asserting what they were written to assert. The image pass has its own suite.
+    private val cacheSampleImages: CacheSampleImagesUseCase = mock {
+        onBlocking { invoke(any()) } doReturn ImageCacheSummary()
+    }
+    private val sampleImageStore: SampleImageStore = mock()
+
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
@@ -86,6 +100,8 @@ class FetchRemoteDataUseCaseTest {
         initialFetchStateStore = initialFetchStateStore,
         fetchOutcomeStore = fetchOutcomeStore,
         speciesSuggestionSeeder = speciesSuggestionSeeder,
+        cacheSampleImages = cacheSampleImages,
+        sampleImageStore = sampleImageStore,
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -803,6 +819,14 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = supabaseStatus,
     )
 
+    /** Every pull answers with nothing, so a test only stubs the one it is about. */
+    private suspend fun stubEmptyPulls() {
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+    }
+
     private fun fakeSample(
         id: String,
         sessionId: String,
@@ -832,4 +856,77 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = ReportSyncStatus.SYNCED.value,
         createdAt = 1_000L,
     )
+
+    // ── Sample frames (86d4by5n9) ────────────────────────────────────────────
+
+    @Test
+    fun `a pull does not orphan the JPEG this device already holds`() = runTest {
+        // The live defect this ticket had to fix before it could cache anything. Every pulled
+        // sample is mapped with image_path = "" - correct, the server has no notion of this
+        // device's disk - and a sample captured *here* goes SYNCED the moment its push lands,
+        // so the E4 guard lets the next pull overwrite it. The JPEG stayed on disk with nothing
+        // pointing at it, and the capturing device fell back to needing a network for a frame
+        // already in its hands.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+            .thenReturn(listOf(fakeSample("smp-1", "session-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1"))
+            .thenReturn("/data/users/user-1/samples/smp-1.jpg")
+
+        useCase.invoke()
+
+        val written = argumentCaptor<SampleEntity>()
+        verify(sampleDao).upsertSample(written.capture())
+        assertEquals("/data/users/user-1/samples/smp-1.jpg", written.firstValue.imagePath)
+    }
+
+    @Test
+    fun `a frame the device does not hold leaves the path empty rather than inventing one`() =
+        runTest {
+            setupOnlineSignedIn()
+            stubEmptyPulls()
+            whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+                .thenReturn(listOf(fakeSample("smp-1", "session-1")))
+            whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+            whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1")).thenReturn(null)
+
+            useCase.invoke()
+
+            // A path to a file that is not there is worse than none: it is indistinguishable
+            // from a frame that is really held, and the screen would open blank.
+            val written = argumentCaptor<SampleEntity>()
+            verify(sampleDao).upsertSample(written.capture())
+            assertEquals("", written.firstValue.imagePath)
+        }
+
+    @Test
+    fun `rows without their frames does not read as a synced device`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(cacheSampleImages.invoke("user-1")).thenReturn(ImageCacheSummary(missing = 3))
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        // Every row type succeeded, and the device still cannot open three samples. Reporting
+        // that as All synced is how a medtech finds out in a barangay with no signal.
+        assertTrue(FetchType.SAMPLE_IMAGES in summary.failed)
+        assertFalse(summary.isComplete)
+        verify(fetchOutcomeStore).record(userId = "user-1", complete = false)
+    }
+
+    @Test
+    fun `a missing frame does not pin the initial-fetch flag shut`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(cacheSampleImages.invoke("user-1")).thenReturn(ImageCacheSummary(missing = 1))
+
+        useCase.invoke()
+
+        // Two different questions. "Did this account's rows arrive" is what clears
+        // NOT_YET_SYNCED, and a Storage object that is gone for good must not hold it closed
+        // forever - the device really does have every row.
+        verify(initialFetchStateStore).markCompleted("user-1")
+    }
 }

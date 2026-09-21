@@ -17,6 +17,9 @@ import org.robolectric.annotation.Config
  *
  * Each variant is driven through the state/action seam — no Hilt, no ViewModel.
  * Runs on the JVM under Robolectric inside `:app:testDebugUnitTest`.
+ *
+ * Two variants, since the queue holds unverified rows only. The NONE_VERIFIED case went with the
+ * Verified bucket: there is no longer a list of verified samples for it to be empty.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -35,7 +38,7 @@ class QueueEmptyStateTest {
             }
         }
 
-        composeRule.onNodeWithText("Queue is clear").assertIsDisplayed()
+        composeRule.onNodeWithText("Nothing captured yet").assertIsDisplayed()
     }
 
     @Test
@@ -46,7 +49,9 @@ class QueueEmptyStateTest {
             }
         }
 
-        composeRule.onNodeWithText("Nothing to verify right now.").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Tap the shutter to record a field. Frames wait here until you verify them."
+        ).assertIsDisplayed()
     }
 
     @Test
@@ -54,41 +59,6 @@ class QueueEmptyStateTest {
         composeRule.setContent {
             AgarthaVisionTheme {
                 QueueEmptyState(variant = QueueEmptyVariant.NEVER_HAD, onViewRecords = {})
-            }
-        }
-
-        composeRule.onNodeWithText("View session records").assertDoesNotExist()
-    }
-
-    // ---------- NONE_VERIFIED ----------
-
-    @Test
-    fun `NONE_VERIFIED shows its title`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
-            }
-        }
-
-        composeRule.onNodeWithText("No verified samples yet").assertIsDisplayed()
-    }
-
-    @Test
-    fun `NONE_VERIFIED shows its body`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
-            }
-        }
-
-        composeRule.onNodeWithText("Samples you verify will appear here.").assertIsDisplayed()
-    }
-
-    @Test
-    fun `NONE_VERIFIED does not show View session records button`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                QueueEmptyState(variant = QueueEmptyVariant.NONE_VERIFIED, onViewRecords = {})
             }
         }
 
@@ -105,7 +75,7 @@ class QueueEmptyStateTest {
             }
         }
 
-        composeRule.onNodeWithText("All items verified").assertIsDisplayed()
+        composeRule.onNodeWithText("All frames verified").assertIsDisplayed()
     }
 
     @Test
@@ -116,7 +86,7 @@ class QueueEmptyStateTest {
             }
         }
 
-        composeRule.onNodeWithText("Every egg in this session has been checked.").assertIsDisplayed()
+        composeRule.onNodeWithText("Every frame captured in this session has been checked.").assertIsDisplayed()
     }
 
     @Test

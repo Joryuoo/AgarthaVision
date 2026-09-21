@@ -46,4 +46,11 @@ data class ReportPdfSpeciesRow(
     val speciesDisplayName: String,
     val min: Int,
     val max: Int,
+    /**
+     * The qualitative reading for the worst field, or null when the species was never seen.
+     *
+     * Carried rather than recomputed in the renderer, so the page and the screen cannot end up
+     * describing the same range differently.
+     */
+    val descriptor: LpfDescriptor? = null,
 )

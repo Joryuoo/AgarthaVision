@@ -35,6 +35,8 @@ internal data class FrameTransform(
  * transform with an infinite or zero scale would push the failure downstream into geometry that
  * merely looks wrong.
  */
+// One validity guard over the four dimensions, not four separate conditions: any
+// non-positive value makes the transform meaningless, so they are rejected together.
 @Suppress("ComplexCondition")
 internal fun frameTransform(
     canvasWidth: Float,

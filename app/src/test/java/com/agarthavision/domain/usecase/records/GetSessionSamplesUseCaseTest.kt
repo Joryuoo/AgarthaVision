@@ -11,7 +11,6 @@ import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -263,8 +262,6 @@ private class SamplesDetectionRepository(
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) =
         emptyList<EggCount>()
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
         flowOf(emptyList())
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()

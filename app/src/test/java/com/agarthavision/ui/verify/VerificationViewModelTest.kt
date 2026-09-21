@@ -6,6 +6,7 @@ import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -14,7 +15,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,14 +22,17 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 
-@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
+// One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
+// files and make the question-chain cases harder to read against each other.
+@Suppress("LargeClass")
 class VerificationViewModelTest {
 
     @get:Rule
@@ -41,7 +44,17 @@ class VerificationViewModelTest {
     }
     private val submitVerificationUseCase: SubmitVerificationUseCase = mock()
 
-    private fun viewModel() = VerificationViewModel(flaggedFrameStore, submitVerificationUseCase)
+    // Stubbed to answer with nothing: these suites are not about suggestions, but the free-text
+    // handlers query the index now and an unstubbed mock would answer null.
+    private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase = mock {
+        onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+    }
+
+    private fun viewModel() = VerificationViewModel(
+        flaggedFrameStore,
+        submitVerificationUseCase,
+        searchSpeciesSuggestions,
+    )
 
     private fun makeFrame(predictions: Int = 2): FlaggedFrame {
         val preds = List(predictions) {
@@ -572,7 +585,7 @@ class VerificationViewModelTest {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             advanceUntilIdle()
 
             val findings = vm.state.value.findings
@@ -586,7 +599,7 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onRemoveFinding(1)
             advanceUntilIdle()
@@ -610,34 +623,81 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `a typed egg count lands on the added finding`() =
+    fun `a typed field total lands on the added species`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
-            vm.onEggCountChanged(1, "4")
+            vm.onFieldTotalChanged(1, "4")
             advanceUntilIdle()
 
             val added = vm.state.value.findings[1].answers
             assertEquals(EggSpecies.HOOKWORM, added.species)
-            assertEquals(4, added.eggCount)
+            assertEquals(4, added.fieldTotal)
             assertEquals(true, added.speciesTouched)
         }
 
     @Test
-    fun `a non-numeric egg count clears rather than crashing`() =
+    fun `a non-numeric field total clears rather than crashing`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
-            vm.onEggCountChanged(1, "4")
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "4")
 
-            vm.onEggCountChanged(1, "abc")
+            vm.onFieldTotalChanged(1, "abc")
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[1].answers.eggCount)
+            assertNull(vm.state.value.findings[1].answers.fieldTotal)
+        }
+
+    @Test
+    fun `the total is taken as typed, not clamped up to the floor`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The floor is usually above the first digit of the number being typed - heading
+            // for 23 against nine boxed eggs, a clamp would snap "2" to 9 and the 3 would land
+            // on the wrong number. Submit holds instead, and says why.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
+
+            vm.onFieldTotalChanged(2, "1")
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings[2].answers.fieldTotal)
+            assertFalse(
+                "One egg is fewer than the two boxes already kept for this species.",
+                vm.state.value.canSubmit,
+            )
+
+            vm.onFieldTotalChanged(2, "12")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `naming a species another card already holds merges the two`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // sample_species_findings is unique on (sample_id, species) and the detection ids
+            // derive from the species, so two cards naming one species have nowhere separate to
+            // be stored - and the reopen path brought them back merged anyway.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals("The two cards became one.", 1, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
         }
 
     @Test
@@ -780,12 +840,28 @@ class VerificationViewModelTest {
         }
 
     @Test
+    fun `a species the boxes already account for is not a miss`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // One Ascaris boxed, and the medtech says there is one Ascaris in the field. They
+            // agree, so nothing was missed - the row exists but claims no unboxed egg.
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
+        }
+
+    @Test
     fun `adding an egg the model never boxed is what says it missed one`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             advanceUntilIdle()
 
@@ -797,7 +873,7 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             assertEquals(true, vm.state.value.missedEgg)
 
@@ -821,7 +897,7 @@ class VerificationViewModelTest {
             vm.setFrame(makeFrame(predictions = 1))
 
             vm.onQ1Selected(false)
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
             advanceUntilIdle()
 
@@ -838,7 +914,7 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeManualFrame("sample-manual"))
-            vm.onAddFinding()
+            vm.onAddSpecies()
             vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
             advanceUntilIdle()
 

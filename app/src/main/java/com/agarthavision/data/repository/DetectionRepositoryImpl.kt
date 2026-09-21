@@ -30,16 +30,6 @@ class DetectionRepositoryImpl @Inject constructor(
             rows.map { EggCount(species = it.species, count = it.eggCount) }
         }
 
-    override fun observeDailyEggCountsSince(
-        userId: String,
-        sinceTimestamp: Long,
-    ): Flow<List<com.agarthavision.domain.repository.DailyEggCount>> =
-        detectionDao.observeDailyEggCountsSince(userId, sinceTimestamp).map { rows ->
-            rows.map {
-                com.agarthavision.domain.repository.DailyEggCount(timestamp = it.timestamp, count = it.eggCount)
-            }
-        }
-
     override suspend fun getSpeciesLabelsForSessions(
         sessionIds: List<String>,
     ): Map<String, List<String>> =

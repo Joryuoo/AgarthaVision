@@ -1,8 +1,6 @@
 package com.agarthavision.data.local.dao
 
-import androidx.room.ColumnInfo
 import androidx.room.Dao
-import androidx.room.Embedded
 import androidx.room.Query
 import androidx.room.Upsert
 import com.agarthavision.data.local.entity.SampleEntity
@@ -63,6 +61,37 @@ interface SampleDao {
         """,
     )
     suspend fun updateStatus(sampleId: String, status: String)
+
+    /**
+     * Points a sample's row at the JPEG now held on this device.
+     *
+     * Needed because a pulled row arrives with `image_path` empty — the server has no notion
+     * of this device's disk — so caching the image has to tell the row where it went.
+     */
+    @Query("UPDATE samples SET image_path = :imagePath WHERE sample_id = :sampleId")
+    suspend fun updateImagePath(sampleId: String, imagePath: String)
+
+    /**
+     * Live samples whose frame exists in Storage, newest verification first.
+     *
+     * The ordering **is** the retention policy: the prefetch fills from the top and the
+     * eviction trims from the bottom, so a device that cannot hold everything holds the most
+     * recent work rather than an arbitrary slice of it.
+     *
+     * Deleted rows are excluded. A tombstoned sample keeps its detections (C8), but no screen
+     * can open its frame, so holding the JPEG buys nothing and spends the budget.
+     */
+    @Query(
+        """
+        SELECT * FROM samples
+        WHERE user_id = :userId
+          AND deleted_at IS NULL
+          AND storage_path IS NOT NULL
+          AND TRIM(storage_path) <> ''
+        ORDER BY verified_at DESC, timestamp DESC
+        """,
+    )
+    suspend fun getCacheableSamples(userId: String): List<SampleEntity>
 
     @Query(
         """
@@ -157,29 +186,29 @@ interface SampleDao {
     suspend fun getFlaggedSamplesForSession(sessionId: String, userId: String?): List<SampleEntity>
 
     /**
-     * Every live sample in a session, verified or not — the union the verification queue shows.
+     * How many samples in a session have already been verified.
      *
-     * Deliberately carries **no `status` predicate**: that is what makes it a union rather than
-     * one of the two halves. Verified samples stay in the queue and stay editable, so the
-     * medtech can correct a mistake instead of living with it.
+     * Not shown as a number anywhere — it answers one question the verification queue cannot
+     * answer from its own rows. An empty queue means "nothing captured yet" or "everything
+     * captured has been checked", and only the second deserves a completion message and a route
+     * into the session's records (86d4ayefd). The queue lists flagged rows only, so both cases
+     * look identical from inside it.
      *
-     * The confirmed-detection count is a correlated subquery rather than a join, so one row
-     * comes back per sample and the caller does not have to collapse duplicates.
+     * `status != 'flagged'` rather than `= 'verified'`: the three non-flagged states (verified,
+     * syncing, sync_failed) are all past the point a human checked the sample, and verification
+     * is one-way — an edit moves SYNCED back to VERIFIED and a failed push moves VERIFIED to
+     * SYNC_FAILED, and neither crosses back into flagged.
      */
     @Query(
         """
-        SELECT s.*,
-               (SELECT COUNT(*) FROM detections d
-                 WHERE d.sample_id = s.sample_id AND d.verdict != 'false_positive')
-                 AS confirmedDetections
-        FROM samples s
-        WHERE s.session_id = :sessionId
-          AND (s.user_id = :userId OR s.user_id IS NULL)
-          AND s.deleted_at is null
-        ORDER BY s.timestamp DESC
+        SELECT COUNT(*) FROM samples
+        WHERE session_id = :sessionId
+          AND (user_id = :userId OR user_id IS NULL)
+          AND status != 'flagged'
+          AND deleted_at is null
         """,
     )
-    fun observeQueueRowsForSession(sessionId: String, userId: String?): Flow<List<QueueSampleRow>>
+    fun observeVerifiedCountForSession(sessionId: String, userId: String?): Flow<Int>
 
     @Query("DELETE FROM samples WHERE sample_id = :sampleId")
     suspend fun deleteSample(sampleId: String)
@@ -276,8 +305,7 @@ interface SampleDao {
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
 }
 
-/** Projection for [SampleDao.observeQueueRowsForSession]: the sample plus its counted detections. */
-data class QueueSampleRow(
-    @Embedded val sample: SampleEntity,
-    @ColumnInfo(name = "confirmedDetections") val confirmedDetections: Int,
-)
+// QueueSampleRow is gone with the union query above. It existed to carry a correlated
+// count of confirmed detections alongside each sample, which only ever meant anything for a
+// verified row — for a flagged one it is zero by definition, since detections are written on
+// submit. A queue of flagged rows only would have rendered that count as a column of zeroes.
