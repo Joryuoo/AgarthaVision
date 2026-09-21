@@ -22,8 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -195,11 +196,11 @@ private fun SearchField(
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Search,
+                    imageVector = AgarthaIcons.Search,
                     // Decorative: the field's own placeholder says what it searches.
                     contentDescription = null,
                     tint = colors.textTertiary,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     if (query.isEmpty()) {

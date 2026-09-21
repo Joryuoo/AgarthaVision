@@ -134,6 +134,7 @@ abstract class RepositoryModule {
     ): ReportRepository
 
     @Binds
+    @Singleton
     abstract fun bindPsgcRepository(
         implementation: PsgcRepositoryImpl,
     ): PsgcRepository
