@@ -187,6 +187,48 @@ class SessionLabelGeneratorTest {
         assertEquals(1, SessionLabelGenerator.nextSequence(existing))
     }
 
+    // ---------- label length and fallback ----------
+
+    @Test
+    fun `lastname that fits exactly at 32 char limit uses full form`() {
+        // 27-char lastname + "M" + "-S01" = 32 chars exactly
+        val lastname = "a".repeat(27)
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = lastname, firstname = "Maria"),
+            sequence = 1,
+        )
+        val expected = "${lastname}M-S01".uppercase()
+        assertEquals(expected, label)
+        assertEquals(32, label.length)
+    }
+
+    @Test
+    fun `lastname one char over limit falls back to initials`() {
+        // 28-char lastname + "M" + "-S01" = 33 chars (exceeds 32 limit by 1)
+        val lastname = "b".repeat(28)
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = lastname, firstname = "Maria"),
+            sequence = 1,
+        )
+        // Should fallback to "BM-S01" (first initial of lastname + first initial of firstname)
+        assertEquals("BM-S01", label)
+        assertEquals(6, label.length)
+    }
+
+    @Test
+    fun `significantly long lastname falls back to initials`() {
+        // A 40-character lastname (the max per PatientFormViewModel.NAME_MAX_LENGTH)
+        // with firstname initial M would be 40 + 1 + 4 = 45 chars (way over the 32 limit)
+        val lastname = "A".repeat(40)
+        assertEquals(40, lastname.length)
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = lastname, firstname = "Maria"),
+            sequence = 1,
+        )
+        // Should fallback to "AM-S01"
+        assertEquals("AM-S01", label)
+    }
+
     private fun patient(
         lastname: String = "Garcia",
         firstname: String = "Maria",

@@ -24,11 +24,25 @@ import com.agarthavision.domain.model.Patient
  *
  * Labels are still per-patient scoped, not globally unique — two patients may share a label
  * like `GarciaM-S01`. Labels remain user-editable, subject to the uniqueness guard.
+ *
+ * **Label length:** the generated label is capped at [MAX_LABEL_LENGTH] (32 characters).
+ * When the full-lastname form would exceed this cap (e.g., a 40-character lastname would push
+ * the label over 32), both names contribute only their initial instead: `GM-S01` instead of
+ * `VeryLongLastnameM-S01`. This keeps labels readable and editable in the UI field.
+ * [MAX_LABEL_LENGTH] must remain synchronized with `SESSION_LABEL_MAX_LENGTH` in
+ * `com.agarthavision.ui.sessions.SessionInputLimits` — they are separate constants at the
+ * domain and UI layers (not cross-layer references), but must be kept numerically in sync.
  */
 object SessionLabelGenerator {
 
     /** Width the sequence is padded to. Exceeding it widens the label rather than wrapping. */
     const val SEQUENCE_DIGITS = 2
+
+    /**
+     * Maximum length of the generated label. Must equal `SESSION_LABEL_MAX_LENGTH` in the UI layer.
+     * Kept as a separate constant rather than a cross-layer reference to respect layering.
+     */
+    const val MAX_LABEL_LENGTH = 32
 
     /**
      * `GarciaM-S01` for [patient] and [sequence].
@@ -45,6 +59,9 @@ object SessionLabelGenerator {
      *   letter; `-S01` if neither name has any letters). The session ID is the real key;
      *   the label still functions as an ordinal marker.
      * - Whitespace in lastname → stripped.
+     * - **Long lastname:** if the full-lastname form would exceed [MAX_LABEL_LENGTH],
+     *   both the lastname and firstname contribute only their initial instead (e.g., `GM-S01`
+     *   instead of `VeryLongLastnameM-S01`). This keeps labels within the UI field limit.
      *
      * A [sequence] past [SEQUENCE_DIGITS] digits prints in full. Truncating to two digits
      * would silently collide `100` with `00`, and the label field is long enough to carry
@@ -54,7 +71,17 @@ object SessionLabelGenerator {
         val lastname = patient.lastname.trim().uppercase()
         val firstInitial = initial(patient.firstname)
         val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
-        return "$lastname$firstInitial-S$padded".uppercase()
+
+        // Try the full-lastname form first
+        val fullForm = "$lastname$firstInitial-S$padded".uppercase()
+        if (fullForm.length <= MAX_LABEL_LENGTH) {
+            return fullForm
+        }
+
+        // Fallback: use initials for both lastname and firstname
+        val lastInitial = initial(patient.lastname)
+        val fallbackForm = "$lastInitial$firstInitial-S$padded".uppercase()
+        return fallbackForm
     }
 
     /**
