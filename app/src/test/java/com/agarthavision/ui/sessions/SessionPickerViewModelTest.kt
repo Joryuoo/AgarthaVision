@@ -145,7 +145,7 @@ class SessionPickerViewModelTest {
 
             // sessions.patient_id is NOT NULL with a foreign key onto patients, so getting
             // this wrong is an insert failure rather than a mis-filed smear.
-            verify(sessionManager).startSession(label = eq("Smear 1"), patientId = eq(PATIENT_ID))
+            verify(sessionManager).startSession(label = eq("SMEAR 1"), patientId = eq(PATIENT_ID))
         }
 
     @Test

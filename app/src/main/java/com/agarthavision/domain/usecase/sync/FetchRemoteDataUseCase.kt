@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.sync
 
+import android.database.sqlite.SQLiteConstraintException
 import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
@@ -12,6 +13,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -229,7 +231,24 @@ class FetchRemoteDataUseCase @Inject constructor(
         return fetched
     }
 
-    /** Sessions are pulled after patients, before samples and reports. Returns rows inserted. */
+    /**
+     * Sessions are pulled after patients, before samples and reports. Returns rows inserted.
+     *
+     * **Label collision reconciliation** — before the unique `(patient_id, label)` index was
+     * added, two offline devices could each mint the same label for the same patient (this was
+     * an explicitly accepted case). Production Supabase may therefore already contain duplicate
+     * `(patient_id, label)` rows from before this branch's fix. Rather than add a Supabase-side
+     * unique constraint now — which would fail to apply against any existing violating data, and
+     * which requires a data-cleanup pass on the production table that cannot be done safely from
+     * here — we reconcile at pull time instead. If a pulled row collides with the local index,
+     * we suffix its label with the first four characters of its own globally-unique session id,
+     * which guarantees the disambiguated label can never itself collide. The remote row is still
+     * written; no session is silently dropped; and the user can manually consolidate duplicates
+     * later if needed.
+     *
+     * Adding the matching Supabase-side unique constraint is a deliberate follow-up that requires
+     * a separate migration with a pre-flight data-deduplication step against the production table.
+     */
     private suspend fun pullSessions(userId: String): Int {
         var fetched = 0
         val sessions = sessionRemoteDataSource.fetchSessions(userId)
@@ -237,11 +256,42 @@ class FetchRemoteDataUseCase @Inject constructor(
             val local = sessionDao.getSessionById(remote.sessionId)
             // E4 guard: only write when absent or already synced; skip pending/sync_failed
             if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                sessionDao.upsertSession(remote)
+                upsertSessionReconcilingLabel(remote)
                 fetched++
             }
         }
         return fetched
+    }
+
+    /**
+     * Upserts [remote], retrying with a disambiguated label if it collides with the local
+     * unique index on `(patient_id, label)`. See [pullSessions] for why this collision is
+     * expected rather than a bug.
+     */
+    private suspend fun upsertSessionReconcilingLabel(remote: SessionEntity) {
+        try {
+            sessionDao.upsertSession(remote)
+        } catch (e: SQLiteConstraintException) {
+            // A non-null label on this remote row collided with the local unique index on
+            // (patient_id, label). SQLite treats NULL as distinct in a unique index, so a
+            // constraint error on a null-label row is unexpected — re-throw it.
+            val rawLabel = remote.label
+            if (rawLabel.isNullOrBlank()) throw e
+
+            // Disambiguate: suffix with the first chars of the session's own globally-unique
+            // id. The result can never collide again. Uppercase for consistency with the
+            // normalization applied to all labels going forward, and to absorb any historical
+            // lowercase labels from before this branch's fix.
+            val disambiguated =
+                "${rawLabel.trim()}-${remote.sessionId.take(DISAMBIGUATION_SUFFIX_LENGTH)}".uppercase()
+            Log.w(
+                TAG,
+                "pullSessions: label collision for session ${remote.sessionId} " +
+                    "(patient ${remote.patientId}); retrying with disambiguated " +
+                    "label \"$disambiguated\"",
+            )
+            sessionDao.upsertSession(remote.copy(label = disambiguated))
+        }
     }
 
     /** Paginated pull of samples plus their detections and findings. Returns samples inserted. */
@@ -373,5 +423,8 @@ class FetchRemoteDataUseCase @Inject constructor(
          * Keeps the GET query string well under server/proxy URL-length limits.
          */
         const val CHILD_BATCH_SIZE = 100
+
+        /** Chars of a session's own id used to disambiguate a colliding label on pull. */
+        const val DISAMBIGUATION_SUFFIX_LENGTH = 4
     }
 }

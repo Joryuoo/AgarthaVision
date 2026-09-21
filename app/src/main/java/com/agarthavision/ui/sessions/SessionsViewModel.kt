@@ -289,8 +289,11 @@ class SessionsViewModel @Inject constructor(
         // navigation reaches this screen without a patient id — a null here would mean a
         // route that does not carry one, which would fail the foreign key anyway.
         val patient = patientId
-        if (label.isBlank() || patient.isNullOrBlank()) {
-            val reason = if (label.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = label.trim().uppercase()
+        if (normalizedLabel.isBlank() || patient.isNullOrBlank()) {
+            val reason = if (normalizedLabel.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
             internalState.update { it.copy(errorMessage = reason) }
             return
         }
@@ -298,12 +301,12 @@ class SessionsViewModel @Inject constructor(
         viewModelScope.launch {
             // Pre-check: reject the label before touching the DB so the medtech sees a
             // friendly message rather than a constraint violation crash.
-            if (sessionRepository.isSessionLabelTaken(patient, label.trim())) {
+            if (sessionRepository.isSessionLabelTaken(patient, normalizedLabel)) {
                 internalState.update { it.copy(isCreating = false, errorMessage = DUPLICATE_LABEL) }
                 return@launch
             }
             runCatching {
-                sessionManager.startSession(label = label.trim(), patientId = patient)
+                sessionManager.startSession(label = normalizedLabel, patientId = patient)
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
                 // The smear just created holds the suggestion that was on screen, so the next
@@ -359,6 +362,9 @@ class SessionsViewModel @Inject constructor(
     fun onRenameSession(sessionId: String, newLabel: String) {
         if (newLabel.isBlank()) return
         val patient = patientId ?: return
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = newLabel.trim().uppercase()
         viewModelScope.launch {
             // Resolve the session to confirm it belongs to this patient before checking the
             // label. If the session is not found (race or stale state), bail silently —
@@ -368,7 +374,7 @@ class SessionsViewModel @Inject constructor(
 
             if (sessionRepository.isSessionLabelTaken(
                     patientId = patient,
-                    label = newLabel.trim(),
+                    label = normalizedLabel,
                     excludingSessionId = sessionId,
                 )
             ) {
@@ -376,7 +382,7 @@ class SessionsViewModel @Inject constructor(
                 return@launch
             }
             runCatching {
-                sessionRepository.updateSessionLabel(sessionId, newLabel.trim())
+                sessionRepository.updateSessionLabel(sessionId, normalizedLabel)
             }.onFailure { error ->
                 val message = if (error.cause is SQLiteConstraintException ||
                     error is SQLiteConstraintException

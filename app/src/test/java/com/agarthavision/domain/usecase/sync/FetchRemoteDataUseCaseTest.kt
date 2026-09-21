@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.sync
 
+import android.database.sqlite.SQLiteConstraintException
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
@@ -713,6 +714,68 @@ class FetchRemoteDataUseCaseTest {
         useCase.invoke()
 
         verify(sessionDao, never()).upsertSession(any())
+    }
+
+    // ── Label-collision reconciliation in pullSessions (86d4bzjhw) ──────────
+
+    @Test
+    fun `pullSessions - label collision is disambiguated and both rows are counted`() = runTest {
+        setupOnlineSignedIn()
+        val collidingLabel = "SMEAR-1"
+        // Two sessions from the same patient, same label — exactly the pre-existing collision
+        // that production Supabase may hold from before the unique index was added.
+        val session1 = fakeSession("sess-abcd").copy(label = collidingLabel)
+        val session2 = fakeSession("sess-efgh").copy(label = collidingLabel)
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session1, session2))
+        whenever(sessionDao.getSessionById("sess-abcd")).thenReturn(null)
+        whenever(sessionDao.getSessionById("sess-efgh")).thenReturn(null)
+        // sess-1 inserts cleanly (default mock no-op).
+        // sess-2 collides on first attempt — exactly what the unique index on
+        // (patient_id, label) does.
+        whenever(sessionDao.upsertSession(session2))
+            .thenAnswer {
+                throw SQLiteConstraintException("UNIQUE constraint failed: sessions.patient_id, sessions.label")
+            }
+        // The retry with the disambiguated label uses default no-op (arg differs from sess-2).
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        assertTrue(result.isSuccess)
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals("both sessions must be counted even when one needs disambiguation", 2, summary.sessionsFetched)
+        assertFalse(
+            "sessions pull must not be flagged as failed when only a label was remapped",
+            FetchType.SESSIONS in summary.failed,
+        )
+        // The retry label is: original.trim() + "-" + sessionId.take(4), all uppercase.
+        val expectedDisambiguated = "${collidingLabel}-${session2.sessionId.take(4)}".uppercase()
+        verify(sessionDao).upsertSession(session2.copy(label = expectedDisambiguated))
+    }
+
+    @Test
+    fun `pullSessions - non-constraint exception from upsertSession is not swallowed`() = runTest {
+        setupOnlineSignedIn()
+        val session = fakeSession("sess-1").copy(label = "SMEAR-1")
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionDao.getSessionById("sess-1")).thenReturn(null)
+        // A non-constraint exception — database is closed, disk full, etc. — must NOT be
+        // silently swallowed by the new catch block; it must surface as a sessions failure.
+        whenever(sessionDao.upsertSession(session))
+            .thenAnswer { throw IllegalStateException("database is closed") }
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        assertTrue(result.isSuccess) // outer runCatching absorbs per-type failures
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertTrue(
+            "a non-constraint exception must surface as FetchType.SESSIONS in failed",
+            FetchType.SESSIONS in summary.failed,
+        )
+        assertFalse(summary.isComplete)
     }
 
     // ── Pagination ───────────────────────────────────────────────────────────

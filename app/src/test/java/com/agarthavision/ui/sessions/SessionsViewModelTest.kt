@@ -38,10 +38,14 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import com.agarthavision.data.local.entity.SessionEntity
 
 // One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
 // files and make the duplicate-label cases harder to read against the rest of the suite.
@@ -649,7 +653,7 @@ class SessionsViewModelTest {
     @Test
     fun `onCreateSession sets DUPLICATE_LABEL error when label is already taken for this patient`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val repo = DuplicateLabelSessionRepository(takenLabel = "GarciaM-S01")
+            val repo = DuplicateLabelSessionRepository(takenLabel = "GARCIAM-S01")
             val vm = buildViewModel(repo, userId = "u1")
 
             vm.state.test {
@@ -705,9 +709,9 @@ class SessionsViewModelTest {
     @Test
     fun `onRenameSession sets DUPLICATE_LABEL error when new label is already taken for this patient`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val takenLabel = "GarciaM-S02"
+            val inputLabel = "GarciaM-S02"
             val repo = DuplicateLabelSessionRepository(
-                takenLabel = takenLabel,
+                takenLabel = "GARCIAM-S02",
                 existingSession = makeSession("s1", "u1"),
             )
             val vm = buildViewModel(repo, userId = "u1")
@@ -716,7 +720,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 expectMostRecentItem()
 
-                vm.onRenameSession("s1", takenLabel)
+                vm.onRenameSession("s1", inputLabel)
                 advanceUntilIdle()
 
                 val state = expectMostRecentItem()
@@ -756,6 +760,45 @@ class SessionsViewModelTest {
                 // If DUPLICATE_LABEL had been set there would be a pending item here; there must not be.
                 expectNoEvents()
                 cancel()
+            }
+        }
+
+    @Test
+    fun `onCreateSession stores label as uppercase even when typed in lowercase`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // A medtech types "smear 1" — the VM must uppercase it before writing and before
+            // checking uniqueness, so the unique index (which is case-sensitive in SQLite) sees
+            // the same form as auto-generated labels.
+            val successEntity = SessionEntity(
+                sessionId = "sess-new",
+                userId = "u1",
+                patientId = "patient-1",
+                deviceId = "device-1",
+                startedAt = 1_000L,
+                label = "SMEAR 1",
+            )
+            val sessionManager = mock<SessionManager> {
+                on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+                onBlocking { startSession(any(), any()) } doReturn successEntity
+            }
+            val repo = DuplicateLabelSessionRepository(takenLabel = "__nothing_taken__")
+            val vm = buildViewModelWithSessionManager(repo, sessionManager, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("smear 1")
+                advanceUntilIdle()
+
+                val labelCaptor = argumentCaptor<String>()
+                verify(sessionManager).startSession(label = labelCaptor.capture(), patientId = eq("patient-1"))
+                assertEquals(
+                    "onCreateSession must uppercase and trim the label before calling startSession",
+                    "SMEAR 1",
+                    labelCaptor.firstValue,
+                )
+                cancelAndIgnoreRemainingEvents()
             }
         }
 
