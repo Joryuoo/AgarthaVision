@@ -132,14 +132,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
     }
 
     /**
-     * Rebuilds the answers that produced a stored detection.
-     *
-     * One edge is lossy and is documented rather than papered over: `computeVerdict` maps both
-     * "not an egg" and "an egg, box correct, no species chosen" to `FALSE_POSITIVE`. This picks
-     * the first, which is the canonical round-trip and stable under a re-submit; if it was
-     * really the second, the medtech sees an answer they can correct.
-     */
-    /**
      * Rebuilds the model's own output from the detection rows it produced.
      *
      * Walks ordinals from zero using the same derivation `VerificationMapper` writes with, and
@@ -169,6 +161,32 @@ class OpenVerificationTargetUseCase @Inject constructor(
         .toList()
 
     /**
+     * Rebuilds the answers that produced a stored detection.
+     *
+     * One edge is lossy and is documented rather than papered over: `computeVerdict` maps both
+     * "not an egg" and "an egg, box correct, no species chosen" to `FALSE_POSITIVE`. This picks
+     * the first, which is the canonical round-trip and stable under a re-submit; if it was
+     * really the second, the medtech sees an answer they can correct.
+     *
+     * **[VerificationAnswers.speciesConfirmed] has to be rebuilt here, not left to its default.**
+     * It is not persisted — nothing in `detections` holds it — so it is derived the one way it
+     * can be: the medtech kept the model's species iff the species this row carries is the one
+     * the model suggested. Leaving it null looked harmless while Q3 was a Yes/No pair, which
+     * draws null as "unanswered" and is at least honest. It is not harmless against a checkbox:
+     * null renders **unchecked**, so every reopened row read "this is not an Ascaris egg" about
+     * a species the medtech had confirmed, and the picker stayed hidden (it opens on `false`,
+     * not on null), leaving an answer that looked wrong and no control to correct it with.
+     *
+     * The obvious correction — tap the checkbox — is the reason this is a C7 problem rather than
+     * a cosmetic one. `onSpeciesConfirmed(true)` sets [VerificationAnswers.speciesTouched], so
+     * re-saving flipped `detections.species_touched` to 1 on a row no human ever adjudicated,
+     * and the retraining corpus began recording "a human confirmed this" for an answer nobody
+     * gave. Which is exactly the distinction that flag exists to keep.
+     *
+     * So: `speciesTouched` keeps coming from its column and never from this comparison. Deriving
+     * it here would recreate the same corruption from the other direction — every reopened row
+     * that happened to match the model would start claiming a human had agreed with it.
+     *
      * @param reconstructed true when [prediction] came from this very detection row rather than
      *   from `predictions_json`. The model's original geometry is then unknown on this device,
      *   so the two compare equal and the geometry test cannot see a replacement. A BOX_INCORRECT
@@ -184,11 +202,18 @@ class OpenVerificationTargetUseCase @Inject constructor(
         val label = expertClass ?: classLabel
         val species = EggSpecies.fromClassLabel(label)
         val replaced = reconstructed || replacesBoxOf(prediction)
+        // Null when the model's class maps to no EggSpecies: there was never anything to
+        // confirm, so the picker is offered directly and the checkbox never renders. Compared
+        // against the coerced species rather than the raw one, so that a free-text expert_class
+        // - which lands on OTHER - reads as an override of the model rather than as agreement.
+        val suggested = EggSpecies.fromClassLabel(prediction.classLabel)
+        val confirmed = suggested?.let { (species ?: EggSpecies.OTHER) == it }
         return when (DetectionVerdict.fromValue(verdict)) {
             DetectionVerdict.FALSE_POSITIVE -> VerificationAnswers(isEgg = false)
             DetectionVerdict.BOX_INCORRECT -> VerificationAnswers(
                 isEgg = true,
                 isBoxCorrect = false,
+                speciesConfirmed = confirmed,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
                 speciesTouched = speciesTouched,
@@ -198,6 +223,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
             else -> VerificationAnswers(
                 isEgg = true,
                 isBoxCorrect = true,
+                speciesConfirmed = confirmed,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
                 speciesTouched = speciesTouched,
