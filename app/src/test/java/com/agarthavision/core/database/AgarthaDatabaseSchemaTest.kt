@@ -262,8 +262,49 @@ class AgarthaDatabaseSchemaTest {
                 result
             }
 
+    @Test
+    fun `sessions carry a unique per-patient label index`() {
+        // v17 (86d4bzjhw): per-patient label uniqueness is enforced at the SQLite level.
+        // Without this index two concurrent offline creates with the same label collide
+        // silently into a duplicate row pair that confuses the medtech's list.
+        val indexNames = database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+            }
+        val uniqueIndex = indexNames.firstOrNull { name ->
+            val columns = database.openHelper.writableDatabase
+                .query("PRAGMA index_info($name)")
+                .use { cursor ->
+                    val colIndex = cursor.getColumnIndexOrThrow("name")
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(colIndex)) }
+                }
+            columns.containsAll(listOf("patient_id", "label")) && columns.size == 2
+        }
+        // Confirm the index is actually unique.
+        val isUnique = uniqueIndex != null && database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val uniqueIndex2 = cursor.getColumnIndexOrThrow("unique")
+                var result = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == uniqueIndex) {
+                        result = cursor.getInt(uniqueIndex2) == 1
+                    }
+                }
+                result
+            }
+        assertTrue(
+            "sessions(patient_id, label) unique index is missing — duplicate labels for the " +
+                "same patient can slip through on concurrent offline creates.",
+            isUnique,
+        )
+    }
+
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 16
+        private const val EXPECTED_VERSION = 17
     }
 }

@@ -107,6 +107,22 @@ interface SessionRepository {
     ): Flow<List<SessionWithStats>>
 
     /**
+     * Returns true when [label] is already in use by another session for [patientId].
+     *
+     * [excludingSessionId] is the id of the session being renamed — its own current label
+     * must not count as a collision. Pass null (or omit) when creating a new session.
+     *
+     * This is a pre-check only. The [SessionEntity] unique index on `(patient_id, label)`
+     * is the authoritative enforcement; this function is a best-effort guard against the
+     * common case so the user sees a friendly error rather than a constraint violation.
+     */
+    suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String? = null,
+    ): Boolean
+
+    /**
      * Live counts (sessions, and frames awaiting review) for the Sessions screen header.
      * Applies the same filter predicate as [observeVisibleSessionsPage] so the header and
      * the list can never disagree. Per ADR-007.

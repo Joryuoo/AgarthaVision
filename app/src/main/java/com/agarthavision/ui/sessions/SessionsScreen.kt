@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -81,8 +82,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -286,25 +287,50 @@ fun SessionsScreen(
  * `patients/{patientId}`, which is not in `bottomBarRoutes`, so without this the only way
  * back is the system gesture — and a screen reachable only by gesture reads as a dead end.
  *
- * [ScreenHeader] is deliberately not given a leading slot: its doc scopes it to the root
- * tabs, and four screens share it. The arrow sits beside it instead, matching
- * `SessionDetailScreen`'s top bar.
+ * The [Row] owns `.statusBarsPadding()` so the back arrow and the title text share the
+ * same inset origin and align correctly. The old implementation wrapped [ScreenHeader] (a
+ * component that applies its own `.statusBarsPadding()` internally) inside a plain [Row]
+ * alongside [BackArrow], which caused the title to sit lower than the arrow by the height
+ * of the status bar.
+ *
+ * Pattern matches `SessionDetailScreen.SessionDetailAppBar`.
  */
 @Composable
 private fun AppBar(unverifiedCount: Int, totalCount: Int, onBack: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        BackArrow(onBack = onBack, modifier = Modifier.padding(start = Spacing.xs))
-        ScreenHeader(
-            title = stringResource(R.string.sessions_title),
-            purpose = stringResource(R.string.sessions_subtitle_purpose),
-            status = pluralStringResource(
-                R.plurals.sessions_subtitle,
-                totalCount,
-                totalCount,
-                unverifiedCount,
-            ),
-            modifier = Modifier.weight(1f),
-        )
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .statusBarsPadding()
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+    ) {
+        BackArrow(onBack = onBack)
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
+            Text(
+                text = stringResource(R.string.sessions_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.textPrimary,
+            )
+            Text(
+                text = stringResource(R.string.sessions_subtitle_purpose),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+            Text(
+                text = pluralStringResource(
+                    R.plurals.sessions_subtitle,
+                    totalCount,
+                    totalCount,
+                    unverifiedCount,
+                ),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
 

@@ -3,49 +3,58 @@ package com.agarthavision.domain.session
 import com.agarthavision.domain.model.Patient
 
 /**
- * Builds the auto-generated smear label, `C.G.-0730600000-001`.
+ * Builds the auto-generated smear label, `GarciaM-S01`.
  *
  * ```
- * C.G.-0730600000-001
- * │ │   │          └── sequence: the Nth smear for this patient
- * │ │   └───────────── the patient's 10-digit PSGC barangay code
- * │ └───────────────── firstname initial  (Gerald)
- * └─────────────────── lastname initial   (Cruz)
+ * GarciaM-S01
+ * │      │ └── sequence: zero-padded to 2 digits; widens past 99 without truncation
+ * │      └──── literal "-S" separator
+ * └─────────── lastname (whitespace-stripped) + uppercase first-initial of firstname
  * ```
  *
  * Pure Kotlin, no Android and no repository (C2): it takes a [Patient] and a sequence number
  * and returns a string. Everything that has to touch a database — reading the patient's
- * existing labels — happens in the use case above it.
+ * existing labels and checking for collisions — happens in the use case above it.
  *
- * **The label is cosmetic, editable, and deliberately not unique.** Two devices working
- * offline will both mint `-001` for the same patient, and that is accepted: the session UUID
- * is the real key and is globally unique. Nothing enforces uniqueness — not a CHECK, not an
- * index, not this class. Anyone reaching for a server round-trip, a device discriminator or a
- * reservation scheme should read this paragraph first: the label exists to orient a medtech
- * looking at a list, not to identify a row.
+ * **Labels are unique per patient**, enforced at two levels:
+ * 1. A unique index on `sessions(patient_id, label)` in [com.agarthavision.data.local.entity.SessionEntity].
+ * 2. A pre-check via [com.agarthavision.domain.repository.SessionRepository.isSessionLabelTaken]
+ *    in [com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase] and in
+ *    [com.agarthavision.ui.sessions.SessionsViewModel].
+ *
+ * Labels are still per-patient scoped, not globally unique — two patients may share a label
+ * like `GarciaM-S01`. Labels remain user-editable, subject to the uniqueness guard.
  */
 object SessionLabelGenerator {
 
     /** Width the sequence is padded to. Exceeding it widens the label rather than wrapping. */
-    const val SEQUENCE_DIGITS = 3
+    const val SEQUENCE_DIGITS = 2
 
     /**
-     * `C.G.-0730600000-001` for [patient] and [sequence].
+     * `GarciaM-S01` for [patient] and [sequence].
      *
-     * An initial is uppercased, so a lastname stored as `cruz` still yields `C.`, and an
-     * accented first letter is preserved rather than stripped. A name with no letter at all
-     * contributes no initial instead of a placeholder — the form requires both names, so that
-     * only happens on a hand-edited row, and `?.` in a clinical label reads worse than a
-     * slightly shorter one.
+     * The lastname is whitespace-stripped and used as-is (preserving its stored casing).
+     * The first-initial is the first letter of the firstname, uppercased — so a firstname
+     * stored as `maria` still yields `M`. An accented first letter is preserved rather than
+     * stripped.
      *
-     * A [sequence] past [SEQUENCE_DIGITS] digits prints in full (`1000`). Truncating it to the
-     * last three would silently collide `1000` with the existing `000`, and the label field is
-     * long enough to carry the extra character.
+     * **Edge cases:**
+     * - Empty/no-letter firstname → initial omitted (e.g. `Garcia-S01`). A placeholder
+     *   char in a clinical label reads worse than a slightly shorter one.
+     * - Lastname with no letters → no lastname segment (e.g. `M-S01` if firstname has a
+     *   letter; `-S01` if neither name has any letters). The session ID is the real key;
+     *   the label still functions as an ordinal marker.
+     * - Whitespace in lastname → stripped.
+     *
+     * A [sequence] past [SEQUENCE_DIGITS] digits prints in full. Truncating to two digits
+     * would silently collide `100` with `00`, and the label field is long enough to carry
+     * the extra character.
      */
     fun generate(patient: Patient, sequence: Int): String {
-        val initials = initial(patient.lastname) + initial(patient.firstname)
+        val lastname = patient.lastname.trim()
+        val firstInitial = initial(patient.firstname)
         val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
-        return "$initials-${patient.psgcBarangayCode}-$padded"
+        return "$lastname$firstInitial-S$padded"
     }
 
     /**
@@ -60,19 +69,18 @@ object SessionLabelGenerator {
         existingLabels.mapNotNull(::sequenceOf).maxOrNull()?.plus(1) ?: 1
 
     /**
-     * The trailing sequence in [label], or null when it does not end in one.
+     * The trailing sequence in [label], or null when it does not end in the `-S<digits>` tail.
      *
-     * The whole tail is matched, not just the trailing digits: the PSGC code is also a run of
-     * digits and it is the last thing left when the sequence is edited away, so an end-anchor
-     * alone still reads the barangay as a ten-digit sequence. Requiring the barangay segment
-     * in front of it is what makes the difference legible.
+     * The whole tail is matched with a case-insensitive end-anchor so an edited label that
+     * happens to end in a bare digit run (but not the `-S` prefix) does not accidentally parse
+     * as a sequence number.
      */
     private fun sequenceOf(label: String): Int? =
         SEQUENCE_SUFFIX.find(label.trim())?.groupValues?.get(1)?.toIntOrNull()
 
     private fun initial(name: String): String =
-        name.trim().firstOrNull { it.isLetter() }?.uppercaseChar()?.let { "$it." }.orEmpty()
+        name.trim().firstOrNull { it.isLetter() }?.uppercaseChar()?.toString().orEmpty()
 
-    /** `-<10-digit barangay>-<sequence>` at the end of the label. */
-    private val SEQUENCE_SUFFIX = Regex("""-\d{10}-(\d+)$""")
+    /** `-S<sequence>` at the end of the label (case-insensitive). */
+    private val SEQUENCE_SUFFIX = Regex("""-S(\d+)$""", RegexOption.IGNORE_CASE)
 }

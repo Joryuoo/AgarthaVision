@@ -29,6 +29,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -56,6 +57,11 @@ class SessionPickerViewModelTest {
             .thenReturn(countsFlow)
         // Keep the old stub so any residual call doesn't NPE (defensive).
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
+        // Unstubbed, this suspend fun returns null through Mockito's default answer, which
+        // NPEs when unboxed to Boolean and silently kills onCreateSession's coroutine.
+        it.stub {
+            onBlocking { isSessionLabelTaken(any(), any(), anyOrNull()) } doReturn false
+        }
     }
     private val sessionManager: SessionManager = mock {
         on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)

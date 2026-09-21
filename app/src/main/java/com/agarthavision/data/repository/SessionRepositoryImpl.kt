@@ -44,6 +44,16 @@ class SessionRepositoryImpl @Inject constructor(
         sessionDao.updateSessionLabel(sessionId, label)
     }
 
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = sessionDao.countLabelCollisions(
+        patientId = patientId,
+        label = label,
+        excludingSessionId = excludingSessionId ?: "",
+    ) > 0
+
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> =
         sessionDao.getLabelsForPatient(patientId)
 

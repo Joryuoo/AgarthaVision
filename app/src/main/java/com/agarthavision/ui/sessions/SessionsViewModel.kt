@@ -10,6 +10,7 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import android.database.sqlite.SQLiteConstraintException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -261,6 +262,12 @@ class SessionsViewModel @Inject constructor(
         }
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
+            // Pre-check: reject the label before touching the DB so the medtech sees a
+            // friendly message rather than a constraint violation crash.
+            if (sessionRepository.isSessionLabelTaken(patient, label.trim())) {
+                internalState.update { it.copy(isCreating = false, errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
                 sessionManager.startSession(label = label.trim(), patientId = patient)
             }.onSuccess { entity ->
@@ -272,9 +279,17 @@ class SessionsViewModel @Inject constructor(
                 refreshSuggestedLabel()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
-                internalState.update {
-                    it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
+                // Backstop: if a concurrent create slipped past the pre-check and the unique
+                // index fired, map the constraint exception to the same user-facing message
+                // rather than surfacing a generic or technical error.
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Failed to create session."
                 }
+                internalState.update { it.copy(isCreating = false, errorMessage = message) }
             }
         }
     }
@@ -309,13 +324,34 @@ class SessionsViewModel @Inject constructor(
 
     fun onRenameSession(sessionId: String, newLabel: String) {
         if (newLabel.isBlank()) return
+        val patient = patientId ?: return
         viewModelScope.launch {
+            // Resolve the session to confirm it belongs to this patient before checking the
+            // label. If the session is not found (race or stale state), bail silently —
+            // there is no session to rename.
+            val session = sessionRepository.getSessionById(sessionId) ?: return@launch
+            if (session.patientId != patient) return@launch
+
+            if (sessionRepository.isSessionLabelTaken(
+                    patientId = patient,
+                    label = newLabel.trim(),
+                    excludingSessionId = sessionId,
+                )
+            ) {
+                internalState.update { it.copy(errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
                 sessionRepository.updateSessionLabel(sessionId, newLabel.trim())
             }.onFailure { error ->
-                internalState.update {
-                    it.copy(errorMessage = error.message ?: "Could not rename session.")
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Could not rename session."
                 }
+                internalState.update { it.copy(errorMessage = message) }
             }
         }
     }
@@ -353,6 +389,9 @@ class SessionsViewModel @Inject constructor(
         // module (see CaptureViewModel). Lifting all of it into resources needs an error-type
         // seam across every screen state, which is a wider change than this ticket.
         private const val LABEL_REQUIRED = "Label is required."
+
+        /** Shown when the medtech picks a label already used by another smear for this patient. */
+        private const val DUPLICATE_LABEL = "A smear with this label already exists for this patient."
 
         /** Unreachable through the UI: every route that opens this screen carries a patient. */
         private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."

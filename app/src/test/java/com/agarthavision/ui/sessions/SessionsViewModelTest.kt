@@ -35,9 +35,13 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 
+// One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
+// files and make the duplicate-label cases harder to read against the rest of the suite.
+@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionsViewModelTest {
 
@@ -641,6 +645,123 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // Duplicate label rejection (86d4bzjhw)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `onCreateSession sets DUPLICATE_LABEL error when label is already taken for this patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val repo = DuplicateLabelSessionRepository(takenLabel = "GarciaM-S01")
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("GarciaM-S01")
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertEquals(
+                    "onCreateSession must surface DUPLICATE_LABEL when the label is taken",
+                    "A smear with this label already exists for this patient.",
+                    state.errorMessage,
+                )
+                assertFalse(
+                    "isCreating must be false after duplicate rejection",
+                    state.isCreating,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onCreateSession does not reject a label that is not taken`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // No taken labels — the duplicate pre-check passes. We stub startSession to throw a
+            // known non-duplicate error so runCatching maps it to a generic message, not the
+            // DUPLICATE_LABEL string, which is what this test asserts.
+            val repo = DuplicateLabelSessionRepository(takenLabel = "OtherLabel-S01")
+            val sessionManager = mock<SessionManager> {
+                on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+                onBlocking { startSession(any(), any()) } doThrow RuntimeException("test-stub-create-failed")
+            }
+            val vm = buildViewModelWithSessionManager(repo, sessionManager, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("GarciaM-S01")
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertFalse(
+                    "A non-duplicate label must not produce DUPLICATE_LABEL error; got: ${state.errorMessage}",
+                    state.errorMessage == "A smear with this label already exists for this patient.",
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onRenameSession sets DUPLICATE_LABEL error when new label is already taken for this patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val takenLabel = "GarciaM-S02"
+            val repo = DuplicateLabelSessionRepository(
+                takenLabel = takenLabel,
+                existingSession = makeSession("s1", "u1"),
+            )
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onRenameSession("s1", takenLabel)
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertEquals(
+                    "onRenameSession must surface DUPLICATE_LABEL when the new label is already taken",
+                    "A smear with this label already exists for this patient.",
+                    state.errorMessage,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onRenameSession allows keeping the same label (self-rename exclusion)`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Renaming s1 to its own current label must NOT be blocked. The excludingSessionId
+            // parameter ensures the session's own label is not counted as a collision.
+            // A successful rename emits no state change (onSuccess has no state update), so we
+            // verify no DUPLICATE_LABEL error appears in any state emitted after the call.
+            val ownLabel = "GarciaM-S01"
+            val repo = DuplicateLabelSessionRepository(
+                takenLabel = ownLabel,
+                existingSession = makeSession("s1", "u1"),
+                excludeSelfFromTaken = true,   // fake honours excludingSessionId
+            )
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                val initial = expectMostRecentItem()
+                assertNull("errorMessage must be null before rename", initial.errorMessage)
+
+                vm.onRenameSession("s1", ownLabel)
+                advanceUntilIdle()
+
+                // A successful rename emits no state change (onSuccess has no state update).
+                // If DUPLICATE_LABEL had been set there would be a pending item here; there must not be.
+                expectNoEvents()
+                cancel()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Error state interplay
     // ---------------------------------------------------------------------------
 
@@ -832,6 +953,26 @@ class SessionsViewModelTest {
         return buildViewModelWithIdentityFlow(repo, identityFlow)
     }
 
+    /** Variant that accepts a pre-configured [sessionManager] (e.g. with startSession stubbed). */
+    private fun buildViewModelWithSessionManager(
+        repo: SessionRepository,
+        sessionManager: SessionManager,
+        userId: String?,
+    ): SessionsViewModel {
+        val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(
+                MutableStateFlow(userId?.let { id -> LocalIdentity(userId = id, email = "user@example.com") })
+            )
+        }
+        return SessionsViewModel(
+            sessionRepository = repo,
+            sessionManager = sessionManager,
+            observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
+            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
+        )
+    }
+
     /**
      * The generator is exercised by its own pure tests; here it only has to not be null. The
      * VM calls it from `init`, so an unstubbed mock would return null from a non-null
@@ -891,6 +1032,11 @@ private class RecordingSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -940,6 +1086,11 @@ private class ControllableSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -984,6 +1135,11 @@ private class LambdaSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
@@ -1012,6 +1168,76 @@ private class LambdaSessionRepository(
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts> = flowOf(counts)
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate-label fake — returns true from isSessionLabelTaken for a specific label.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fake that simulates a taken label. Pass [excludeSelfFromTaken] = true to simulate the
+ * real DAO behaviour where the session being renamed is excluded from the collision count
+ * (the `excludingSessionId != session_id` clause in the query).
+ */
+private class DuplicateLabelSessionRepository(
+    private val takenLabel: String,
+    private val existingSession: SessionWithStats? = null,
+    private val excludeSelfFromTaken: Boolean = false,
+) : SessionRepository {
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean {
+        // When excludeSelfFromTaken is true and a session id is given, pretend the exclusion
+        // means the label is NOT taken for that specific rename — matching real DAO semantics.
+        if (excludeSelfFromTaken && excludingSessionId != null) return false
+        return label == takenLabel
+    }
+
+    override suspend fun getSessionById(sessionId: String): Session? =
+        existingSession?.session?.takeIf { it.id == sessionId }
+
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+        flowOf(emptyList())
+    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeSessionRecordsPage(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeSessionRecordsTotals(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> = flowOf(RecordsTotals())
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        patientId: String,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        patientId: String,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 // ---------------------------------------------------------------------------
