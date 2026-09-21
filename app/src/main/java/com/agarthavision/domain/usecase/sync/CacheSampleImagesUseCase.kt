@@ -68,6 +68,10 @@ class CacheSampleImagesUseCase @Inject constructor(
      * counted, not raised, because one unreachable object must not cost the pass every other
      * image it could still have brought down.
      */
+    // Three guard clauses, each a distinct reason this frame is done with: already held,
+    // past the per-pass ceiling, or unreachable. Folding them into nested branches would
+    // deepen exactly the nesting this rule exists to prevent.
+    @Suppress("LoopWithTooManyJumpStatements")
     suspend operator fun invoke(userId: String): ImageCacheSummary {
         val samples = sampleDao.getCacheableSamples(userId)
         if (samples.isEmpty()) return ImageCacheSummary()

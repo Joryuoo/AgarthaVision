@@ -9,12 +9,15 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * Sample frames on the device, brought down by sync rather than on open (86d4by5n9).
@@ -25,6 +28,8 @@ import org.mockito.kotlin.whenever
  * no signal that is the whole feature failing, which is why the cache is filled while the radio
  * is already on and why [ImageCacheSummary.missing] is carried rather than swallowed.
  */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
 class CacheSampleImagesUseCaseTest {
 
     private val sampleDao: SampleDao = mock()

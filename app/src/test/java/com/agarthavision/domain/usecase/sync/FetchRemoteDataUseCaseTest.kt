@@ -52,6 +52,10 @@ import org.robolectric.annotation.Config
  * Robolectric is required because the use case logs failures via [android.util.Log],
  * which throws RuntimeException("Stub!") in plain JVM tests without returnDefaultValues.
  */
+// One use case, one fixture of DAOs and remote sources. Splitting by entity type would
+// duplicate that fixture five times over and hide the cross-type rules - E2 completeness
+// and the E4 skip - which are the point of testing a pull pass whole.
+@Suppress("LargeClass")
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -852,7 +856,7 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = ReportSyncStatus.SYNCED.value,
         createdAt = 1_000L,
     )
-\n
+
     // ── Sample frames (86d4by5n9) ────────────────────────────────────────────
 
     @Test
