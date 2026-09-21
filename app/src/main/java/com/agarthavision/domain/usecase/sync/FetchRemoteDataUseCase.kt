@@ -4,12 +4,14 @@ import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -43,14 +45,31 @@ sealed interface FetchSummary {
         val samplesFetched: Int,
         val reportsFetched: Int,
         val failed: Set<FetchType> = emptySet(),
+        /** Sample frames brought onto the device by this pass (86d4by5n9). */
+        val imagesFetched: Int = 0,
     ) : FetchSummary {
-        /** True when all four entity types pulled without throwing. */
+        /** True when every entity type pulled without throwing and no frame is still missing. */
         val isComplete: Boolean get() = failed.isEmpty()
     }
 }
 
 /** The entity types a pull pass covers, so a failure can name itself. */
-enum class FetchType { PATIENTS, SESSIONS, SAMPLES, REPORTS }
+enum class FetchType {
+    PATIENTS,
+    SESSIONS,
+    SAMPLES,
+    REPORTS,
+
+    /**
+     * The sample frames themselves (86d4by5n9).
+     *
+     * Present in [FetchSummary.Ran.failed] whenever the device still lacks a frame it should
+     * hold — a download that failed, or one the per-pass ceiling deferred. Rows without frames
+     * is not a synced device: a sample whose image is missing cannot be opened and therefore
+     * cannot be corrected, which is the whole point of holding it.
+     */
+    SAMPLE_IMAGES,
+}
 
 /**
  * Pulls all remote rows from Supabase into the local Room database for the signed-in
@@ -89,6 +108,8 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val initialFetchStateStore: InitialFetchStateStore,
     private val fetchOutcomeStore: FetchOutcomeStore,
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
+    private val cacheSampleImages: CacheSampleImagesUseCase,
+    private val sampleImageStore: SampleImageStore,
 ) {
     /**
      * Runs one fetch pass.
@@ -127,15 +148,32 @@ class FetchRemoteDataUseCase @Inject constructor(
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
 
-        // Mark completed only when all four types succeeded (E2). Listed rather than chained
-        // so a fifth entity type is one entry, not a longer boolean expression.
-        val failed = buildSet {
+        // Frames last: every one of them hangs off a sample row, so there is nothing to cache
+        // until the rows are down. It never throws — an unreachable object is counted, not
+        // raised — so it needs no runCatching of its own.
+        val images = cacheSampleImages(userId)
+
+        // Mark completed only when all four row types succeeded (E2). Listed rather than
+        // chained so a fifth entity type is one entry, not a longer boolean expression.
+        val rowFailures = buildSet {
             if (!patientsOk) add(FetchType.PATIENTS)
             if (!sessionsOk) add(FetchType.SESSIONS)
             if (!samplesOk) add(FetchType.SAMPLES)
             if (!reportsOk) add(FetchType.REPORTS)
         }
-        if (failed.isEmpty()) {
+
+        // **Two different questions, deliberately answered from two different sets.**
+        //
+        // `markCompleted` asks "did this account's rows finish arriving" - it is what stops the
+        // badge reading NOT_YET_SYNCED forever, and it must not be held hostage by images. A
+        // frame whose Storage object is gone would otherwise pin the flag shut for good, and a
+        // device that has every row would keep claiming it has none.
+        //
+        // The Settings card asks the harder question: "is this device ready to work offline?"
+        // Rows without frames is not ready, so images count there. A pass that fetched every
+        // row and no image must not read as All synced.
+        val failed = rowFailures + if (images.isComplete) emptySet() else setOf(FetchType.SAMPLE_IMAGES)
+        if (rowFailures.isEmpty()) {
             initialFetchStateStore.markCompleted(userId)
         }
         // Recorded rather than only returned: most passes run in the worker now, with no
@@ -156,6 +194,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             samplesFetched = samplesFetched,
             reportsFetched = reportsFetched,
             failed = failed,
+            imagesFetched = images.downloaded,
         )
     }
 
@@ -228,7 +267,7 @@ class FetchRemoteDataUseCase @Inject constructor(
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
                 val local = sampleDao.getSampleByIdIncludingDeleted(remote.sampleId)
                 if (local == null || local.status == SampleStatus.SYNCED.value) {
-                    sampleDao.upsertSample(remote)
+                    sampleDao.upsertSample(remote.withLocalImagePath(userId))
                     fetched++
                     writtenSampleIds.add(remote.sampleId)
                 }
@@ -240,6 +279,25 @@ class FetchRemoteDataUseCase @Inject constructor(
             offset += PAGE_SIZE.toLong()
         }
         return fetched
+    }
+
+    /**
+     * Keeps a frame this device already holds attached to its row.
+     *
+     * `SampleRemoteDataSource` maps every pulled sample with `image_path = ""` — correctly, as
+     * the server has no notion of this device's disk. Writing that straight through orphaned
+     * the JPEG of every sample captured *here*: the row goes SYNCED the moment its push lands,
+     * the E4 guard therefore lets the next pull overwrite it, and the file stayed on disk with
+     * nothing pointing at it. The capturing device lost its own image after one sync pass and
+     * fell back to needing a network for a frame already in its hands.
+     *
+     * Resolved from the store's derived path rather than from `local.image_path`, so a row
+     * whose recorded path is stale — an eviction, a reinstall, a cleared cache — is corrected
+     * rather than preserved. The disk is the authority on what the disk holds.
+     */
+    private suspend fun SampleEntity.withLocalImagePath(userId: String): SampleEntity {
+        val cached = sampleImageStore.cachedPathOrNull(userId, sampleId) ?: return this
+        return copy(imagePath = cached)
     }
 
     /**
