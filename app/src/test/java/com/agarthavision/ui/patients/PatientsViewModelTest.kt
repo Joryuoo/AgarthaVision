@@ -26,7 +26,9 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -199,6 +201,30 @@ class PatientsViewModelTest {
 
             vm.onCreatePatient()
             assertEquals(PatientsEvent.CreatePatient, awaitItem())
+        }
+    }
+
+    @Test
+    fun `load more increments query limit by 10`() = runTest {
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            verify(observePatientsUseCase).invoke(
+                userId = eq(USER_ID),
+                query = eq(PatientsQuery(limit = 10)),
+                asOf = any(),
+            )
+
+            vm.onLoadMore()
+            advanceUntilIdle()
+
+            verify(observePatientsUseCase).invoke(
+                userId = eq(USER_ID),
+                query = eq(PatientsQuery(limit = 20)),
+                asOf = any(),
+            )
+            cancelAndIgnoreRemainingEvents()
         }
     }
 

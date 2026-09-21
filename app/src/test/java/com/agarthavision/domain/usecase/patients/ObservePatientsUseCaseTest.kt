@@ -47,7 +47,7 @@ class ObservePatientsUseCaseTest {
             patientRepository.observePatients(
                 userId = "user-a",
                 query = "",
-                limit = 20,
+                limit = PatientsQuery.PAGE_SIZE,
                 sort = PatientSort.RECENT,
                 sex = null,
                 barangayCode = null,
@@ -76,7 +76,7 @@ class ObservePatientsUseCaseTest {
             patientRepository.observePatients(
                 userId = "user-a",
                 query = "de\\_la",
-                limit = 20,
+                limit = PatientsQuery.PAGE_SIZE,
                 sort = PatientSort.RECENT,
                 sex = null,
                 barangayCode = null,
@@ -103,7 +103,7 @@ class ObservePatientsUseCaseTest {
         verify(patientRepository).observePatients(
             userId = "user-a",
             query = "de\\_la",
-            limit = 20,
+            limit = PatientsQuery.PAGE_SIZE,
             sort = PatientSort.RECENT,
             sex = null,
             barangayCode = null,
@@ -183,14 +183,14 @@ class ObservePatientsUseCaseTest {
 
     @Test
     fun `the total is the filtered count, not the page size`() = runTest {
-        stubPage((1..20).map { patient("p-$it") }, total = 57)
+        stubPage((1..10).map { patient("p-$it") }, total = 57)
         whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
 
         val result = useCase("user-a", PatientsQuery()).first()
 
         // canLoadMore is items.size < total upstream, so a wrong total here silently
         // ends pagination at the first page.
-        assertEquals(20, result.items.size)
+        assertEquals(10, result.items.size)
         assertEquals(57, result.total)
     }
 
@@ -204,7 +204,7 @@ class ObservePatientsUseCaseTest {
             patientRepository.observePatients(
                 userId = "user-a",
                 query = "",
-                limit = 20,
+                limit = PatientsQuery.PAGE_SIZE,
                 sort = PatientSort.RECENT,
                 sex = Sex.FEMALE,
                 barangayCode = LAHUG,
@@ -234,7 +234,7 @@ class ObservePatientsUseCaseTest {
         verify(patientRepository).observePatients(
             userId = "user-a",
             query = "",
-            limit = 20,
+            limit = PatientsQuery.PAGE_SIZE,
             sort = PatientSort.RECENT,
             sex = Sex.FEMALE,
             barangayCode = LAHUG,
