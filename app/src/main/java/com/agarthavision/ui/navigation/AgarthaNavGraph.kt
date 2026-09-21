@@ -203,7 +203,13 @@ fun AgarthaNavHost(
                 },
             ),
         ) {
-            PatientFormScreen(onDone = { navController.popBackStack() })
+            PatientFormScreen(
+                onDone = { navController.popBackStack() },
+                onOpenPatient = { id ->
+                    navController.popBackStack()
+                    navController.navigate(Screen.PatientSessions.createRoute(id))
+                },
+            )
         }
 
         // One patient's session list, scoped by the `patientId` path argument the

@@ -1,6 +1,8 @@
 package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -59,4 +61,29 @@ interface PatientRepository {
 
     /** Updates an existing patient and re-queues it for sync. */
     suspend fun update(patient: Patient)
+
+    /**
+     * Returns all patients that are identity-equal to the supplied fields and are visible to
+     * [userId] through `patient_users`, excluding [excludingId] (pass `""` for a new patient
+     * so no real row is excluded by accident).
+     *
+     * Identity equality means: same lastname, firstname, middle name (null-aware, case- and
+     * trim-insensitive), exact birthdate, and same sex.  The barangay is deliberately **not**
+     * part of the identity key — a duplicate registered in a different barangay is still a
+     * probable duplicate and surfaces in the different-barangay dialog.
+     *
+     * The caller must normalise [middleName] with `trim().ifBlank { null }`, the same coercion
+     * used at persist time, or false negatives will result.
+     */
+    @Suppress("LongParameterList") // Every parameter is an independent identity field; a wrapper
+    // object would add ceremony with no benefit — this method has exactly one call site.
+    suspend fun findDuplicates(
+        userId: String,
+        lastname: String,
+        firstname: String,
+        middleName: String?,
+        birthdate: LocalDate,
+        sex: Sex,
+        excludingId: String,
+    ): List<Patient>
 }

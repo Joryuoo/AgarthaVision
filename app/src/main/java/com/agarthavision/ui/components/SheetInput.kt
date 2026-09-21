@@ -51,7 +51,14 @@ internal data class SheetInputConfig(
     val isError: Boolean,
     val isTextArea: Boolean = false,
     val isRequired: Boolean = true,
-    val maxLength: Int = Int.MAX_VALUE
+    val maxLength: Int = Int.MAX_VALUE,
+    /**
+     * Whether to show the character-count row beneath the field.
+     *
+     * Set to `false` for patient name fields: the length is enforced by the ViewModel's
+     * input transform, and a counter showing "0 / 2147483647" would be meaningless noise.
+     */
+    val showCounter: Boolean = true,
 )
 
 @Composable
@@ -125,12 +132,14 @@ internal fun SheetInput(
                 }
             }
         )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(
-                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
-                fontSize = 11.sp,
-                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
-            )
+        if (config.showCounter) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Text(
+                    text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
+                    fontSize = 11.sp,
+                    color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
+                )
+            }
         }
     }
 }

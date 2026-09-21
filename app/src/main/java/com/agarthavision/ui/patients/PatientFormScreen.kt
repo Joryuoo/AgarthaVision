@@ -1,5 +1,6 @@
 package com.agarthavision.ui.patients
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -67,13 +69,21 @@ import java.time.format.DateTimeFormatter
  * Works entirely offline: the barangay picker searches the PSGC dataset bundled in the APK,
  * and the save is a local write that syncs when connectivity returns.
  *
- * **No duplicate-detection warning** — duplicates are an admin-side decision. **No delete**
- * — also admin-side.
+ * Duplicate detection runs before committing: an identity match in the same barangay
+ * surfaces a strong "already registered" dialog; a match in a different barangay surfaces a
+ * softer "possible duplicate" dialog. Both let the medtech proceed, navigate to the existing
+ * patient, or cancel.
+ *
+ * **No delete** — admin-side.
  */
+@Suppress("CyclomaticComplexMethod") // Composable root function: dialog visibility branches
+// are pattern-matched state, not logic. Decomposing them across multiple composables
+// would add indirection without reducing actual complexity.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PatientFormScreen(
     onDone: () -> Unit,
+    onOpenPatient: (String) -> Unit,
     viewModel: PatientFormViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -83,9 +93,14 @@ fun PatientFormScreen(
         viewModel.events.collect { event ->
             when (event) {
                 PatientFormEvent.Saved, PatientFormEvent.Cancelled -> onDone()
+                is PatientFormEvent.OpenExisting -> onOpenPatient(event.patientId)
             }
         }
     }
+
+    // Route system back through the dirty-check guard, the same way CaptureScreen routes it
+    // through its isBusy guard.
+    BackHandler { viewModel.onCancel() }
 
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -100,6 +115,10 @@ fun PatientFormScreen(
                 .widthIn(max = 480.dp)
                 .align(Alignment.TopCenter)
                 .verticalScroll(rememberScrollState())
+                // imePadding raises the content so the barangay field is not obscured by the
+                // keyboard. Ordered before navigationBarsPadding so the two insets compose
+                // correctly: the keyboard offset is applied first, then the nav-bar gap.
+                .imePadding()
                 // After verticalScroll so the inset is part of the scrolling content rather
                 // than a dead band around it: Save and Cancel are the last thing in the form,
                 // and without this they sit flush to the screen edge at full scroll with their
@@ -111,7 +130,10 @@ fun PatientFormScreen(
                     if (state.isEditing) R.string.patient_form_edit_title
                     else R.string.patient_form_new_title,
                 ),
-                purpose = stringResource(R.string.patients_subtitle_purpose),
+                // patient_form_subtitle_purpose is deliberately separate from
+                // patients_subtitle_purpose (the Patients list screen subtitle); they have
+                // different purposes and must not share a string.
+                purpose = stringResource(R.string.patient_form_subtitle_purpose),
             )
 
             Column(
@@ -126,6 +148,10 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_lastname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.LASTNAME_REQUIRED in state.errors,
+                        // Character counter removed: length is enforced via the VM's
+                        // transformNameInput pipeline, and "x / 2147483647" is meaningless
+                        // noise when no explicit maxLength is passed.
+                        showCounter = false,
                     ),
                 )
                 SheetInput(
@@ -136,6 +162,7 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_firstname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.FIRSTNAME_REQUIRED in state.errors,
+                        showCounter = false,
                     ),
                 )
                 // Optional on purpose: many patients do not supply one, and a required
@@ -148,6 +175,7 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_middle_name_placeholder),
                         isError = false,
                         isRequired = false,
+                        showCounter = false,
                     ),
                 )
 
@@ -240,6 +268,34 @@ fun PatientFormScreen(
                 viewModel.onBirthdateSelected(it)
                 showDatePicker = false
             },
+        )
+    }
+
+    // Discard-changes confirmation
+    if (state.showDiscardConfirm) {
+        DiscardConfirmDialog(
+            onConfirm = viewModel::onDiscardConfirmed,
+            onDismiss = viewModel::onDiscardDismissed,
+        )
+    }
+
+    // Same-barangay duplicate: stronger "already registered" wording
+    state.pendingSameBarangayDuplicate?.let { dup ->
+        SameBarangayDuplicateDialog(
+            duplicate = dup,
+            onProceed = viewModel::onProceedAsNewPatient,
+            onOpenExisting = { viewModel.onGoToExistingPatient(dup.patient.id) },
+            onDismiss = viewModel::onDismissDuplicate,
+        )
+    }
+
+    // Different-barangay duplicate: softer "possible duplicate" wording (first match)
+    state.pendingDifferentBarangayDuplicates.firstOrNull()?.let { dup ->
+        DifferentBarangayDuplicateDialog(
+            duplicate = dup,
+            onProceed = viewModel::onProceedAsNewPatient,
+            onOpenExisting = { viewModel.onGoToExistingPatient(dup.patient.id) },
+            onDismiss = viewModel::onDismissDuplicate,
         )
     }
 }
