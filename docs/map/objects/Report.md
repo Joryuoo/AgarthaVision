@@ -17,7 +17,7 @@ besides sample images.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`)
+**Postgres** (`supabase/migrations/0001_init.sql:309-322`)
 
 | Field | Constraint |
 |---|---|
@@ -29,14 +29,14 @@ besides sample images.
 | `total_samples` | integer **NOT NULL, no default** |
 | `total_eggs_confirmed` | integer NOT NULL, no default |
 | `positive_species` | `text[]` NOT NULL default `'{}'` |
-| `lpf_per_species` | `jsonb` NOT NULL default `'{}'` (Replaces `epg_per_species`) |
+| `lpf_per_species` | `jsonb` NOT NULL default `'{}'` (Replaces Kato-Katz `epg_per_species`) |
 | `csv_file_path` | nullable text — a **device-local** path, meaningless to any other client |
-| `pdf_file_path` | nullable text — mirrors `csv_file_path`; added by `0011_reports_pdf_and_lpf.sql` |
+| `pdf_file_path` | nullable text — mirrors `csv_file_path`; device-local path or URI |
 | `created_at` | NOT NULL, default `now()` |
 
 Indexes on `(session_id, generated_at desc)` and `(user_id, generated_at desc)`.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`)
+**Room** (`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt:39-86`)
 
 PK column is `report_id`. Differences:
 
@@ -45,6 +45,7 @@ PK column is `report_id`. Differences:
   `lpf_per_species_json`, and expanded back into `List<String>` and
   `Map<String, LpfDensity>` at the sync boundary.
 - `generated_at` and `created_at` are epoch millis locally, ISO strings remotely.
+- `total_samples` counts live verified samples (`deleted_at is null`).
 
 ## Connected to
 

@@ -30,7 +30,7 @@
 
 ## Overview
 
-AgarthaVision is a mobile diagnostic-support and surveillance platform for fecal smear microscopy workflows. It helps medical technologists capture microscope frames, run AI-assisted parasite egg detection, verify results through a human-in-the-loop workflow, compute session-level Eggs Per Gram (EPG), and archive structured records for reporting.
+AgarthaVision is a mobile diagnostic-support and surveillance platform for fecal smear microscopy workflows. It helps medical technologists capture microscope frames, run AI-assisted parasite egg detection, verify results through a human-in-the-loop workflow, compute session-level Low Power Field (LPF) density ranges, and archive structured records for reporting.
 
 The project is designed as a decision-support and preprocessing tool. It does not replace qualified medical judgment, final diagnosis, or laboratory validation.
 
@@ -38,13 +38,13 @@ The project is designed as a decision-support and preprocessing tool. It does no
 
 Phase 1 focuses on the Android application and a lightweight managed-services backend:
 
-- Email/password authentication through Supabase Auth.
-- Continuous microscope feed analysis with CameraX `ImageAnalysis`.
+- Email/password authentication through Supabase Auth (mandatory login).
+- One-shot microscope frame capture with CameraX `ImageAnalysis`.
 - Synchronous inference through a self-hosted FastAPI container.
-- Human-in-the-loop verification for AI detections.
-- Manual capture for specimens missed by the model.
-- Session-as-smear records with verified samples, repeat flags, user notes, and EPG summaries.
-- CSV/session report generation backed by local Room data and Supabase sync.
+- Human-in-the-loop verification for AI detections with pre-filled model answers and derived Q4.
+- Manual capture and "Add Egg" workflow for specimens missed by the model.
+- Patient-scoped session records with verified samples, soft-delete duplicate tombstoning, and per-species LPF range summaries.
+- PDF session report generation backed by local Room data and Supabase sync.
 
 Phase 2 work, including owned hardware deployment and a fuller self-hosted backend stack, is documented but intentionally deferred.
 
@@ -158,7 +158,7 @@ The mobile app persists verified samples locally with Room, uploads images to Su
 
 ## Project Status
 
-The current root audit records Sprint 3 hardening as the active implementation phase. Core records browsing, sample detail with Supabase image fallback, CSV export, session-as-smear semantics, manual capture, EPG calculation, user notes, persisted session reports, light/dark theme toggle, detekt 0-violation cleanup, and the production Settings screen are implemented. Open follow-ups include physical-device E2E verification, GitHub Actions CI setup, `:app:ktlintCheck` Gradle wiring fix, launcher icon regeneration, and remaining Phase 2 roadmap items. Active tasks and sprint items are tracked in ClickUp.
+The current codebase implements patient-based records management, session-as-smear workflows, one-shot frame capture, LPF density range reporting (Direct Smear method), PDF session report generation, soft-delete duplicate tombstoning, pre-filled verification with derived Q4, GitHub Actions CI verification (`:app:verifyRoborazziDebug`), detekt 0-violation cleanup, and production Settings and Patients screens. Active tasks and sprint items are tracked in ClickUp.
 
 ## Documentation
 
@@ -181,12 +181,12 @@ disagree, the code wins - fix the document in the same change.
 
 ## Git Workflow
 
-This repository follows the documented GitHub Flow process:
+This repository follows the documented workflow manual:
 
-- Branch from `staging` for feature, fix, docs, test, and CI work.
+- Branch from `development` for feature, fix, docs, test, and CI work (`git switch -c tasktype/taskname`).
 - Format commits as `[type][ClickUp-ID][Lastname]: Task title`, enforced by `.husky/commit-msg`.
 - Run lint, tests, and build checks before opening a pull request.
-- Target `staging` for PRs (never `main` directly).
+- Target `development` for PRs (never `staging` or `main` directly).
 - Keep source changes aligned with the relevant plan, ADR, or design-system document.
 
 ## Contributors

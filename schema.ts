@@ -322,105 +322,91 @@ export interface PsgcBarangay {
  * A captured microscope frame/sample and its sync metadata.
  *
  * Supabase migrations:
- * - `0001_init.sql`: creates `samples`.
- * - `0002_verification_fields.sql`: renames `roboflow_model_version` to
- *   `inference_model_version` and adds `needs_reannotation`.
- * - `0003_storage_rls.sql`: defines Storage path policy for sample images.
- * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
- * - `0006_sample_is_manual.sql`: adds `is_manual`.
- * - `0013_sample_soft_delete.sql`: adds `deleted_at` and the partial index
- *   `samples_live_session_idx` over live rows.
+ * - `0001_init.sql` (consolidated): creates `samples` with `captured_at`,
+ *   `verified_at`, `storage_path`, `inference_model_version`, `user_note`,
+ *   `needs_reannotation`, `is_manual`, and `deleted_at`.
+ * - Historical development migrations archived under `legacy-dev/` (`0001` through `0013`).
  *
  * Room mirror:
  * - `SampleEntity.kt`
  *
- * Important ERD conflict:
- * - The legacy ERD names `samples.status`, but no Supabase migration creates a
- *   remote status column. `status` is Room/domain-only.
+ * Important differences:
+ * - In Supabase, the capture timestamp column is named `captured_at` (timestamptz).
+ *   In Room, it is named `timestamp` (epoch millis).
+ * - There is no remote `samples.status` or `created_at` column; status is Room/domain-only.
+ * - `image_path` is Room-only (local disk path); image bytes in the cloud live in Storage.
  */
 export interface Sample {
   id: UUID;
   // Supabase PK. Room column: `sample_id` PK.
 
   session_id: UUID;
-  // Supabase NOT NULL FK -> sessions(id). DELETE CASCADE.
+  // Supabase NOT NULL FK -> sessions(id). DELETE CASCADE in Postgres (NO_ACTION in Room per C8).
 
   user_id: UUID;
-  // Supabase NOT NULL FK -> profiles(id). DELETE CASCADE.
+  // Supabase NOT NULL FK -> profiles(id). Room allows null for offline/pre-auth capture.
 
-  timestamp: TimestampTZ;
-  // Supabase NOT NULL default `now()`; epoch millis in Room.
+  captured_at: TimestampTZ;
+  // Supabase NOT NULL timestamptz. Room column: `timestamp` (epoch millis).
 
-  image_path: string;
-  // NOT NULL. Local file path captured by the Android app. In Supabase this is
-  // metadata only; Storage object bytes live under `storage.objects`.
+  verified_at: TimestampTZ;
+  // Supabase NOT NULL default `now()`. Room column: `verified_at` (epoch millis, 0 = unset).
 
   storage_path: string;
-  // Supabase NOT NULL. Object key in bucket `samples`, convention
-  // `{user_id}/{sample_id}.jpg`. Room stores nullable until upload succeeds.
+  // Supabase NOT NULL. Object key in bucket `samples`, convention `{user_id}/{sample_id}.jpg`.
+  // Room stores nullable until upload succeeds.
 
-  inference_model_version: string | null;
-  // Nullable. Renamed from `roboflow_model_version` by migration `0002`.
-  // Room default is `unknown`.
+  inference_model_version: string;
+  // Supabase NOT NULL. Room default is `'unknown'`.
+
+  user_note: string | null;
+  // Nullable per-sample medtech note.
 
   needs_reannotation: boolean;
-  // NOT NULL. Default `false`. Set when manual/HITL review requires follow-up.
+  // Supabase NOT NULL default `false`. Flagged when verification indicates follow-up needed.
 
-  verified_at: TimestampTZ | null;
-  // Nullable remote timestamp. Room stores epoch millis with `0` as unset.
+  is_manual: boolean;
+  // Supabase NOT NULL default `false`. Set for manual captures (no AI inference).
+
+  deleted_at: TimestampTZ | null;
+  // Nullable timestamptz. Null means live. A verified sample is never hard-deleted (C8) —
+  // it is tombstoned here, hiding it from all UI lists, counts, and reports while preserving
+  // retraining detections and Storage assets. Unverified frames are hard-deleted on-device.
+  // Every query listing or counting live samples must filter `deleted_at is null`.
+
+  // ── Room-only columns (not present in Supabase samples table) ───────────────
+  image_path: string;
+  // Room-only. Local absolute file path captured by the Android camera.
+
+  device_id: string;
+  // Room-only. Supabase keeps device ownership on `sessions.device_id`.
+
+  status: SampleStatus;
+  // Room/domain-only sync state machine.
+
+  predictions_json: string | null;
+  // Room-only raw inference payload/cache for display and recovery.
+
+  image_width: number | null;
+  // Room-only pixel width.
+
+  image_height: number | null;
+  // Room-only pixel height.
 
   // ── Deliberately absent ───────────────────────────────────────────────────
   // `gps_latitude` / `gps_longitude` / `gps_accuracy` — removed. The fix was
   // taken at the microscope, so it recorded where the smear was read, not where
   // the infection came from; plotted, it mapped laboratories. Geospatial
-  // mapping keys on `patients.psgc_barangay_code` instead. Nothing ever read
-  // these three columns.
-
-  user_note: string | null;
-  // Nullable per-sample note.
-
-  is_manual: boolean;
-  // NOT NULL. Default `false`. Added by migration `0006`; manual captures use
-  // this plus nullable detection boxes.
-
-  created_at: TimestampTZ;
-  // Supabase NOT NULL. Default `now()`.
-
-  device_id: string;
-  // Room-only. Supabase keeps device ownership at `sessions.device_id`.
-
-  status: SampleStatus;
-  // Room/domain-only. No Supabase column.
-
-  predictions_json: string | null;
-  // Room-only raw inference payload/cache for local display and recovery.
-
-  image_width: number | null;
-  // Room-only captured image width in pixels.
-
-  image_height: number | null;
-  // Room-only captured image height in pixels.
-
-  deleted_at: TimestampTZ | null;
-  // Nullable after migration `0013_sample_soft_delete.sql`. Null means live. A verified
-  // sample is never hard-deleted (C8) — it is tombstoned here, which hides it from every
-  // queue, count and report while its detections stay in the retraining corpus and its
-  // Storage object stays put. Unverified frames are hard-deleted instead, on-device.
-  // EVERY query that lists or counts samples must filter `deleted_at is null`.
+  // mapping keys on `patients.psgc_barangay_code` instead.
 }
 
 /**
  * A model- or user-created parasite egg detection attached to a sample.
  *
  * Supabase migrations:
- * - `0001_init.sql`: creates `detections` with class/confidence/bounding box.
- * - `0002_verification_fields.sql`: adds verdict/expert_class, drops remote
- *   `verified_by_user`, and adds `detections_verdict_idx`.
- * - `0004_fix_profiles_rls_recursion.sql`: replaces admin select policy.
- * - `0007_detection_bbox_nullable.sql`: makes `bbox_x`, `bbox_y`, `bbox_w`,
- *   and `bbox_h` nullable for manual detections.
- * - `0012_polyparasitism_findings.sql`: adds `species_touched`, and adds the UPDATE
- *   policy `detections_update_via_sample` that re-syncing an edited sample needs.
+ * - `0001_init.sql` (consolidated): creates `detections` with class, confidence,
+ *   nullable bboxes, verdict, expert_class, and `species_touched`.
+ * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
  * - `DetectionEntity.kt`
@@ -439,59 +425,50 @@ export interface Detection {
   // NOT NULL model confidence as a floating-point value.
 
   bbox_x: number | null;
-  // Nullable after migration `0007`; manual detections may not have a box.
+  // Nullable; manual detections may not have a bounding box.
 
   bbox_y: number | null;
-  // Nullable after migration `0007`.
+  // Nullable.
 
   bbox_w: number | null;
-  // Nullable after migration `0007`.
+  // Nullable.
 
   bbox_h: number | null;
-  // Nullable after migration `0007`.
+  // Nullable.
 
   verdict: DetectionVerdict;
   // Supabase NOT NULL default `CONFIRMED` with uppercase CHECK values.
   // Room stores lowercase domain values and maps them for remote sync.
 
   expert_class: string | null;
-  // Nullable corrected class. Used when verdict is `WRONG_CLASS` — and, from
-  // `0012_polyparasitism_findings.sql` on, also when verdict is `BOX_INCORRECT` and the
-  // medtech corrected the species. An egg with a misplaced box is still an egg and still
-  // has to be counted, so the species question is asked whenever the box contains one.
-  // `0002_verification_fields.sql` describes the narrower rule; it is applied and not
-  // edited (C6), so this is the current one.
-
-  created_at: TimestampTZ;
-  // Supabase NOT NULL. Default `now()`.
-
-  verified_by_user: boolean;
-  // Room-only after migration `0002` dropped the Supabase column.
+  // Nullable corrected class. Used when verdict is `WRONG_CLASS` or `BOX_INCORRECT`
+  // and the medtech corrected the species.
 
   species_touched: boolean;
-  // NOT NULL. Default `false`. Added by `0012_polyparasitism_findings.sql`. True when the
-  // medtech made a deliberate species selection on this box, including re-picking the
-  // value pre-filled from the model. False means the pre-fill was submitted untouched: a
-  // non-objection, not a confirmation. Provenance only — `verdict` is unaffected — but it
-  // matters because `detections` doubles as the retraining corpus. Deliberately NOT a
-  // reuse of the dead `verified_by_user`.
+  // NOT NULL default `false`. True when the medtech made a deliberate species selection,
+  // including re-picking the pre-filled value. False means pre-fill was untouched.
+  // Critical for retraining corpus provenance.
+
+  created_at: TimestampTZ;
+  // Supabase NOT NULL default `now()`.
+
+  // ── Room-only column ───────────────────────────────────────────────────────
+  verified_by_user: boolean;
+  // Room-only. Dropped from Supabase in legacy-dev migration 0002.
 }
 
 /**
  * One species finding a medtech logged on a single frame, with that species'
  * low-power-field egg count.
  *
- * One field can hold eggs of more than one species, and that is normal, so a frame carries
- * zero or more of these. The count is per species, never a frame total: WHO
- * infection-intensity thresholds are species-specific and differ by more than an order of
- * magnitude, so a combined per-field number cannot be graded.
- *
- * Zero rows is a meaningful state — a clean field — which is why `EggSpecies` has no
- * "no egg" member.
+ * One field can hold eggs of more than one species, so a frame carries zero or more
+ * findings. The count is per species, never a frame total: WHO infection-intensity
+ * thresholds are species-specific. Zero rows represents a clean field.
  *
  * Supabase migrations:
- * - `0012_polyparasitism_findings.sql`: creates the table, its two partial unique indexes,
- *   and its RLS policies (scoped through the parent sample, like `detections`).
+ * - `0001_init.sql` (consolidated): creates `sample_species_findings` with nullable `stage`
+ *   and partial unique indexes for staged and unstaged findings.
+ * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
  * - `SampleSpeciesFindingEntity.kt`
@@ -502,33 +479,25 @@ export interface SampleSpeciesFinding {
   // (sample_id, species) so an edit replaces rather than duplicates.
 
   sample_id: UUID;
-  // NOT NULL. FK to `samples.id`, ON DELETE CASCADE.
+  // NOT NULL FK to `samples.id`, ON DELETE CASCADE.
 
   species: string;
-  // NOT NULL, non-blank. Canonical class name, or free text when the dropdown does not
-  // cover the species. Same convention as `detections.class_label` / `expert_class`.
+  // NOT NULL, non-blank. Canonical class name, or free text when outside the dropdown.
 
   stage: string | null;
-  // ALWAYS NULL, and dormant. `0012` created it with a CHECK on 'UNFERTILIZED' |
-  // 'UNEMBRYONATED' | 'EMBRYONATED' | 'LARVATED' for ticket 86d4a6jwy, which staging then
-  // reverted (`9dcfd5d`) and deprioritised — those four values were never checked against
-  // literature, and Ascaris could only be tagged UNFERTILIZED, the one stage that is never
-  // infective. The column stays because 0012 is applied and frozen (C6); nothing in the app
-  // reads or writes it, and `sample_species_findings_unique_unstaged` is the index in force.
-  // Reviving the ticket needs a migration widening that CHECK first.
+  // ALWAYS NULL, and dormant. Reserved hook for future developmental stage classification.
+  // Kept nullable; unstaged unique index is in force.
 
   egg_count: number;
-  // NOT NULL, CHECK > 0. Eggs of this species in this one low-power field. A count of zero
-  // is the absence of a row, not a row holding zero.
+  // NOT NULL, CHECK > 0. Eggs of this species in this one low-power field.
 }
 
 /**
  * Persisted session-level report generated from verified local samples.
  *
  * Supabase migrations:
- * - `0008_reports.sql`: creates `reports`, indexes, and owner/admin RLS.
- * - `0011_reports_pdf_and_lpf.sql`: adds `pdf_file_path` (this file's change only; any
- *   LPF columns in that same numbered slot belong to ticket 86d4a6jxw's separate work).
+ * - `0001_init.sql` (consolidated): creates `reports` with `pdf_file_path` and `lpf_per_species`.
+ * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
  * - `ReportEntity.kt`
@@ -550,35 +519,37 @@ export interface Report {
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
   total_samples: number;
-  // NOT NULL. Default `0`.
+  // NOT NULL. Count of non-deleted verified samples in the session at report time.
 
   total_eggs_confirmed: number;
-  // NOT NULL. Default `0`; sum of confirmed detections across the smear.
+  // NOT NULL. Sum of confirmed detections across the smear.
 
   positive_species: string[];
-  // Supabase `text[]` NOT NULL default `{}`. Room stores as
-  // `positive_species_json`.
+  // Supabase `text[]` NOT NULL default `{}`. Room stores as `positive_species_json`.
 
-  // ── Deliberately absent ───────────────────────────────────────────────────
-  // `epg_per_species` — removed. EPG is eggs-per-gram via Kato-Katz; Philippine
-  // medtechs use direct smear, so the x24 multiplier was wrong for the method in
-  // use. WHO's light/moderate/heavy bands are defined only against EPG and there
-  // is no published intensity table for direct smear to rescale them to, so the
-  // infectivity tier goes with it. The per-species min-max LPF range replaces
-  // both. Do not add an EPG column back without clinical sign-off.
+  lpf_per_species: Record<string, { mean: number; min: number; max: number }>;
+  // Supabase `jsonb` NOT NULL default `{}`. Room stores as `lpf_per_species_json`.
+  // Per-species low-power-field density range (PB-17/18), replacing Kato-Katz EPG.
 
   csv_file_path: string | null;
   // Nullable local/export path to generated CSV.
 
   pdf_file_path: string | null;
-  // Nullable local/export path to generated PDF. Added by `0011_reports_pdf_and_lpf.sql`.
-  // Mirrors csv_file_path: device-local, meaningless to any other client.
+  // Nullable local/export path to generated PDF. Device-local file or URI.
 
   created_at: TimestampTZ;
-  // Supabase NOT NULL. Default `now()`.
+  // Supabase NOT NULL default `now()`. Room column: `created_at` (epoch millis).
 
+  // ── Room-only column ───────────────────────────────────────────────────────
   supabase_status: ReportSyncStatus;
-  // Room-only sync state. No Supabase column.
+  // Room-only sync state machine. No Supabase column.
+
+  // ── Deliberately absent ───────────────────────────────────────────────────
+  // `epg_per_species` — removed. EPG is eggs-per-gram via Kato-Katz; Philippine
+  // medtechs use direct smear, so the x24 multiplier was wrong for the method in
+  // use. WHO's light/moderate/heavy bands are defined only against EPG and there
+  // is no published intensity table for direct smear to rescale them to. The
+  // per-species min-max LPF range (`lpf_per_species`) replaces both.
 }
 
 /**
@@ -780,6 +751,9 @@ export type RelationshipMatrix = [
  * Confirmed migration-vs-ERD differences:
  *
  * - Remote `samples.status` does not exist. It is Room/domain-only.
+ * - Remote `samples.captured_at` (timestamptz) is mirrored as `timestamp` (epoch millis) in Room.
+ * - Remote `samples` has no `image_path` or `created_at` column; `image_path` is Room-only.
+ * - Remote `reports.lpf_per_species` (jsonb) stores the min–max LPF density range, replacing Kato-Katz EPG.
  * - Remote `detections.verified_by_user` was dropped in migration `0002`; Room
  *   still keeps it locally.
  * - Remote detection verdict values are uppercase. Room/domain values are
