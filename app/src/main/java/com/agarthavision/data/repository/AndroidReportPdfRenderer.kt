@@ -158,15 +158,13 @@ class AndroidReportPdfRenderer @Inject constructor(
             canvas.drawText("%d\u2013%d".format(row.min, row.max), LPF_COLUMN_X, y, rowPaint)
             // Blank rather than a dash when a species was never seen: the row would not be on
             // the page at all in that case, and inventing a reading for one is worse than none.
-            row.descriptor?.let { canvas.drawText(it.pdfLabel(), READING_COLUMN_X, y, rowPaint) }
+            row.descriptor?.let { canvas.drawText(context.getString(it.labelRes), READING_COLUMN_X, y, rowPaint) }
             y += LINE_HEIGHT
         }
 
         y += UNIT_NOTE_GAP
         canvas.drawText(context.getString(R.string.report_pdf_lpf_unit_note), MARGIN, y, paintFor(PdfTextStyle.NOTE))
     }
-
-    private fun LpfDescriptor.pdfLabel(): String = context.getString(labelRes)
 
     /**
      * Draws the AgarthaVision brand mark at the left margin, vertically centered against the
