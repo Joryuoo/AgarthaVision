@@ -441,6 +441,8 @@ class PatientFormViewModel @Inject constructor(
             else patientRepository.update(patient)
         }.onSuccess {
             fields.value = PatientFormState(isEditing = false, showDiscardConfirm = false)
+            loaded = null
+            patientId = null
             barangayPicker.onCleared()
             eventFlow.emit(PatientFormEvent.Saved)
         }.onFailure { throwable ->

@@ -532,6 +532,150 @@ class PatientFormViewModelTest {
             assertTrue(vm.state.value.isDirty)
         }
 
+    // ── loadPatient (sheet-reuse API) ─────────────────────────────────────────
+
+    @Test
+    fun `loadPatient null resets VM to blank new-patient form`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isEditing)
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            vm.loadPatient(null)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isEditing)
+            assertEquals("", vm.state.value.lastname)
+            assertNull(vm.state.value.barangay.selected)
+            assertFalse(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `loadPatient with same id and loaded set is a no-op and does not re-query the repository`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+
+            // First loadPatient call with same id — should skip re-load
+            vm.loadPatient(PATIENT_ID)
+            advanceUntilIdle()
+
+            // getPatientById must have been called exactly once (from init's loadExisting, not again)
+            org.mockito.kotlin.verify(patientRepository, org.mockito.kotlin.times(1))
+                .getPatientById(PATIENT_ID)
+        }
+
+    @Test
+    fun `loadPatient with a different id loads the new patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientA = existingPatient()
+            val patientB = existingPatient().copy(id = "p-2", lastname = "Santos", firstname = "Liza")
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patientA)
+            whenever(patientRepository.getPatientById("p-2")).thenReturn(patientB)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            vm.loadPatient("p-2")
+            advanceUntilIdle()
+
+            assertEquals("Santos", vm.state.value.lastname)
+            assertEquals("Liza", vm.state.value.firstname)
+        }
+
+    @Test
+    fun `loadPatient after successful save reloads patient from DB — sheet re-open must not show blank form`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = existingPatient()
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patient)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isEditing)
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            // Save the patient (all required fields are already loaded — no validation error).
+            vm.onSave()
+            advanceUntilIdle()
+            // After save the fields StateFlow is cleared.
+            assertFalse(vm.state.value.isEditing)
+            assertEquals("", vm.state.value.lastname)
+
+            // Sheet dismissed then re-opened for the same patient: loadPatient is called again.
+            vm.loadPatient(PATIENT_ID)
+            advanceUntilIdle()
+
+            // The form must show the patient's data, not the blank cleared state.
+            // Fails today because loadPatient hits the early-return guard
+            // (patientId == PATIENT_ID && loaded != null) and never calls loadExisting again.
+            assertTrue(
+                "isEditing must be true after re-opening existing patient post-save",
+                vm.state.value.isEditing,
+            )
+            assertEquals(
+                "lastname must be restored to 'Cruz' after re-opening post-save",
+                "Cruz",
+                vm.state.value.lastname,
+            )
+        }
+
+    @Test
+    fun `isDirty reflects sex and birthdate changes for new patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertFalse(vm.state.value.isDirty)
+
+            vm.onSexSelected(Sex.FEMALE)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `isDirty is false immediately after successful save`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            fillValid(vm)
+            advanceUntilIdle()
+            vm.onBarangaySelected(LAHUG)
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onSave()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `onDiscardConfirmed for new patient resets isDirty and clears barangay`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            fillValid(vm)
+            advanceUntilIdle()
+            vm.onBarangaySelected(LAHUG)
+            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(lahug()))
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+            assertFalse(vm.state.value.isEditing)
+            assertNull(vm.state.value.barangay.selected)
+            assertEquals("", vm.state.value.lastname)
+        }
+
     private fun existingPatient() = Patient(
         id = PATIENT_ID,
         lastname = "Cruz",
