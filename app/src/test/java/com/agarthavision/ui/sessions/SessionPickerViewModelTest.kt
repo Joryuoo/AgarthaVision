@@ -9,6 +9,8 @@ import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
@@ -16,6 +18,7 @@ import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -77,6 +80,10 @@ class SessionPickerViewModelTest {
                 MutableStateFlow(LocalIdentity(userId = "user-1", email = "user@example.com")),
             )
         }
+    private val patientRepository: PatientRepository = mock {
+        on { observePatientById(any()) } doReturn flowOf(null)
+    }
+    private val psgcRepository: PsgcRepository = mock()
 
     /**
      * The screen is reached at `patients/{patientId}`, so the patient a new session belongs
@@ -88,6 +95,8 @@ class SessionPickerViewModelTest {
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
         generateSessionLabelUseCase = generateSessionLabelUseCase,
+        patientRepository = patientRepository,
+        psgcRepository = psgcRepository,
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),

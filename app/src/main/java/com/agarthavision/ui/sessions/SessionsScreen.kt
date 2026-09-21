@@ -71,6 +71,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
@@ -142,10 +144,19 @@ fun SessionsScreen(
                 // count is of frames awaiting review rather than of open sessions - the
                 // latter would have counted every session and said nothing.
                 AppBar(
-                    unverifiedCount = state.unverifiedCount,
-                    totalCount = state.totalCount,
                     onBack = onBack,
                 )
+
+                // Patient Identity Preview Header / Card
+                state.patient?.let { patient ->
+                    PatientPreviewCard(
+                        patient = patient,
+                        barangayName = state.barangayName,
+                        totalCount = state.totalCount,
+                        unverifiedCount = state.unverifiedCount,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    )
+                }
 
                 // Search + date filter row
                 SearchInput(
@@ -304,7 +315,7 @@ fun SessionsScreen(
  * Pattern matches `SessionDetailScreen.SessionDetailAppBar`.
  */
 @Composable
-private fun AppBar(unverifiedCount: Int, totalCount: Int, onBack: () -> Unit) {
+private fun AppBar(onBack: () -> Unit) {
     val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -327,18 +338,91 @@ private fun AppBar(unverifiedCount: Int, totalCount: Int, onBack: () -> Unit) {
                 color = colors.textSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
-            Text(
-                text = pluralStringResource(
-                    R.plurals.sessions_subtitle,
-                    totalCount,
-                    totalCount,
-                    unverifiedCount,
-                ),
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.textSecondary,
-                modifier = Modifier.padding(top = 2.dp),
-            )
         }
+    }
+}
+
+/**
+ * Patient identity preview card shown below the app bar.
+ *
+ * Establishes immediate clinical context (full name, age, sex, barangay) so the medtech
+ * can verify they are reading smears for the correct patient without navigating back.
+ * Persists while scrolling the session list below.
+ */
+@Composable
+private fun PatientPreviewCard(
+    patient: Patient,
+    barangayName: String?,
+    totalCount: Int,
+    unverifiedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val context = LocalContext.current
+    val age = patient.ageYears(Instant.now())
+    val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
+    val sexLabel = when (patient.sex) {
+        Sex.MALE -> stringResource(R.string.patients_sex_male)
+        Sex.FEMALE -> stringResource(R.string.patients_sex_female)
+        null -> stringResource(R.string.patients_sex_unknown)
+    }
+    val ageSex = stringResource(R.string.patient_preview_age_sex, ageText, sexLabel)
+    val barangay = barangayName ?: patient.psgcBarangayCode
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.accent)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = patient.displayName,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = colors.onAccent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = ageSex,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = barangay,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = pluralStringResource(
+                R.plurals.sessions_subtitle,
+                totalCount,
+                totalCount,
+                unverifiedCount,
+            ),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 

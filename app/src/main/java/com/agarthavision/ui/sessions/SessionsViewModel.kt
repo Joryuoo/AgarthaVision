@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
@@ -20,6 +23,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -59,6 +64,10 @@ data class SessionsState(
      * a blocked sheet: a failure to suggest a name is no reason to refuse a smear.
      */
     val suggestedLabel: String = "",
+    /** The patient whose session list this is, or null while loading. */
+    val patient: Patient? = null,
+    /** The barangay name resolved from [Patient.psgcBarangayCode], or null. */
+    val barangayName: String? = null,
 )
 
 sealed interface SessionsEvent {
@@ -80,7 +89,7 @@ sealed interface SessionsEvent {
  * belong to one ViewModel, and splitting them across two classes to satisfy a count would
  * be inconsistent with every other ViewModel here for no functional benefit.
  */
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class SessionsViewModel @Inject constructor(
@@ -88,6 +97,8 @@ class SessionsViewModel @Inject constructor(
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
+    private val patientRepository: PatientRepository,
+    private val psgcRepository: PsgcRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -147,20 +158,20 @@ class SessionsViewModel @Inject constructor(
     ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
-     * Observable UI state for the Sessions screen.
-     *
-     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
-     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
-     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
-     * A fresh collector therefore receives the last non-loading state immediately — no
-     * flicker back to the loading skeleton on resubscribe — while the query eventually
-     * restarts and emits a fresh update.
-     *
-     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
-     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
-     * only update after the debounce window.
+     * Observes the patient entity and resolves their barangay name for the preview header.
      */
-    val state: StateFlow<SessionsState> = queryInputs
+    private val patientFlow: Flow<Pair<Patient?, String?>> = if (patientId.isNullOrBlank()) {
+        flowOf(null to null)
+    } else {
+        patientRepository.observePatientById(patientId).map { patient ->
+            val barangayName = patient?.psgcBarangayCode?.let { code ->
+                psgcRepository.getBarangay(code)?.name
+            }
+            patient to barangayName
+        }
+    }
+
+    private val sessionsStateFlow = queryInputs
         .flatMapLatest { inputs ->
             // Unreachable through the UI. Emitting an empty, non-loading state keeps a
             // malformed route from hanging on the loading skeleton forever, and keeps the
@@ -209,11 +220,34 @@ class SessionsViewModel @Inject constructor(
                 )
             }
         }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = SessionsState(),
+
+    /**
+     * Observable UI state for the Sessions screen.
+     *
+     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
+     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
+     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
+     * A fresh collector therefore receives the last non-loading state immediately — no
+     * flicker back to the loading skeleton on resubscribe — while the query eventually
+     * restarts and emits a fresh update.
+     *
+     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
+     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
+     * only update after the debounce window.
+     */
+    val state: StateFlow<SessionsState> = combine(
+        sessionsStateFlow,
+        patientFlow,
+    ) { sessionsState, (patient, barangayName) ->
+        sessionsState.copy(
+            patient = patient,
+            barangayName = barangayName,
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = SessionsState(),
+    )
 
     /**
      * Updates the free-text search query. Resets pagination.

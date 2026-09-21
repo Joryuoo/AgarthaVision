@@ -337,7 +337,7 @@
 
     <string name="sessions_title">Sessions</string>
     <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
-    <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
+    <string name="sessions_subtitle_purpose">Active and past testing sessions for this patient</string>
     <string name="session_picker_title">Sessions</string>
     <string name="session_picker_empty_title">No recent sessions</string>
     <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
@@ -438,4 +438,11 @@
     <string name="sample_detail_not_found_body">This sample isn\'t on this device.</string>
     <string name="sample_detail_not_visible_title">Not your sample</string>
     <string name="sample_detail_not_visible_body">This sample belongs to a different account.</string>
+
+    <!-- Patient preview card on Sessions screen -->
+    <plurals name="patient_preview_age">
+        <item quantity="one">%1$d year old</item>
+        <item quantity="other">%1$d years old</item>
+    </plurals>
+    <string name="patient_preview_age_sex">%1$s | %2$s</string>
 </resources>

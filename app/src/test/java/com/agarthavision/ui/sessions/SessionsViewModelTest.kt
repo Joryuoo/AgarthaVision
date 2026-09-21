@@ -5,10 +5,14 @@ import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
@@ -364,16 +368,10 @@ class SessionsViewModelTest {
     fun `a route with no patient id resolves to an error instead of loading forever`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val recording = RecordingSessionRepository()
-            val vm = SessionsViewModel(
-                sessionRepository = recording,
-                sessionManager = mock<SessionManager> {
-                    on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
-                },
-                observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
-                    whenever(it.invoke()).thenReturn(MutableStateFlow(LocalIdentity("u1", "u1@example.com")))
-                },
-                generateSessionLabelUseCase = stubLabelUseCase(),
-                savedStateHandle = SavedStateHandle(),
+            val vm = buildViewModelWithIdentityFlow(
+                repo = recording,
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@example.com")),
+                patientId = null,
             )
 
             vm.state.test {
@@ -929,8 +927,148 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // Patient Identity Preview Header
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `state emits patient and resolved barangay name when patient exists`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = defaultTestPatient
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn flowOf(patient)
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                patientRepo = patientRepo,
+                psgcRepo = psgcRepo,
+                patientId = "patient-1",
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals("Dela Cruz, Juan D.", settled.patient?.displayName)
+                assertEquals(Sex.MALE, settled.patient?.sex)
+                assertEquals("Poblacion", settled.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state has null patient and null barangayName when patient is not found`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("unknown-patient") } doReturn flowOf(null)
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                patientRepo = patientRepo,
+                patientId = "unknown-patient",
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertNull(settled.patient)
+                assertNull(settled.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state updates patient and barangay when patient flow re-emits`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientSource = MutableStateFlow<Patient?>(defaultTestPatient)
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn patientSource
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+                onBlocking { getBarangay("072217002") } doReturn PsgcBarangay(
+                    code = "072217002",
+                    name = "San Roque",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                patientRepo = patientRepo,
+                psgcRepo = psgcRepo,
+                patientId = "patient-1",
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val initial = expectMostRecentItem()
+                assertEquals("Poblacion", initial.barangayName)
+
+                patientSource.value = defaultTestPatient.copy(
+                    lastname = "Santos",
+                    psgcBarangayCode = "072217002",
+                )
+                advanceUntilIdle()
+                val updated = expectMostRecentItem()
+                assertEquals("Santos, Juan D.", updated.patient?.displayName)
+                assertEquals("San Roque", updated.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Factory helpers
     // ---------------------------------------------------------------------------
+
+    private val defaultTestPatient = Patient(
+        id = "patient-1",
+        lastname = "Dela Cruz",
+        firstname = "Juan",
+        middleName = "Diaz",
+        sex = Sex.MALE,
+        birthdate = LocalDate.of(2000, 1, 1),
+        psgcBarangayCode = "072217001",
+        createdBy = "user-1",
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+    )
+
+    private fun stubPatientRepository(patient: Patient? = defaultTestPatient): PatientRepository =
+        mock<PatientRepository> {
+            on { observePatientById(any()) } doReturn flowOf(patient)
+            onBlocking { getPatientById(any()) } doReturn patient
+        }
+
+    private fun stubPsgcRepository(barangayName: String? = "Poblacion"): PsgcRepository =
+        mock<PsgcRepository> {
+            onBlocking { getBarangay(any()) } doReturn barangayName?.let {
+                PsgcBarangay(
+                    code = "072217001",
+                    name = it,
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+        }
 
     private fun viewModelWith(
         userId: String?,
@@ -958,6 +1096,8 @@ class SessionsViewModelTest {
         repo: SessionRepository,
         sessionManager: SessionManager,
         userId: String?,
+        patientRepo: PatientRepository = stubPatientRepository(),
+        psgcRepo: PsgcRepository = stubPsgcRepository(),
     ): SessionsViewModel {
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(
@@ -969,6 +1109,8 @@ class SessionsViewModelTest {
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             generateSessionLabelUseCase = stubLabelUseCase(),
+            patientRepository = patientRepo,
+            psgcRepository = psgcRepo,
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
@@ -985,6 +1127,9 @@ class SessionsViewModelTest {
     private fun buildViewModelWithIdentityFlow(
         repo: SessionRepository,
         identityFlow: MutableStateFlow<LocalIdentity?>,
+        patientRepo: PatientRepository = stubPatientRepository(),
+        psgcRepo: PsgcRepository = stubPsgcRepository(),
+        patientId: String? = "patient-1",
     ): SessionsViewModel {
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(identityFlow)
@@ -1001,7 +1146,11 @@ class SessionsViewModelTest {
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             generateSessionLabelUseCase = stubLabelUseCase(),
-            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
+            patientRepository = patientRepo,
+            psgcRepository = psgcRepo,
+            savedStateHandle = SavedStateHandle(
+                if (patientId != null) mapOf("patientId" to patientId) else emptyMap()
+            ),
         )
     }
 }
