@@ -2,14 +2,10 @@
 
 package com.agarthavision.ui.records
 
-import android.content.Context
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,10 +50,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -496,39 +494,65 @@ internal fun LpfHeroCard(
             Spacer(Modifier.height(12.dp))
             LpfMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
             
-            if (session.lpfPerSpecies.isNotEmpty()) {
-                Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(16.dp))
+            Text(
+                stringResource(R.string.session_detail_lpf_title).uppercase(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = onCardMuted,
+                letterSpacing = 1.sp,
+            )
+            Spacer(Modifier.height(8.dp))
+
+            // A wholly negative session is a real result - and in surveillance it is the most
+            // common one, and the one a report is most often needed for. It gets a sentence
+            // saying so, not an absent section the medtech has to interpret. Stated once here
+            // rather than as a row of `0-0 LPF` per species, and the PDF says the same thing
+            // the same way: PB-18 asks for one of the two, consistently.
+            if (session.lpfPerSpecies.isEmpty()) {
                 Text(
-                    "LPF DENSITY",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = onCardMuted,
-                    letterSpacing = 1.sp,
+                    stringResource(R.string.session_detail_no_parasites),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = onCard,
+                    modifier = Modifier.testTag(SessionDetailTestTags.NO_PARASITES),
                 )
-                Spacer(Modifier.height(8.dp))
-                session.lpfPerSpecies.forEach { (species, density) ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+            }
+            session.lpfPerSpecies.forEach { (species, density) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(SessionDetailTestTags.lpfRow(species)),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        species,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        // Binomials are italic per the design system; "Hookworm" is a common
+                        // name covering two genera, so it is not.
+                        fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
+                        color = onCard,
+                        modifier = Modifier.weight(1f),
+                    )
+                    density.descriptor?.let { descriptor ->
                         Text(
-                            species,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = onCard,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            "%.2f/LPF (%d-%d)".format(density.mean, density.min, density.max),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = onCard,
-                            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                            stringResource(descriptor.labelRes),
+                            fontSize = 12.sp,
+                            color = onCardMuted,
+                            modifier = Modifier.padding(end = 10.dp),
                         )
                     }
-                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(R.string.lpf_range_value, density.min, density.max),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = onCard,
+                        style = TextStyle(fontFeatureSettings = "tnum"),
+                    )
                 }
+                Spacer(Modifier.height(4.dp))
             }
         }
     }

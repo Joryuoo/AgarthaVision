@@ -155,7 +155,7 @@ interface SessionDao {
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
-     * Observes sessions with their associated sample, verification, and EPG counts.
+     * Observes sessions with their associated sample, verification, and egg counts.
      */
     @Query(
         """
@@ -179,7 +179,7 @@ interface SessionDao {
 
     /**
      * Observes a paginated, filtered window of sessions for the Records screen.
-     * Non-flagged sample counts and non-false-positive detection EPG totals are
+     * Non-flagged sample counts and non-false-positive detection totals are
      * pre-aggregated so the UI avoids per-session N+1 queries. The verdict filter
      * (`d.verdict != 'false_positive'`) matches [DetectionDao.getConfirmedEggCountsForSession]
      * so Records cards and Session Detail counts are always consistent.

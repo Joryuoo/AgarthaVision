@@ -23,7 +23,7 @@ interface SessionRepository {
     suspend fun getSessionById(sessionId: String): Session?
 
     /**
-     * Observes sessions with sample and EPG counts.
+     * Observes sessions with sample and egg counts.
      */
     fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
 

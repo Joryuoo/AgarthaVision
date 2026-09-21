@@ -61,7 +61,6 @@ class ReportCsvBuilder @Inject constructor() {
             .forEach { canonical ->
                 val density = metadata.lpfPerSpecies[canonical]
                 val key = canonical.toLpfHeaderKey()
-                headerLines += "# lpf_mean_$key: ${density?.mean ?: 0.0f}"
                 headerLines += "# lpf_range_$key: ${density?.min ?: 0}-${density?.max ?: 0}"
             }
         return headerLines
