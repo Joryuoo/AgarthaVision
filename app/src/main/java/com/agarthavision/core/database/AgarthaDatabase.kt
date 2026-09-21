@@ -84,6 +84,8 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * carrying one of the other builds crashes at launch. That has already happened once on this
  * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
  * an ordering token under destructive fallback, so a skipped number costs nothing.
+ * Version 17 adds an index on `patients.updated_at` to support sorting by recent activity
+ * (86d4bze80).
  *
  * No hand-written `Migration` is supplied: per [DatabaseModule] the app
  * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
@@ -102,7 +104,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
