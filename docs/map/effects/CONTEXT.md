@@ -173,6 +173,8 @@ Actions CI (`.github/workflows/build-and-test.yml`), which runs `:app:verifyRobo
 
 **Open:** `../../non-negotiables.md` · `../../constraints.md` C9.
 
-**The non-obvious break:** `.husky/commit-msg` enforces the `[type][ClickUp-ID][Lastname]: Task title`
-format directly on every commit. Merge and revert commits are skipped automatically. The committed
-`commitlint.config.js` is unreferenced by any active hook.
+**The non-obvious break:** `.husky/commit-msg` enforces the commit subject line format, but
+branch names, ticket structure, and PR conventions are checked by review only. The committed
+`commitlint.config.js` encodes a *conventional-commit* shape that contradicts the documented
+`[type][ClickUp-ID][Lastname]` format while being wired to no hook.
+

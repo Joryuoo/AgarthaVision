@@ -68,6 +68,7 @@ Installed by Husky into `.git/hooks` via `bun run prepare`.
 | Hook | Runs | File |
 |---|---|---|
 | `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
+| `commit-msg` | Validates subject format `[type][ClickUp-ID][Lastname]: Task title` against C9 | `.husky/commit-msg` |
 | `pre-push` | `assembleDebug` | `.husky/pre-push` |
 | `commit-msg` | Validates commit message subject against `[type][ClickUp-ID][Lastname]: Task title` | `.husky/commit-msg` |
 
