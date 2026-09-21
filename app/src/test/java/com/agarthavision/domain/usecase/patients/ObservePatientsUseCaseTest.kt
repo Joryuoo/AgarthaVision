@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.patients
 
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Sex
@@ -191,6 +192,63 @@ class ObservePatientsUseCaseTest {
         // ends pagination at the first page.
         assertEquals(20, result.items.size)
         assertEquals(57, result.total)
+    }
+
+    @Test
+    fun `minAge and maxAge convert to exact birthdate epoch millis based on CLINICAL_ZONE`() = runTest {
+        val asOf = LocalDate.of(2026, 9, 22).atStartOfDay(CLINICAL_ZONE).toInstant()
+        val expectedMinBirthdate = LocalDate.of(2005, 9, 23).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+        val expectedMaxBirthdate = LocalDate.of(2016, 9, 22).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+
+        whenever(
+            patientRepository.observePatients(
+                userId = "user-a",
+                query = "",
+                limit = 20,
+                sort = PatientSort.RECENT,
+                sex = Sex.FEMALE,
+                barangayCode = LAHUG,
+                minBirthdate = expectedMinBirthdate,
+                maxBirthdate = expectedMaxBirthdate,
+            ),
+        ).thenReturn(flowOf(emptyList()))
+        whenever(
+            patientRepository.observePatientCount(
+                userId = "user-a",
+                query = "",
+                sex = Sex.FEMALE,
+                barangayCode = LAHUG,
+                minBirthdate = expectedMinBirthdate,
+                maxBirthdate = expectedMaxBirthdate,
+            ),
+        ).thenReturn(flowOf(0))
+
+        val query = PatientsQuery(
+            sex = Sex.FEMALE,
+            barangayCode = LAHUG,
+            minAge = 10,
+            maxAge = 20,
+        )
+        useCase("user-a", query, asOf = asOf).first()
+
+        verify(patientRepository).observePatients(
+            userId = "user-a",
+            query = "",
+            limit = 20,
+            sort = PatientSort.RECENT,
+            sex = Sex.FEMALE,
+            barangayCode = LAHUG,
+            minBirthdate = expectedMinBirthdate,
+            maxBirthdate = expectedMaxBirthdate,
+        )
+        verify(patientRepository).observePatientCount(
+            userId = "user-a",
+            query = "",
+            sex = Sex.FEMALE,
+            barangayCode = LAHUG,
+            minBirthdate = expectedMinBirthdate,
+            maxBirthdate = expectedMaxBirthdate,
+        )
     }
 
     private fun lahug() =

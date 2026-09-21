@@ -1,10 +1,12 @@
 package com.agarthavision.domain.usecase.patients
 
 import com.agarthavision.core.util.escapeLike
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
+import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -70,8 +72,22 @@ class ObservePatientsUseCase @Inject constructor(
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
 ) {
-    operator fun invoke(userId: String?, query: PatientsQuery): Flow<PatientsResult> {
+    operator fun invoke(
+        userId: String?,
+        query: PatientsQuery,
+        asOf: Instant = Instant.now(),
+    ): Flow<PatientsResult> {
         if (userId == null) return flowOf(PatientsResult())
+
+        val today = asOf.atZone(CLINICAL_ZONE).toLocalDate()
+        val minBirthdate = query.maxAge?.let { maxAge ->
+            today.minusYears((maxAge + 1).toLong()).plusDays(1)
+                .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+        }
+        val maxBirthdate = query.minAge?.let { minAge ->
+            today.minusYears(minAge.toLong())
+                .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+        }
 
         // Escaped here, once, for both the page and the count — they run the same predicate
         // and must not disagree. Without it a surname containing `_` is a wildcard and a
@@ -84,16 +100,16 @@ class ObservePatientsUseCase @Inject constructor(
             sort = query.sort,
             sex = query.sex,
             barangayCode = query.barangayCode,
-            minBirthdate = null,
-            maxBirthdate = null,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
         )
         val total = patientRepository.observePatientCount(
             userId = userId,
             query = needle,
             sex = query.sex,
             barangayCode = query.barangayCode,
-            minBirthdate = null,
-            maxBirthdate = null,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
         )
 
         return combine(page, total) { patients, count ->
