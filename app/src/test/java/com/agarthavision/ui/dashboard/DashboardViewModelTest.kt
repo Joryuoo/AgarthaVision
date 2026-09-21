@@ -213,7 +213,7 @@ class DashboardViewModelTest {
 
         verify(setThemeModeUseCase).invoke(eq(ThemeMode.LIGHT))
     }
-\n
+
     @Test
     fun `every KPI tile is a row count`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
         // The bar PB-23 sets: if a tile cannot be explained by pointing at data, it does not
@@ -226,7 +226,11 @@ class DashboardViewModelTest {
         val vm = viewModel()
         vm.uiState.test {
             var snapshot = awaitItem()
-            while (snapshot.isLoading) {
+            // The KPI flow hangs off userIdFlow, whose stateIn seed is null, and a null
+            // identity yields KpiState() zeros by design (ADR-007). The first non-loading
+            // frame is therefore the signed-out one, so waiting only on isLoading asserts
+            // against that transient rather than against the counts.
+            while (snapshot.isLoading || snapshot.kpis.patientsCount == "0") {
                 snapshot = awaitItem()
             }
 
