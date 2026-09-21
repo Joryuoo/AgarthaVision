@@ -153,6 +153,13 @@ its own ticket.
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
 
+**Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
+images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
+data (patient names, birthdates, sex, barangays) is governed by Philippine RA 10173 and clinical
+retention policies. Model retraining requires labeled tensors, not patient identities. The privacy
+position permanently separating the retraining corpus from patient PII is documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 ## C9 — Commit and branch format
 
 Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
@@ -202,6 +209,14 @@ no CI at all — no `.github/` directory exists in this repository.
 `INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
 `INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
 wins.
+
+**Patient data privacy and at-rest security:** Like application secrets, patient Personally
+Identifiable Information (PII) and Sensitive Personal Information (SPI) must never leak into git
+history, test artifacts, or logs. Local on-device SQLite storage (Room) and report PDFs in shared
+storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
+validation mandate requiring synthetic patient profiles are documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 
 ## C11 — One design system
 

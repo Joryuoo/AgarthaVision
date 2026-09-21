@@ -132,6 +132,7 @@ docs/
 ├── features.md         What ships, and the ghost list
 ├── CHANGELOG.md        What changed, from git history
 ├── file-tree.md        This file
+├── patient-pii-position.md  Written position on patient PII, RA 10173, and synthetic validation data
 ├── map/
 │   ├── objects/        Six object cards — the nouns
 │   ├── processes/      Five process cards — the verbs
