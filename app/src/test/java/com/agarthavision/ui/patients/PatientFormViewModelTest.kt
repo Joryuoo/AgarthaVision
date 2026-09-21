@@ -433,22 +433,59 @@ class PatientFormViewModelTest {
         }
 
     @Test
-    fun `onDiscardConfirmed emits Cancelled`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
-        val vm = viewModel()
-        vm.onLastnameChanged("A")
-        vm.onCancel()
-        advanceUntilIdle()
-        assertTrue(vm.state.value.showDiscardConfirm)
+    fun `onDiscardConfirmed emits Cancelled and resets form state`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onLastnameChanged("A")
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+            assertTrue(vm.state.value.isDirty)
 
-        val events = mutableListOf<PatientFormEvent>()
-        val job = launch { vm.events.collect { events.add(it) } }
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
 
-        vm.onDiscardConfirmed()
-        advanceUntilIdle()
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
 
-        assertEquals(listOf(PatientFormEvent.Cancelled), events)
-        job.cancel()
-    }
+            assertEquals(listOf(PatientFormEvent.Cancelled), events)
+            assertFalse(vm.state.value.showDiscardConfirm)
+            assertFalse(vm.state.value.isDirty)
+            assertEquals("", vm.state.value.lastname)
+            job.cancel()
+        }
+
+    @Test
+    fun `onDiscardConfirmed when editing resets form to original patient values`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = existingPatient()
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patient)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertEquals("Cruz", vm.state.value.lastname)
+            assertFalse(vm.state.value.isDirty)
+
+            vm.onLastnameChanged("Modified")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
+
+            assertEquals(listOf(PatientFormEvent.Cancelled), events)
+            assertFalse(vm.state.value.showDiscardConfirm)
+            assertFalse(vm.state.value.isDirty)
+            assertEquals("Cruz", vm.state.value.lastname)
+            job.cancel()
+        }
 
     @Test
     fun `onDiscardDismissed clears showDiscardConfirm without emitting any event`() =

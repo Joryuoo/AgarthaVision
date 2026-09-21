@@ -247,6 +247,27 @@ class PatientFormViewModel @Inject constructor(
     }
 
     fun onDiscardConfirmed() {
+        val existing = loaded
+        fields.value = if (existing != null) {
+            PatientFormState(
+                lastname = existing.lastname,
+                firstname = existing.firstname,
+                middleName = existing.middleName.orEmpty(),
+                sex = existing.sex,
+                birthdate = existing.birthdate,
+                isEditing = true,
+                showDiscardConfirm = false,
+            )
+        } else {
+            PatientFormState(isEditing = false, showDiscardConfirm = false)
+        }
+        if (existing != null) {
+            viewModelScope.launch {
+                barangayPicker.preselect(psgcRepository.getBarangay(existing.psgcBarangayCode))
+            }
+        } else {
+            barangayPicker.onCleared()
+        }
         viewModelScope.launch { eventFlow.emit(PatientFormEvent.Cancelled) }
     }
 
@@ -419,7 +440,8 @@ class PatientFormViewModel @Inject constructor(
             if (existing == null) patientRepository.insert(patient)
             else patientRepository.update(patient)
         }.onSuccess {
-            fields.update { it.copy(isSaving = false) }
+            fields.value = PatientFormState(isEditing = false, showDiscardConfirm = false)
+            barangayPicker.onCleared()
             eventFlow.emit(PatientFormEvent.Saved)
         }.onFailure { throwable ->
             // Logged, not swallowed: the screen only says "could not save", so without
