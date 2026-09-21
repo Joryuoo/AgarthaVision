@@ -78,6 +78,9 @@ class OpenVerificationTargetUseCaseTest {
         imageHeight = null,
     )
 
+    // Seven independent knobs, each defaulted; a holder here would obscure which one a
+    // given case varies. Same call as `topLeftOf` in DetectionOverlayGeometryTest.
+    @Suppress("LongParameterList")
     private fun boxDetection(
         ordinal: Int,
         verdict: DetectionVerdict = DetectionVerdict.CONFIRMED,
