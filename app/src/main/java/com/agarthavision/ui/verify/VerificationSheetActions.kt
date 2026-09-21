@@ -1,5 +1,6 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
 /**
@@ -24,11 +25,22 @@ data class VerificationSheetActions(
     val onSubmit: () -> Unit,
     val onCancel: () -> Unit,
     val onUserNoteChanged: (String) -> Unit,
-    /** Adds an egg the model never boxed. Opens holding one. */
-    val onAddFinding: () -> Unit,
-    /** Removes an added egg. Never offered on a prediction-backed row. */
+    /** Adds a species the model did not account for. Opens holding one egg. */
+    val onAddSpecies: () -> Unit,
+    /** Removes an added species. Never offered on a prediction-backed row. */
     val onRemoveFinding: (Int) -> Unit,
-    val onEggCountChanged: (Int, String) -> Unit,
+    /** Eggs of an added species in this field, the model's own boxes included. */
+    val onFieldTotalChanged: (Int, String) -> Unit,
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit,
     val onAddedOtherSpeciesChanged: (Int, String) -> Unit,
+    /**
+     * Starts drawing a box: a redraw on the model box at this finding (`slot` null), or a
+     * location for egg `slot` of an added species. Both optional — a box the medtech says is
+     * misplaced is a complete answer without a redraw, and an added egg is a complete finding
+     * with no box at all.
+     */
+    val onBeginDraw: (Int, Int?) -> Unit,
+    /** The medtech accepted a drawn box, already in the model's centre-based image space. */
+    val onBoxDrawn: (ImageBox) -> Unit,
+    val onCancelDraw: () -> Unit,
 )

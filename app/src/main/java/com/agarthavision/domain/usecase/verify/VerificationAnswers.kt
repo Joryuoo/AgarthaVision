@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
 
 /**
@@ -23,10 +24,27 @@ data class VerificationAnswers(
     val species: EggSpecies? = null,
     val otherSpeciesText: String = "",
     /**
-     * Eggs of this species in this field. Only ever set on a finding with no prediction — a
-     * box is worth exactly one egg, and that is not the medtech's to edit.
+     * **Eggs of this species the medtech counted in this field, the model's own boxes
+     * included.** Only ever set on a finding with no prediction: a box is worth exactly one egg,
+     * and that is not the medtech's to edit.
+     *
+     * A total, deliberately, and not the number being added on top. Two reasons, and the second
+     * is the one that made the old shape wrong:
+     *
+     * 1. It is what the medtech actually counts. A tally at the microscope produces "23
+     *    Ascaris in this field", and a field asking for the 14 *beyond* the nine the model
+     *    boxed makes them do the subtraction in their head, under time pressure, with nothing
+     *    anywhere to catch an error. The unboxed remainder is derived instead — see
+     *    [com.agarthavision.domain.usecase.verify.unboxedCountOf].
+     * 2. It is stable under a later answer. Reject one of the model's boxes after typing the
+     *    total and the medtech still saw 23 eggs; a stored remainder would silently read 22,
+     *    because the number it was relative to moved underneath it.
+     *
+     * Named [fieldTotal] rather than reusing `eggCount` on purpose. The meaning changed, and a
+     * field whose meaning drifts under its old name is the exact shape this project has already
+     * been bitten by twice (`sessions.ended_at`, `detections.verified_by_user`).
      */
-    val eggCount: Int? = null,
+    val fieldTotal: Int? = null,
     /**
      * True once the medtech deliberately asserts a species — by confirming the model's
      * suggestion, or by picking one themselves.
@@ -50,6 +68,51 @@ data class VerificationAnswers(
      * flag is here to tell apart.
      */
     val speciesTouched: Boolean = false,
+    /**
+     * A box the medtech drew by hand, in the model's own coordinate space.
+     *
+     * On a prediction-backed row this **replaces** the model's box: the model boxed a real egg
+     * badly, and this is where it actually is. On an added row it is simply where the egg is,
+     * and it stays null when the medtech did not bother — an added egg with no box is a complete
+     * finding, which is what `detections.bbox_*` is nullable for.
+     *
+     * Deliberately not a synthesised [com.agarthavision.domain.inference.Prediction]: that would
+     * need a class label and a confidence the model never assigned, and both feed the retraining
+     * corpus.
+     */
+    val drawnBox: ImageBox? = null,
+    /**
+     * Where the eggs on an **added** row are, for the ones the medtech bothered to locate.
+     *
+     * Deliberately a second field rather than a list [drawnBox] widens into: the two are
+     * different facts. [drawnBox] *replaces* one box the model got wrong and latches
+     * [boxReplaced]; this one says where eggs the model never boxed actually sit, and there is
+     * no model claim for it to contradict. Collapsing them would put a replacement and a
+     * location in one list and leave nothing able to tell which a given entry was.
+     *
+     * **Drawn boxes occupy the front slots.** Egg *k* of the unboxed set carries
+     * `drawnBoxes[k]` when one exists, and the rest are simply not drawn. Two things fall out
+     * of that ordering for free: lowering [fieldTotal] drops undrawn eggs first, and the clamp
+     * that refuses to go below `drawnBoxes.size` is the only guard needed to make hand-drawn
+     * geometry — the most expensive data this screen produces — impossible to delete with a
+     * stray digit.
+     */
+    val drawnBoxes: List<ImageBox> = emptyList(),
+    /**
+     * The model put this box in the wrong place, and that does not stop being true because a
+     * human fixed it.
+     *
+     * Set when a redraw is committed, and **it locks Q2 to "No"**. This is the training signal
+     * the whole drawing feature exists to capture: an implementation that lets Q2 flip back to
+     * "Yes" after a redraw destroys the label, silently, leaving a frame that claims the model
+     * localised correctly while carrying the human's geometry.
+     *
+     * A frame reopened for editing reconstructs this by comparing the stored `bbox_*` against
+     * the prediction it belongs to. That is the only durable record: the alternative is a new
+     * column, which means a Room version bump, and this project has already been burned once by
+     * a version collision (`core/database/AgarthaDatabase.kt` records it).
+     */
+    val boxReplaced: Boolean = false,
 ) {
     /**
      * True when the species question is answered.

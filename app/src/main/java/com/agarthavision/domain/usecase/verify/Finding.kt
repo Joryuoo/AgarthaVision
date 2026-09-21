@@ -27,7 +27,7 @@ data class Finding(
     /** True when this row has everything it needs to be persisted. */
     val isComplete: Boolean
         get() = if (prediction == null) {
-            answers.speciesIsComplete && (answers.eggCount ?: 0) > 0
+            answers.speciesIsComplete && (answers.fieldTotal ?: 0) > 0
         } else {
             when {
                 answers.isEgg == null -> false
@@ -43,19 +43,85 @@ data class Finding(
         }
 
     /**
-     * Eggs this finding contributes to its species count.
+     * True when this row is one confirmed egg with a model box behind it.
      *
-     * A prediction-backed row is worth exactly one egg and the medtech cannot edit that — the
-     * number of boxes they said "yes" to *is* the count. Only an added row carries a typed
-     * number.
+     * This replaced an `eggContribution: Int` that tried to answer "how many eggs is this row
+     * worth?" for both kinds of row at once. It cannot be answered on one row any more: an
+     * added row now carries [VerificationAnswers.fieldTotal], a total for its whole species
+     * that already counts the boxes its siblings hold, so turning it into a number needs the
+     * siblings. That arithmetic moved to the list-level helpers below, which is where it can
+     * see them.
      */
-    val eggContribution: Int
-        get() = when {
-            prediction == null -> answers.eggCount ?: 0
-            answers.isEgg == true -> 1
-            else -> 0
-        }
+    val countsAsEgg: Boolean
+        get() = prediction != null && answers.isEgg == true
 }
+
+/**
+ * Boxes the medtech kept as eggs of [species] — the part of the count the model supplied.
+ *
+ * Zero for a null [species], which is what a card holds before it is named and what a box holds
+ * before its species question is answered. "How many boxes of no species" has no answer, and
+ * counting the unnamed ones together would put a floor under a freshly added card drawn from
+ * boxes that have nothing to do with it.
+ */
+fun List<Finding>.boxedCountOf(species: String?): Int =
+    if (species == null) 0 else count { it.countsAsEgg && it.answers.speciesLabel == species }
+
+/**
+ * What the medtech says is in this field for [species]: their own total when they gave one,
+ * and otherwise the boxes they kept.
+ *
+ * The two are not added. A total already includes the boxes — that is what makes it a total —
+ * and summing them is the double-count the old per-row contribution walked into.
+ */
+fun List<Finding>.fieldTotalOf(species: String?): Int =
+    firstOrNull { it.prediction == null && it.answers.speciesLabel == species }
+        ?.answers?.fieldTotal
+        ?: boxedCountOf(species)
+
+/**
+ * Eggs of [species] with no box behind them.
+ *
+ * These are the slots the Add Species reveal list enumerates, and the detection rows a submit
+ * writes for the eggs the model missed. Floored at zero: a total below the boxed count is a
+ * contradiction [totalsAreConsistent] holds submit on rather than clamping away, so it does
+ * reach here, and it must produce no slots instead of a negative count.
+ */
+fun List<Finding>.unboxedCountOf(species: String?): Int =
+    (fieldTotalOf(species) - boxedCountOf(species)).coerceAtLeast(0)
+
+/**
+ * The lowest total the medtech can claim for [species] without contradicting what is already on
+ * the frame: the boxes kept, plus the boxes they drew themselves on added eggs.
+ *
+ * The drawn half is the part that matters. Geometry a human placed by hand is the most expensive
+ * data this screen produces, and a total below this floor would leave the mapper writing fewer
+ * slots than there are boxes — a stray digit silently deleting work. Submit refuses instead; see
+ * [totalsAreConsistent].
+ */
+fun List<Finding>.floorFor(species: String?): Int {
+    val added = firstOrNull { it.prediction == null && it.answers.speciesLabel == species }
+    return boxedCountOf(species) + (added?.answers?.drawnBoxes?.size ?: 0)
+}
+
+/**
+ * True when no added row claims fewer eggs than the frame already accounts for.
+ *
+ * Checked at list level rather than clamped as the medtech types: a field that fights the
+ * keyboard cannot be typed through — heading for 23 with a floor of 11 would snap "2" to 11
+ * before the 3 arrives. The value is taken as given and submit explains why it is held.
+ */
+fun List<Finding>.totalsAreConsistent(): Boolean =
+    none { finding ->
+        finding.prediction == null &&
+            (finding.answers.fieldTotal ?: 0) < floorFor(finding.answers.speciesLabel)
+    }
+
+/** Every species this frame has something to say about, in a stable order. */
+fun List<Finding>.speciesPresent(): List<String> =
+    mapNotNull { finding ->
+        finding.answers.speciesLabel?.takeIf { finding.countsAsEgg || finding.prediction == null }
+    }.distinct().sorted()
 
 /**
  * One species and its egg count for this field — the shape that reaches
@@ -74,18 +140,21 @@ data class FindingRow(
 /**
  * Collapses a frame's findings into the rows that get persisted.
  *
- * Several findings can land on the same species — five confirmed Ascaris boxes plus a typed
- * count for Ascaris the model missed — and they add up into one row, because the table holds
- * one row per species per frame, not one per assertion.
+ * One row per species, because that is what `sample_species_findings` holds — it is unique on
+ * `(sample_id, species)` and `0001_init.sql` records that a per-egg count column was considered
+ * and rejected.
  *
- * Rows contributing zero eggs drop out, which is how a rejected box (`isEgg = false`) leaves no
- * trace in the count while still persisting as a labelled `FALSE_POSITIVE` detection.
+ * **This is no longer a sum.** It used to add every finding's contribution together, which was
+ * correct only while an added row meant "eggs beyond the boxes". An added row now carries the
+ * field total for its species, boxes included, so the rule is [fieldTotalOf]: the medtech's
+ * total when they gave one, the kept boxes otherwise.
+ *
+ * Species contributing zero eggs drop out, which is how a rejected box (`isEgg = false`) leaves
+ * no trace in the count while still persisting as a labelled `FALSE_POSITIVE` detection.
  */
 fun List<Finding>.toFindingRows(): List<FindingRow> =
-    filter { it.eggContribution > 0 }
-        .mapNotNull { finding ->
-            finding.answers.speciesLabel?.let { label -> label to finding.eggContribution }
+    speciesPresent()
+        .mapNotNull { species ->
+            fieldTotalOf(species).takeIf { it > 0 }?.let { FindingRow(species, it) }
         }
-        .groupBy { (label, _) -> label }
-        .map { (label, group) -> FindingRow(label, group.sumOf { it.second }) }
         .sortedBy { it.species }

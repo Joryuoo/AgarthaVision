@@ -10,10 +10,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.content.ContextCompat
 import com.agarthavision.R
+import com.agarthavision.domain.model.LpfDescriptor
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
 import com.agarthavision.domain.model.ReportPdfSpeciesRow
 import com.agarthavision.domain.repository.ReportPdfRenderer
+import com.agarthavision.ui.records.labelRes
 import com.agarthavision.ui.theme.AppColors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.ByteArrayOutputStream
@@ -122,19 +124,41 @@ class AndroidReportPdfRenderer @Inject constructor(
         return y
     }
 
+    /**
+     * The per-species table: one row per species found, its LPF range, and its reading.
+     *
+     * **A session with nothing in it prints a sentence, not an empty table.** A wholly negative
+     * smear is a real result and the most common one in surveillance - it is the outcome a
+     * report is most often needed for - and a blank table under a heading asks the person
+     * holding the page to work out whether the app found nothing or failed to look. Session
+     * Detail says the same thing in the same words, which is the consistency PB-18 asks for.
+     */
     private fun drawSpeciesTable(canvas: Canvas, rows: List<ReportPdfSpeciesRow>, startY: Float) {
         var y = drawSectionHeader(canvas, context.getString(R.string.report_pdf_species_table_title), startY)
+
+        if (rows.isEmpty()) {
+            canvas.drawText(
+                context.getString(R.string.report_pdf_no_parasites),
+                MARGIN,
+                y,
+                paintFor(PdfTextStyle.VALUE),
+            )
+            return
+        }
 
         val headerPaint = paintFor(PdfTextStyle.TABLE_HEADER)
         canvas.drawText(context.getString(R.string.report_pdf_column_species), MARGIN, y, headerPaint)
         canvas.drawText(context.getString(R.string.report_pdf_column_lpf), LPF_COLUMN_X, y, headerPaint)
+        canvas.drawText(context.getString(R.string.report_pdf_column_reading), READING_COLUMN_X, y, headerPaint)
         y += LINE_HEIGHT
 
         val rowPaint = paintFor(PdfTextStyle.VALUE)
         rows.forEach { row ->
             canvas.drawText(row.speciesDisplayName, MARGIN, y, rowPaint)
-            val densityText = "%d-%d".format(row.min, row.max)
-        canvas.drawText(densityText, LPF_COLUMN_X, y, rowPaint)
+            canvas.drawText("%d\u2013%d".format(row.min, row.max), LPF_COLUMN_X, y, rowPaint)
+            // Blank rather than a dash when a species was never seen: the row would not be on
+            // the page at all in that case, and inventing a reading for one is worse than none.
+            row.descriptor?.let { canvas.drawText(context.getString(it.labelRes), READING_COLUMN_X, y, rowPaint) }
             y += LINE_HEIGHT
         }
 
@@ -209,6 +233,9 @@ class AndroidReportPdfRenderer @Inject constructor(
         private const val MARGIN = 40f
         private const val LABEL_COLUMN_WIDTH = 160f
         private const val LPF_COLUMN_X = 300f
+
+        // Right of the range, with room for "numerous" inside the page's right margin.
+        private const val READING_COLUMN_X = 400f
         private const val LINE_HEIGHT = 22f
         private const val SECTION_GAP = 16f
         private const val UNIT_NOTE_GAP = 10f

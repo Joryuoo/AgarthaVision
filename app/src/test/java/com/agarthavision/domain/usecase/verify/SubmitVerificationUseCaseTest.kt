@@ -4,6 +4,9 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.data.local.mapper.addedDetectionIdFor
+import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
@@ -18,10 +21,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -35,7 +40,13 @@ class SubmitVerificationUseCaseTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val sampleDao: SampleDao = mock()
-    private val detectionDao: DetectionDao = mock()
+    // Room returns an empty list for a sample with no detection rows, never null, but
+    // Mockito's default for a suspend function is null. Unstubbed, the prune block in
+    // SubmitVerificationUseCase throws an NPE that runCatching swallows, so every assertion
+    // sited after it passes vacuously instead of failing.
+    private val detectionDao: DetectionDao = mock {
+        onBlocking { getDetectionsForSample(any()) } doReturn emptyList()
+    }
     private val syncSampleUseCase: SyncSampleUseCase = mock()
 
     private val findingDao: SampleSpeciesFindingDao = mock()
@@ -186,6 +197,84 @@ class SubmitVerificationUseCaseTest {
                 firstIds,
                 secondIds,
             )
+        }
+
+    @Test
+    fun `lowering an added count prunes the slots it left behind, and never a model box`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // 23 Ascaris counted down to 21 leaves two null-bbox rows for eggs nobody claims.
+            // insertDetections replaces and never deletes, so without this they stay forever,
+            // inflating the corpus and marking the frame un-localised for good.
+            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
+            val ascaris = VerificationAnswers(
+                isEgg = true,
+                isBoxCorrect = true,
+                species = EggSpecies.ASCARIS,
+                speciesTouched = true,
+            )
+            val stale = listOf(
+                addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 1),
+                addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 2),
+            )
+            whenever(detectionDao.getDetectionsForSample("sample-1")).thenReturn(
+                (stale + detectionIdFor("sample-1", 0)).map { id ->
+                    DetectionEntity(
+                        detectionId = id,
+                        sampleId = "sample-1",
+                        classLabel = "Ascaris lumbricoides",
+                        confidence = 1.0f,
+                        bboxX = null,
+                        bboxY = null,
+                        bboxW = null,
+                        bboxH = null,
+                        verdict = DetectionVerdict.CONFIRMED.value,
+                        verifiedByUser = true,
+                    )
+                },
+            )
+
+            // One box kept, and a total of two: exactly one egg left unboxed, so slot 0 only.
+            val findings = listOf(
+                Finding(prediction, ascaris),
+                Finding(prediction = null, answers = ascaris.copy(fieldTotal = 2)),
+            )
+            useCase(frame, findings, missedEgg = true)
+            advanceUntilIdle()
+
+            val captor = argumentCaptor<List<String>>()
+            verify(detectionDao).deleteDetectionsByIds(captor.capture())
+            assertEquals(stale, captor.firstValue)
+        }
+
+    @Test
+    fun `a model box is never pruned, whatever the finding list says`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // C8's boundary, asserted rather than trusted: a rejection is kept as a labelled
+            // FALSE_POSITIVE row, so no path through here may delete a prediction-backed id.
+            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
+            val boxId = detectionIdFor("sample-1", 0)
+            whenever(detectionDao.getDetectionsForSample("sample-1")).thenReturn(
+                listOf(
+                    DetectionEntity(
+                        detectionId = boxId,
+                        sampleId = "sample-1",
+                        classLabel = "Ascaris lumbricoides",
+                        confidence = 0.9f,
+                        bboxX = 1f,
+                        bboxY = 2f,
+                        bboxW = 3f,
+                        bboxH = 4f,
+                        verdict = DetectionVerdict.CONFIRMED.value,
+                        verifiedByUser = true,
+                    ),
+                ),
+            )
+
+            // An empty finding list produces no entities at all, so the box id is "unwritten".
+            useCase(frame, findings = emptyList(), missedEgg = null)
+            advanceUntilIdle()
+
+            verify(detectionDao, never()).deleteDetectionsByIds(any())
         }
 
     @Test

@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.LpfDescriptor
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
@@ -112,8 +113,18 @@ class ReportPdfBuilderTest {
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             ),
             speciesRows = listOf(
-                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", min = 0, max = 2),
-                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", min = 0, max = 1),
+                ReportPdfSpeciesRow(
+                    speciesDisplayName = "Ascaris lumbricoides",
+                    min = 0,
+                    max = 2,
+                    descriptor = LpfDescriptor.RARE,
+                ),
+                ReportPdfSpeciesRow(
+                    speciesDisplayName = "Trichuris trichiura",
+                    min = 0,
+                    max = 1,
+                    descriptor = LpfDescriptor.RARE,
+                ),
             ),
         )
         assertEquals(expected, document)

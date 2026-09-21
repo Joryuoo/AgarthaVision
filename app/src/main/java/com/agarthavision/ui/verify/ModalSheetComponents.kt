@@ -199,6 +199,9 @@ internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
  * Each side goes dead at its end of the range rather than wrapping, so the control cannot read
  * as a way to leave the cycle.
  */
+// A prev/next pair needs its label, description, tag and enablement on both sides; bundling
+// them into a holder would add a type that exists only to satisfy the threshold.
+@Suppress("LongParameterList")
 @Composable
 internal fun CycleRow(
     indicator: String,

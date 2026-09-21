@@ -3,7 +3,6 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.model.QueueBucket
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.domain.usecase.verify.DeleteQueueItemsUseCase
 import com.agarthavision.domain.usecase.verify.ObserveVerificationQueueUseCase
@@ -18,8 +17,17 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class VerificationQueueState(
+    /** Every row, and every row is unverified — there is no second list to filter out of this. */
     val samples: List<QueueSample> = emptyList(),
-    val bucket: QueueBucket = QueueBucket.UNVERIFIED,
+    /**
+     * How many samples in this session have already been verified.
+     *
+     * Not rendered as a number. It is the only thing that separates the two empty states, which
+     * an empty list of unverified rows cannot tell apart on its own.
+     */
+    val verifiedInSession: Int = 0,
+    /** The session every row belongs to, carried in so the empty state still has a way onward. */
+    val sessionId: String? = null,
     /**
      * The sample open in the sheet, with whatever the medtech already said about it.
      *
@@ -40,64 +48,40 @@ data class VerificationQueueState(
     /** Derived, never stored, so the flag and the set cannot disagree. */
     val isSelecting: Boolean get() = selectedIds.isNotEmpty()
 
-    /** How the selection splits, which is what the confirmation dialog has to say out loud. */
-    val selectedVerifiedCount: Int
-        get() = samples.count { it.sampleId in selectedIds && it.isVerified }
-
-    val selectedUnverifiedCount: Int
-        get() = samples.count { it.sampleId in selectedIds && !it.isVerified }
-
     val verificationTarget: FlaggedFrame?
         get() = priorTarget?.frame
-
-    /** The rows in the selected bucket. */
-    val visibleSamples: List<QueueSample>
-        get() = samples.filter { it.bucket == bucket }
-
-    /** Verified rows across both buckets - what "all done" is judged against. */
-    val verifiedCount: Int
-        get() = samples.count { it.isVerified }
-
-    /** The session every row belongs to; null only while the queue is empty. */
-    val activeSessionId: String?
-        get() = samples.firstOrNull()?.sessionId
-
-    /**
-     * Counts per bucket, derived from the same list the rows come from.
-     *
-     * A row belongs to exactly one bucket by construction, so a count cannot disagree with its
-     * list — which is what the previous version had to defend against by routing its chip counts
-     * through the same filter function the list used.
-     */
-    val counts: Map<QueueBucket, Int>
-        get() = samples.groupingBy { it.bucket }.eachCount()
 }
 
-/** Which empty body to show when the selected bucket has no rows. */
-internal enum class QueueEmptyVariant { NEVER_HAD, ALL_DONE, NONE_VERIFIED }
+/** Which empty body to show when there is nothing left to verify. */
+internal enum class QueueEmptyVariant { NEVER_HAD, ALL_DONE }
 
 /**
- * Pure: pick the empty-state copy for an empty [bucket].
+ * Pure: pick the empty-state copy.
  *
- * An empty unverified bucket means one of two very different things to the medtech - nothing
- * has been captured yet, or every capture has been checked - and only the second deserves a
- * completion message and a way onward. An empty verified bucket is simply "not yet".
+ * An empty queue means one of two very different things to the medtech — nothing has been
+ * captured yet, or every capture has been checked — and only the second deserves a completion
+ * message and a way onward (86d4ayefd). The list itself is silent about which, because both look
+ * like zero unverified rows; [verifiedInSession] is what distinguishes them.
  */
-internal fun queueEmptyVariant(bucket: QueueBucket, verifiedCount: Int): QueueEmptyVariant = when {
-    bucket == QueueBucket.VERIFIED -> QueueEmptyVariant.NONE_VERIFIED
-    verifiedCount > 0 -> QueueEmptyVariant.ALL_DONE
-    else -> QueueEmptyVariant.NEVER_HAD
-}
+internal fun queueEmptyVariant(verifiedInSession: Int): QueueEmptyVariant =
+    if (verifiedInSession > 0) QueueEmptyVariant.ALL_DONE else QueueEmptyVariant.NEVER_HAD
 
 /**
  * State holder for the verification queue.
  *
- * Shows the **union** of verified and unverified samples for the open session. Verified samples
- * stay visible and stay editable: tapping one reopens it with the medtech's own previous answers
- * so a mistake can be corrected rather than lived with.
+ * **One flat list, no categories.** Every row is an unverified sample in the open session, held
+ * locally and never pushed until a human submits it. Tapping a row opens the Verification Screen.
  *
- * Takes [ObserveVerificationQueueUseCase] rather than the data-layer `FlaggedFrameStore`, which
- * only ever held the unverified half — and which takes this ViewModel back inside C1.
+ * This partially reverses 86d4ab4vm, deliberately: that ticket made the queue a union of verified
+ * and unverified rows in two buckets so a verified sample stayed editable in place. That editing
+ * now lives on the Sample Data Screen, reached from the Records screen's Samples tab, so the
+ * queue goes back to meaning one thing — work still to do. The capability moved; it was not
+ * dropped.
+ *
+ * Takes [ObserveVerificationQueueUseCase] rather than the data-layer `FlaggedFrameStore`. The two
+ * now read the same rows, which is exactly why this must not be "simplified" back onto the store:
+ * the store hands out `FlaggedFrame`, which carries the JPEG bytes of every row on every
+ * emission, and it is a data-layer singleton this ViewModel was moved off on purpose (C1).
  */
 @HiltViewModel
 class VerificationQueueViewModel @Inject constructor(
@@ -111,24 +95,21 @@ class VerificationQueueViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            observeVerificationQueue().collect { samples ->
+            observeVerificationQueue().collect { queue ->
                 _state.update { current ->
-                    // Prune ids that have left the list. A sample deleted from elsewhere would
-                    // otherwise leave a phantom in the count on the contextual bar.
-                    val live = samples.mapTo(mutableSetOf()) { it.sampleId }
+                    // Prune ids that have left the list. A sample verified or deleted from
+                    // elsewhere would otherwise leave a phantom in the count on the contextual
+                    // bar — and verifying one is now the ordinary way a row leaves.
+                    val live = queue.samples.mapTo(mutableSetOf()) { it.sampleId }
                     current.copy(
-                        samples = samples,
+                        samples = queue.samples,
+                        verifiedInSession = queue.verifiedInSession,
+                        sessionId = queue.sessionId,
                         selectedIds = current.selectedIds intersect live,
                     )
                 }
             }
         }
-    }
-
-    fun onBucketSelected(bucket: QueueBucket) {
-        // Clears the selection: confirming a delete of rows you can no longer see is exactly
-        // the kind of mistake an irreversible action must not allow.
-        _state.update { it.copy(bucket = bucket, selectedIds = emptySet()) }
     }
 
     /** Long-press starts selection; tapping while selecting adds and removes. */

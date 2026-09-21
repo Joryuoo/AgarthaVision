@@ -103,6 +103,19 @@ class SampleRemoteDataSource @Inject constructor(
         }.decodeList<FindingRow>().map { it.toEntity() }
 
     /**
+     * Downloads a private sample image from Storage, as the signed-in medtech.
+     *
+     * Authenticated rather than signed: this runs inside the sync pass, where a session
+     * already exists, and a signed URL would add a round trip and a 15-minute expiry to a
+     * transfer that starts immediately. [createSignedSampleImageUrl] stays for the on-open
+     * path, where the URL is handed to Coil rather than read here.
+     *
+     * Throws on a missing object or a lost connection, which is what the caller counts.
+     */
+    suspend fun downloadSampleImage(storagePath: String): ByteArray =
+        supabase.storage.from(SAMPLES_BUCKET).downloadAuthenticated(storagePath)
+
+    /**
      * Creates a short-lived URL for reading a private sample image from Storage.
      */
     suspend fun createSignedSampleImageUrl(storagePath: String): String =
