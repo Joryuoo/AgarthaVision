@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -270,17 +271,21 @@ private fun SelectionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.accentTint2, RoundedCornerShape(Spacing.md))
-            .border(1.dp, colors.accentTint, RoundedCornerShape(Spacing.md))
+            .background(colors.accent, RoundedCornerShape(Spacing.md))
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        OptionText(option = selected, modifier = Modifier.weight(1f))
+        OptionText(
+            option = selected,
+            titleColor = colors.onAccent,
+            subtitleColor = colors.onAccent.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f),
+        )
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(colors.surfaceMuted, CircleShape)
+                .background(colors.onAccent.copy(alpha = 0.18f), CircleShape)
                 .clickable(onClick = onClear)
                 .semantics { contentDescription = clearLabel },
             contentAlignment = Alignment.Center,
@@ -289,7 +294,7 @@ private fun SelectionRow(
                 imageVector = Icons.Outlined.Close,
                 // The enclosing Box already carries `clearLabel` as its semantics.
                 contentDescription = null,
-                tint = colors.textSecondary,
+                tint = colors.onAccent,
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -335,14 +340,18 @@ private fun ResultsPanel(
 }
 
 @Composable
-private fun OptionText(option: SearchableOption, modifier: Modifier = Modifier) {
-    val colors = AgarthaTheme.colors
+private fun OptionText(
+    option: SearchableOption,
+    modifier: Modifier = Modifier,
+    titleColor: Color = AgarthaTheme.colors.textPrimary,
+    subtitleColor: Color = AgarthaTheme.colors.textSecondary,
+) {
     Column(modifier = modifier) {
         Text(
             text = option.title,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            color = colors.textPrimary,
+            color = titleColor,
             letterSpacing = (-0.01).em,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -350,7 +359,7 @@ private fun OptionText(option: SearchableOption, modifier: Modifier = Modifier) 
         Text(
             text = option.subtitle,
             fontSize = 12.sp,
-            color = colors.textSecondary,
+            color = subtitleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
