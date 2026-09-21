@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.patients.ObservePatientsUseCase
 import com.agarthavision.domain.usecase.patients.PatientListItem
+import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.domain.usecase.patients.PatientsQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Instant
@@ -30,6 +31,7 @@ data class PatientsState(
     val total: Int = 0,
     val isLoading: Boolean = true,
     val searchQuery: String = "",
+    val sort: PatientSort = PatientSort.RECENT,
     val canLoadMore: Boolean = false,
     /**
      * One instant per emission, so every row in a given render computes its age against
@@ -72,6 +74,7 @@ class PatientsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
+    private val sort = MutableStateFlow(PatientSort.RECENT)
     private val limit = MutableStateFlow(PatientsQuery.PAGE_SIZE)
 
     private val eventFlow = MutableSharedFlow<PatientsEvent>(extraBufferCapacity = 1)
@@ -84,8 +87,8 @@ class PatientsViewModel @Inject constructor(
     // keystroke; the raw flow is combined back in below so the field stays responsive.
     private val debouncedSearch = searchQuery.debounce(SEARCH_DEBOUNCE_MS)
 
-    private val resultFlow = combine(userIdFlow, debouncedSearch, limit) { userId, query, lim ->
-        userId to PatientsQuery(query = query, limit = lim)
+    private val resultFlow = combine(userIdFlow, debouncedSearch, sort, limit) { userId, query, s, lim ->
+        userId to PatientsQuery(query = query, sort = s, limit = lim)
     }.flatMapLatest { (userId, query) ->
         observePatientsUseCase(userId, query).map { query to it }
     }
@@ -97,6 +100,7 @@ class PatientsViewModel @Inject constructor(
                 total = result.total,
                 isLoading = false,
                 searchQuery = rawSearch,
+                sort = query.sort,
                 canLoadMore = result.items.size < result.total,
             )
         }.stateIn(
@@ -108,6 +112,11 @@ class PatientsViewModel @Inject constructor(
     /** Resets pagination: a new filter should not start halfway down the previous one. */
     fun onSearchQueryChanged(query: String) {
         searchQuery.value = query
+        limit.value = PatientsQuery.PAGE_SIZE
+    }
+
+    fun onSortSelected(sort: PatientSort) {
+        this.sort.value = sort
         limit.value = PatientsQuery.PAGE_SIZE
     }
 

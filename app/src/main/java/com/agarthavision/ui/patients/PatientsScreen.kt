@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -28,7 +30,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.patients.PatientListItem
+import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SearchInput
@@ -108,6 +113,11 @@ fun PatientsScreen(
                 onValueChange = viewModel::onSearchQueryChanged,
                 placeholder = stringResource(R.string.patients_search_placeholder),
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            )
+
+            PatientsFiltersSection(
+                sort = state.sort,
+                onSortSelected = viewModel::onSortSelected,
             )
 
             val listState = rememberLazyListState()
@@ -271,5 +281,98 @@ private fun PatientRow(
                 tint = colors.textSecondary,
             )
         }
+    }
+}
+
+@Composable
+private fun PatientsFiltersSection(
+    sort: PatientSort,
+    onSortSelected: (PatientSort) -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    var filtersExpanded by remember { mutableStateOf(false) }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { filtersExpanded = !filtersExpanded }
+            .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = stringResource(R.string.patients_filters_title),
+            color = colors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Icon(
+            imageVector = if (filtersExpanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+            contentDescription = stringResource(R.string.patients_filters_title),
+            tint = colors.textSecondary,
+        )
+    }
+
+    if (filtersExpanded) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Text(
+                text = stringResource(R.string.patients_sort_label),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+            ) {
+                PatientFilterChip(
+                    label = stringResource(R.string.patients_sort_recent),
+                    selected = sort == PatientSort.RECENT,
+                    onClick = { onSortSelected(PatientSort.RECENT) },
+                )
+                PatientFilterChip(
+                    label = stringResource(R.string.patients_sort_lastname),
+                    selected = sort == PatientSort.LAST_NAME,
+                    onClick = { onSortSelected(PatientSort.LAST_NAME) },
+                )
+                PatientFilterChip(
+                    label = stringResource(R.string.patients_sort_firstname),
+                    selected = sort == PatientSort.FIRST_NAME,
+                    onClick = { onSortSelected(PatientSort.FIRST_NAME) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PatientFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    val bg = if (selected) colors.textPrimary else colors.surface
+    val border = if (selected) colors.textPrimary else colors.borderStrong
+    val text = if (selected) colors.background else colors.textSecondary
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(999.dp))
+            .background(bg, RoundedCornerShape(999.dp))
+            .border(1.dp, border, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = text,
+        )
     }
 }

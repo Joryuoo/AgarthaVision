@@ -161,6 +161,45 @@ class PatientRepositoryImplTest {
         assertEquals(0, repository.observePatientCount(USER_B, "").first())
     }
 
+    // ── sorting ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `observePatients orders by recent activity by default`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by lastname when LAST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Abad").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.LAST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by firstname when FIRST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", firstname = "Zoren").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", firstname = "Ana").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.FIRST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
     // ── single reads and update ───────────────────────────────────────────────
 
     @Test
