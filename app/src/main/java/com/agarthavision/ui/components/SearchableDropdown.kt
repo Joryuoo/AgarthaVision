@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
@@ -37,8 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -121,16 +124,21 @@ fun SearchableDropdown(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
-
-    // Scroll the field (and its inline results panel) into view when the user taps into it.
-    LaunchedEffect(isFocused) {
-        if (isFocused) bringIntoViewRequester.bringIntoView()
+    val density = LocalDensity.current
+    val topInViewRect = remember(density) {
+        val heightPx = with(density) { TOP_IN_VIEW_HEIGHT.toPx() }
+        Rect(left = 0f, top = 0f, right = 1000f, bottom = heightPx)
     }
 
-    // Re-scroll when results appear or change size while the field is focused, so the
-    // freshly-expanded results panel isn't hidden below the soft keyboard.
+    // Scroll the field (and the top of its results panel) into view when the user taps into it.
+    LaunchedEffect(isFocused) {
+        if (isFocused) bringIntoViewRequester.bringIntoView(topInViewRect)
+    }
+
+    // Re-scroll when results appear or change size while the field is focused, keeping the
+    // search field and the top of the results list in view rather than scrolling past it.
     LaunchedEffect(state.options) {
-        if (isFocused) bringIntoViewRequester.bringIntoView()
+        if (isFocused) bringIntoViewRequester.bringIntoView(topInViewRect)
     }
 
     Column(
@@ -309,6 +317,13 @@ private fun ResultsPanel(
     onSelect: (SearchableOption) -> Unit,
 ) {
     val colors = AgarthaTheme.colors
+    val listState = rememberLazyListState()
+
+    // Reset scroll to the top of the results list whenever the search query changes.
+    LaunchedEffect(query) {
+        listState.scrollToItem(0)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -323,7 +338,10 @@ private fun ResultsPanel(
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
             )
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = RESULTS_MAX_HEIGHT)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.heightIn(max = RESULTS_MAX_HEIGHT),
+            ) {
                 items(options, key = { it.key }) { option ->
                     Box(
                         modifier = Modifier
@@ -342,9 +360,9 @@ private fun ResultsPanel(
 @Composable
 private fun OptionText(
     option: SearchableOption,
-    modifier: Modifier = Modifier,
     titleColor: Color = AgarthaTheme.colors.textPrimary,
     subtitleColor: Color = AgarthaTheme.colors.textSecondary,
+    modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         Text(
@@ -368,3 +386,6 @@ private fun OptionText(
 
 /** Roughly five rows — enough to choose from without the sheet outgrowing a small screen. */
 private val RESULTS_MAX_HEIGHT = 232.dp
+
+/** Height from the top of the dropdown (label + search field + top result) to keep in view. */
+private val TOP_IN_VIEW_HEIGHT = 140.dp

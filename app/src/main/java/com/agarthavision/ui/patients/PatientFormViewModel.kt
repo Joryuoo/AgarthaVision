@@ -79,6 +79,8 @@ data class PatientFormState(
     val pendingDifferentBarangayDuplicates: List<PatientDuplicate> = emptyList(),
     /** True while the discard-changes confirmation dialog is open. */
     val showDiscardConfirm: Boolean = false,
+    /** True when any field differs from its initial value. */
+    val isDirty: Boolean = false,
 )
 
 sealed interface PatientFormEvent {
@@ -146,7 +148,12 @@ class PatientFormViewModel @Inject constructor(
      * lies about what the medtech typed is worse than a combine that runs while nobody looks.
      */
     val state: StateFlow<PatientFormState> =
-        combine(fields, barangayPicker.state) { form, barangay -> form.copy(barangay = barangay) }
+        combine(fields, barangayPicker.state) { form, barangay ->
+            form.copy(
+                barangay = barangay,
+                isDirty = isDirty(form, barangay.selected),
+            )
+        }
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.Eagerly,
@@ -450,25 +457,26 @@ class PatientFormViewModel @Inject constructor(
      * the loaded patient's values for an edit). Used to decide whether [onCancel] must show
      * the discard-confirm dialog rather than leaving immediately.
      */
-    private fun isDirty(): Boolean {
-        val snapshot = fields.value
-        val barangay = barangayPicker.state.value.selected
+    private fun isDirty(
+        form: PatientFormState = fields.value,
+        barangay: PsgcBarangay? = barangayPicker.state.value.selected,
+    ): Boolean {
         val l = loaded
         return if (l == null) {
             // New patient — dirty if anything has been typed or picked.
-            snapshot.lastname.isNotEmpty() ||
-                snapshot.firstname.isNotEmpty() ||
-                snapshot.middleName.isNotEmpty() ||
-                snapshot.sex != null ||
-                snapshot.birthdate != null ||
+            form.lastname.isNotEmpty() ||
+                form.firstname.isNotEmpty() ||
+                form.middleName.isNotEmpty() ||
+                form.sex != null ||
+                form.birthdate != null ||
                 barangay != null
         } else {
             // Editing — dirty if any field differs from the loaded value.
-            snapshot.lastname != l.lastname ||
-                snapshot.firstname != l.firstname ||
-                snapshot.middleName != (l.middleName ?: "") ||
-                snapshot.sex != l.sex ||
-                snapshot.birthdate != l.birthdate ||
+            form.lastname != l.lastname ||
+                form.firstname != l.firstname ||
+                form.middleName != (l.middleName ?: "") ||
+                form.sex != l.sex ||
+                form.birthdate != l.birthdate ||
                 barangay?.code != l.psgcBarangayCode
         }
     }

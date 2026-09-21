@@ -470,6 +470,31 @@ class PatientFormViewModelTest {
             job.cancel()
         }
 
+    @Test
+    fun `isDirty is false initially for new patient and true after field change`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertFalse(vm.state.value.isDirty)
+            vm.onLastnameChanged("Reyes")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `isDirty is false after existing patient loads and true after field edit`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+            vm.onFirstnameChanged("Different")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
     private fun existingPatient() = Patient(
         id = PATIENT_ID,
         lastname = "Cruz",
