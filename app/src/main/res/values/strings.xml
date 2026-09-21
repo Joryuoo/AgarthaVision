@@ -334,6 +334,7 @@
     <string name="patient_form_cancel">Cancel</string>
     <!-- Shown on the edit form. Without it, correcting a name and finding the old one still
          on a report reads as a bug rather than as the intended behaviour. -->
+    <string name="patient_form_edit_note_tag">NOTE</string>
     <string name="patient_form_edit_note">Editing these details does not change session labels already created or reports already generated. Generate a new report to pick up the change.</string>
     <string name="patient_form_error_lastname">Lastname is required.</string>
     <string name="patient_form_error_firstname">Firstname is required.</string>

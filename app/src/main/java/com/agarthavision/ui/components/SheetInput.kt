@@ -75,17 +75,11 @@ internal fun SheetInput(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textSecondary)
             if (isRequired) {
-                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    "REQUIRED",
-                    fontSize = 9.sp,
-                    lineHeight = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.04.em,
-                    color = colors.dangerText,
-                    modifier = Modifier
-                        .background(colors.dangerTint, RoundedCornerShape(3.dp))
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                    " *",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.danger,
                 )
             } else {
                 Spacer(modifier = Modifier.width(8.dp))

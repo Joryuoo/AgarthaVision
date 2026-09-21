@@ -87,6 +87,7 @@ data class SearchableDropdownConfig(
     val minQueryLength: Int,
     /** Small chip beside the label, e.g. "REQUIRED". Omitted when null. */
     val badge: String? = null,
+    val isRequired: Boolean = false,
     val isError: Boolean = false,
 )
 
@@ -135,7 +136,11 @@ fun SearchableDropdown(
         modifier = modifier.bringIntoViewRequester(bringIntoViewRequester),
         verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
-        FieldLabel(label = config.label, badge = config.badge)
+        FieldLabel(
+            label = config.label,
+            badge = config.badge,
+            isRequired = config.isRequired,
+        )
         val selected = state.selected
         if (selected != null) {
             SelectionRow(selected = selected, clearLabel = config.clearLabel, onClear = actions.onClear)
@@ -159,7 +164,11 @@ fun SearchableDropdown(
 }
 
 @Composable
-private fun FieldLabel(label: String, badge: String?) {
+private fun FieldLabel(
+    label: String,
+    badge: String?,
+    isRequired: Boolean = false,
+) {
     val colors = AgarthaTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -168,6 +177,14 @@ private fun FieldLabel(label: String, badge: String?) {
             fontWeight = FontWeight.Medium,
             color = colors.textSecondary,
         )
+        if (isRequired) {
+            Text(
+                text = " *",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.danger,
+            )
+        }
         if (badge != null) {
             Spacer(modifier = Modifier.width(Spacing.sm))
             Text(

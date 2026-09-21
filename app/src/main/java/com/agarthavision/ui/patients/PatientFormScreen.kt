@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -179,17 +180,24 @@ fun PatientFormScreen(
                     ),
                 )
 
-                SexSelector(
-                    selected = state.sex,
-                    onSelected = viewModel::onSexSelected,
-                    isError = state.showErrors && PatientFormError.SEX_REQUIRED in state.errors,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    SexSelector(
+                        selected = state.sex,
+                        onSelected = viewModel::onSexSelected,
+                        isError = state.showErrors && PatientFormError.SEX_REQUIRED in state.errors,
+                        modifier = Modifier.weight(1f),
+                    )
 
-                BirthdateField(
-                    birthdate = state.birthdate,
-                    isError = state.showErrors && state.errors.any { it in BIRTHDATE_ERRORS },
-                    onClick = { showDatePicker = true },
-                )
+                    BirthdateField(
+                        birthdate = state.birthdate,
+                        isError = state.showErrors && state.errors.any { it in BIRTHDATE_ERRORS },
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
                 SearchableDropdown(
                     state = SearchableDropdownState(
@@ -207,7 +215,7 @@ fun PatientFormScreen(
                         noMatches = stringResource(R.string.patient_form_barangay_no_matches),
                         clearLabel = stringResource(R.string.patient_form_barangay_clear),
                         minQueryLength = SearchBarangaysUseCase.MIN_QUERY_LENGTH,
-                        badge = stringResource(R.string.patient_form_required_badge),
+                        isRequired = true,
                         isError = state.showErrors &&
                             PatientFormError.BARANGAY_REQUIRED in state.errors,
                     ),
@@ -236,8 +244,19 @@ fun PatientFormScreen(
                         .padding(vertical = Spacing.md),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
                 ) {
-                    TextButton(onClick = viewModel::onCancel, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.patient_form_cancel), color = colors.textSecondary)
+                    Button(
+                        onClick = viewModel::onCancel,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.surfaceMuted,
+                            contentColor = colors.textPrimary,
+                        ),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.patient_form_cancel),
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                     Button(
                         onClick = viewModel::onSave,
@@ -309,27 +328,37 @@ private fun SexSelector(
     selected: Sex?,
     onSelected: (Sex) -> Unit,
     isError: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Text(
-            text = stringResource(R.string.patient_form_sex),
-            color = colors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.patient_form_sex),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " *",
+                color = colors.danger,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
             Sex.entries.forEach { sex ->
                 val active = selected == sex
-                Text(
-                    text = stringResource(
-                        if (sex == Sex.MALE) R.string.patients_sex_male
-                        else R.string.patients_sex_female,
-                    ),
-                    color = if (active) colors.onAccent else colors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                Box(
                     modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (active) colors.accent else colors.surface)
                         .border(
@@ -337,9 +366,19 @@ private fun SexSelector(
                             if (isError && selected == null) colors.danger else colors.border,
                             RoundedCornerShape(12.dp),
                         )
-                        .clickable { onSelected(sex) }
-                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                )
+                        .clickable { onSelected(sex) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (sex == Sex.MALE) R.string.patients_sex_male
+                            else R.string.patients_sex_female,
+                        ),
+                        color = if (active) colors.onAccent else colors.textPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
             }
         }
     }
@@ -350,22 +389,31 @@ private fun BirthdateField(
     birthdate: LocalDate?,
     isError: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Text(
-            text = stringResource(R.string.patient_form_birthdate),
-            color = colors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
-            text = birthdate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                ?: stringResource(R.string.patient_form_birthdate_placeholder),
-            color = if (birthdate == null) colors.textTertiary else colors.textPrimary,
-            fontSize = 14.sp,
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.patient_form_birthdate),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " *",
+                color = colors.danger,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(colors.surface)
                 .border(
@@ -374,8 +422,16 @@ private fun BirthdateField(
                     RoundedCornerShape(12.dp),
                 )
                 .clickable(onClick = onClick)
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        )
+                .padding(horizontal = Spacing.md),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = birthdate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    ?: stringResource(R.string.patient_form_birthdate_placeholder),
+                color = if (birthdate == null) colors.textTertiary else colors.textPrimary,
+                fontSize = 14.sp,
+            )
+        }
     }
 }
 
@@ -450,12 +506,25 @@ private fun EditNote() {
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surfaceVariant)
-            .padding(Spacing.sm),
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
+        Text(
+            text = stringResource(R.string.patient_form_edit_note_tag),
+            fontSize = 9.sp,
+            lineHeight = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.04.em,
+            color = colors.textSecondary,
+            modifier = Modifier
+                .background(colors.surfaceMuted, RoundedCornerShape(3.dp))
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+        )
         Text(
             text = stringResource(R.string.patient_form_edit_note),
             color = colors.textSecondary,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
         )
     }
     Spacer(modifier = Modifier.height(Spacing.xs))
