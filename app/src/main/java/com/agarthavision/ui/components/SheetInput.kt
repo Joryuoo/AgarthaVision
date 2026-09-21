@@ -78,25 +78,27 @@ internal fun SheetInput(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "REQUIRED",
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.04.em,
                     color = colors.dangerText,
                     modifier = Modifier
-                        .background(colors.dangerTint, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                        .background(colors.dangerTint, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             } else {
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
                     "OPTIONAL",
-                    fontSize = 10.sp,
+                    fontSize = 9.sp,
+                    lineHeight = 11.sp,
                     fontWeight = FontWeight.SemiBold,
                     letterSpacing = 0.04.em,
                     color = colors.textSecondary,
                     modifier = Modifier
-                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                        .background(colors.surfaceMuted, RoundedCornerShape(3.dp))
+                        .padding(horizontal = 5.dp, vertical = 2.dp)
                 )
             }
         }

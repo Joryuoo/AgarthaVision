@@ -172,13 +172,14 @@ private fun FieldLabel(label: String, badge: String?) {
             Spacer(modifier = Modifier.width(Spacing.sm))
             Text(
                 text = badge,
-                fontSize = 10.sp,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.04.em,
                 color = colors.dangerText,
                 modifier = Modifier
-                    .background(colors.dangerTint, RoundedCornerShape(Spacing.xs))
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                    .background(colors.dangerTint, RoundedCornerShape(3.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
             )
         }
     }
