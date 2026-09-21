@@ -177,7 +177,7 @@ class SearchableDropdownTest {
 
     /**
      * Verifies that the default `onFocusChanged` no-op parameter on `SearchField` doesn't
-     * affect callers that do NOT pass the argument — existing call sites (PatientFormScreen)
+     * affect callers that do NOT pass the argument — existing call sites (PatientFormSheet)
      * are unaffected. This is essentially a compile-time guarantee, but exercising it at
      * runtime confirms the default wires a lambda that does nothing.
      */

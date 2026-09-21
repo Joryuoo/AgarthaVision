@@ -5,7 +5,7 @@ import com.agarthavision.ui.sessions.limitInput
 /**
  * The maximum length of a patient name field, sized for one line of the list row's title.
  *
- * Single source of truth shared by [PatientFormViewModel] and [PatientFormScreen]. The
+ * Single source of truth shared by [PatientFormViewModel] and [PatientFormSheet]. The
  * private `NAME_MAX_LENGTH` constant that used to live only in the VM is replaced by this
  * so the screen can pass the same bound without importing VM internals.
  */
