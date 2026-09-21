@@ -35,7 +35,6 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.records.RecordsScreen
 import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
-import com.agarthavision.ui.patients.PatientFormScreen
 import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreen
@@ -52,19 +51,6 @@ sealed class Screen(val route: String) {
      */
     data object PatientSessions : Screen("patients/{patientId}") {
         fun createRoute(patientId: String) = "patients/$patientId"
-    }
-
-    /**
-     * The New / Edit Patient form. Omitting `patientId` means a blank form.
-     *
-     * Deliberately **not** under `patients/`. A literal `patients/form` would also match
-     * [PatientSessions]'s `patients/{patientId}` pattern, and which one wins is a matter
-     * of registration order rather than intent — the kind of ambiguity that resolves
-     * correctly in testing and wrongly after an unrelated reorder.
-     */
-    data object PatientForm : Screen("patient-form?patientId={patientId}") {
-        fun createRoute(patientId: String? = null) =
-            if (patientId == null) "patient-form" else "patient-form?patientId=$patientId"
     }
 
     data object Capture : Screen("capture")
@@ -183,25 +169,6 @@ fun AgarthaNavHost(
             PatientsScreen(
                 onPatientSelected = { patientId ->
                     navController.navigate(Screen.PatientSessions.createRoute(patientId))
-                },
-            )
-        }
-
-        composable(
-            route = Screen.PatientForm.route,
-            arguments = listOf(
-                navArgument("patientId") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
-            ),
-        ) {
-            PatientFormScreen(
-                onDone = { navController.popBackStack() },
-                onOpenPatient = { id ->
-                    navController.popBackStack()
-                    navController.navigate(Screen.PatientSessions.createRoute(id))
                 },
             )
         }

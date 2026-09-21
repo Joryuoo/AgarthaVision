@@ -383,23 +383,6 @@ fun PatientFormSheet(
 }
 
 /**
- * Backward-compatible entry point for the patient form screen route.
- */
-@Composable
-fun PatientFormScreen(
-    onDone: () -> Unit,
-    onOpenPatient: (String) -> Unit,
-    viewModel: PatientFormViewModel = hiltViewModel(),
-) {
-    PatientFormSheet(
-        onDismiss = onDone,
-        onOpenPatient = onOpenPatient,
-        patientId = null,
-        viewModel = viewModel,
-    )
-}
-
-/**
  * Dropdown-shaped rather than free text, and limited to two values: that is how DOH and WHO
  * stratify STH surveillance data, and a free-text sex would not aggregate.
  */

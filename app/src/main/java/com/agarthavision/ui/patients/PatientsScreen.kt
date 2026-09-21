@@ -72,8 +72,6 @@ private val FloatingActionClearance = 64.dp
 @Composable
 fun PatientsScreen(
     onPatientSelected: (String) -> Unit,
-    onEditPatient: (String) -> Unit = {},
-    onCreatePatient: () -> Unit = {},
     viewModel: PatientsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -89,12 +87,10 @@ fun PatientsScreen(
                 is PatientsEvent.EditPatient -> {
                     activePatientId = event.patientId
                     showPatientSheet = true
-                    onEditPatient(event.patientId)
                 }
                 PatientsEvent.CreatePatient -> {
                     activePatientId = null
                     showPatientSheet = true
-                    onCreatePatient()
                 }
             }
         }
