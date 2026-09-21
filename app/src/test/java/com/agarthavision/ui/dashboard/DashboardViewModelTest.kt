@@ -33,6 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -80,7 +81,9 @@ class DashboardViewModelTest {
         whenever(it.observePendingCount(any())).thenReturn(flowOf(0))
     }
     private val patientRepository: PatientRepository = mock<PatientRepository>().also {
-        whenever(it.observePatientCount(any(), any())).thenReturn(flowOf(0))
+        whenever(
+            it.observePatientCount(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()),
+        ).thenReturn(flowOf(0))
     }
     private val themeModeFlow = MutableStateFlow(ThemeMode.LIGHT)
     private val observeThemeModeUseCase: ObserveThemeModeUseCase = mock<ObserveThemeModeUseCase>().also {
@@ -220,7 +223,11 @@ class DashboardViewModelTest {
         // ship. `verifiedRatio` returned "100%" whenever any sample existed - a constant
         // wearing a percent sign - and `eggsAvgStatus` read "Elevated" off `totalSamples > 100`,
         // a sample count dressed as a clinical intensity on a screen used during validation.
-        whenever(patientRepository.observePatientCount(any(), any())).thenReturn(flowOf(3))
+        whenever(
+            patientRepository.observePatientCount(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            ),
+        ).thenReturn(flowOf(3))
         whenever(sampleDao.observePendingCount(any())).thenReturn(flowOf(4))
 
         val vm = viewModel()

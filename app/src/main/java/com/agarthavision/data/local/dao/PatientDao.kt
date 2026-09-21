@@ -36,25 +36,31 @@ interface PatientDao {
     /**
      * One page of the signed-in medtech's patients, by name, optionally filtered.
      *
-     * [query] matches lastname, firstname or barangay name. The barangay join is against
-     * the bundled `psgc_barangays` reference table, which is why searching by barangay
-     * works with the radio off. A blank query matches everything — the `:query = ''`
-     * short-circuit keeps the plan simple rather than relying on `LIKE '%%'`.
+     * [query] matches lastname or firstname. A blank query matches everything — the
+     * `:query = ''` short-circuit keeps the plan simple rather than relying on `LIKE '%%'`.
+     * Barangay filtering is handled via [barangayCode], not free-text search.
      */
+    @Suppress("LongParameterList")
     @Transaction
     @Query(
         """
         SELECT p.* FROM patients p
         INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
-        LEFT JOIN psgc_barangays b ON b.code = p.psgc_barangay_code
         WHERE pu.user_id = :userId
           AND (
             :query = ''
             OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
             OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
-            OR b.name      LIKE '%' || :query || '%' ESCAPE '\'
           )
-        ORDER BY p.lastname ASC, p.firstname ASC
+          AND (:sex IS NULL OR p.sex = :sex)
+          AND (:barangayCode IS NULL OR p.psgc_barangay_code = :barangayCode)
+          AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
+          AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
+        ORDER BY
+          CASE WHEN :sort = 'RECENT' THEN p.updated_at END DESC,
+          CASE WHEN :sort = 'LAST_NAME' THEN p.lastname END ASC,
+          CASE WHEN :sort = 'FIRST_NAME' THEN p.firstname END ASC,
+          p.lastname ASC, p.firstname ASC
         LIMIT :limit OFFSET :offset
         """,
     )
@@ -62,25 +68,40 @@ interface PatientDao {
         userId: String,
         query: String,
         limit: Int,
-        offset: Int,
+        offset: Int = 0,
+        sort: String = "RECENT",
+        sex: String? = null,
+        barangayCode: String? = null,
+        minBirthdate: Long? = null,
+        maxBirthdate: Long? = null,
     ): Flow<List<PatientEntity>>
 
     /** Total matching [observePatients], for the pager's page count. */
+    @Suppress("LongParameterList")
     @Query(
         """
         SELECT COUNT(*) FROM patients p
         INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
-        LEFT JOIN psgc_barangays b ON b.code = p.psgc_barangay_code
         WHERE pu.user_id = :userId
           AND (
             :query = ''
             OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
             OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
-            OR b.name      LIKE '%' || :query || '%' ESCAPE '\'
           )
+          AND (:sex IS NULL OR p.sex = :sex)
+          AND (:barangayCode IS NULL OR p.psgc_barangay_code = :barangayCode)
+          AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
+          AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
         """,
     )
-    fun observePatientCount(userId: String, query: String): Flow<Int>
+    fun observePatientCount(
+        userId: String,
+        query: String,
+        sex: String? = null,
+        barangayCode: String? = null,
+        minBirthdate: Long? = null,
+        maxBirthdate: Long? = null,
+    ): Flow<Int>
 
     @Query("SELECT * FROM patients WHERE patient_id = :patientId")
     suspend fun getPatientById(patientId: String): PatientEntity?

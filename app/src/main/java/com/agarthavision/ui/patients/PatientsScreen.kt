@@ -61,8 +61,7 @@ private val FloatingActionClearance = 64.dp
 /**
  * The patient list: everyone the signed-in medtech is linked to.
  *
- * Every read behind this screen is local, so it renders and searches with the radio off —
- * including the barangay filter, which joins the PSGC table bundled in the APK.
+ * Every read behind this screen is local, so it renders and searches with the radio off.
  *
  * **There is no delete affordance, and none should be added.** Removing a patient is an
  * admin-side action.

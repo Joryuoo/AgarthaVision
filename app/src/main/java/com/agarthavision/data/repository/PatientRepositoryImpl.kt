@@ -4,8 +4,10 @@ import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.data.local.mapper.toEntity
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.sync.SyncScheduler
+import com.agarthavision.domain.usecase.patients.PatientSort
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -23,19 +25,50 @@ class PatientRepositoryImpl @Inject constructor(
     private val syncScheduler: SyncScheduler,
 ) : PatientRepository {
 
+    @Suppress("LongParameterList")
     override fun observePatients(
         userId: String,
         query: String,
         limit: Int,
+        sort: PatientSort,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
     ): Flow<List<Patient>> =
         // Always from the top: the list accumulates rather than paging, as Records and
         // Sessions do. The DAO keeps its offset for a caller that one day wants real pages.
-        patientDao.observePatients(userId, query, limit, offset = 0).map { entities ->
+        patientDao.observePatients(
+            userId = userId,
+            query = query,
+            limit = limit,
+            offset = 0,
+            sort = sort.name,
+            sex = sex?.remoteValue,
+            barangayCode = barangayCode,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
+        ).map { entities ->
             entities.map { it.toDomain() }
         }
 
-    override fun observePatientCount(userId: String, query: String): Flow<Int> =
-        patientDao.observePatientCount(userId, query)
+    @Suppress("LongParameterList")
+    override fun observePatientCount(
+        userId: String,
+        query: String,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
+    ): Flow<Int> =
+        patientDao.observePatientCount(
+            userId = userId,
+            query = query,
+            sex = sex?.remoteValue,
+            barangayCode = barangayCode,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
+        )
 
     override suspend fun getPatientById(patientId: String): Patient? =
         patientDao.getPatientById(patientId)?.toDomain()

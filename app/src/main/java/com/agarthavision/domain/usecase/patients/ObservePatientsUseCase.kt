@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.patients
 
 import com.agarthavision.core.util.escapeLike
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import javax.inject.Inject
@@ -9,9 +10,21 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 
-/** What the list asks for: a filter and a page size. */
+/** Sort order for the patient list. */
+enum class PatientSort {
+    RECENT,
+    LAST_NAME,
+    FIRST_NAME,
+}
+
+/** What the list asks for: search filter, sort, category filters, and a page size. */
 data class PatientsQuery(
     val query: String = "",
+    val sort: PatientSort = PatientSort.RECENT,
+    val sex: Sex? = null,
+    val barangayCode: String? = null,
+    val minAge: Int? = null,
+    val maxAge: Int? = null,
     val limit: Int = PAGE_SIZE,
 ) {
     companion object {
@@ -45,11 +58,9 @@ data class PatientsResult(
 /**
  * Observes the signed-in medtech's patients, with their barangay labels resolved.
  *
- * Filtering is not done here. `PatientDao.observePatients` already filters on lastname,
- * firstname and barangay name in SQL — including the join against the bundled
- * `psgc_barangays` table, which is what makes barangay search work with the radio off.
- * This use case supplies the query and turns each stored PSGC code into something the row
- * can display.
+ * Filtering is not done here. `PatientDao.observePatients` already filters on lastname
+ * and firstname in SQL. This use case supplies the query and turns each stored PSGC code
+ * into something the row can display.
  *
  * A null [userId] yields nothing rather than everything. Login is mandatory on first run
  * so it should not arise, but defaulting to "show all patients on the device" if it ever
@@ -70,8 +81,20 @@ class ObservePatientsUseCase @Inject constructor(
             userId = userId,
             query = needle,
             limit = query.limit,
+            sort = query.sort,
+            sex = query.sex,
+            barangayCode = query.barangayCode,
+            minBirthdate = null,
+            maxBirthdate = null,
         )
-        val total = patientRepository.observePatientCount(userId, needle)
+        val total = patientRepository.observePatientCount(
+            userId = userId,
+            query = needle,
+            sex = query.sex,
+            barangayCode = query.barangayCode,
+            minBirthdate = null,
+            maxBirthdate = null,
+        )
 
         return combine(page, total) { patients, count ->
             PatientsResult(items = patients.mapToItems(), total = count)
