@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -27,6 +29,7 @@ import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,13 +117,35 @@ fun SearchableDropdown(
     actions: SearchableDropdownActions,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+    var isFocused by remember { mutableStateOf(false) }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    // Scroll the field (and its inline results panel) into view when the user taps into it.
+    LaunchedEffect(isFocused) {
+        if (isFocused) bringIntoViewRequester.bringIntoView()
+    }
+
+    // Re-scroll when results appear or change size while the field is focused, so the
+    // freshly-expanded results panel isn't hidden below the soft keyboard.
+    LaunchedEffect(state.options) {
+        if (isFocused) bringIntoViewRequester.bringIntoView()
+    }
+
+    Column(
+        modifier = modifier.bringIntoViewRequester(bringIntoViewRequester),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
         FieldLabel(label = config.label, badge = config.badge)
         val selected = state.selected
         if (selected != null) {
             SelectionRow(selected = selected, clearLabel = config.clearLabel, onClear = actions.onClear)
         } else {
-            SearchField(query = state.query, config = config, onQueryChange = actions.onQueryChange)
+            SearchField(
+                query = state.query,
+                config = config,
+                onQueryChange = actions.onQueryChange,
+                onFocusChanged = { isFocused = it },
+            )
             if (state.query.isNotBlank()) {
                 ResultsPanel(
                     query = state.query,
@@ -164,6 +189,7 @@ private fun SearchField(
     query: String,
     config: SearchableDropdownConfig,
     onQueryChange: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var isFocused by remember { mutableStateOf(false) }
@@ -178,7 +204,10 @@ private fun SearchField(
         onValueChange = onQueryChange,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                onFocusChanged(it.isFocused)
+            },
         textStyle = TextStyle(fontSize = 15.sp, color = colors.textPrimary),
         singleLine = true,
         cursorBrush = SolidColor(colors.accent),

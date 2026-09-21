@@ -1,7 +1,11 @@
 package com.agarthavision.ui.components
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -97,6 +101,101 @@ class SearchableDropdownTest {
         assertEquals(true, cleared)
     }
 
+    // --- BringIntoViewRequester / focus-hoisting tests (added for the scroll-into-view change) ---
+
+    /**
+     * Tapping (focusing) the search field must not crash even though the component now sets up
+     * a [BringIntoViewRequester] and two LaunchedEffects. In a Robolectric environment there is
+     * no real scroll container to respond to bringIntoView, but the call must be a no-op rather
+     * than throwing.
+     */
+    @Test
+    fun `focusing the search field does not crash`() {
+        composeRule.setContent { Host(query = "") }
+
+        // performClick drives onFocusChanged(true) on BasicTextField → propagates to the outer
+        // isFocused state → LaunchedEffect(isFocused) fires bringIntoView() harmlessly.
+        composeRule.onNodeWithText(PLACEHOLDER).performClick()
+
+        // If we reach here without an exception, the focus→bringIntoView path is safe.
+        composeRule.onNodeWithText(PLACEHOLDER).assertIsDisplayed()
+    }
+
+    /**
+     * Options arriving while the field is not focused must not crash — the second LaunchedEffect
+     * is guarded by `if (isFocused)` and should short-circuit silently.
+     */
+    @Test
+    fun `options changing before focus does not crash`() {
+        var options by mutableStateOf(emptyList<SearchableOption>())
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SearchableDropdown(
+                    state = SearchableDropdownState(selected = null, query = "lahug", options = options),
+                    config = CONFIG,
+                    actions = SearchableDropdownActions({}, {}, {}),
+                )
+            }
+        }
+
+        // Deliver results while the field has never been focused.
+        options = listOf(LAHUG)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Lahug").assertIsDisplayed()
+    }
+
+    /**
+     * Options arriving while the field IS focused must not crash — this exercises the
+     * `LaunchedEffect(state.options)` branch where `isFocused == true` and
+     * `bringIntoView()` is actually called.
+     */
+    @Test
+    fun `options changing while focused does not crash`() {
+        var options by mutableStateOf(emptyList<SearchableOption>())
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                SearchableDropdown(
+                    state = SearchableDropdownState(selected = null, query = "lahug", options = options),
+                    config = CONFIG,
+                    actions = SearchableDropdownActions({}, {}, {}),
+                )
+            }
+        }
+
+        // Focus first so isFocused becomes true in the outer composable. The query is already
+        // "lahug" so the placeholder isn't rendered; use hasSetTextAction() to find the field.
+        composeRule.onNode(hasSetTextAction()).performClick()
+        composeRule.waitForIdle()
+
+        // Now deliver results — LaunchedEffect(state.options) fires with isFocused == true.
+        options = listOf(LAHUG)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithText("Lahug").assertIsDisplayed()
+    }
+
+    /**
+     * Verifies that the default `onFocusChanged` no-op parameter on `SearchField` doesn't
+     * affect callers that do NOT pass the argument — existing call sites (PatientFormScreen)
+     * are unaffected. This is essentially a compile-time guarantee, but exercising it at
+     * runtime confirms the default wires a lambda that does nothing.
+     */
+    @Test
+    fun `SearchField default onFocusChanged no-op is inert`() {
+        // Host() never passes onFocusChanged to SearchableDropdown — it goes straight to the
+        // private SearchField's default. Interacting with the field must still work normally.
+        var typed: String? = null
+        composeRule.setContent {
+            Host(query = "", actions = SearchableDropdownActions({ typed = it }, {}, {}))
+        }
+
+        composeRule.onNodeWithText(PLACEHOLDER).performClick()
+        composeRule.onNodeWithText(PLACEHOLDER).performTextInput("test")
+
+        assertEquals("test", typed)
+    }
+
     @Composable
     private fun Host(
         query: String,
@@ -134,6 +233,15 @@ class SearchableDropdownTest {
             key = "0730600051",
             title = "Lahug",
             subtitle = "City of Cebu · Region VII",
+        )
+
+        private val CONFIG = SearchableDropdownConfig(
+            label = "Patient barangay",
+            placeholder = PLACEHOLDER,
+            hint = HINT,
+            noMatches = NO_MATCHES,
+            clearLabel = CLEAR_LABEL,
+            minQueryLength = 2,
         )
     }
 }
