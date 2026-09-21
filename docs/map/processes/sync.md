@@ -5,8 +5,8 @@ Pushing local rows to Supabase. Foreground, trigger-based, best-effort.
 **Input** — local rows and a live Supabase session.
 **Output** — remote rows, a Storage object per sample, and updated local sync state.
 
-**consumes** [`Session`](../objects/Session.md), [`Sample`](../objects/Sample.md),
-[`Detection`](../objects/Detection.md), [`Report`](../objects/Report.md)
+**consumes** [`Patient`](../objects/Patient.md), [`Session`](../objects/Session.md),
+[`Sample`](../objects/Sample.md), [`Detection`](../objects/Detection.md), [`Report`](../objects/Report.md)
 **produces** [`StorageObject`](../objects/StorageObject.md)
 
 ## Movement — one sample
@@ -32,20 +32,19 @@ Runs inline at the end of [`validate`](validate.md).
 ## Movement — the catch-up pass
 
 `SyncPendingDataUseCase` is the trigger-based sweep. It runs on login success, on app start,
-and after every local write. **Not when connectivity returns** - nothing observes
-`ConnectivityObserver` to start a pass, and the worker's network constraint only gates a pass
-already requested. See the trigger list below, which is the authoritative one.
+and after every local write.
 
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —
    returning `SyncSummary.Skipped`, not a failure
-   (`domain/usecase/sync/SyncPendingDataUseCase.kt:61-64`).
-2. **Push in FK-safe order**: sessions, then samples, then reports
-   (`domain/usecase/sync/SyncPendingDataUseCase.kt:66-74`). A per-row failure marks that row and
+   (`domain/usecase/sync/SyncPendingDataUseCase.kt:70-74`).
+2. **Push in FK-safe order**: **patients → sessions → samples → reports**
+   (`domain/usecase/sync/SyncPendingDataUseCase.kt:76-90`). Patients go first because
+   `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
    does not abort the pass.
 
-Session pushes are upserts so a pending row can be re-sent carrying an `ended_at` set while
-offline (`data/supabase/SessionRemoteDataSource.kt:38-40`). Report pushes are row-only — the
-CSV never leaves the device (`data/supabase/SyncReportUseCase.kt:25-35`).
+Report pushes are row-only — the PDF/CSV never leaves the device (`data/supabase/SyncReportUseCase.kt`).
+Because login is mandatory on first launch, every entity has an owner from creation and no
+deferred claiming step is needed.
 
 ## Frames on the device — the image cache
 
@@ -82,30 +81,22 @@ Whether a frame is held is answered by the disk — `SampleImageStore.pathFor` i
 the user and sample ids — not by `samples.image_path`, which arrives empty on every pulled row
 and is repaired from the disk rather than trusted.
 
-## Claim before sync
-
-A row with `user_id = NULL` cannot satisfy the remote NOT NULL constraint, so login claims
-first: unowned non-exempt sessions, cascading to their samples and reports, all idempotent
-because only `user_id IS NULL` rows are touched
-(`domain/usecase/auth/ClaimLocalDataUseCase.kt:33-53`, `data/local/dao/SampleDao.kt:151-158`).
-Only then does the sync pass run. Claim-exempt sessions are never pushed
-(`core/session/SessionManager.kt:133-135`).
 
 ## Hits
 
-- **The insert row is the contract.** A new column that is not added to `SampleInsertRow`,
-  `SessionInsertRow`, or `ReportInsertRow` never reaches Postgres, with no error
-  (`data/supabase/SampleRemoteDataSource.kt:100-152`,
-  `data/supabase/SessionRemoteDataSource.kt:76-93`,
-  `data/supabase/ReportRemoteDataSource.kt:61-83`).
-- **RLS.** Every insert must satisfy `auth.uid() = user_id`
-  (`supabase/migrations/0001_init.sql:99-117`), and detections are checked through the parent
-  sample (`supabase/migrations/0001_init.sql:133-139`). Sync only ever runs authenticated and
-  post-claim, which is why no Supabase schema change was needed for offline mode.
-- **Three separate sync-state enums** — `SampleStatus`, `SessionSyncStatus`,
-  `ReportSyncStatus` — all with the same three states and different homes. Changing the
-  vocabulary means changing all three plus every raw query that names a value
-  (`domain/model/SessionSyncStatus.kt:10-12` acknowledges this).
+- **The insert row is the contract.** A new column that is not added to `PatientInsertRow`,
+  `SessionInsertRow`, `SampleInsertRow`, or `ReportInsertRow` never reaches Postgres, with no error
+  (`data/supabase/PatientRemoteDataSource.kt`,
+  `data/supabase/SessionRemoteDataSource.kt`,
+  `data/supabase/SampleRemoteDataSource.kt`,
+  `data/supabase/ReportRemoteDataSource.kt`).
+- **RLS.** Every insert must satisfy ownership: `auth.uid() = created_by` on patients
+  (`0001_init.sql:369-371`), `auth.uid() = user_id` on sessions/samples/reports
+  (`0001_init.sql:405-420`), and detections/findings are checked through the parent
+  sample (`0001_init.sql:441-470`). Sync only ever runs authenticated.
+- **Four separate sync-state enums** — `PatientSyncStatus`, `SessionSyncStatus`,
+  `SampleStatus`, `ReportSyncStatus` — all managing pending/synced/sync_failed states. Changing the
+  vocabulary means changing all four plus every raw query that names a value.
 
 ## Does not hit
 
