@@ -20,7 +20,7 @@ class SessionLabelGeneratorTest {
     @Test
     fun `builds the documented label`() {
         assertEquals(
-            "GarciaM-S01",
+            "GARCIAM-S01",
             SessionLabelGenerator.generate(patient(lastname = "Garcia", firstname = "Maria"), sequence = 1),
         )
     }
@@ -31,8 +31,8 @@ class SessionLabelGeneratorTest {
             patient(lastname = "cruz", firstname = "gerald"),
             sequence = 1,
         )
-        // Lastname is preserved as-is (trimmed only); initial is uppercased.
-        assertEquals("cruzG-S01", label)
+        // Entire label is all caps.
+        assertEquals("CRUZG-S01", label)
     }
 
     @Test
@@ -43,7 +43,7 @@ class SessionLabelGeneratorTest {
             patient(lastname = "ñuñez", firstname = "Élia"),
             sequence = 2,
         )
-        assertEquals("ñuñezÉ-S02", label)
+        assertEquals("ÑUÑEZÉ-S02", label)
     }
 
     @Test
@@ -52,7 +52,7 @@ class SessionLabelGeneratorTest {
             patient(lastname = "  Cruz  ", firstname = "Gerald"),
             sequence = 1,
         )
-        assertEquals("CruzG-S01", label)
+        assertEquals("CRUZG-S01", label)
     }
 
     @Test
@@ -62,7 +62,7 @@ class SessionLabelGeneratorTest {
             patient(lastname = "Garcia", firstname = ""),
             sequence = 1,
         )
-        assertEquals("Garcia-S01", label)
+        assertEquals("GARCIA-S01", label)
     }
 
     @Test
@@ -71,7 +71,7 @@ class SessionLabelGeneratorTest {
             patient(lastname = "Garcia", firstname = "123"),
             sequence = 1,
         )
-        assertEquals("Garcia-S01", label)
+        assertEquals("GARCIA-S01", label)
     }
 
     @Test
@@ -81,7 +81,7 @@ class SessionLabelGeneratorTest {
             patient(lastname = "Dela Cruz", firstname = "'Gerald"),
             sequence = 1,
         )
-        assertEquals("Dela CruzG-S01", label)
+        assertEquals("DELA CRUZG-S01", label)
     }
 
     @Test
@@ -89,7 +89,7 @@ class SessionLabelGeneratorTest {
         // Truncating to the last two digits would print 00 and collide with a label that
         // already exists. The field is 32 characters; it has the room.
         assertEquals(
-            "GarciaM-S100",
+            "GARCIAM-S100",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 100,
@@ -101,7 +101,7 @@ class SessionLabelGeneratorTest {
     fun `sequence zero is coerced to one`() {
         // coerceAtLeast(1) prevents S00 which would be confusing and imply ordinal 0.
         assertEquals(
-            "GarciaM-S01",
+            "GARCIAM-S01",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 0,
@@ -112,7 +112,7 @@ class SessionLabelGeneratorTest {
     @Test
     fun `single-digit sequences are zero-padded to two digits`() {
         assertEquals(
-            "GarciaM-S09",
+            "GARCIAM-S09",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 9,

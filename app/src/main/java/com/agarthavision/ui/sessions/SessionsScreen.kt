@@ -103,11 +103,15 @@ fun SessionsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val colors = AgarthaTheme.colors
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionsEvent.NavigateToCapture -> onNavigateToCapture(event.sessionId)
+                is SessionsEvent.NavigateToCapture -> {
+                    showCreateDialog = false
+                    onNavigateToCapture(event.sessionId)
+                }
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND
@@ -120,8 +124,6 @@ fun SessionsScreen(
             }
         }
     }
-
-    var showCreateDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -240,7 +242,10 @@ fun SessionsScreen(
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
-                        onClick = { showCreateDialog = true },
+                        onClick = {
+                            viewModel.onDismissError()
+                            showCreateDialog = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(49.dp),
@@ -270,11 +275,14 @@ fun SessionsScreen(
             // Leaving the sheet abandons the draft; the label is local `remember` state and
             // resets with it. There is nothing left in the ViewModel to reset — the barangay
             // moved to the patient and the note is gone.
-            suggestedLabel = state.suggestedLabel,
-            onDismiss = { showCreateDialog = false },
+            state = state,
+            onClearError = viewModel::onDismissError,
+            onDismiss = {
+                viewModel.onDismissError()
+                showCreateDialog = false
+            },
             onSubmit = { label ->
                 viewModel.onCreateSession(label)
-                showCreateDialog = false
             }
         )
     }
@@ -482,7 +490,8 @@ fun LiveDot() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
-    suggestedLabel: String,
+    state: SessionsState,
+    onClearError: () -> Unit,
     onDismiss: () -> Unit,
     onSubmit: (label: String) -> Unit
 ) {
@@ -506,8 +515,15 @@ private fun NewSessionSheet(
         // Keyed on the suggestion so a sheet opened after the previous smear was created
         // starts on the new number rather than the one already used. It is only a seed: the
         // field is editable from the first keystroke, and nothing re-applies it.
-        var label by remember(suggestedLabel) { mutableStateOf(suggestedLabel) }
-        var showError by remember { mutableStateOf(false) }
+        var label by remember(state.suggestedLabel) { mutableStateOf(state.suggestedLabel) }
+        var showEmptyError by remember { mutableStateOf(false) }
+
+        val activeErrorMessage = when {
+            showEmptyError && label.isBlank() -> stringResource(R.string.session_new_label_required)
+            !state.errorMessage.isNullOrBlank() -> state.errorMessage
+            else -> null
+        }
+        val isError = activeErrorMessage != null
 
         Column(
             modifier = Modifier
@@ -557,18 +573,22 @@ private fun NewSessionSheet(
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 SheetInput(
                     value = label,
-                    onValueChange = { label = it; showError = false },
+                    onValueChange = {
+                        label = it
+                        showEmptyError = false
+                        if (state.errorMessage != null) onClearError()
+                    },
                     config = SheetInputConfig(
                         label = stringResource(R.string.session_label_field_label),
                         placeholder = stringResource(R.string.session_label_placeholder),
-                        isError = showError && label.isBlank(),
+                        isError = isError,
                         maxLength = SESSION_LABEL_MAX_LENGTH
                     )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (showError && label.isBlank()) {
+                if (activeErrorMessage != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -587,7 +607,7 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            stringResource(R.string.session_new_label_required),
+                            text = activeErrorMessage,
                             fontSize = 12.sp,
                             color = colors.dangerText,
                             fontWeight = FontWeight.Medium,
@@ -628,6 +648,7 @@ private fun NewSessionSheet(
             ) {
                 Button(
                     onClick = onDismiss,
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
@@ -639,20 +660,29 @@ private fun NewSessionSheet(
                 }
                 Button(
                     onClick = {
-                        if (label.isBlank()) showError = true else onSubmit(label)
+                        if (label.isBlank()) showEmptyError = true else onSubmit(label)
                     },
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
                 ) {
-                    Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                        contentDescription = null,
-                        tint = colors.onAccent,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    if (state.isCreating) {
+                        CircularProgressIndicator(
+                            color = colors.onAccent,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                            contentDescription = null,
+                            tint = colors.onAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

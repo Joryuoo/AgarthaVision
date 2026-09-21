@@ -51,10 +51,10 @@ object SessionLabelGenerator {
      * the extra character.
      */
     fun generate(patient: Patient, sequence: Int): String {
-        val lastname = patient.lastname.trim()
+        val lastname = patient.lastname.trim().uppercase()
         val firstInitial = initial(patient.firstname)
         val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
-        return "$lastname$firstInitial-S$padded"
+        return "$lastname$firstInitial-S$padded".uppercase()
     }
 
     /**

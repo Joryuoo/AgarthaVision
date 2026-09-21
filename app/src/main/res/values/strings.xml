@@ -410,8 +410,8 @@
     <!-- Sessions empty state (86d4apzf5) -->
     <string name="sessions_search_placeholder">Search smears by label</string>
     <string name="session_label_field_label">Label</string>
-    <string name="session_label_placeholder">GarciaM-S01</string>
-    <string name="session_label_helper">Generated from the patient\'s last name, first initial, and smear count (e.g. GarciaM-S01). Edit it if your lab labels smears differently — but each label must be unique for this patient.</string>
+    <string name="session_label_placeholder">GARCIAM-S01</string>
+    <string name="session_label_helper">Generated from the patient\'s last name, first initial, and smear count (e.g. GARCIAM-S01). Edit it if your lab labels smears differently — but each label must be unique for this patient.</string>
     <string name="session_duplicate_label">A smear with this label already exists for this patient.</string>
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>

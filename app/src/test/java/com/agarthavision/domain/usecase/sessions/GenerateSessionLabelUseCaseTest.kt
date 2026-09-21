@@ -39,7 +39,7 @@ class GenerateSessionLabelUseCaseTest {
         val result = useCase("patient-1")
 
         assertTrue(result.isSuccess)
-        assertEquals("GarciaM-S01", result.getOrThrow())
+        assertEquals("GARCIAM-S01", result.getOrThrow())
     }
 
     @Test
@@ -47,14 +47,14 @@ class GenerateSessionLabelUseCaseTest {
         // Three smears already exist; the suggestion must be S04.
         val useCase = useCaseFor(
             patient = garcia(),
-            existingLabels = listOf("GarciaM-S01", "GarciaM-S02", "GarciaM-S03"),
+            existingLabels = listOf("GARCIAM-S01", "GARCIAM-S02", "GARCIAM-S03"),
             takenLabels = emptySet(),
         )
 
         val result = useCase("patient-1")
 
         assertTrue(result.isSuccess)
-        assertEquals("GarciaM-S04", result.getOrThrow())
+        assertEquals("GARCIAM-S04", result.getOrThrow())
     }
 
     // ---------------------------------------------------------------------------
@@ -68,13 +68,13 @@ class GenerateSessionLabelUseCaseTest {
         val useCase = useCaseFor(
             patient = garcia(),
             existingLabels = emptyList(),
-            takenLabels = setOf("GarciaM-S01"),
+            takenLabels = setOf("GARCIAM-S01"),
         )
 
         val result = useCase("patient-1")
 
         assertTrue(result.isSuccess)
-        assertEquals("GarciaM-S02", result.getOrThrow())
+        assertEquals("GARCIAM-S02", result.getOrThrow())
     }
 
     @Test
@@ -83,13 +83,13 @@ class GenerateSessionLabelUseCaseTest {
         val useCase = useCaseFor(
             patient = garcia(),
             existingLabels = emptyList(),
-            takenLabels = setOf("GarciaM-S01", "GarciaM-S02"),
+            takenLabels = setOf("GARCIAM-S01", "GARCIAM-S02"),
         )
 
         val result = useCase("patient-1")
 
         assertTrue(result.isSuccess)
-        assertEquals("GarciaM-S03", result.getOrThrow())
+        assertEquals("GARCIAM-S03", result.getOrThrow())
     }
 
     @Test
