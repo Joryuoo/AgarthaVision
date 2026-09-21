@@ -17,24 +17,23 @@ trail for every human decision.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0001_init.sql:59-69`, plus `0002` and `0007`)
+**Postgres** (`supabase/migrations/0001_init.sql:224-245`)
 
 | Field | Constraint |
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `sample_id` | NOT NULL, FK → `samples(id)`, CASCADE |
 | `class_label` | NOT NULL — what the model said |
-| `confidence` | NOT NULL real, CHECK between 0 and 1 (`0001_init.sql:63`) |
-| `bbox_x/y/w/h` | real, **nullable since** `supabase/migrations/0007_detection_bbox_nullable.sql:10-14` |
-| `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) — `supabase/migrations/0002_verification_fields.sql:30-32` |
-| `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, and **since `0012` also when the verdict is `BOX_INCORRECT`** and the medtech corrected the species (`0002_verification_fields.sql:38-39` describes the narrower original rule) |
-| `species_touched` | NOT NULL boolean, default `false` (`supabase/migrations/0012_polyparasitism_findings.sql`) — see below |
+| `confidence` | NOT NULL real, CHECK between 0 and 1 (`0001_init.sql:229`) |
+| `bbox_x/y/w/h` | real, **nullable** (`0001_init.sql:231-234`) |
+| `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) (`0001_init.sql:237-238`) |
+| `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, or when the verdict is `BOX_INCORRECT` and the medtech corrected the species |
+| `species_touched` | NOT NULL boolean, default `false` (`0001_init.sql:242`) — see below |
 
 **Why `expert_class` widened.** An egg with a misplaced box is still an egg and still has to be
 counted, so the species question is now asked whenever the medtech says the box contains one —
 not only when they also say the box is correctly placed. The verdict precedence is unchanged
 (`BOX_INCORRECT` still outranks `WRONG_CLASS`); only the column's population rule widened.
-`0002` is applied and is not edited (C6), so this card and `schema.ts` carry the current rule.
 
 **`species_touched` is provenance, not a verdict.** Species fields are pre-filled from the model
 output so the medtech edits only what is wrong. That means an untouched submission yields
@@ -46,8 +45,8 @@ member: that would mean touching the Supabase CHECK constraint and every query n
 verdict, for a signal a boolean carries. It is also deliberately **not** a reuse of
 `verified_by_user`, which is dead drift (ticket 86d4akgmf).
 
-Index on `verdict` for retraining queries (`0002_verification_fields.sql:47`).
-`verified_by_user` was **dropped** from Postgres by `0002_verification_fields.sql:42-43`.
+Index on `verdict` for retraining queries (`0001_init.sql:250`).
+`verified_by_user` was **dropped** from Postgres in legacy-dev migration 0002.
 
 **Room** (`app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt:28-68`)
 
@@ -63,20 +62,20 @@ PK column is `detection_id`. Two things to know:
 
 **Contradiction in the source, unresolved:** the entity's class KDoc says bounding boxes are
 "normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says
-"source-image pixels" (`DetectionEntity.kt:43-46`); `0001_init.sql:64` also says normalized.
+"source-image pixels" (`DetectionEntity.kt:43-46`); legacy SQL comment also said normalized.
 **The pixel reading is correct** — the server returns `box.xywh`, which is centre-x, centre-y,
 width, height in pixels (`inference/server.py:47-55`), and the mapper stores those values
 unchanged (`data/local/mapper/VerificationMapper.kt:36-39`). Treat the "normalized" comments as
 stale.
 
-Documented shape: `schema.ts:358-395`.
+Documented shape: `schema.ts` (`Detection`).
 
 ## Connected to
 
 - **Owned by** [`Sample`](Sample.md). Deleting a sample cascades.
 - **Aggregated into** [`Report`](Report.md) — counted, never copied.
 - **Scoped by** [`Profile`](Profile.md) indirectly: `detections` RLS runs through the parent
-  sample's `user_id`, not its own (`supabase/migrations/0004_fix_profiles_rls_recursion.sql:46-57`).
+  sample's `user_id`, not its own (`supabase/migrations/0001_init.sql:405-414`).
   There is no `user_id` on this table.
 - **Looks like but is not** `PredictionDto` (`data/remote/dto/InferenceResponseDto.kt:17-24`).
   That is the wire shape from the inference server: `class`, `confidence`, `x`, `y`, `width`,
@@ -88,15 +87,15 @@ Documented shape: `schema.ts:358-395`.
 **Hits**
 - The verdict computation — the questionnaire-to-verdict function is the single decision point
   (`data/local/mapper/VerificationMapper.kt:10-17`).
-- EPG. `getConfirmedEggCountsForSession` resolves species as
+- Confirmed egg counts. `getConfirmedEggCountsForSession` resolves species as
   `COALESCE(expert_class, class_label)`, so `expert_class` silently overrides the model's label
-  in every count and every report (`data/local/dao/DetectionDao.kt:33-52`).
+  in every count and every report (`data/local/dao/DetectionDao.kt:33-52`). Counts all detections
+  where `d.verdict != 'false_positive'`.
 - Both sides of the case mapping, if you add or rename a verdict: the Postgres CHECK
-  (`0002_verification_fields.sql:32`), the enum (`domain/model/DetectionVerdict.kt:13-16`), and
+  (`0001_init.sql:238`), the enum (`domain/model/DetectionVerdict.kt:13-16`), and
   every raw query string that names a verdict (`data/local/dao/DetectionDao.kt:43`, `:66`,
   `:87`).
-- The CSV, which emits `model_class`, `expert_class`, `verdict`, and now `stage` as separate
-  columns (`domain/usecase/records/ReportCsvBuilder.kt`).
+- The report generator, which emits `model_class`, `expert_class`, and `verdict`.
 
 **Does not hit**
 - The overlay geometry. `FrameWithBoxes` renders from the live
@@ -109,12 +108,11 @@ Documented shape: `schema.ts:358-395`.
 
 Written only at verification, by `SubmitVerificationUseCase` — one path for both sources since
 86d4ab4tq. A finding with no prediction (a manual capture, or a species the medtech added to an
-AI frame) becomes one row with `confidence = 1.0f` and all four box columns null. Read by Sample Detail, the EPG aggregate, the Dashboard trend queries, and
-the CSV builder. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
+AI frame) becomes one row with `confidence = 1.0f` and all four box columns null. Read by Sample Detail,
+the confirmed egg counts query (`DetectionDao.kt:43`), and the report generator. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
 
 ## See
 
-`supabase/migrations/0002_verification_fields.sql`,
-`supabase/migrations/0007_detection_bbox_nullable.sql`,
+`supabase/migrations/0001_init.sql:224-245`,
 `app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt`,
-`data/local/mapper/VerificationMapper.kt`, `schema.ts:358-395`.
+`data/local/mapper/VerificationMapper.kt`, `schema.ts` (`Detection`).

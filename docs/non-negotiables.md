@@ -44,7 +44,7 @@ The terse list. No explanation here — each line points at the constraint that 
 - **Never create or re-introduce a `TODO.md`.** Tasks live in ClickUp.
 - **Never over-specify implementation in an AI-assisted ticket.** State the problem, expected behavior, and acceptance criteria; treat code paths and fixes as hints. → C9
 - **Never push without a local build and test pass.** → C12
-- **Never open a PR against `main`.** Target `staging`. → C9
+- **Never open a PR against `main` or `staging` directly.** Target `development`. → C9
 - **Never invent a convention without writing it into `docs/`.** → C13
 - **Never trust a document over the code.** → C13
 - **Never implement against anything in `docs/_archive/`.**

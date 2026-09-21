@@ -33,6 +33,8 @@ All defined in `package.json:5-19`.
 | `./gradlew assembleDebug` | Debug APK |
 | `./gradlew :app:compileDebugKotlin` | Compile Kotlin |
 | `./gradlew :app:testDebugUnitTest` | Debug unit tests |
+| `./gradlew :app:verifyRoborazziDebug` | Run unit tests and compare Roborazzi screenshot goldens |
+| `./gradlew :app:recordRoborazziDebug` | Re-record Roborazzi screenshot goldens when UI changes are intentional |
 | `./gradlew :app:ktlintCheck :app:detekt` | Lint the app module — the exact pair the pre-commit hook runs |
 | `./gradlew :app:connectedAndroidTest` | Instrumented tests. Needs a device or emulator. `androidTest/` currently holds only the generated stub |
 | `./gradlew tasks` | Enumerate what is actually available in this build |
@@ -68,6 +70,7 @@ Installed by Husky into `.git/hooks` via `bun run prepare`.
 | `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
 | `commit-msg` | Validates subject format `[type][ClickUp-ID][Lastname]: Task title` against C9 | `.husky/commit-msg` |
 | `pre-push` | `assembleDebug` | `.husky/pre-push` |
+| `commit-msg` | Validates commit message subject against `[type][ClickUp-ID][Lastname]: Task title` | `.husky/commit-msg` |
 
 Both auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
 
@@ -81,9 +84,9 @@ before committing the new image.
 touches only Markdown, since the hook gates on a full Android build that such a change cannot
 affect. It is not a general-purpose escape hatch — see `constraints.md` C12.
 
-**`commit-msg` hook enforces C9.** Replaced after commit `172ab4d` (`12509f8`), it validates
-the subject against `[type][ClickUp-ID][Lastname]: Task title`. `commitlint.config.js` and
-`lint-staged.config.js` are both committed and unreferenced by any hook.
+**`commit-msg` hook enforces format.** Restored at `12509f8` to enforce constraint C9
+(`[type][ClickUp-ID][Lastname]: Task title`). `commitlint.config.js` and `lint-staged.config.js`
+are both committed and remain unreferenced by any hook.
 
 ## Node tooling
 
@@ -114,7 +117,9 @@ There is no migration command. Open the Supabase dashboard SQL editor, paste the
 numbered file from `supabase/migrations/`, run it, and commit the file. Promote dev to prod by
 pasting the same file into the prod project. See `constraints.md` C6.
 
-## Not present
+## Continuous Integration (CI)
 
-No CI. There is no `.github/` directory in this repository — no workflow runs any of the
-above on a push or a pull request.
+GitHub Actions runs on every pull request (`.github/workflows/build-and-test.yml`).
+It sets up JDK 21 and Gradle, and runs `./gradlew :app:verifyRoborazziDebug --stacktrace`
+to gate pull requests on clean unit tests and verified screenshot goldens.
+Superseded runs are automatically cancelled via workflow concurrency.

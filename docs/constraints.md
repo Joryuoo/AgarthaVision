@@ -19,11 +19,11 @@ complexity, naming, and magic numbers — there is no import-boundary rule in it
 (`detekt.yml:1-49`).
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
-`retrofit2`, or `io.github.jan.*`. The spirit is bent in three ViewModels that inject the
-data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:9`,
-`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`). It was
-four until `ManualCaptureViewModel` was deleted by the one-verification-screen merge
-(86d4ab4tq). The composable that once rendered a wire DTO no
+`retrofit2`, or `io.github.jan.*`. The spirit is bent in two ViewModels that inject the
+data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:10`,
+`ui/verify/VerificationViewModel.kt:5`). It was four until `ManualCaptureViewModel` was deleted
+by the one-verification-screen merge (86d4ab4tq) and `VerificationQueueViewModel` moved to
+`ObserveVerificationQueueUseCase`. The composable that once rendered a wire DTO no
 longer does — `FrameWithBoxes` takes domain `Prediction` values
 (`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
 
@@ -53,12 +53,11 @@ bindings exist, not that the boundary is respected
 (`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:79-127`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
-eleven `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
+several `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
 directly rather than going through a repository —
-`domain/usecase/verify/SubmitVerificationUseCase.kt:3-6`,
-`domain/usecase/auth/ClaimLocalDataUseCase.kt:3-5`,
-`domain/usecase/sync/SyncPendingDataUseCase.kt:4-9`. `ClaimLocalDataUseCase` documents the
-deviation and defers the fix to Phase 2 (`domain/usecase/auth/ClaimLocalDataUseCase.kt:16-19`).
+`domain/usecase/verify/SubmitVerificationUseCase.kt:3-8`,
+`domain/usecase/sync/SyncPendingDataUseCase.kt:4-11`,
+`domain/usecase/sync/FetchRemoteDataUseCase.kt:7-17`.
 
 ## C4 — Use cases return `Result<T>`
 
@@ -85,23 +84,22 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 
 ## C6 — Migrations own the schema
 
-`supabase/migrations/*.sql` is the authority for Postgres tables, nullability, defaults,
-foreign keys, CHECKs, and RLS. Do not change schema behaviour without updating both the
-migration SQL **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in
-the Supabase dashboard SQL editor — never applied programmatically
-(`supabase/migrations/0001_init.sql:2`). Room is a separate mirror: a Room-shape change means
-bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:46`).
+`supabase/migrations/0001_init.sql` is the authority for Postgres tables, nullability, defaults,
+foreign keys, CHECKs, and RLS on the consolidated `agarthavision` project; pre-patient migration
+history `0001`–`0013` is archived under `supabase/migrations/legacy-dev/` as the description of
+the dev and prod projects. Do not change schema behaviour without updating both the migration SQL
+**and** `schema.ts`. Migrations are numbered, committed, and run **manually** in the Supabase
+dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:2`).
+Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
+(`core/database/AgarthaDatabase.kt:105`).
 
-**Enforcement:** review only. There is no migration runner, no schema-diff test, and no CI.
+**Enforcement:** review only. There is no migration runner and no schema-diff test.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).
 
-**Known drift, code wins:** `schema.ts` names `samples.timestamp`, `samples.image_path`,
-`samples.created_at`, `samples.gps_lat/gps_lng/gps_accuracy_m`, and `detections.created_at`
-(`schema.ts:284-342`, `schema.ts:321`). None of those columns exist in Postgres. The
-migration creates `captured_at`, `gps_latitude`, `gps_longitude`, `gps_accuracy` and no
-`created_at` (`supabase/migrations/0001_init.sql:43-55`), and the insert row confirms it
-(`data/supabase/SampleRemoteDataSource.kt:100-127`). Those `schema.ts` names describe the
-Room entity, not Postgres.
+**Known drift, code wins:** `schema.ts` previously named Room entity names (`samples.timestamp`,
+`samples.image_path`, `samples.created_at`, `gps_*`) as if they were Postgres columns. The
+consolidated schema aligns with Postgres `0001_init.sql` (`captured_at`, `verified_at`, etc.)
+and explicitly separates Room-only columns.
 
 ## C7 — Human validation gates every AI output
 
@@ -153,12 +151,19 @@ its own ticket.
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
 
+**Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
+images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
+data (patient names, birthdates, sex, barangays) is governed by Philippine RA 10173 and clinical
+retention policies. Model retraining requires labeled tensors, not patient identities. The privacy
+position permanently separating the retraining corpus from patient PII is documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 ## C9 — Commit and branch format
 
 Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
 Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
-cut from `staging` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
-`test/…`. PRs target `staging`, never `main`.
+cut from `development` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+`test/…`. PRs target `development` (workflow: `development` → `staging` → `main`).
 
 **Commits are sole-authored.** No `Co-Authored-By` trailer, no session trailer, and no tool
 or model identifier anywhere in a pushed artifact — not in a commit subject or body, not in
@@ -217,13 +222,19 @@ at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A mi
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
 
-**Enforcement:** `.gitignore` plus review. There is no secret-scanning step, because there is
-no CI at all — no `.github/` directory exists in this repository.
+**Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
+(verifying compile and Roborazzi screenshot tests without requiring secrets).
 
-**Drift:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
-`INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
-`INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
-wins.
+**Drift, fixed in PB-01:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
+`INFERENCE_API_KEY_PROD`. `local.properties.example` now documents both suffixed names.
+
+**Patient data privacy and at-rest security:** Like application secrets, patient Personally
+Identifiable Information (PII) and Sensitive Personal Information (SPI) must never leak into git
+history, test artifacts, or logs. Local on-device SQLite storage (Room) and report PDFs in shared
+storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
+validation mandate requiring synthetic patient profiles are documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 
 ## C11 — One design system
 
@@ -288,9 +299,9 @@ opening the file it describes.
 trustworthy. Every load-bearing claim in `docs/` carries a `path:line` citation precisely so
 this rule is checkable.
 
-**Live examples of documents losing:** the `schema.ts` column names in C6; the
-`INFERENCE_API_KEY` name in C10; the "flagged frames are transient / in-memory" claim, which
-is wrong — `FlaggedFrameStore` is Room-backed
+**Live examples of documents losing:** the `schema.ts` column names in C6 (corrected in PB-24);
+the `INFERENCE_API_KEY` name in C10 (corrected in PB-01); the "flagged frames are transient / in-memory"
+claim, which is wrong — `FlaggedFrameStore` is Room-backed
 (`data/repository/FlaggedFrameStore.kt:33-34`, `:58-74`); and the LPF counting rule, where the
 query counts everything that is not a false positive
 (`data/local/dao/DetectionDao.kt:43`).

@@ -13,57 +13,34 @@ The human-in-the-loop gate. Nothing counts until this runs.
 
 1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
    session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). When the selected bucket has
-   no rows the screen says which of three things is true — nothing captured yet, every capture
-   verified (with a "View session records" button into `SessionDetail`), or nothing verified
-   yet — chosen by the pure `queueEmptyVariant` in `ui/verify/VerificationQueueViewModel.kt`.
-   A running session with pending frames can also reach the queue from the Session Detail app
-   bar (`ui/records/SessionDetailScreen.kt`, gated by
-   `domain/usecase/records/ObserveSessionPendingCountUseCase`). **One screen handles both
-   sources**, so the cycle is the whole queue and `Frame n/N` counts all of it. Frames marked
-   repeat are the one exclusion: marking the open frame repeat drops it from the cycle, and it
-   stays on screen so the mark can be undone but reports no position and both frame buttons
-   dim. Until 86d4ab4tq there were two sheets asking different questions, and the host picked
-   one from the frame it opened with and never re-evaluated — so each sheet had to page only
-   through its own source or it would render the wrong questions.
-2. **Answer per box.** The sheet collects, per detection: is it an egg, is the box correct,
-   and which species (`domain/usecase/verify/VerificationAnswers.kt`). Species is asked as a
-   confirmation first — "Is this egg *Ascaris lumbricoides*?" — and a yes records the model's
-   species as the medtech's answer in that same step (`ui/verify/VerificationViewModel.kt`
-   `onSpeciesConfirmed`); only a no opens the species picker. A model class that maps to no
-   `EggSpecies` has nothing to confirm, so the picker is offered directly.
-
-   A "no" to the egg question short-circuits the rest. A "no" to the **box** question does not:
-   a misplaced box still contains a countable egg, so the species is still asked and the egg
-   still reaches the per-species count — the verdict records `BOX_INCORRECT` separately.
-   `Finding.isComplete` encodes exactly which questions still matter.
-
-   There is no developmental-stage question. 86d4a6jwy added one and staging reverted it
-   (`9dcfd5d`); the ticket is deprioritised. `sample_species_findings.stage` survives as a
-   dormant column because `0012` is applied and frozen under C6.
-3. **Answer once per frame.** A frame-level "did the model miss any eggs?" question feeds
-   `needs_reannotation` (`ui/verify/VerificationViewModel.kt:217`).
+   (`data/repository/FlaggedFrameStore.kt:59-75`, `:99-117`). The unverified queue is flat —
+   there are no tabs dividing sources. When the queue has no rows, the screen indicates the status
+   (nothing captured yet, all verified, or session complete). Duplicate frames are handled via soft-delete
+   tombstoning (`deleted_at`), which excludes them from counts and queues.
+2. **Review per box (pre-filled Q1–Q3, Add Egg).** For each detected egg, the verification sheet
+   presents the model's prediction: is it an egg (Q1), is the bounding box placed correctly (Q2),
+   and which species is it (Q3). These are pre-filled from model inference so the medtech confirms
+   or overrides with minimal taps. Medtechs can also use "Add Egg" to draw/tag missed eggs on the frame.
+   When the medtech confirms or re-selects a species, `species_touched` is marked `true` for retraining provenance.
+   A "no" to the egg question records `FALSE_POSITIVE`. A "no" to the box question records `BOX_INCORRECT`
+   while still asking for species.
+3. **Derived / frame-level reannotation.** Missed eggs or misclassified detections feed
+   `needs_reannotation` on the sample row (`SubmitVerificationUseCase.kt:54`).
 4. **Compute the verdict.** One function, first-match-wins:
    not an egg → `FALSE_POSITIVE`; box wrong → `BOX_INCORRECT`; species is `OTHER` or differs
    from the model's → `WRONG_CLASS`; otherwise `CONFIRMED`
-   (`data/local/mapper/VerificationMapper.kt:10-17`). **This is the whole clinical decision
-   rule.** Note a null species also yields `FALSE_POSITIVE`
-   (`VerificationMapper.kt:13`).
-5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and dismisses on success
-   (`ui/verify/VerificationViewModel.kt:271-296`).
-6. **Update the sample.** One UPDATE sets `status = verified`, `verified_at`,
-   `needs_reannotation`, the note, the repeat flag, GPS — and **nulls `predictions_json`**,
-   because the cache's job is done (`domain/usecase/verify/SubmitVerificationUseCase.kt:34-44`,
-   `data/local/dao/SampleDao.kt:93-122`). GPS is fetched here, not at capture, and returns null
-   on denial or timeout rather than throwing
-   (`domain/usecase/verify/SubmitVerificationUseCase.kt:31`).
-7. **Insert detections.** Predictions are zipped with answers, one row each
-   (`domain/usecase/verify/SubmitVerificationUseCase.kt:46-49`). The model's label is
-   canonicalised into `class_label`, and the expert's correction goes to `expert_class`
-   (`data/local/mapper/VerificationMapper.kt:24-39`). **Both halves persist** — a rejection is a
-   row, never a deletion (`../../constraints.md` C8).
-8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline — see [`sync`](sync.md)
-   (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`).
+   (`data/local/mapper/VerificationMapper.kt:10-17`). Note a null species also yields `FALSE_POSITIVE`.
+5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and navigates on success.
+6. **Update the sample and findings.** One UPDATE sets `status = verified`, `verified_at`,
+   `needs_reannotation`, `user_note`, and nulls `predictions_json`
+   (`domain/usecase/verify/SubmitVerificationUseCase.kt:50-56`). GPS and the legacy repeat flag
+   are completely absent. `SampleSpeciesFindingDao.replaceFindingsForSample` updates the per-species
+   counts for the low-power field (`:69-72`).
+7. **Insert detections.** Predictions are mapped to `DetectionEntity` rows with their verdicts
+   (`SubmitVerificationUseCase.kt:61-63`). **Both halves persist** — a rejection is a
+   `FALSE_POSITIVE` row, never a deletion (`../../constraints.md` C8).
+8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()`
+   enqueues background sync (`SubmitVerificationUseCase.kt:74-78`).
 
 ## Manual captures take the same path
 
@@ -71,31 +48,19 @@ There is no second use case and no second screen. A manual capture is a frame wi
 output, so it opens with exactly one finding whose `prediction` is null: the isEgg and
 isBoxCorrect questions do not render, and the medtech names a species and a count directly.
 `Finding.toDetectionEntity` writes that as **one** detection with `confidence = 1.0f`, all four
-box columns null and `verdict = CONFIRMED` — the same row `SubmitManualCaptureUseCase` used to
-write before it was absorbed (`data/local/mapper/VerificationMapper.kt`).
-
-**One behaviour did change in the merge.** The old manual path set `needs_reannotation = true`
-unconditionally, so every manual capture was queued for offline annotation whether or not the
-medtech thought anything was missing. On the shared path it follows the missed-egg answer like
-any other frame. The question is asked on a manual capture — it is not gated on having a box —
-so the flag now records what the medtech actually said rather than an assumption made on their
-behalf. Fewer frames land in the annotation queue, and the ones that do are there for a
-reason.
+box columns null and `verdict = CONFIRMED`.
 
 ## Hits
 
-- **Every downstream count.** A verdict is not just a label — the EPG aggregate filters on it,
-  and `expert_class` overrides `class_label` in the species grouping
-  (`data/local/dao/DetectionDao.kt:35`, `:43`).
+- **Every downstream count.** A verdict is not just a label — the confirmed egg count query
+  filters `verdict != 'false_positive'` (`data/local/dao/DetectionDao.kt:43`), and `expert_class`
+  overrides `class_label` in the species grouping. Findings feed `aggregateLpfPerSpecies` for LPF ranges.
 - **Verdict case.** Room lowercase, Postgres uppercase, mapped at the sync boundary
   (`domain/model/DetectionVerdict.kt:13-16`,
-  `data/supabase/SampleRemoteDataSource.kt:80-94`). Adding a verdict means touching the enum,
-  the Postgres CHECK (`supabase/migrations/0002_verification_fields.sql:32`), and every raw
-  query string that names one.
+  `data/supabase/SampleRemoteDataSource.kt:79-97`).
 - **Offline behaviour.** Verification needs no auth and no network
-  (`domain/usecase/verify/SubmitVerificationUseCase.kt:27-28`). The inline sync call simply
-  fails and marks the row `sync_failed`.
-- The queue's visibility gate — see the identity caveat in [`capture`](capture.md).
+  (`domain/usecase/verify/SubmitVerificationUseCase.kt:41-42`). The inline sync call simply
+  fails safely and enqueues background sync via `SyncScheduler`.
 
 ## Does not hit
 
@@ -136,20 +101,16 @@ all.
   data.
 
 **Governing rule status.** The only clinical free-text field in the app is the dropdown-gated
-"Other species" fallback above — there is no manual LPF/count field yet (blocked on
-`86d4a6jxw`), so the "only LPF is typed" rule has nothing to satisfy or violate today.
-
-**Deferred (explicitly out of scope here).** Per-species LPF count carry-through and the PDF
-per-detection breakdown are blocked on `86d4ab4tq` (polyparasitism findings table) and
-`86d4a6jxw` (LPF unit) respectively.
+"Other species" fallback above and medtech notes. The per-species LPF count uses the structured
+findings inputs.
 
 ## The inconsistency worth knowing
 
 Two aggregate queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession`
-— the one behind EPG and every report — counts everything with
+— the one behind the report egg count — counts everything with
 `verdict != 'false_positive'`, so `WRONG_CLASS` and `BOX_INCORRECT` boxes are counted as eggs
 (`data/local/dao/DetectionDao.kt:43`). The dashboard trend queries use
-`verdict = 'confirmed'` (`data/local/dao/DetectionDao.kt:66`, `:87`). Prose that says EPG counts
+`verdict = 'confirmed'` (`data/local/dao/DetectionDao.kt:66`, `:87`). Prose that says the report counts
 "CONFIRMED detections" describes the second query, not the one that produces the number.
 Clinically the first is defensible — a misclassified egg is still an egg — but the two should
 not silently differ.

@@ -9,8 +9,15 @@ these files, not the one above.
 
 They are **not** the description of `agarthavision` (`zxojfpfarhhoxjjicphi`), the project the
 patient-records work targets. That project was empty, so `../0001_init.sql` consolidates all
-fourteen files into one, applies the patient-based changes, and is the only file to run there.
+thirteen applied files into one, applies the patient-based changes, and is the only file to run there.
 Do not apply anything from this directory to it.
 
-`0010_verification_stage.sql` was already orphaned before this move: ticket 86d4a6jwy was
-reverted on staging (9dcfd5d) and the file was never applied anywhere. PB-24 retires it.
+## Retired: `0010_verification_stage.sql`
+
+`0010_verification_stage.sql` was an orphan created alongside `0010_session_psgc_barangay.sql`.
+It was **never applied anywhere**: ticket 86d4a6jwy was reverted on staging (`9dcfd5d`) and deprioritised,
+leaving the file behind with a collision on number `0010`. PB-24 retires it by removing the file.
+
+The work it represents can return cleanly because two hooks were deliberately preserved for it:
+1. The `stage` column **still exists**, nullable, in `sample_species_findings` in the consolidated `0001_init.sql` (`stage text check (stage in ('UNFERTILIZED', 'UNEMBRYONATED', 'EMBRYONATED', 'LARVATED'))`).
+2. **Room version 11 is still left free** (`core/database/AgarthaDatabase.kt:78-86`) so returning stage classification will not cause a version/hash collision.
