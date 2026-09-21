@@ -43,6 +43,7 @@
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
     <string name="verify_other_hint">Type the observed species</string>
+    <string name="verify_other_suggestions_label">Already recorded on this device</string>
     <string name="verify_show_boxes_label">Show bounding boxes</string>
 
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->

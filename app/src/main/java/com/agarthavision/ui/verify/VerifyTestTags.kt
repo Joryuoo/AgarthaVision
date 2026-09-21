@@ -120,11 +120,26 @@ internal object VerifyTestTags {
     /** The live per-species summary of what submitting would write. */
     const val FINDINGS_SUMMARY = "findings_summary"
 
+    /**
+     * The species already on this device, offered under whichever "Other species" field is
+     * being typed into.
+     *
+     * One tag, not one per field: only one free-text field is ever being typed into, and the
+     * view model's own [VerificationUiState.suggestionsFor] is what keeps a list from rendering
+     * under a field it does not belong to. A test asserting there is exactly one of these is
+     * asserting that rule.
+     */
+    const val OTHER_SPECIES_SUGGESTIONS = "other_species_suggestions"
+
     // The manual-capture checklist tags went with the checklist. A frame captured while the
     // inference container was unreachable is verified through the same Add Egg section as every
     // other frame, so there is no separate set of controls to address.
 
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
+
+    /** One offered species name, keyed on the name so a test can tap the one it means. */
+    fun otherSpeciesSuggestion(speciesName: String): String =
+        "other_species_suggestion_" + speciesName
 
     /** Remove button on the added finding at [index]. */
     fun removeFinding(index: Int): String = "remove_finding_" + index

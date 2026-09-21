@@ -262,6 +262,12 @@ internal fun VerificationSheetContent(
                         ?.let { EggSpecies.fromClassLabel(it.classLabel) },
                     detectionIndex = state.currentDetectionIndex,
                     actions = actions,
+                    // Derived against this field's own text, so a list fetched for another row
+                    // - or for a keystroke since typed over - simply does not come back.
+                    suggestions = state.suggestionsFor(
+                        SuggestionTarget.CurrentDetection,
+                        currentAnswers?.otherSpeciesText.orEmpty(),
+                    ),
                 )
             }
 
@@ -272,6 +278,12 @@ internal fun VerificationSheetContent(
                 findings = state.findings,
                 boxCount = boxCount,
                 actions = actions,
+                suggestionsFor = { index ->
+                    state.suggestionsFor(
+                        SuggestionTarget.AddedFinding(index),
+                        state.findings.getOrNull(index)?.answers?.otherSpeciesText.orEmpty(),
+                    )
+                },
             )
 
             FindingsSummary(findings = state.findings)
@@ -417,6 +429,7 @@ private fun BoxQuestionChain(
     suggestedSpecies: EggSpecies?,
     detectionIndex: Int,
     actions: VerificationSheetActions,
+    suggestions: List<String> = emptyList(),
 ) {
     CheckQuestion(
         title = stringResource(R.string.verify_q1),
@@ -482,6 +495,7 @@ private fun BoxQuestionChain(
             otherText = answers.otherSpeciesText,
             onSpeciesSelected = actions.onSpeciesSelected,
             onOtherTextChanged = actions.onOtherSpeciesChanged,
+            suggestions = suggestions,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.SPECIES_DROPDOWN)
