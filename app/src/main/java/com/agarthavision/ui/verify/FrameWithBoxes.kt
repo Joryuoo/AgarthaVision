@@ -107,6 +107,7 @@ internal const val NO_HIGHLIGHT = -1
  *   interchangeable downstream.
  * @param onDrawCancelled fired when the medtech backs out instead.
  */
+@Suppress("CyclomaticComplexMethod", "ComplexCondition")
 @Composable
 fun FrameWithBoxes(
     jpegBytes: ByteArray,

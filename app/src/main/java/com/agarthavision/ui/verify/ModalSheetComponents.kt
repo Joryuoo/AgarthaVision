@@ -199,6 +199,7 @@ internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
  * Each side goes dead at its end of the range rather than wrapping, so the control cannot read
  * as a way to leave the cycle.
  */
+@Suppress("LongParameterList")
 @Composable
 internal fun CycleRow(
     indicator: String,

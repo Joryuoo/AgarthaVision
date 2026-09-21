@@ -35,6 +35,7 @@ internal data class FrameTransform(
  * transform with an infinite or zero scale would push the failure downstream into geometry that
  * merely looks wrong.
  */
+@Suppress("ComplexCondition")
 internal fun frameTransform(
     canvasWidth: Float,
     canvasHeight: Float,

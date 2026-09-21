@@ -28,6 +28,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 
+@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
 class VerificationViewModelTest {
 
