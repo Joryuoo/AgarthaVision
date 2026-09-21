@@ -12,6 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 
@@ -35,15 +37,18 @@ internal fun DiscardConfirmDialog(
         title = { Text(stringResource(R.string.patient_form_discard_title)) },
         text = { Text(stringResource(R.string.patient_form_discard_body)) },
         confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(
-                    text = stringResource(R.string.patient_form_discard_confirm),
-                    color = AgarthaTheme.colors.danger,
-                )
+            AgarthaButton(
+                onClick = onConfirm,
+                variant = AgarthaButtonVariant.Destructive,
+            ) {
+                Text(stringResource(R.string.patient_form_discard_confirm))
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            AgarthaButton(
+                onClick = onDismiss,
+                variant = AgarthaButtonVariant.Secondary,
+            ) {
                 Text(stringResource(R.string.patient_form_discard_keep))
             }
         },
