@@ -1,6 +1,5 @@
 package com.agarthavision.domain.usecase.sync
 
-import android.database.sqlite.SQLiteConstraintException
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
@@ -729,14 +728,13 @@ class FetchRemoteDataUseCaseTest {
         whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session1, session2))
         whenever(sessionDao.getSessionById("sess-abcd")).thenReturn(null)
         whenever(sessionDao.getSessionById("sess-efgh")).thenReturn(null)
-        // sess-1 inserts cleanly (default mock no-op).
-        // sess-2 collides on first attempt — exactly what the unique index on
-        // (patient_id, label) does.
-        whenever(sessionDao.upsertSession(session2))
-            .thenAnswer {
-                throw SQLiteConstraintException("UNIQUE constraint failed: sessions.patient_id, sessions.label")
-            }
-        // The retry with the disambiguated label uses default no-op (arg differs from sess-2).
+        // sess-abcd: no collision — pre-check returns 0.
+        whenever(sessionDao.countLabelCollisions("patient-1", collidingLabel, "sess-abcd"))
+            .thenReturn(0)
+        // sess-efgh: collides with the already-inserted sess-abcd — pre-check returns 1.
+        // This is the accurate model of what countLabelCollisions returns after sess-abcd lands.
+        whenever(sessionDao.countLabelCollisions("patient-1", collidingLabel, "sess-efgh"))
+            .thenReturn(1)
         whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
         whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
 
@@ -749,7 +747,9 @@ class FetchRemoteDataUseCaseTest {
             "sessions pull must not be flagged as failed when only a label was remapped",
             FetchType.SESSIONS in summary.failed,
         )
-        // The retry label is: original.trim() + "-" + sessionId.take(4), all uppercase.
+        // sess-abcd lands with original label (no collision).
+        verify(sessionDao).upsertSession(session1)
+        // The disambiguated label is: original.trim() + "-" + sessionId.take(4), all uppercase.
         val expectedDisambiguated = "${collidingLabel}-${session2.sessionId.take(4)}".uppercase()
         verify(sessionDao).upsertSession(session2.copy(label = expectedDisambiguated))
     }
