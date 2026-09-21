@@ -28,7 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,19 +72,30 @@ private val FloatingActionClearance = 64.dp
 @Composable
 fun PatientsScreen(
     onPatientSelected: (String) -> Unit,
-    onEditPatient: (String) -> Unit,
-    onCreatePatient: () -> Unit,
+    onEditPatient: (String) -> Unit = {},
+    onCreatePatient: () -> Unit = {},
     viewModel: PatientsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val colors = AgarthaTheme.colors
 
+    var showPatientSheet by remember { mutableStateOf(false) }
+    var activePatientId by remember { mutableStateOf<String?>(null) }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 is PatientsEvent.OpenPatient -> onPatientSelected(event.patientId)
-                is PatientsEvent.EditPatient -> onEditPatient(event.patientId)
-                PatientsEvent.CreatePatient -> onCreatePatient()
+                is PatientsEvent.EditPatient -> {
+                    activePatientId = event.patientId
+                    showPatientSheet = true
+                    onEditPatient(event.patientId)
+                }
+                PatientsEvent.CreatePatient -> {
+                    activePatientId = null
+                    showPatientSheet = true
+                    onCreatePatient()
+                }
             }
         }
     }
@@ -178,6 +191,21 @@ fun PatientsScreen(
                     .padding(bottom = Spacing.lg),
             )
         }
+    }
+
+    if (showPatientSheet) {
+        PatientFormSheet(
+            patientId = activePatientId,
+            onDismiss = {
+                showPatientSheet = false
+                activePatientId = null
+            },
+            onOpenPatient = { id ->
+                showPatientSheet = false
+                activePatientId = null
+                onPatientSelected(id)
+            },
+        )
     }
 }
 

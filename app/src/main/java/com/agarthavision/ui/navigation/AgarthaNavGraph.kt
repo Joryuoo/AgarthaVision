@@ -184,12 +184,6 @@ fun AgarthaNavHost(
                 onPatientSelected = { patientId ->
                     navController.navigate(Screen.PatientSessions.createRoute(patientId))
                 },
-                onEditPatient = { patientId ->
-                    navController.navigate(Screen.PatientForm.createRoute(patientId))
-                },
-                onCreatePatient = {
-                    navController.navigate(Screen.PatientForm.createRoute())
-                },
             )
         }
 

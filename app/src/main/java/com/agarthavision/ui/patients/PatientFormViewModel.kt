@@ -120,7 +120,7 @@ class PatientFormViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Null for a blank form; set when opened on an existing patient. */
-    private val patientId: String? = savedStateHandle["patientId"]
+    private var patientId: String? = savedStateHandle["patientId"]
 
     // Shared with the session sheet rather than copied (PB-07b).
     private val barangayPicker = BarangayPickerDelegate(searchBarangaysUseCase)
@@ -156,6 +156,23 @@ class PatientFormViewModel @Inject constructor(
     init {
         barangayPicker.start(viewModelScope)
         patientId?.let { loadExisting(it) }
+    }
+
+    /**
+     * Initializes the form for a new patient or loads an existing patient by [id].
+     * Allows the ViewModel to be reused when presented inside a bottom sheet.
+     */
+    fun loadPatient(id: String?) {
+        if (id == null) {
+            patientId = null
+            loaded = null
+            fields.value = PatientFormState(isEditing = false)
+            barangayPicker.onCleared()
+            return
+        }
+        if (id == patientId && loaded != null) return
+        patientId = id
+        loadExisting(id)
     }
 
     private fun loadExisting(id: String) {

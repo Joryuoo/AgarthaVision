@@ -10,24 +10,31 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -52,7 +59,6 @@ import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
 import com.agarthavision.ui.components.SearchableDropdownState
-import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.toOption
@@ -65,7 +71,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * The New / Edit Patient form.
+ * The New / Edit Patient form, rendered as a bottom drawer / sheet matching [NewSessionSheet].
  *
  * Works entirely offline: the barangay picker searches the PSGC dataset bundled in the APK,
  * and the save is a local write that syncs when connectivity returns.
@@ -82,18 +88,23 @@ import java.time.format.DateTimeFormatter
 // would add indirection without reducing actual complexity.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PatientFormScreen(
-    onDone: () -> Unit,
-    onOpenPatient: (String) -> Unit,
-    viewModel: PatientFormViewModel = hiltViewModel(),
+fun PatientFormSheet(
+    onDismiss: () -> Unit,
+    onOpenPatient: (String) -> Unit = {},
+    patientId: String? = null,
+    viewModel: PatientFormViewModel = hiltViewModel(key = patientId ?: "new"),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val colors = AgarthaTheme.colors
 
+    LaunchedEffect(patientId) {
+        viewModel.loadPatient(patientId)
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                PatientFormEvent.Saved, PatientFormEvent.Cancelled -> onDone()
+                PatientFormEvent.Saved, PatientFormEvent.Cancelled -> onDismiss()
                 is PatientFormEvent.OpenExisting -> onOpenPatient(event.patientId)
             }
         }
@@ -104,41 +115,81 @@ fun PatientFormScreen(
     BackHandler { viewModel.onCancel() }
 
     var showDatePicker by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background),
+    ModalBottomSheet(
+        onDismissRequest = viewModel::onCancel,
+        sheetState = sheetState,
+        containerColor = colors.surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(colors.borderStrong, RoundedCornerShape(2.dp)),
+            )
+        },
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .widthIn(max = 480.dp)
-                .align(Alignment.TopCenter)
-                .verticalScroll(rememberScrollState())
-                // imePadding raises the content so the barangay field is not obscured by the
-                // keyboard. Ordered before navigationBarsPadding so the two insets compose
-                // correctly: the keyboard offset is applied first, then the nav-bar gap.
-                .imePadding()
-                // After verticalScroll so the inset is part of the scrolling content rather
-                // than a dead band around it: Save and Cancel are the last thing in the form,
-                // and without this they sit flush to the screen edge at full scroll with their
-                // lower half under the system navigation bar.
-                .navigationBarsPadding(),
+                .fillMaxWidth()
+                .padding(bottom = 20.dp),
         ) {
-            ScreenHeader(
-                title = stringResource(
-                    if (state.isEditing) R.string.patient_form_edit_title
-                    else R.string.patient_form_new_title,
-                ),
-                // patient_form_subtitle_purpose is deliberately separate from
-                // patients_subtitle_purpose (the Patients list screen subtitle); they have
-                // different purposes and must not share a string.
-                purpose = stringResource(R.string.patient_form_subtitle_purpose),
-            )
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp),
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (state.isEditing) R.string.patient_form_edit_title
+                            else R.string.patient_form_new_title,
+                        ),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.015).em,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.patient_form_subtitle_purpose),
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                IconButton(
+                    onClick = viewModel::onCancel,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(colors.surfaceMuted, CircleShape),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.patient_form_cancel),
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
 
+            // Body
             Column(
-                modifier = Modifier.padding(horizontal = Spacing.lg),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 6.dp)
+                    .imePadding()
+                    .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 SheetInput(
@@ -241,13 +292,15 @@ fun PatientFormScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = Spacing.md),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Button(
                         onClick = viewModel::onCancel,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(49.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = colors.surfaceMuted,
                             contentColor = colors.textPrimary,
@@ -255,14 +308,17 @@ fun PatientFormScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.patient_form_cancel),
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
                     Button(
                         onClick = viewModel::onSave,
                         enabled = !state.isSaving,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(49.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = colors.accent,
                             contentColor = colors.onAccent,
@@ -270,6 +326,7 @@ fun PatientFormScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.patient_form_save),
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
@@ -317,6 +374,23 @@ fun PatientFormScreen(
             onDismiss = viewModel::onDismissDuplicate,
         )
     }
+}
+
+/**
+ * Backward-compatible entry point for the patient form screen route.
+ */
+@Composable
+fun PatientFormScreen(
+    onDone: () -> Unit,
+    onOpenPatient: (String) -> Unit,
+    viewModel: PatientFormViewModel = hiltViewModel(),
+) {
+    PatientFormSheet(
+        onDismiss = onDone,
+        onOpenPatient = onOpenPatient,
+        patientId = null,
+        viewModel = viewModel,
+    )
 }
 
 /**
@@ -527,7 +601,6 @@ private fun EditNote() {
             lineHeight = 15.sp,
         )
     }
-    Spacer(modifier = Modifier.height(Spacing.xs))
 }
 
 /** Both birthdate failures light the same field. */
