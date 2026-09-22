@@ -11,7 +11,9 @@ import org.junit.Test
  * Pure tests for the smear-label generator. No Room, no Hilt, no coroutines — the whole point
  * of keeping it out of the repository is that it can be checked like this.
  *
- * Format: `<lastname (trimmed)><firstInitial>-S<NN>` — e.g. `GarciaM-S01`.
+ * Format: `<abbrev><firstInitial>-<SEXAGE>-S<NN>` — e.g. `LDNJ-M21-S01`, where the abbrev
+ * is the 3-letter lastname abbreviation (first + middle-index + last letter, letters only)
+ * and SEXAGE is the sex-and-age token from [com.agarthavision.domain.patient.CodenameGenerator].
  */
 class SessionLabelGeneratorTest {
 
@@ -19,69 +21,85 @@ class SessionLabelGeneratorTest {
 
     @Test
     fun `builds the documented label`() {
+        // Garcia -> GARCIA (6 letters), 6/2=3 -> C -> GCA; Maria -> M; F21
         assertEquals(
-            "GARCIAM-S01",
-            SessionLabelGenerator.generate(patient(lastname = "Garcia", firstname = "Maria"), sequence = 1),
+            "GCAM-F21-S01",
+            SessionLabelGenerator.generate(
+                patient(lastname = "Garcia", firstname = "Maria"),
+                sequence = 1,
+                asOf = asOf,
+            ),
         )
     }
 
     @Test
     fun `firstname initial is uppercased when stored lowercase`() {
+        // cruz -> CRUZ (4 letters), 4/2=2 -> U -> CUZ; gerald -> G; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "cruz", firstname = "gerald"),
             sequence = 1,
+            asOf = asOf,
         )
-        // Entire label is all caps.
-        assertEquals("CRUZG-S01", label)
+        assertEquals("CUZG-F21-S01", label)
     }
 
     @Test
     fun `an accented initial survives`() {
         // Ñ is a real first letter of Philippine surnames (Ñuñez). Stripping the diacritic
         // would print a different person's initial, so it is kept as-is.
+        // ñuñez -> ÑUÑEZ (5 letters), 5/2=2 -> Ñ -> ÑÑZ; Élia -> É; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "ñuñez", firstname = "Élia"),
             sequence = 2,
+            asOf = asOf,
         )
-        assertEquals("ÑUÑEZÉ-S02", label)
+        assertEquals("ÑÑZÉ-F21-S02", label)
     }
 
     @Test
     fun `leading and trailing whitespace in lastname is stripped`() {
+        // "  Cruz  " -> filter letters -> CRUZ (4 letters), 4/2=2 -> U -> CUZ; Gerald -> G; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "  Cruz  ", firstname = "Gerald"),
             sequence = 1,
+            asOf = asOf,
         )
-        assertEquals("CRUZG-S01", label)
+        assertEquals("CUZG-F21-S01", label)
     }
 
     @Test
     fun `empty firstname yields no initial`() {
         // A placeholder char in a clinical label reads worse than a slightly shorter one.
+        // Garcia -> GCA; "" -> no initial; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "Garcia", firstname = ""),
             sequence = 1,
+            asOf = asOf,
         )
-        assertEquals("GARCIA-S01", label)
+        assertEquals("GCA-F21-S01", label)
     }
 
     @Test
     fun `firstname with no letters yields no initial`() {
+        // Garcia -> GCA; "123" -> no letter initial; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "Garcia", firstname = "123"),
             sequence = 1,
+            asOf = asOf,
         )
-        assertEquals("GARCIA-S01", label)
+        assertEquals("GCA-F21-S01", label)
     }
 
     @Test
     fun `firstname starting with punctuation still yields a letter initial`() {
         // The initial() helper skips non-letter characters and takes the first letter.
+        // "Dela Cruz" -> filter letters -> DELACRUZ (8 letters), 8/2=4 -> C -> DCZ; "'Gerald" -> G; F21
         val label = SessionLabelGenerator.generate(
             patient(lastname = "Dela Cruz", firstname = "'Gerald"),
             sequence = 1,
+            asOf = asOf,
         )
-        assertEquals("DELA CRUZG-S01", label)
+        assertEquals("DCZG-F21-S01", label)
     }
 
     @Test
@@ -89,10 +107,11 @@ class SessionLabelGeneratorTest {
         // Truncating to the last two digits would print 00 and collide with a label that
         // already exists. The field is 32 characters; it has the room.
         assertEquals(
-            "GARCIAM-S100",
+            "GCAM-F21-S100",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 100,
+                asOf = asOf,
             ),
         )
     }
@@ -101,10 +120,11 @@ class SessionLabelGeneratorTest {
     fun `sequence zero is coerced to one`() {
         // coerceAtLeast(1) prevents S00 which would be confusing and imply ordinal 0.
         assertEquals(
-            "GARCIAM-S01",
+            "GCAM-F21-S01",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 0,
+                asOf = asOf,
             ),
         )
     }
@@ -112,12 +132,70 @@ class SessionLabelGeneratorTest {
     @Test
     fun `single-digit sequences are zero-padded to two digits`() {
         assertEquals(
-            "GARCIAM-S09",
+            "GCAM-F21-S09",
             SessionLabelGenerator.generate(
                 patient(lastname = "Garcia", firstname = "Maria"),
                 sequence = 9,
+                asOf = asOf,
             ),
         )
+    }
+
+    // ---------- lastname abbreviation edge cases ----------
+
+    @Test
+    fun `ticket example - Ledon Jhon male age 21 yields LDNJ-M21-S01`() {
+        // LEDON (5 letters), 5/2=2 -> D -> LDN; Jhon -> J; MALE age 21 -> M21
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "Ledon", firstname = "Jhon", sex = Sex.MALE),
+            sequence = 1,
+            asOf = asOf,
+        )
+        assertEquals("LDNJ-M21-S01", label)
+    }
+
+    @Test
+    fun `1-letter lastname uses the single letter as abbreviation`() {
+        // "A" -> letters = "A", length = 1 -> abbrev = "A"; Jose -> J; F21
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "A", firstname = "Jose"),
+            sequence = 1,
+            asOf = asOf,
+        )
+        assertEquals("AJ-F21-S01", label)
+    }
+
+    @Test
+    fun `2-letter lastname uses both letters as abbreviation`() {
+        // "Li" -> letters = "LI", length = 2 -> abbrev = "LI"; Ana -> A; F21
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "Li", firstname = "Ana"),
+            sequence = 1,
+            asOf = asOf,
+        )
+        assertEquals("LIA-F21-S01", label)
+    }
+
+    @Test
+    fun `all-non-letter lastname yields empty abbreviation segment`() {
+        // "---" -> filter letters -> "" -> abbrev = ""; Maria -> M; F21; prefix = "M"
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "---", firstname = "Maria"),
+            sequence = 1,
+            asOf = asOf,
+        )
+        assertEquals("M-F21-S01", label)
+    }
+
+    @Test
+    fun `null sex omits the entire sex-age segment`() {
+        // Garcia -> GCA; Maria -> M; sex = null -> no -SEXAGE- segment
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "Garcia", firstname = "Maria", sex = null),
+            sequence = 1,
+            asOf = asOf,
+        )
+        assertEquals("GCAM-S01", label)
     }
 
     // ---------- the sequence ----------
@@ -187,47 +265,7 @@ class SessionLabelGeneratorTest {
         assertEquals(1, SessionLabelGenerator.nextSequence(existing))
     }
 
-    // ---------- label length and fallback ----------
-
-    @Test
-    fun `lastname that fits exactly at 32 char limit uses full form`() {
-        // 27-char lastname + "M" + "-S01" = 32 chars exactly
-        val lastname = "a".repeat(27)
-        val label = SessionLabelGenerator.generate(
-            patient(lastname = lastname, firstname = "Maria"),
-            sequence = 1,
-        )
-        val expected = "${lastname}M-S01".uppercase()
-        assertEquals(expected, label)
-        assertEquals(32, label.length)
-    }
-
-    @Test
-    fun `lastname one char over limit falls back to initials`() {
-        // 28-char lastname + "M" + "-S01" = 33 chars (exceeds 32 limit by 1)
-        val lastname = "b".repeat(28)
-        val label = SessionLabelGenerator.generate(
-            patient(lastname = lastname, firstname = "Maria"),
-            sequence = 1,
-        )
-        // Should fallback to "BM-S01" (first initial of lastname + first initial of firstname)
-        assertEquals("BM-S01", label)
-        assertEquals(6, label.length)
-    }
-
-    @Test
-    fun `significantly long lastname falls back to initials`() {
-        // A 40-character lastname (the max per PatientFormViewModel.NAME_MAX_LENGTH)
-        // with firstname initial M would be 40 + 1 + 4 = 45 chars (way over the 32 limit)
-        val lastname = "A".repeat(40)
-        assertEquals(40, lastname.length)
-        val label = SessionLabelGenerator.generate(
-            patient(lastname = lastname, firstname = "Maria"),
-            sequence = 1,
-        )
-        // Should fallback to "AM-S01"
-        assertEquals("AM-S01", label)
-    }
+    // ---------- codename ----------
 
     @Test
     fun `codenamed patient produces -SEXAGE-S01 label`() {
@@ -250,15 +288,23 @@ class SessionLabelGeneratorTest {
         assertEquals("-F05-S03", labelFemale)
     }
 
+    /**
+     * Fixed reference instant for all named-patient tests: 2021-06-15 UTC, which resolves to
+     * 2021-06-15 in CLINICAL_ZONE (Asia/Manila, UTC+8) and yields age 21 for the default
+     * birthdate of 2000-01-01.
+     */
+    private val asOf: Instant = Instant.parse("2021-06-15T00:00:00Z")
+
     private fun patient(
         lastname: String = "Garcia",
         firstname: String = "Maria",
+        sex: Sex? = Sex.FEMALE,
     ) = Patient(
         id = "patient-1",
         lastname = lastname,
         firstname = firstname,
         middleName = null,
-        sex = Sex.FEMALE,
+        sex = sex,
         birthdate = LocalDate.of(2000, 1, 1),
         psgcBarangayCode = "0730600000",
         createdBy = "user-1",

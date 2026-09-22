@@ -72,7 +72,7 @@ class SessionPickerViewModelTest {
     // Called from the VM's init. An unstubbed mock returns null for a non-null Result and
     // takes down every test here, so it is stubbed even though the label is not asserted.
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase = mock {
-        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+        onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
     }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {

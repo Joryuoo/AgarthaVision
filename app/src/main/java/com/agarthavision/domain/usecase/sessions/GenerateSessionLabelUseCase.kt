@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.sessions
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.session.SessionLabelGenerator
+import java.time.Instant
 import javax.inject.Inject
 
 /**
@@ -23,17 +24,20 @@ class GenerateSessionLabelUseCase @Inject constructor(
     private val patientRepository: PatientRepository,
     private val sessionRepository: SessionRepository,
 ) {
-    suspend operator fun invoke(patientId: String): Result<String> = runCatching {
+    suspend operator fun invoke(
+        patientId: String,
+        asOf: Instant = Instant.now(),
+    ): Result<String> = runCatching {
         val patient = requireNotNull(patientRepository.getPatientById(patientId)) {
             "No patient $patientId; cannot build a smear label for one that is not there."
         }
         var sequence = SessionLabelGenerator.nextSequence(
             sessionRepository.getSessionLabelsForPatient(patientId),
         )
-        var candidate = SessionLabelGenerator.generate(patient, sequence)
+        var candidate = SessionLabelGenerator.generate(patient, sequence, asOf)
         while (sessionRepository.isSessionLabelTaken(patientId, candidate)) {
             sequence++
-            candidate = SessionLabelGenerator.generate(patient, sequence)
+            candidate = SessionLabelGenerator.generate(patient, sequence, asOf)
         }
         candidate
     }
