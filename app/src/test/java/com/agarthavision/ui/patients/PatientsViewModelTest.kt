@@ -184,6 +184,38 @@ class PatientsViewModelTest {
             val state = expectMostRecentItem()
             assertEquals(PatientSort.LAST_NAME, state.sort)
             assertFalse(state.isNarrowed)
+            assertEquals(1, state.activeFilterCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `onApplyFilters updates all filter fields and calculates activeFilterCount`() = runTest {
+        whenever(psgcRepository.searchBarangays("Lahug", SearchBarangaysUseCase.RESULT_LIMIT))
+            .thenReturn(listOf(lahug()))
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            assertEquals(0, expectMostRecentItem().activeFilterCount)
+
+            vm.onApplyFilters(
+                sort = PatientSort.FIRST_NAME,
+                sex = Sex.MALE,
+                barangay = lahug(),
+                minAge = 18,
+                maxAge = 65,
+            )
+            advanceUntilIdle()
+
+            val state = expectMostRecentItem()
+            assertEquals(PatientSort.FIRST_NAME, state.sort)
+            assertEquals(Sex.MALE, state.selectedSex)
+            assertEquals(LAHUG, state.barangayPickerState.selected?.code)
+            assertEquals(18, state.minAge)
+            assertEquals(65, state.maxAge)
+            assertEquals(4, state.activeFilterCount)
+            assertTrue(state.isNarrowed)
             cancelAndIgnoreRemainingEvents()
         }
     }

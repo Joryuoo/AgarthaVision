@@ -365,6 +365,9 @@
     <string name="patients_sort_firstname">First name</string>
     <string name="patients_filters_title">Filters</string>
     <string name="patients_filters_clear">Clear filters</string>
+    <string name="patients_filters_clear_short">Clear</string>
+    <string name="patients_filters_apply">Apply filters</string>
+    <string name="patients_filters_button_count">Filters · %1$d</string>
     <string name="patients_filter_sex">Sex</string>
     <string name="patients_filter_sex_all">All</string>
     <string name="patients_filter_age">Age range</string>

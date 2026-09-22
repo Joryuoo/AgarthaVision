@@ -2,6 +2,7 @@ package com.agarthavision.ui.patients
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.patients.ObservePatientsUseCase
@@ -55,6 +56,12 @@ data class PatientsState(
             barangayPickerState.selected != null ||
             minAge != null ||
             maxAge != null
+
+    val activeFilterCount: Int
+        get() = (if (sort != PatientSort.RECENT) 1 else 0) +
+            (if (selectedSex != null) 1 else 0) +
+            (if (barangayPickerState.selected != null) 1 else 0) +
+            (if (minAge != null || maxAge != null) 1 else 0)
 }
 
 /** One-shot navigation out of the list. */
@@ -227,10 +234,30 @@ class PatientsViewModel @Inject constructor(
     }
 
     fun onClearFilters() {
+        sort.value = PatientSort.RECENT
         selectedSex.value = null
         barangayPicker.onCleared()
         minAge.value = null
         maxAge.value = null
+        limit.value = PatientsQuery.PAGE_SIZE
+    }
+
+    fun onApplyFilters(
+        sort: PatientSort,
+        sex: Sex?,
+        barangay: PsgcBarangay?,
+        minAge: Int?,
+        maxAge: Int?,
+    ) {
+        this.sort.value = sort
+        this.selectedSex.value = sex
+        if (barangay != null) {
+            barangayPicker.preselect(barangay)
+        } else {
+            barangayPicker.onCleared()
+        }
+        this.minAge.value = minAge
+        this.maxAge.value = maxAge
         limit.value = PatientsQuery.PAGE_SIZE
     }
 

@@ -68,6 +68,7 @@ private val FloatingActionClearance = 64.dp
  * **There is no delete affordance, and none should be added.** Removing a patient is an
  * admin-side action.
  */
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun PatientsScreen(
     onPatientSelected: (String) -> Unit,
@@ -77,6 +78,7 @@ fun PatientsScreen(
     val colors = AgarthaTheme.colors
 
     var showPatientSheet by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var activePatientId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(viewModel) {
@@ -119,19 +121,16 @@ fun PatientsScreen(
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
             )
 
-            PatientsFiltersSection(
-                state = state,
-                actions = PatientsFiltersActions(
-                    onSortSelected = viewModel::onSortSelected,
-                    onSexSelected = viewModel::onSexSelected,
-                    onBarangayQueryChange = viewModel::onBarangayQueryChanged,
-                    onBarangaySelected = viewModel::onBarangaySelected,
-                    onBarangayCleared = viewModel::onBarangayCleared,
-                    onMinAgeChanged = viewModel::onMinAgeChanged,
-                    onMaxAgeChanged = viewModel::onMaxAgeChanged,
-                    onClearFilters = viewModel::onClearFilters,
-                ),
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            ) {
+                PatientsFilterButton(
+                    activeCount = state.activeFilterCount,
+                    onClick = { showFilterSheet = true },
+                )
+            }
 
             val listState = rememberLazyListState()
             val shouldLoadMore by remember {
@@ -196,6 +195,15 @@ fun PatientsScreen(
                     .padding(bottom = Spacing.lg),
             )
         }
+    }
+
+    if (showFilterSheet) {
+        PatientsFilterSheet(
+            state = state,
+            onDismiss = { showFilterSheet = false },
+            onApply = viewModel::onApplyFilters,
+            onBarangayQueryChange = viewModel::onBarangayQueryChanged,
+        )
     }
 
     if (showPatientSheet) {
