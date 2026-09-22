@@ -559,6 +559,11 @@ internal class FakeSessionRepository(
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(rows.map { it.session }.filter { it.userId == null || it.userId == userId })
 
@@ -640,6 +645,11 @@ private class MultiEmitSessionRepository(
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
 
     override fun observeSessionRecordsPage(

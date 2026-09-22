@@ -285,114 +285,44 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `migration 16 to 17 creates updated_at index on patients table`() {
-        val context: Context = RuntimeEnvironment.getApplication()
-        val dbHelper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory().create(
-            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
-                .name("test_v16_to_17.db")
-                .callback(
-                    object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(16) {
-                        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                            db.execSQL(
-                                "CREATE TABLE IF NOT EXISTS `patients` (" +
-                                    "`patient_id` TEXT NOT NULL, " +
-                                    "`lastname` TEXT NOT NULL, " +
-                                    "`firstname` TEXT NOT NULL, " +
-                                    "`middle_name` TEXT, " +
-                                    "`sex` TEXT NOT NULL, " +
-                                    "`birthdate` INTEGER NOT NULL, " +
-                                    "`psgc_barangay_code` TEXT NOT NULL, " +
-                                    "`created_by` TEXT NOT NULL, " +
-                                    "`created_at` INTEGER NOT NULL, " +
-                                    "`updated_at` INTEGER NOT NULL, " +
-                                    "`supabase_status` TEXT NOT NULL DEFAULT 'pending', " +
-                                    "PRIMARY KEY(`patient_id`))",
-                            )
-                        }
-
-                        override fun onUpgrade(
-                            db: androidx.sqlite.db.SupportSQLiteDatabase,
-                            oldVersion: Int,
-                            newVersion: Int,
-                        ) {
-                            // Test helper does not need to handle upgrade.
-                        }
-                    },
-                )
-                .build(),
-        )
-        val db = dbHelper.writableDatabase
-        try {
-            AgarthaDatabase.MIGRATION_16_17.migrate(db)
-            val indices = db.query("PRAGMA index_list('patients')").use { cursor ->
+    fun `sessions carry a unique per-patient label index`() {
+        // v17 (86d4bzjhw): per-patient label uniqueness is enforced at the SQLite level.
+        // Without this index two concurrent offline creates with the same label collide
+        // silently into a duplicate row pair that confuses the medtech's list.
+        val indexNames = database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
                 val nameIndex = cursor.getColumnIndexOrThrow("name")
                 buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
             }
-            assertTrue(
-                "index_patients_updated_at was not created by MIGRATION_16_17",
-                indices.contains("index_patients_updated_at"),
-            )
-        } finally {
-            db.close()
-            context.deleteDatabase("test_v16_to_17.db")
+        val uniqueIndex = indexNames.firstOrNull { name ->
+            val columns = database.openHelper.writableDatabase
+                .query("PRAGMA index_info($name)")
+                .use { cursor ->
+                    val colIndex = cursor.getColumnIndexOrThrow("name")
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(colIndex)) }
+                }
+            columns.containsAll(listOf("patient_id", "label")) && columns.size == 2
         }
-    }
-
-    @Test
-    fun `migration 17 to 18 creates updated_at index on patients table`() {
-        // Version 17 is poisoned (equal-version-different-hash collision). MIGRATION_17_18
-        // re-runs the same idempotent CREATE INDEX statement: a no-op for devices whose v17
-        // already had the index, and a fix-up for devices whose poisoned v17 did not.
-        val context: Context = RuntimeEnvironment.getApplication()
-        val dbHelper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory().create(
-            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
-                .name("test_v17_to_18.db")
-                .callback(
-                    object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(17) {
-                        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
-                            db.execSQL(
-                                "CREATE TABLE IF NOT EXISTS `patients` (" +
-                                    "`patient_id` TEXT NOT NULL, " +
-                                    "`lastname` TEXT NOT NULL, " +
-                                    "`firstname` TEXT NOT NULL, " +
-                                    "`middle_name` TEXT, " +
-                                    "`sex` TEXT NOT NULL, " +
-                                    "`birthdate` INTEGER NOT NULL, " +
-                                    "`psgc_barangay_code` TEXT NOT NULL, " +
-                                    "`created_by` TEXT NOT NULL, " +
-                                    "`created_at` INTEGER NOT NULL, " +
-                                    "`updated_at` INTEGER NOT NULL, " +
-                                    "`supabase_status` TEXT NOT NULL DEFAULT 'pending', " +
-                                    "PRIMARY KEY(`patient_id`))",
-                            )
-                        }
-
-                        override fun onUpgrade(
-                            db: androidx.sqlite.db.SupportSQLiteDatabase,
-                            oldVersion: Int,
-                            newVersion: Int,
-                        ) {
-                            // Test helper does not need to handle upgrade.
-                        }
-                    },
-                )
-                .build(),
-        )
-        val db = dbHelper.writableDatabase
-        try {
-            AgarthaDatabase.MIGRATION_17_18.migrate(db)
-            val indices = db.query("PRAGMA index_list('patients')").use { cursor ->
+        // Confirm the index is actually unique.
+        val isUnique = uniqueIndex != null && database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
                 val nameIndex = cursor.getColumnIndexOrThrow("name")
-                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+                val uniqueIndex2 = cursor.getColumnIndexOrThrow("unique")
+                var result = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == uniqueIndex) {
+                        result = cursor.getInt(uniqueIndex2) == 1
+                    }
+                }
+                result
             }
-            assertTrue(
-                "index_patients_updated_at was not created by MIGRATION_17_18",
-                indices.contains("index_patients_updated_at"),
-            )
-        } finally {
-            db.close()
-            context.deleteDatabase("test_v17_to_18.db")
-        }
+        assertTrue(
+            "sessions(patient_id, label) unique index is missing — duplicate labels for the " +
+                "same patient can slip through on concurrent offline creates.",
+            isUnique,
+        )
     }
 
     private companion object {

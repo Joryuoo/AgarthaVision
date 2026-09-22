@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 18,
-    "identityHash": "b9e65459a2a73a08bb31d7ccb34af5a2",
+    "identityHash": "cb092c054b468b6f6b59a2a24e4ff0c3",
     "entities": [
       {
         "tableName": "samples",
@@ -200,6 +200,16 @@
             ],
             "orders": [],
             "createSql": "CREATE INDEX IF NOT EXISTS `index_sessions_patient_id` ON `${TABLE_NAME}` (`patient_id`)"
+          },
+          {
+            "name": "index_sessions_patient_id_label",
+            "unique": true,
+            "columnNames": [
+              "patient_id",
+              "label"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_sessions_patient_id_label` ON `${TABLE_NAME}` (`patient_id`, `label`)"
           }
         ],
         "foreignKeys": [
@@ -821,7 +831,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b9e65459a2a73a08bb31d7ccb34af5a2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cb092c054b468b6f6b59a2a24e4ff0c3')"
     ]
   }
 }

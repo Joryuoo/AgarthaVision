@@ -2,8 +2,6 @@ package com.agarthavision.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
@@ -65,6 +63,20 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * new number rather than a reshaped 14 for the reason immediately below: 14 is already
  * committed and installed, and changing its shape in place is the collision, not the bump.
  *
+ * Version 17 adds a unique composite index on `sessions(patient_id, label)` enforcing
+ * per-patient label uniqueness (86d4bzjhw). Labels are still per-patient scoped, not
+ * globally unique, and remain user-editable subject to the uniqueness guard. SQLite treats
+ * NULL as distinct in a unique index so unlabelled rows never collide.
+ *
+ * Version 18 adds an index on `patients.updated_at` to support sorting by recent activity
+ * (86d4bze80). It lands as a plain version bump with no hand-written migration, the same as
+ * every other Phase 1 change here — a dev branch briefly tried routing this fix through
+ * explicit `Migration` objects to work around a local build collision, but the collision was
+ * really just this branch and the session-label branch (86d4bzjhw) independently minting the
+ * same version 17 for two different shapes, the same failure mode described below for 10/11
+ * and 13. Now that both lines share one history, 18 is simply the next number and destructive
+ * fallback covers it like everything else.
+ *
  * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
  * already committed and on devices. Adding a table without changing the number is precisely
  * the equal-version-different-hash case described below: destructive fallback does not
@@ -86,18 +98,11 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * carrying one of the other builds crashes at launch. That has already happened once on this
  * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
  * an ordering token under destructive fallback, so a skipped number costs nothing.
- * Version 17 was meant to add an index on `patients.updated_at` to support sorting by recent
- * activity (86d4bze80), migrated via [MIGRATION_16_17]. It was poisoned the same way 10/11 and
- * 13 were: a dev device carried a local build that also declared version 17 but with a different
- * identity hash (cace33f87dcf89735c12df13025f3a08), so the two collided into an
- * equal-version-different-hash mismatch. Destructive fallback does not fire in that case — Room
- * throws `IllegalStateException: Room cannot verify the data integrity` on open and the app crashes
- * at launch. Version 17 is therefore left free, exactly the way 11 was left free after the 10/12
- * skip. The index shape moves to version 18 via [MIGRATION_17_18], which re-runs the same
- * idempotent `CREATE INDEX IF NOT EXISTS` statement: a safe no-op on devices whose poisoned v17
- * already had the index, and the fix-up for devices whose poisoned v17 did not.
  *
- * Local schema history is exported under `app/schemas/`.
+ * No hand-written `Migration` is supplied: per [DatabaseModule] the app
+ * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
+ * these entities. Acceptable in Phase 1 (no production data). Local schema history is
+ * exported under `app/schemas/`.
  */
 @Database(
     entities = [
@@ -124,22 +129,4 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun speciesSuggestionDao(): SpeciesSuggestionDao
 
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
-
-    companion object {
-        val MIGRATION_16_17 = object : Migration(16, 17) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE INDEX IF NOT EXISTS `index_patients_updated_at` ON `patients` (`updated_at`)"
-                )
-            }
-        }
-
-        val MIGRATION_17_18 = object : Migration(17, 18) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL(
-                    "CREATE INDEX IF NOT EXISTS `index_patients_updated_at` ON `patients` (`updated_at`)"
-                )
-            }
-        }
-    }
 }

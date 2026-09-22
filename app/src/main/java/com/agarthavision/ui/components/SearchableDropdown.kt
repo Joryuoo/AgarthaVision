@@ -17,15 +17,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Search
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +38,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -83,6 +91,7 @@ data class SearchableDropdownConfig(
     val minQueryLength: Int,
     /** Small chip beside the label, e.g. "REQUIRED". Omitted when null. */
     val badge: String? = null,
+    val isRequired: Boolean = false,
     val isError: Boolean = false,
 )
 
@@ -113,13 +122,44 @@ fun SearchableDropdown(
     actions: SearchableDropdownActions,
     modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        FieldLabel(label = config.label, badge = config.badge)
+    var isFocused by remember { mutableStateOf(false) }
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val density = LocalDensity.current
+    val topInViewRect = remember(density) {
+        val heightPx = with(density) { TOP_IN_VIEW_HEIGHT.toPx() }
+        Rect(left = 0f, top = 0f, right = 1000f, bottom = heightPx)
+    }
+
+    // Scroll the field (and the top of its results panel) into view when the user taps into it.
+    LaunchedEffect(isFocused) {
+        if (isFocused) bringIntoViewRequester.bringIntoView(topInViewRect)
+    }
+
+    // Re-scroll when results appear or change size while the field is focused, keeping the
+    // search field and the top of the results list in view rather than scrolling past it.
+    LaunchedEffect(state.options) {
+        if (isFocused) bringIntoViewRequester.bringIntoView(topInViewRect)
+    }
+
+    Column(
+        modifier = modifier.bringIntoViewRequester(bringIntoViewRequester),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        FieldLabel(
+            label = config.label,
+            badge = config.badge,
+            isRequired = config.isRequired,
+        )
         val selected = state.selected
         if (selected != null) {
             SelectionRow(selected = selected, clearLabel = config.clearLabel, onClear = actions.onClear)
         } else {
-            SearchField(query = state.query, config = config, onQueryChange = actions.onQueryChange)
+            SearchField(
+                query = state.query,
+                config = config,
+                onQueryChange = actions.onQueryChange,
+                onFocusChanged = { isFocused = it },
+            )
             if (state.query.isNotBlank()) {
                 ResultsPanel(
                     query = state.query,
@@ -133,7 +173,11 @@ fun SearchableDropdown(
 }
 
 @Composable
-private fun FieldLabel(label: String, badge: String?) {
+private fun FieldLabel(
+    label: String,
+    badge: String?,
+    isRequired: Boolean = false,
+) {
     val colors = AgarthaTheme.colors
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -142,17 +186,26 @@ private fun FieldLabel(label: String, badge: String?) {
             fontWeight = FontWeight.Medium,
             color = colors.textSecondary,
         )
+        if (isRequired) {
+            Text(
+                text = " *",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.danger,
+            )
+        }
         if (badge != null) {
             Spacer(modifier = Modifier.width(Spacing.sm))
             Text(
                 text = badge,
-                fontSize = 10.sp,
+                fontSize = 9.sp,
+                lineHeight = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = 0.04.em,
                 color = colors.dangerText,
                 modifier = Modifier
-                    .background(colors.dangerTint, RoundedCornerShape(Spacing.xs))
-                    .padding(horizontal = 7.dp, vertical = 2.dp),
+                    .background(colors.dangerTint, RoundedCornerShape(3.dp))
+                    .padding(horizontal = 5.dp, vertical = 2.dp),
             )
         }
     }
@@ -163,6 +216,7 @@ private fun SearchField(
     query: String,
     config: SearchableDropdownConfig,
     onQueryChange: (String) -> Unit,
+    onFocusChanged: (Boolean) -> Unit = {},
 ) {
     val colors = AgarthaTheme.colors
     var isFocused by remember { mutableStateOf(false) }
@@ -177,7 +231,10 @@ private fun SearchField(
         onValueChange = onQueryChange,
         modifier = Modifier
             .fillMaxWidth()
-            .onFocusChanged { isFocused = it.isFocused },
+            .onFocusChanged {
+                isFocused = it.isFocused
+                onFocusChanged(it.isFocused)
+            },
         textStyle = TextStyle(fontSize = 15.sp, color = colors.textPrimary),
         singleLine = true,
         cursorBrush = SolidColor(colors.accent),
@@ -195,11 +252,11 @@ private fun SearchField(
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Search,
+                    imageVector = AgarthaIcons.Search,
                     // Decorative: the field's own placeholder says what it searches.
                     contentDescription = null,
                     tint = colors.textTertiary,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 Box(modifier = Modifier.weight(1f)) {
                     if (query.isEmpty()) {
@@ -222,17 +279,21 @@ private fun SelectionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.accentTint2, RoundedCornerShape(Spacing.md))
-            .border(1.dp, colors.accentTint, RoundedCornerShape(Spacing.md))
+            .background(colors.accent, RoundedCornerShape(Spacing.md))
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
-        OptionText(option = selected, modifier = Modifier.weight(1f))
+        OptionText(
+            option = selected,
+            titleColor = colors.onAccent,
+            subtitleColor = colors.onAccent.copy(alpha = 0.8f),
+            modifier = Modifier.weight(1f),
+        )
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(colors.surfaceMuted, CircleShape)
+                .background(colors.onAccent.copy(alpha = 0.18f), CircleShape)
                 .clickable(onClick = onClear)
                 .semantics { contentDescription = clearLabel },
             contentAlignment = Alignment.Center,
@@ -241,7 +302,7 @@ private fun SelectionRow(
                 imageVector = Icons.Outlined.Close,
                 // The enclosing Box already carries `clearLabel` as its semantics.
                 contentDescription = null,
-                tint = colors.textSecondary,
+                tint = colors.onAccent,
                 modifier = Modifier.size(14.dp),
             )
         }
@@ -256,6 +317,13 @@ private fun ResultsPanel(
     onSelect: (SearchableOption) -> Unit,
 ) {
     val colors = AgarthaTheme.colors
+    val listState = rememberLazyListState()
+
+    // Reset scroll to the top of the results list whenever the search query changes.
+    LaunchedEffect(query) {
+        listState.scrollToItem(0)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -270,7 +338,10 @@ private fun ResultsPanel(
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
             )
         } else {
-            LazyColumn(modifier = Modifier.heightIn(max = RESULTS_MAX_HEIGHT)) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.heightIn(max = RESULTS_MAX_HEIGHT),
+            ) {
                 items(options, key = { it.key }) { option ->
                     Box(
                         modifier = Modifier
@@ -287,14 +358,18 @@ private fun ResultsPanel(
 }
 
 @Composable
-private fun OptionText(option: SearchableOption, modifier: Modifier = Modifier) {
-    val colors = AgarthaTheme.colors
+private fun OptionText(
+    option: SearchableOption,
+    titleColor: Color = AgarthaTheme.colors.textPrimary,
+    subtitleColor: Color = AgarthaTheme.colors.textSecondary,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier) {
         Text(
             text = option.title,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            color = colors.textPrimary,
+            color = titleColor,
             letterSpacing = (-0.01).em,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -302,7 +377,7 @@ private fun OptionText(option: SearchableOption, modifier: Modifier = Modifier) 
         Text(
             text = option.subtitle,
             fontSize = 12.sp,
-            color = colors.textSecondary,
+            color = subtitleColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -311,3 +386,6 @@ private fun OptionText(option: SearchableOption, modifier: Modifier = Modifier) 
 
 /** Roughly five rows — enough to choose from without the sheet outgrowing a small screen. */
 private val RESULTS_MAX_HEIGHT = 232.dp
+
+/** Height from the top of the dropdown (label + search field + top result) to keep in view. */
+private val TOP_IN_VIEW_HEIGHT = 140.dp

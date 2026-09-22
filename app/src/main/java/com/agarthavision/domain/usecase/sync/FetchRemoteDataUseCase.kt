@@ -1,5 +1,6 @@
 package com.agarthavision.domain.usecase.sync
 
+import android.database.sqlite.SQLiteConstraintException
 import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
@@ -12,6 +13,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -229,7 +231,20 @@ class FetchRemoteDataUseCase @Inject constructor(
         return fetched
     }
 
-    /** Sessions are pulled after patients, before samples and reports. Returns rows inserted. */
+    /**
+     * Sessions are pulled after patients, before samples and reports. Returns rows inserted.
+     *
+     * **Label collision reconciliation** — before the unique `(patient_id, label)` index was
+     * added, two offline devices could each mint the same label for the same patient (this was
+     * an explicitly accepted case). Production Supabase may therefore already contain duplicate
+     * `(patient_id, label)` rows from before this branch's fix. Rather than add a Supabase-side
+     * unique constraint now — which would fail to apply against any existing violating data, and
+     * which requires a data-cleanup pass on the production table that cannot be done safely from
+     * here — we reconcile at pull time instead via [upsertSessionReconcilingLabel].
+     *
+     * Adding the matching Supabase-side unique constraint is a deliberate follow-up that requires
+     * a separate migration with a pre-flight data-deduplication step against the production table.
+     */
     private suspend fun pullSessions(userId: String): Int {
         var fetched = 0
         val sessions = sessionRemoteDataSource.fetchSessions(userId)
@@ -237,11 +252,58 @@ class FetchRemoteDataUseCase @Inject constructor(
             val local = sessionDao.getSessionById(remote.sessionId)
             // E4 guard: only write when absent or already synced; skip pending/sync_failed
             if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                sessionDao.upsertSession(remote)
+                upsertSessionReconcilingLabel(remote)
                 fetched++
             }
         }
         return fetched
+    }
+
+    /**
+     * Upserts [remote], proactively disambiguating its label if a collision is detected before
+     * writing.
+     *
+     * **Why pre-check, not catch**: Room's `@Upsert` does not throw `SQLiteConstraintException`
+     * for the new-row collision case. Internally it tries an INSERT; on a UNIQUE-constraint
+     * failure it catches that and falls back to `UPDATE … WHERE session_id = ?` keyed on the
+     * PRIMARY KEY. For a brand-new remote session (no matching `session_id` locally yet), that
+     * UPDATE matches zero rows and is a silent no-op — the row is never written and no exception
+     * surfaces. A try/catch on the upsert call would therefore be dead code for the common
+     * cross-device duplicate scenario this method exists to handle.
+     *
+     * Instead: query `countLabelCollisions` before writing. If a collision exists, build the
+     * disambiguated label (same suffix scheme: `"${label}-${sessionId.take(4)}".uppercase()`,
+     * which can never itself collide because session IDs are globally unique) and upsert the
+     * corrected copy. The try/catch is kept only as a backstop for the `local != null` update
+     * path, where a genuine concurrent write could still produce a real constraint violation.
+     */
+    private suspend fun upsertSessionReconcilingLabel(remote: SessionEntity) {
+        val rawLabel = remote.label
+        val toWrite = if (!rawLabel.isNullOrBlank() &&
+            sessionDao.countLabelCollisions(remote.patientId, rawLabel, remote.sessionId) > 0
+        ) {
+            val disambiguated =
+                "${rawLabel.trim()}-${remote.sessionId.take(DISAMBIGUATION_SUFFIX_LENGTH)}".uppercase()
+            Log.w(
+                TAG,
+                "pullSessions: label collision for session ${remote.sessionId} " +
+                    "(patient ${remote.patientId}); writing with disambiguated " +
+                    "label \"$disambiguated\"",
+            )
+            remote.copy(label = disambiguated)
+        } else {
+            remote
+        }
+
+        try {
+            sessionDao.upsertSession(toWrite)
+        } catch (e: SQLiteConstraintException) {
+            // Backstop only: the pre-check above handles the expected new-row collision case.
+            // If we land here it is a genuine concurrent write race — log and rethrow so
+            // the per-entity runCatching in invoke() records it as a sessions failure.
+            Log.e(TAG, "pullSessions: unexpected constraint on upsert for ${remote.sessionId}", e)
+            throw e
+        }
     }
 
     /** Paginated pull of samples plus their detections and findings. Returns samples inserted. */
@@ -373,5 +435,8 @@ class FetchRemoteDataUseCase @Inject constructor(
          * Keeps the GET query string well under server/proxy URL-length limits.
          */
         const val CHILD_BATCH_SIZE = 100
+
+        /** Chars of a session's own id used to disambiguate a colliding label on pull. */
+        const val DISAMBIGUATION_SUFFIX_LENGTH = 4
     }
 }

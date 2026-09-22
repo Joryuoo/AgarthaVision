@@ -59,7 +59,6 @@ object DatabaseModule {
             AgarthaDatabase::class.java,
             "agarthavision.db",
         )
-            .addMigrations(AgarthaDatabase.MIGRATION_16_17, AgarthaDatabase.MIGRATION_17_18)
             .addCallback(
                 object : RoomDatabase.Callback() {
                     override fun onOpen(db: SupportSQLiteDatabase) {
@@ -151,6 +150,7 @@ abstract class RepositoryModule {
     ): ReportRepository
 
     @Binds
+    @Singleton
     abstract fun bindPsgcRepository(
         implementation: PsgcRepositoryImpl,
     ): PsgcRepository

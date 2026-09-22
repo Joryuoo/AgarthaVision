@@ -3,11 +3,13 @@ package com.agarthavision.data.repository
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.data.local.mapper.toEntity
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.sync.SyncScheduler
 import com.agarthavision.domain.usecase.patients.PatientSort
+import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -92,6 +94,25 @@ class PatientRepositoryImpl @Inject constructor(
         // committed, and a save must not fail because the network did.
         syncScheduler.requestSync()
     }
+
+    override suspend fun findDuplicates(
+        userId: String,
+        lastname: String,
+        firstname: String,
+        middleName: String?,
+        birthdate: LocalDate,
+        sex: Sex,
+        excludingId: String,
+    ): List<Patient> = patientDao.findIdentityMatches(
+        userId = userId,
+        lastname = lastname,
+        firstname = firstname,
+        middleName = middleName,
+        // Same conversion as Patient.toEntity(): birthdate at midnight in CLINICAL_ZONE.
+        birthdateEpochMillis = birthdate.atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
+        sex = sex.remoteValue,
+        excludingId = excludingId,
+    ).map { it.toDomain() }
 
     /**
      * [Patient.toEntity] resets `supabase_status` to `pending`, which is what re-queues

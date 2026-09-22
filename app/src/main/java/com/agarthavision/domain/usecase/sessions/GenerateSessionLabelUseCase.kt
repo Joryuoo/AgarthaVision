@@ -8,9 +8,11 @@ import javax.inject.Inject
 /**
  * The label to pre-fill the New Session sheet with, for one patient.
  *
- * Reads the patient (for the initials and the barangay code) and that patient's existing
- * labels (for the sequence), then hands both to the pure
- * [SessionLabelGenerator]. Returns `Result` per C4.
+ * Reads the patient (for the initials) and that patient's existing labels (for the
+ * sequence), then hands both to the pure [SessionLabelGenerator]. After generating a
+ * candidate, increments the sequence until the label is not already taken by a
+ * manually-edited label, so the suggestion is always fresh and unambiguous. Returns
+ * `Result` per C4.
  *
  * A failure here is not fatal to creating a session: the sheet falls back to an empty field
  * the medtech types into, which is exactly what it did before this ticket. That is why the
@@ -25,9 +27,14 @@ class GenerateSessionLabelUseCase @Inject constructor(
         val patient = requireNotNull(patientRepository.getPatientById(patientId)) {
             "No patient $patientId; cannot build a smear label for one that is not there."
         }
-        val sequence = SessionLabelGenerator.nextSequence(
+        var sequence = SessionLabelGenerator.nextSequence(
             sessionRepository.getSessionLabelsForPatient(patientId),
         )
-        SessionLabelGenerator.generate(patient, sequence)
+        var candidate = SessionLabelGenerator.generate(patient, sequence)
+        while (sessionRepository.isSessionLabelTaken(patientId, candidate)) {
+            sequence++
+            candidate = SessionLabelGenerator.generate(patient, sequence)
+        }
+        candidate
     }
 }

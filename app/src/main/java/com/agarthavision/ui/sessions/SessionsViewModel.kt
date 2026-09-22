@@ -6,10 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import android.database.sqlite.SQLiteConstraintException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -19,6 +23,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,6 +31,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
@@ -58,6 +64,10 @@ data class SessionsState(
      * a blocked sheet: a failure to suggest a name is no reason to refuse a smear.
      */
     val suggestedLabel: String = "",
+    /** The patient whose session list this is, or null while loading. */
+    val patient: Patient? = null,
+    /** The barangay name resolved from [Patient.psgcBarangayCode], or null. */
+    val barangayName: String? = null,
 )
 
 sealed interface SessionsEvent {
@@ -79,7 +89,7 @@ sealed interface SessionsEvent {
  * belong to one ViewModel, and splitting them across two classes to satisfy a count would
  * be inconsistent with every other ViewModel here for no functional benefit.
  */
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class SessionsViewModel @Inject constructor(
@@ -87,6 +97,8 @@ class SessionsViewModel @Inject constructor(
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
+    private val patientRepository: PatientRepository,
+    private val psgcRepository: PsgcRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -146,20 +158,20 @@ class SessionsViewModel @Inject constructor(
     ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
-     * Observable UI state for the Sessions screen.
-     *
-     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
-     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
-     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
-     * A fresh collector therefore receives the last non-loading state immediately — no
-     * flicker back to the loading skeleton on resubscribe — while the query eventually
-     * restarts and emits a fresh update.
-     *
-     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
-     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
-     * only update after the debounce window.
+     * Observes the patient entity and resolves their barangay name for the preview header.
      */
-    val state: StateFlow<SessionsState> = queryInputs
+    private val patientFlow: Flow<Pair<Patient?, String?>> = if (patientId.isNullOrBlank()) {
+        flowOf(null to null)
+    } else {
+        patientRepository.observePatientById(patientId).map { patient ->
+            val barangayName = patient?.psgcBarangayCode?.let { code ->
+                psgcRepository.getBarangay(code)?.name
+            }
+            patient to barangayName
+        }
+    }
+
+    private val sessionsStateFlow = queryInputs
         .flatMapLatest { inputs ->
             // Unreachable through the UI. Emitting an empty, non-loading state keeps a
             // malformed route from hanging on the loading skeleton forever, and keeps the
@@ -208,11 +220,34 @@ class SessionsViewModel @Inject constructor(
                 )
             }
         }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = SessionsState(),
+
+    /**
+     * Observable UI state for the Sessions screen.
+     *
+     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
+     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
+     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
+     * A fresh collector therefore receives the last non-loading state immediately — no
+     * flicker back to the loading skeleton on resubscribe — while the query eventually
+     * restarts and emits a fresh update.
+     *
+     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
+     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
+     * only update after the debounce window.
+     */
+    val state: StateFlow<SessionsState> = combine(
+        sessionsStateFlow,
+        patientFlow,
+    ) { sessionsState, (patient, barangayName) ->
+        sessionsState.copy(
+            patient = patient,
+            barangayName = barangayName,
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = SessionsState(),
+    )
 
     /**
      * Updates the free-text search query. Resets pagination.
@@ -254,15 +289,24 @@ class SessionsViewModel @Inject constructor(
         // navigation reaches this screen without a patient id — a null here would mean a
         // route that does not carry one, which would fail the foreign key anyway.
         val patient = patientId
-        if (label.isBlank() || patient.isNullOrBlank()) {
-            val reason = if (label.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = label.trim().uppercase()
+        if (normalizedLabel.isBlank() || patient.isNullOrBlank()) {
+            val reason = if (normalizedLabel.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
             internalState.update { it.copy(errorMessage = reason) }
             return
         }
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
+            // Pre-check: reject the label before touching the DB so the medtech sees a
+            // friendly message rather than a constraint violation crash.
+            if (sessionRepository.isSessionLabelTaken(patient, normalizedLabel)) {
+                internalState.update { it.copy(isCreating = false, errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
-                sessionManager.startSession(label = label.trim(), patientId = patient)
+                sessionManager.startSession(label = normalizedLabel, patientId = patient)
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
                 // The smear just created holds the suggestion that was on screen, so the next
@@ -272,9 +316,17 @@ class SessionsViewModel @Inject constructor(
                 refreshSuggestedLabel()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
-                internalState.update {
-                    it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
+                // Backstop: if a concurrent create slipped past the pre-check and the unique
+                // index fired, map the constraint exception to the same user-facing message
+                // rather than surfacing a generic or technical error.
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Failed to create session."
                 }
+                internalState.update { it.copy(isCreating = false, errorMessage = message) }
             }
         }
     }
@@ -309,13 +361,37 @@ class SessionsViewModel @Inject constructor(
 
     fun onRenameSession(sessionId: String, newLabel: String) {
         if (newLabel.isBlank()) return
+        val patient = patientId ?: return
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = newLabel.trim().uppercase()
         viewModelScope.launch {
+            // Resolve the session to confirm it belongs to this patient before checking the
+            // label. If the session is not found (race or stale state), bail silently —
+            // there is no session to rename.
+            val session = sessionRepository.getSessionById(sessionId) ?: return@launch
+            if (session.patientId != patient) return@launch
+
+            if (sessionRepository.isSessionLabelTaken(
+                    patientId = patient,
+                    label = normalizedLabel,
+                    excludingSessionId = sessionId,
+                )
+            ) {
+                internalState.update { it.copy(errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
-                sessionRepository.updateSessionLabel(sessionId, newLabel.trim())
+                sessionRepository.updateSessionLabel(sessionId, normalizedLabel)
             }.onFailure { error ->
-                internalState.update {
-                    it.copy(errorMessage = error.message ?: "Could not rename session.")
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Could not rename session."
                 }
+                internalState.update { it.copy(errorMessage = message) }
             }
         }
     }
@@ -353,6 +429,9 @@ class SessionsViewModel @Inject constructor(
         // module (see CaptureViewModel). Lifting all of it into resources needs an error-type
         // seam across every screen state, which is a wider change than this ticket.
         private const val LABEL_REQUIRED = "Label is required."
+
+        /** Shown when the medtech picks a label already used by another smear for this patient. */
+        private const val DUPLICATE_LABEL = "A smear with this label already exists for this patient."
 
         /** Unreachable through the UI: every route that opens this screen carries a patient. */
         private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."

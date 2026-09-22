@@ -284,7 +284,31 @@
     <string name="sample_detail_hide_box">Hide the box for %1$s</string>
     <string name="sample_detail_show_box">Show the box for %1$s</string>
 
-    <!-- Patient form (PB-07c) -->
+    <!-- Patient form (PB-07c / 86d4bzjkb duplicate detection) -->
+    <!-- Subtitle shown on the New / Edit Patient form only. patients_subtitle_purpose is the
+         Patients list screen's subtitle and must not be changed here. -->
+    <string name="patient_form_subtitle_purpose">Register patient details for smear tracking and surveillance.</string>
+
+    <!-- Discard-changes confirmation dialog -->
+    <string name="patient_form_discard_title">Discard changes?</string>
+    <string name="patient_form_discard_body">This patient record will not be saved.</string>
+    <string name="patient_form_discard_confirm">Discard</string>
+    <string name="patient_form_discard_keep">Keep editing</string>
+
+    <!-- Same-barangay duplicate: stronger wording because this is a true duplicate. -->
+    <string name="patient_form_same_duplicate_title">Patient already registered</string>
+    <string name="patient_form_same_duplicate_body">A patient named %1$s is already registered in this barangay with the same sex and birthdate. Adding another will create a true duplicate.</string>
+    <string name="patient_form_same_duplicate_proceed">Add anyway</string>
+    <string name="patient_form_same_duplicate_open">Go to existing</string>
+    <string name="patient_form_same_duplicate_cancel">Cancel</string>
+
+    <!-- Different-barangay duplicate: softer "possible duplicate" wording. -->
+    <string name="patient_form_duplicate_title">Possible duplicate</string>
+    <string name="patient_form_duplicate_body">A patient named %1$s is already registered in %2$s with the same sex and birthdate. This may be the same person.</string>
+    <string name="patient_form_duplicate_proceed">Add as new patient</string>
+    <string name="patient_form_duplicate_open">Go to existing</string>
+    <string name="patient_form_duplicate_cancel">Cancel</string>
+
     <string name="patient_form_new_title">New patient</string>
     <string name="patient_form_edit_title">Edit patient</string>
     <string name="patient_form_lastname">Lastname</string>
@@ -306,6 +330,7 @@
     <string name="patient_form_cancel">Cancel</string>
     <!-- Shown on the edit form. Without it, correcting a name and finding the old one still
          on a report reads as a bug rather than as the intended behaviour. -->
+    <string name="patient_form_edit_note_tag">NOTE</string>
     <string name="patient_form_edit_note">Editing these details does not change session labels already created or reports already generated. Generate a new report to pick up the change.</string>
     <string name="patient_form_error_lastname">Lastname is required.</string>
     <string name="patient_form_error_firstname">Firstname is required.</string>
@@ -351,7 +376,7 @@
 
     <string name="sessions_title">Sessions</string>
     <string name="sessions_status_counts">%1$d sessions · %2$d active</string>
-    <string name="sessions_subtitle_purpose">Your active and past testing sessions</string>
+    <string name="sessions_subtitle_purpose">Active and past testing sessions for this patient</string>
     <string name="session_picker_title">Sessions</string>
     <string name="session_picker_empty_title">No recent sessions</string>
     <string name="session_picker_empty_body">Tap “New session” below to start your first fecal-smear session.</string>
@@ -424,8 +449,9 @@
     <!-- Sessions empty state (86d4apzf5) -->
     <string name="sessions_search_placeholder">Search smears by label</string>
     <string name="session_label_field_label">Label</string>
-    <string name="session_label_placeholder">C.G.-0730600000-001</string>
-    <string name="session_label_helper">Generated from the patient and the number of smears they already have. Edit it if your lab labels smears differently.</string>
+    <string name="session_label_placeholder">GARCIAM-S01</string>
+    <string name="session_label_helper">Generated from the patient\'s last name, first initial, and smear count (e.g. GARCIAM-S01). Edit it if your lab labels smears differently — but each label must be unique for this patient.</string>
+    <string name="session_duplicate_label">A smear with this label already exists for this patient.</string>
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
@@ -451,4 +477,11 @@
     <string name="sample_detail_not_found_body">This sample isn\'t on this device.</string>
     <string name="sample_detail_not_visible_title">Not your sample</string>
     <string name="sample_detail_not_visible_body">This sample belongs to a different account.</string>
+
+    <!-- Patient preview card on Sessions screen -->
+    <plurals name="patient_preview_age">
+        <item quantity="one">%1$d year old</item>
+        <item quantity="other">%1$d years old</item>
+    </plurals>
+    <string name="patient_preview_age_sex">%1$s | %2$s</string>
 </resources>

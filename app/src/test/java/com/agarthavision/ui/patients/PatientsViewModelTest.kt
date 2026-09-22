@@ -109,7 +109,7 @@ class PatientsViewModelTest {
 
     @Test
     fun `selecting barangay updates state and marks state as narrowed`() = runTest {
-        whenever(psgcRepository.searchBarangays("Lahug", 50))
+        whenever(psgcRepository.searchBarangays("Lahug", SearchBarangaysUseCase.RESULT_LIMIT))
             .thenReturn(listOf(lahug()))
         val vm = createViewModel()
 

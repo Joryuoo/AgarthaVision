@@ -207,6 +207,46 @@ interface PatientDao {
     suspend fun getLinksForUser(userId: String): List<PatientUserEntity>
 
     /**
+     * Finds patients that are identity-equal to the supplied fields, scoped to this medtech.
+     *
+     * Used by duplicate detection in [PatientFormViewModel] before a save. The excludingId
+     * guard ensures a patient being edited does not flag itself — pass `""` for a new
+     * patient (no real row has an empty id).
+     *
+     * Middle-name matching: a stored NULL and a supplied NULL match; a supplied non-null
+     * value is compared case- and trim-insensitively. The caller must normalise the supplied
+     * middle name the same way persistence does — `trim().ifBlank { null }` — or false
+     * negatives result.
+     */
+    @Query(
+        """
+        SELECT p.* FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId
+          AND p.patient_id <> :excludingId
+          AND LOWER(TRIM(p.lastname))  = LOWER(TRIM(:lastname))
+          AND LOWER(TRIM(p.firstname)) = LOWER(TRIM(:firstname))
+          AND (
+            (:middleName IS NULL AND p.middle_name IS NULL)
+            OR LOWER(TRIM(p.middle_name)) = LOWER(TRIM(:middleName))
+          )
+          AND p.birthdate = :birthdateEpochMillis
+          AND p.sex = :sex
+        """,
+    )
+    @Suppress("LongParameterList") // Every parameter maps directly to a WHERE clause column;
+    // wrapping them in a data class would add a layer with no benefit at the single call site.
+    suspend fun findIdentityMatches(
+        userId: String,
+        lastname: String,
+        firstname: String,
+        middleName: String?,
+        birthdateEpochMillis: Long,
+        sex: String,
+        excludingId: String,
+    ): List<PatientEntity>
+
+    /**
      * Creates a patient and links its creator in one transaction.
      *
      * Remotely the `on_patient_created` trigger does this; locally it has to be explicit,
