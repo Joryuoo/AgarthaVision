@@ -260,6 +260,48 @@ class PatientsViewModelTest {
         }
     }
 
+    @Test
+    fun `onApplyFilters with all defaults clears all filters (Clear button behavior)`() = runTest {
+        val vm = createViewModel()
+
+        vm.state.test {
+            advanceUntilIdle()
+            // Set up filters (excluding barangay which has complex state handling)
+            vm.onSortSelected(PatientSort.LAST_NAME)
+            vm.onSexSelected(Sex.FEMALE)
+            vm.onMinAgeChanged(25)
+            vm.onMaxAgeChanged(75)
+            advanceUntilIdle()
+
+            var state = expectMostRecentItem()
+            assertEquals(PatientSort.LAST_NAME, state.sort)
+            assertEquals(Sex.FEMALE, state.selectedSex)
+            assertEquals(25, state.minAge)
+            assertEquals(75, state.maxAge)
+            assertTrue(state.isNarrowed)
+            assertEquals(3, state.activeFilterCount)
+
+            // Simulate Clear button: call onApplyFilters with all defaults/nulls
+            vm.onApplyFilters(
+                sort = PatientSort.RECENT,
+                sex = null,
+                barangay = null,
+                minAge = null,
+                maxAge = null,
+            )
+            advanceUntilIdle()
+
+            state = expectMostRecentItem()
+            assertEquals(PatientSort.RECENT, state.sort)
+            assertNull(state.selectedSex)
+            assertNull(state.minAge)
+            assertNull(state.maxAge)
+            assertFalse(state.isNarrowed)
+            assertEquals(0, state.activeFilterCount)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
     private fun lahug() =
         PsgcBarangay(LAHUG, "Lahug", "City of Cebu", null, "Region VII (Central Visayas)")
 
