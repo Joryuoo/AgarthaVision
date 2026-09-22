@@ -37,18 +37,28 @@ object NameMasking {
         }
     }
 
+    private const val BULLET = "•"
+    private const val SHORT_NAME_LENGTH = 2
+    private const val MEDIUM_NAME_LENGTH = 3
+
     /**
-     * Masks an individual word according to GCash rules.
+     * Masks an individual word according to formal masked rules:
+     * - Preserves single letters and initials (e.g. "M.")
+     * - 2 letters: first letter + 1 bullet (e.g. "Li" -> "L•")
+     * - 3 letters: first letter + 1 bullet + last letter (e.g. "Ben" -> "B•N")
+     * - 4+ letters: first letter + 2 bullets + last letter (e.g. "Escolano" -> "E••O", "Joseph" -> "J••P")
+     * Formatted in uppercase for formality.
      */
     fun maskWord(word: String): String {
-        val w = word.trim()
-        val isInitial = w.endsWith('.') && w.length <= 2
+        val w = word.trim().uppercase()
+        val isInitial = w.endsWith('.') && w.length <= SHORT_NAME_LENGTH
         if (w.length <= 1 || isInitial) return w
 
         return when {
             w.contains('-') -> w.split('-').joinToString("-") { maskWord(it) }
-            w.length == 2 -> "${w[0]}*"
-            else -> "${w.first()}${"*".repeat(w.length - 2)}${w.last()}"
+            w.length == SHORT_NAME_LENGTH -> "${w.first()}$BULLET"
+            w.length == MEDIUM_NAME_LENGTH -> "${w.first()}$BULLET${w.last()}"
+            else -> "${w.first()}$BULLET$BULLET${w.last()}"
         }
     }
 }

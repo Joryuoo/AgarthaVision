@@ -13,12 +13,13 @@ import java.time.Period
  */
 object CodenameGenerator {
 
-    val CODENAME_REGEX = Regex("""^[MF]\d{2}-\d{3,}$""")
+    val CODENAME_REGEX = Regex("""^(?:VISION-)?[MF]\d{2}-\d{3,}$""")
+    const val CODENAME_PREFIX = "VISION"
     private const val AGE_DIGITS = 2
     private const val PATIENT_NUMBER_DIGITS = 3
 
     /**
-     * True if [name] matches the codename pattern `{SEXAGE}-{PATIENTNUM}`.
+     * True if [name] matches the codename pattern `{SEXAGE}-{PATIENTNUM}` or `VISION-{SEXAGE}-{PATIENTNUM}`.
      */
     fun isCodename(name: String?): Boolean =
         name != null && CODENAME_REGEX.matches(name.trim())
@@ -46,7 +47,7 @@ object CodenameGenerator {
      * Starts at 1 (`001`) if none exist in this bucket.
      */
     fun nextPatientNumber(prefix: String, existingCodenames: List<String>): Int {
-        val prefixRegex = Regex("""^$prefix-(\d+)$""")
+        val prefixRegex = Regex("""^(?:$CODENAME_PREFIX-)?$prefix-(\d+)$""")
         val max = existingCodenames.mapNotNull { name ->
             prefixRegex.find(name.trim())?.groupValues?.get(1)?.toIntOrNull()
         }.maxOrNull() ?: 0
@@ -54,7 +55,7 @@ object CodenameGenerator {
     }
 
     /**
-     * Generates `{SEXAGE}-{PATIENTNUM}` (e.g. `M24-001`, `F05-002`).
+     * Generates `VISION-{SEXAGE}-{PATIENTNUM}` (e.g. `VISION-M22-001`, `VISION-F05-002`).
      */
     fun generate(
         sex: Sex,
@@ -65,6 +66,6 @@ object CodenameGenerator {
         val prefix = bucketPrefix(sex, birthdate, today)
         val nextSeq = nextPatientNumber(prefix, existingCodenames)
         val seqStr = nextSeq.toString().padStart(PATIENT_NUMBER_DIGITS, '0')
-        return "$prefix-$seqStr"
+        return "$CODENAME_PREFIX-$prefix-$seqStr"
     }
 }

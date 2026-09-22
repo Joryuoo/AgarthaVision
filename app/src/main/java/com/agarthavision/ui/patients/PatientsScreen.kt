@@ -25,6 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -36,6 +38,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -276,6 +279,7 @@ private fun PatientRow(
 ) {
     val colors = AgarthaTheme.colors
     val patient = item.patient
+    var isRevealed by rememberSaveable { mutableStateOf(false) }
 
     val sexLabel = when (patient.sex) {
         Sex.MALE -> stringResource(R.string.patients_sex_male)
@@ -306,7 +310,7 @@ private fun PatientRow(
             verticalArrangement = Arrangement.spacedBy(Spacing.xs),
         ) {
             Text(
-                text = patient.maskedDisplayName,
+                text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
                 color = colors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -320,6 +324,17 @@ private fun PatientRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        if (!patient.isCodename) {
+            IconButton(onClick = { isRevealed = !isRevealed }) {
+                Icon(
+                    imageVector = if (isRevealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = stringResource(
+                        if (isRevealed) R.string.patients_mask_name_desc else R.string.patients_reveal_name_desc,
+                    ),
+                    tint = colors.textSecondary,
+                )
+            }
         }
         // The row itself opens this patient's smears, which is the common action. Editing
         // their details is rarer and deliberate, so it gets its own target rather than

@@ -147,7 +147,32 @@ class PatientFormViewModelTest {
         verify(patientRepository).insert(captor.capture())
         val saved = captor.firstValue
         assertTrue(saved.isCodename)
-        assertTrue(saved.lastname.startsWith("M24-"))
+        assertTrue(saved.lastname.startsWith("VISION-M24-"))
+        assertEquals("", saved.firstname)
+    }
+
+    @Test
+    fun `saving with custom codename persists custom identifier`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        vm.onUseCustomCodenameToggled(true)
+        vm.onCustomCodenameChanged("CUSTOM-001")
+        vm.onSexSelected(Sex.FEMALE)
+        val birthdate = LocalDate.now(CLINICAL_ZONE).minusYears(20)
+        vm.onBirthdateSelected(birthdate)
+        whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(lahug()))
+        vm.onBarangayQueryChanged("Lahug")
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        val captor = argumentCaptor<Patient>()
+        verify(patientRepository).insert(captor.capture())
+        val saved = captor.firstValue
+        assertEquals("CUSTOM-001", saved.lastname)
         assertEquals("", saved.firstname)
     }
 

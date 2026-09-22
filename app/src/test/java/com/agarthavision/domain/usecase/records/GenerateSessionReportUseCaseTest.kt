@@ -474,7 +474,7 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
         query: String,
         limit: Int,
         offset: Int,
-    ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> = flowOf(emptyList())
     override fun observeFilteredReportsCount(
         userId: String,
         startMillis: Long?,

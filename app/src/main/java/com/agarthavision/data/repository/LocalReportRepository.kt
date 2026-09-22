@@ -54,7 +54,7 @@ class LocalReportRepository @Inject constructor(
         offset: Int,
     ): Flow<List<Report>> =
         reportDao.observeFilteredReports(userId, startMillis, endMillis, species, query, limit, offset).map { rows ->
-            rows.map { it.toDomain(gson) }
+            rows.map { it.report.toDomain(gson, it.sessionLabel) }
         }
 
     override fun observeFilteredCount(

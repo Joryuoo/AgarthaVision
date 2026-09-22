@@ -2,7 +2,9 @@
 
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
+import androidx.room.Embedded
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
@@ -58,18 +60,21 @@ interface ReportDao {
 
     @Query(
         """
-        SELECT * FROM reports
-        WHERE user_id = :userId
-          AND (:startMillis IS NULL OR generated_at >= :startMillis)
-          AND (:endMillis IS NULL OR generated_at <= :endMillis)
-          AND (:species IS NULL OR positive_species_json LIKE '%' || :species || '%')
+        SELECT r.*, s.label AS session_label
+        FROM reports r
+        LEFT JOIN sessions s ON r.session_id = s.session_id
+        WHERE r.user_id = :userId
+          AND (:startMillis IS NULL OR r.generated_at >= :startMillis)
+          AND (:endMillis IS NULL OR r.generated_at <= :endMillis)
+          AND (:species IS NULL OR r.positive_species_json LIKE '%' || :species || '%')
           AND (
             :query = ''
-            OR report_id LIKE '%' || :query || '%'
-            OR positive_species_json LIKE '%' || :query || '%'
-            OR session_id LIKE '%' || :query || '%'
+            OR r.report_id LIKE '%' || :query || '%'
+            OR r.positive_species_json LIKE '%' || :query || '%'
+            OR r.session_id LIKE '%' || :query || '%'
+            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%')
           )
-        ORDER BY generated_at DESC
+        ORDER BY r.generated_at DESC
         LIMIT :limit OFFSET :offset
         """,
     )
@@ -81,20 +86,23 @@ interface ReportDao {
         query: String = "",
         limit: Int,
         offset: Int,
-    ): Flow<List<ReportEntity>>
+    ): Flow<List<ReportWithSessionLabel>>
 
     @Query(
         """
-        SELECT COUNT(*) FROM reports
-        WHERE user_id = :userId
-          AND (:startMillis IS NULL OR generated_at >= :startMillis)
-          AND (:endMillis IS NULL OR generated_at <= :endMillis)
-          AND (:species IS NULL OR positive_species_json LIKE '%' || :species || '%')
+        SELECT COUNT(*)
+        FROM reports r
+        LEFT JOIN sessions s ON r.session_id = s.session_id
+        WHERE r.user_id = :userId
+          AND (:startMillis IS NULL OR r.generated_at >= :startMillis)
+          AND (:endMillis IS NULL OR r.generated_at <= :endMillis)
+          AND (:species IS NULL OR r.positive_species_json LIKE '%' || :species || '%')
           AND (
             :query = ''
-            OR report_id LIKE '%' || :query || '%'
-            OR positive_species_json LIKE '%' || :query || '%'
-            OR session_id LIKE '%' || :query || '%'
+            OR r.report_id LIKE '%' || :query || '%'
+            OR r.positive_species_json LIKE '%' || :query || '%'
+            OR r.session_id LIKE '%' || :query || '%'
+            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%')
           )
         """,
     )
@@ -156,3 +164,11 @@ interface ReportDao {
     )
     suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String)
 }
+
+/**
+ * Report projection including the session label from joined sessions.
+ */
+data class ReportWithSessionLabel(
+    @Embedded val report: ReportEntity,
+    @ColumnInfo(name = "session_label") val sessionLabel: String? = null,
+)

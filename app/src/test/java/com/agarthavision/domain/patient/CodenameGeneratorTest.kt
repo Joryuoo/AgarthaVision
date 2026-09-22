@@ -13,9 +13,12 @@ class CodenameGeneratorTest {
 
     @Test
     fun `isCodename correctly validates format`() {
+        assertTrue(CodenameGenerator.isCodename("VISION-M22-001"))
+        assertTrue(CodenameGenerator.isCodename("VISION-M24-001"))
+        assertTrue(CodenameGenerator.isCodename("VISION-F05-002"))
         assertTrue(CodenameGenerator.isCodename("M24-001"))
         assertTrue(CodenameGenerator.isCodename("F05-002"))
-        assertTrue(CodenameGenerator.isCodename("M00-1234"))
+        assertTrue(CodenameGenerator.isCodename("VISION-M00-1234"))
         assertFalse(CodenameGenerator.isCodename("Cruz"))
         assertFalse(CodenameGenerator.isCodename("Cruz, Gerald"))
         assertFalse(CodenameGenerator.isCodename("M2-001"))
@@ -50,27 +53,27 @@ class CodenameGeneratorTest {
 
     @Test
     fun `nextPatientNumber increments from highest sequence`() {
-        val existing = listOf("M24-001", "M24-002", "M24-005")
+        val existing = listOf("VISION-M24-001", "VISION-M24-002", "VISION-M24-005")
         val next = CodenameGenerator.nextPatientNumber("M24", existing)
         assertEquals(6, next)
     }
 
     @Test
     fun `nextPatientNumber returns 1 when bucket is empty`() {
-        val existing = listOf("F30-001", "M25-002")
+        val existing = listOf("VISION-F30-001", "M25-002")
         val next = CodenameGenerator.nextPatientNumber("M24", existing)
         assertEquals(1, next)
     }
 
     @Test
-    fun `generate produces standard codename format`() {
+    fun `generate produces standard codename format with VISION prefix`() {
         val codename = CodenameGenerator.generate(
             sex = Sex.MALE,
             birthdate = LocalDate.of(2002, 1, 1),
-            existingCodenames = listOf("M24-001"),
+            existingCodenames = listOf("VISION-M24-001"),
             today = referenceToday,
         )
-        assertEquals("M24-002", codename)
+        assertEquals("VISION-M24-002", codename)
     }
 
     @Test
@@ -81,6 +84,6 @@ class CodenameGeneratorTest {
             existingCodenames = emptyList(),
             today = referenceToday,
         )
-        assertEquals("F05-001", codename)
+        assertEquals("VISION-F05-001", codename)
     }
 }

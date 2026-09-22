@@ -19,20 +19,24 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -45,8 +49,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -61,9 +65,12 @@ import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
 
 private const val REPORTS_SKELETON_COUNT = 6
+private const val STATS_REPORTS_WEIGHT = 0.32f
+private const val STATS_SPECIES_WEIGHT = 0.68f
 
 @Composable
 fun RecordsScreen(
@@ -78,6 +85,15 @@ fun RecordsScreen(
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var shareError by remember { mutableStateOf<Int?>(null) }
+    var showSpeciesDialog by remember { mutableStateOf(false) }
+
+    if (showSpeciesDialog) {
+        SpeciesFilterDialog(
+            selectedSpecies = state.selectedSpecies,
+            onSelectSpecies = viewModel::onSpeciesSelected,
+            onDismiss = { showSpeciesDialog = false },
+        )
+    }
 
     LaunchedEffect(shareError) {
         shareError?.let { messageRes ->
@@ -133,17 +149,17 @@ fun RecordsScreen(
 
             item {
                 Spacer(Modifier.height(Spacing.md))
+                val selected = state.selectedSpecies
+                val activeFilter = when (selected) {
+                    null -> stringResource(R.string.records_species_all)
+                    EggSpecies.OTHER -> stringResource(R.string.records_species_others)
+                    else -> selected.displayName
+                }
                 StatsRow(
                     reportsCount = if (state.isLoading) "—" else state.totalReports.toString(),
-                    activeFilter = state.selectedSpecies?.displayName ?: "All",
+                    activeFilter = activeFilter,
+                    onSpeciesFilterClick = { showSpeciesDialog = true },
                     modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-            item {
-                Spacer(Modifier.height(Spacing.md))
-                SpeciesFilterChips(
-                    selected = state.selectedSpecies,
-                    onSelect = viewModel::onSpeciesSelected,
                 )
             }
             item {
@@ -236,6 +252,7 @@ private fun ReportsEmptyState(narrowed: Boolean) {
 private fun StatsRow(
     reportsCount: String,
     activeFilter: String,
+    onSpeciesFilterClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -246,7 +263,7 @@ private fun StatsRow(
         StatTile(
             label = "Reports",
             value = reportsCount,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(STATS_REPORTS_WEIGHT),
             colors = StatTileColors(
                 bgColor = colors.accent,
                 contentColor = colors.onAccent,
@@ -256,12 +273,14 @@ private fun StatsRow(
         StatTile(
             label = "Species filter",
             value = activeFilter,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(STATS_SPECIES_WEIGHT),
             colors = StatTileColors(
                 bgColor = colors.surfaceVariant,
                 contentColor = colors.textPrimary,
                 labelColor = colors.textSecondary,
             ),
+            onClick = onSpeciesFilterClick,
+            showDropdown = true,
         )
     }
 }
@@ -278,32 +297,59 @@ private fun StatTile(
     value: String,
     modifier: Modifier = Modifier,
     colors: StatTileColors,
+    onClick: (() -> Unit)? = null,
+    showDropdown: Boolean = false,
 ) {
     val neutralBg = colors.bgColor == AgarthaTheme.colors.surfaceVariant ||
         colors.bgColor == AgarthaTheme.colors.surface
+    val shape = RoundedCornerShape(12.dp)
     Column(
         modifier = modifier
-            .background(colors.bgColor, RoundedCornerShape(12.dp))
+            .clip(shape)
+            .background(colors.bgColor, shape)
             .border(
                 1.dp,
                 if (neutralBg) AgarthaTheme.colors.border else androidx.compose.ui.graphics.Color.Transparent,
-                RoundedCornerShape(12.dp),
+                shape,
+            )
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(onClick = onClick)
+                } else {
+                    Modifier
+                },
             )
             .padding(12.dp),
     ) {
-        Text(
-            text = label.uppercase(),
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.labelColor,
-            letterSpacing = 0.6.sp,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label.uppercase(),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.labelColor,
+                letterSpacing = 0.6.sp,
+            )
+            if (showDropdown) {
+                Icon(
+                    imageVector = Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = colors.labelColor,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
         Spacer(Modifier.height(4.dp))
         Text(
             text = value,
-            fontSize = 20.sp,
+            fontSize = 16.sp,
             fontWeight = FontWeight.Bold,
             color = colors.contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
             lineHeight = 22.sp,
         )
@@ -311,47 +357,77 @@ private fun StatTile(
 }
 
 @Composable
-private fun SpeciesFilterChips(
-    selected: EggSpecies?,
-    onSelect: (EggSpecies?) -> Unit,
+private fun SpeciesFilterDialog(
+    selectedSpecies: EggSpecies?,
+    onSelectSpecies: (EggSpecies?) -> Unit,
+    onDismiss: () -> Unit,
 ) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = Spacing.xl),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        item { SpeciesChip("All species", selected == null) { onSelect(null) } }
-        items(EggSpecies.entries.filterNot { it == EggSpecies.OTHER }) { species ->
-            SpeciesChip(species.displayName, selected == species) { onSelect(species) }
-        }
-    }
-}
+    val options = listOf(
+        null to stringResource(R.string.records_species_all),
+        EggSpecies.ASCARIS to EggSpecies.ASCARIS.displayName,
+        EggSpecies.TRICHURIS to EggSpecies.TRICHURIS.displayName,
+        EggSpecies.HOOKWORM to EggSpecies.HOOKWORM.displayName,
+        EggSpecies.OTHER to stringResource(R.string.records_species_others),
+    )
 
-@Composable
-private fun SpeciesChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val colors = AgarthaTheme.colors
-    val bg = if (selected) colors.textPrimary else colors.surface
-    val border = if (selected) colors.textPrimary else colors.borderStrong
-    val text = if (selected) colors.background else colors.textSecondary
-
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg, RoundedCornerShape(999.dp))
-            .border(1.dp, border, RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 7.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = text,
-            fontStyle = if (label == EggSpecies.HOOKWORM.displayName) FontStyle.Normal else FontStyle.Italic,
-        )
-    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surface,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        title = {
+            Text(
+                text = stringResource(R.string.records_species_modal_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                options.forEach { (species, label) ->
+                    val isSelected = species == selectedSpecies
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onSelectSpecies(species)
+                                onDismiss()
+                            }
+                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            color = if (isSelected) AgarthaTheme.colors.accent else AgarthaTheme.colors.textPrimary,
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = AgarthaTheme.colors.accent,
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = stringResource(android.R.string.cancel),
+                    color = AgarthaTheme.colors.textSecondary,
+                )
+            }
+        },
+    )
 }
 
 @Composable
@@ -392,7 +468,10 @@ private fun ReportCard(
                     color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
-                    text = stringResource(R.string.reports_session_link, report.sessionId.take(8)),
+                    text = stringResource(
+                        R.string.reports_session_link,
+                        report.sessionLabel ?: report.sessionId.take(8),
+                    ),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = AgarthaTheme.colors.accent,

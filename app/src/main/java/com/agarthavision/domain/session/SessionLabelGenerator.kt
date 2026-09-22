@@ -70,7 +70,8 @@ object SessionLabelGenerator {
     fun generate(patient: Patient, sequence: Int): String {
         val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
         if (patient.isCodename) {
-            val sexAge = patient.lastname.substringBefore('-').uppercase()
+            val sexAge = SEX_AGE_REGEX.find(patient.lastname.uppercase())?.value
+                ?: patient.lastname.substringBefore('-').uppercase()
             return "-$sexAge-S$padded"
         }
         val lastname = patient.lastname.trim().uppercase()
@@ -110,4 +111,7 @@ object SessionLabelGenerator {
 
     /** `-S<sequence>` at the end of the label (case-insensitive). */
     private val SEQUENCE_SUFFIX = Regex("""-S(\d+)$""", RegexOption.IGNORE_CASE)
+
+    /** Pattern to extract sex and two-digit age from a codename like "VISION-M22-001" or "M22-001". */
+    private val SEX_AGE_REGEX = Regex("""[MF]\d{2}""")
 }

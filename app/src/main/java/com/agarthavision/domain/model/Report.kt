@@ -32,4 +32,5 @@ data class Report(
     /** Local path (or `content://` URI) to the patient-facing PDF, mirroring [csvFilePath]. */
     val pdfFilePath: String?,
     val supabaseStatus: ReportSyncStatus,
+    val sessionLabel: String? = null,
 )

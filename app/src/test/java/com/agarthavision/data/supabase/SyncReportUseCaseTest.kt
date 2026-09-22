@@ -135,12 +135,13 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
         query: String,
         limit: Int,
         offset: Int,
-    ): Flow<List<ReportEntity>> =
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> =
         flowOf(
             rows.values
                 .filter { it.userId == userId }
                 .drop(offset)
-                .take(limit),
+                .take(limit)
+                .map { com.agarthavision.data.local.dao.ReportWithSessionLabel(it) },
         )
 
     override fun observeFilteredReportsCount(

@@ -53,7 +53,11 @@ class ObserveReportsUseCase @Inject constructor(
             ?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
         val endMillis = query.endDate
             ?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.minusMillis(1)?.toEpochMilli()
-        val speciesNeedle = query.species?.canonicalClass
+        val speciesNeedle = when (query.species) {
+            null -> null
+            EggSpecies.OTHER -> "Other"
+            else -> query.species.canonicalClass
+        }
 
         val escapedQuery = query.searchQuery
             .replace("\\", "\\\\")

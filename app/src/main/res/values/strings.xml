@@ -202,6 +202,8 @@
     <string name="records_filter_apply">Apply</string>
     <string name="records_filter_clear">Clear</string>
     <string name="records_species_all">All species</string>
+    <string name="records_species_modal_title">Filter by species</string>
+    <string name="records_species_others">Others</string>
 
     <!-- Reports tab (PB-22 cross-patient report browser) -->
     <string name="reports_title">Reports</string>
@@ -338,6 +340,10 @@
     <string name="patient_form_firstname_placeholder">e.g. Gerald</string>
     <string name="patient_form_middle_name">Middle name</string>
     <string name="patient_form_middle_name_placeholder">Optional</string>
+    <string name="patient_form_use_custom_codename">Use custom codename</string>
+    <string name="patient_form_use_custom_codename_desc">Assign a custom codename instead of real name</string>
+    <string name="patient_form_custom_codename">Custom codename</string>
+    <string name="patient_form_custom_codename_placeholder">e.g. VISION-M22-001</string>
     <string name="patient_form_sex">Sex</string>
     <string name="patient_form_birthdate">Birthdate</string>
     <string name="patient_form_birthdate_placeholder">Select a date</string>
@@ -373,6 +379,8 @@
     <string name="patients_new">New Patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
+    <string name="patients_reveal_name_desc">Reveal patient name</string>
+    <string name="patients_mask_name_desc">Hide patient name</string>
     <!-- Row meta: sex · age · barangay. -->
     <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
     <string name="patients_age_years">%1$d yrs</string>

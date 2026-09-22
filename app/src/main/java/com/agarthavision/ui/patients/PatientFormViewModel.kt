@@ -59,6 +59,8 @@ data class PatientFormState(
     val lastname: String = "",
     val firstname: String = "",
     val middleName: String = "",
+    val useCustomCodename: Boolean = false,
+    val customCodename: String = "",
     val sex: Sex? = null,
     val birthdate: LocalDate? = null,
     val barangay: BarangayPickerState = BarangayPickerState(),
@@ -213,6 +215,14 @@ class PatientFormViewModel @Inject constructor(
         it.copy(middleName = transformNameInput(it.middleName, value), errors = emptySet())
     }
 
+    fun onUseCustomCodenameToggled(enabled: Boolean) = fields.update {
+        it.copy(useCustomCodename = enabled, errors = emptySet())
+    }
+
+    fun onCustomCodenameChanged(value: String) = fields.update {
+        it.copy(customCodename = value.take(PATIENT_NAME_MAX_LENGTH).uppercase(), errors = emptySet())
+    }
+
     fun onSexSelected(sex: Sex) = fields.update { it.copy(sex = sex, errors = emptySet()) }
 
     /**
@@ -354,7 +364,8 @@ class PatientFormViewModel @Inject constructor(
                 return@launch
             }
 
-            val isAnonymous = snapshot.lastname.isBlank() && snapshot.firstname.isBlank()
+            val isAnonymous = snapshot.useCustomCodename ||
+                (snapshot.lastname.isBlank() && snapshot.firstname.isBlank())
             if (!isAnonymous) {
                 // Middle-name coercion must exactly mirror the coercion used at persist time so
                 // the query sees the same value the row will be stored with. A blank middle name
@@ -426,9 +437,12 @@ class PatientFormViewModel @Inject constructor(
         val now = Instant.now()
         val existing = loaded
 
-        val isAnonymous = snapshot.lastname.isBlank() && snapshot.firstname.isBlank()
+        val isAnonymous = snapshot.useCustomCodename ||
+            (snapshot.lastname.isBlank() && snapshot.firstname.isBlank())
         val (finalLastname, finalFirstname) = if (isAnonymous) {
-            if (existing != null && existing.isCodename) {
+            if (snapshot.useCustomCodename && snapshot.customCodename.isNotBlank()) {
+                snapshot.customCodename.trim() to ""
+            } else if (existing != null && existing.isCodename && !snapshot.useCustomCodename) {
                 existing.lastname to ""
             } else {
                 val sex = requireNotNull(snapshot.sex)
@@ -486,7 +500,8 @@ class PatientFormViewModel @Inject constructor(
      */
     private fun validate(form: PatientFormState, barangay: PsgcBarangay?): Set<PatientFormError> =
         buildSet {
-            val isAnonymous = form.lastname.isBlank() && form.firstname.isBlank()
+            val isAnonymous = form.useCustomCodename ||
+                (form.lastname.isBlank() && form.firstname.isBlank())
             if (!isAnonymous) {
                 if (form.lastname.isBlank()) add(PatientFormError.LASTNAME_REQUIRED)
                 if (form.firstname.isBlank()) add(PatientFormError.FIRSTNAME_REQUIRED)
@@ -509,25 +524,31 @@ class PatientFormViewModel @Inject constructor(
         form: PatientFormState = fields.value,
         barangay: PsgcBarangay? = barangayPicker.state.value.selected,
     ): Boolean {
-        val l = loaded
-        return if (l == null) {
-            // New patient — dirty if anything has been typed or picked.
-            form.lastname.isNotEmpty() ||
-                form.firstname.isNotEmpty() ||
-                form.middleName.isNotEmpty() ||
-                form.sex != null ||
-                form.birthdate != null ||
-                barangay != null
-        } else {
-            // Editing — dirty if any field differs from the loaded value.
-            form.lastname != l.lastname ||
-                form.firstname != l.firstname ||
-                form.middleName != (l.middleName ?: "") ||
-                form.sex != l.sex ||
-                form.birthdate != l.birthdate ||
-                barangay?.code != l.psgcBarangayCode
-        }
+        val l = loaded ?: return isNewPatientDirty(form, barangay)
+        return isEditingDirty(form, barangay, l)
     }
+
+    private fun isNewPatientDirty(form: PatientFormState, barangay: PsgcBarangay?): Boolean =
+        form.useCustomCodename ||
+            form.customCodename.isNotEmpty() ||
+            form.lastname.isNotEmpty() ||
+            form.firstname.isNotEmpty() ||
+            form.middleName.isNotEmpty() ||
+            form.sex != null ||
+            form.birthdate != null ||
+            barangay != null
+
+    private fun isEditingDirty(
+        form: PatientFormState,
+        barangay: PsgcBarangay?,
+        loaded: Patient,
+    ): Boolean =
+        form.lastname != loaded.lastname ||
+            form.firstname != loaded.firstname ||
+            form.middleName != (loaded.middleName ?: "") ||
+            form.sex != loaded.sex ||
+            form.birthdate != loaded.birthdate ||
+            barangay?.code != loaded.psgcBarangayCode
 
     private companion object {
         const val TAG = "PatientForm"

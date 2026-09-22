@@ -270,7 +270,7 @@ interface PatientDao {
         SELECT p.lastname FROM patients p
         INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
         WHERE pu.user_id = :userId
-          AND p.lastname LIKE :prefix || '-%'
+          AND (p.lastname LIKE :prefix || '-%' OR p.lastname LIKE 'VISION-' || :prefix || '-%')
         """,
     )
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
