@@ -36,6 +36,36 @@ class LocalReportRepository @Inject constructor(
     override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> =
         reportDao.observeReportCountForSession(sessionId, userId)
 
+    override fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>> =
+        reportDao.observeAllReports(userId, limit, offset).map { rows ->
+            rows.map { it.toDomain(gson) }
+        }
+
+    override fun observeAllCount(userId: String): Flow<Int> =
+        reportDao.observeAllReportsCount(userId)
+
+    override fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<Report>> =
+        reportDao.observeFilteredReports(userId, startMillis, endMillis, species, query, limit, offset).map { rows ->
+            rows.map { it.toDomain(gson) }
+        }
+
+    override fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> =
+        reportDao.observeFilteredReportsCount(userId, startMillis, endMillis, species, query)
+
     override suspend fun getById(reportId: String): Report? =
         reportDao.getReportById(reportId)?.toDomain(gson)
 

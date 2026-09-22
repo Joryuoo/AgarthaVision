@@ -156,27 +156,6 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
     }
 }
 
-@Composable
-private fun ReportStatusPill(status: ReportSyncStatus) {
-    val colors = AgarthaTheme.colors
-    val (bg, fg, label) = when (status) {
-        ReportSyncStatus.SYNCED -> Triple(colors.successTint, colors.successText, R.string.report_status_synced)
-        ReportSyncStatus.SYNC_FAILED -> Triple(colors.dangerTint, colors.dangerText, R.string.report_status_failed)
-        ReportSyncStatus.PENDING -> Triple(colors.warningTint, colors.warningText, R.string.report_status_pending)
-    }
-    Box(
-        modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(
-            text = stringResource(label),
-            color = fg,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
 
 @Composable
 private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) -> Unit) {
@@ -418,6 +397,3 @@ internal fun EmptyStateGraphic() {
         )
     }
 }
-
-private fun Instant.formatReportDateTime(): String =
-    atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))

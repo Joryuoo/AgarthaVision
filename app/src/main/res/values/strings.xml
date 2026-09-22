@@ -203,6 +203,23 @@
     <string name="records_filter_clear">Clear</string>
     <string name="records_species_all">All species</string>
 
+    <!-- Reports tab (PB-22 cross-patient report browser) -->
+    <string name="reports_title">Reports</string>
+    <string name="reports_subtitle_purpose">Generated surveillance reports across all patients</string>
+    <string name="reports_scope_all">All reports</string>
+    <string name="reports_scope_filtered">Filtered reports</string>
+    <string name="reports_empty_title">No reports yet</string>
+    <string name="reports_empty_body">Reports appear here once generated from session details.</string>
+    <string name="reports_no_match_title">No matching reports</string>
+    <string name="reports_no_match_body">Try adjusting your filters or search query.</string>
+    <string name="reports_search_placeholder">Search reports by id, session, or species</string>
+    <string name="reports_open_pdf">Open PDF</string>
+    <string name="reports_open_csv">Open CSV</string>
+    <string name="reports_share_pdf">Share PDF</string>
+    <string name="reports_share_csv">Share CSV</string>
+    <string name="reports_total_count">%1$d reports</string>
+    <string name="reports_session_link">Session %1$s</string>
+
     <string name="records_session_title">Session %1$s</string>
     <string name="records_session_summary">%1$d verified samples · %2$s</string>
     <string name="records_session_no_species">No species labels</string>

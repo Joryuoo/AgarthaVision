@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions", "LongParameterList")
+
 package com.agarthavision.data.local.dao
 
 import androidx.room.Dao
@@ -36,6 +38,73 @@ interface ReportDao {
      */
     @Query("SELECT COUNT(*) FROM reports WHERE session_id = :sessionId AND user_id = :userId")
     fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int>
+
+    @Query(
+        """
+        SELECT * FROM reports
+        WHERE user_id = :userId
+        ORDER BY generated_at DESC
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>>
+
+    @Query("SELECT COUNT(*) FROM reports WHERE user_id = :userId")
+    fun observeAllReportsCount(userId: String): Flow<Int>
+
+    @Query(
+        """
+        SELECT * FROM reports
+        WHERE user_id = :userId
+          AND (:startMillis IS NULL OR generated_at >= :startMillis)
+          AND (:endMillis IS NULL OR generated_at <= :endMillis)
+          AND (:species IS NULL OR positive_species_json LIKE '%' || :species || '%')
+          AND (
+            :query = ''
+            OR report_id LIKE '%' || :query || '%'
+            OR positive_species_json LIKE '%' || :query || '%'
+            OR session_id LIKE '%' || :query || '%'
+          )
+        ORDER BY generated_at DESC
+        LIMIT :limit OFFSET :offset
+        """,
+    )
+    fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM reports
+        WHERE user_id = :userId
+          AND (:startMillis IS NULL OR generated_at >= :startMillis)
+          AND (:endMillis IS NULL OR generated_at <= :endMillis)
+          AND (:species IS NULL OR positive_species_json LIKE '%' || :species || '%')
+          AND (
+            :query = ''
+            OR report_id LIKE '%' || :query || '%'
+            OR positive_species_json LIKE '%' || :query || '%'
+            OR session_id LIKE '%' || :query || '%'
+          )
+        """,
+    )
+    fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+    ): Flow<Int>
 
     @Query("SELECT * FROM reports WHERE report_id = :reportId LIMIT 1")
     suspend fun getReportById(reportId: String): ReportEntity?
