@@ -379,6 +379,8 @@
     <string name="patients_new">New Patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
+    <string name="patients_edit_action">Edit</string>
+    <string name="patients_menu_desc">Patient options</string>
     <string name="patients_reveal_name_desc">Reveal patient name</string>
     <string name="patients_mask_name_desc">Hide patient name</string>
     <!-- Row meta: sex · age · barangay. -->

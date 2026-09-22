@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,8 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
@@ -363,6 +366,7 @@ private fun PatientPreviewCard(
 ) {
     val colors = AgarthaTheme.colors
     val context = LocalContext.current
+    var isRevealed by rememberSaveable { mutableStateOf(false) }
     val age = patient.ageYears(Instant.now())
     val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
     val sexLabel = when (patient.sex) {
@@ -381,17 +385,42 @@ private fun PatientPreviewCard(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = patient.maskedDisplayName,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.Bold,
-            ),
-            color = colors.onAccent,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = colors.onAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (!patient.isCodename) {
+                val icon = if (isRevealed) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff
+                val descRes = if (isRevealed) {
+                    R.string.patients_mask_name_desc
+                } else {
+                    R.string.patients_reveal_name_desc
+                }
+                IconButton(
+                    onClick = { isRevealed = !isRevealed },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = stringResource(descRes),
+                        tint = colors.onAccent,
+                    )
+                }
+            }
+        }
         Text(
             text = ageSex,
             style = MaterialTheme.typography.labelSmall.copy(

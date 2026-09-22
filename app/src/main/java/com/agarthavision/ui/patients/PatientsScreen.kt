@@ -25,10 +25,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -280,6 +283,7 @@ private fun PatientRow(
     val colors = AgarthaTheme.colors
     val patient = item.patient
     var isRevealed by rememberSaveable { mutableStateOf(false) }
+    var menuExpanded by remember { mutableStateOf(false) }
 
     val sexLabel = when (patient.sex) {
         Sex.MALE -> stringResource(R.string.patients_sex_male)
@@ -325,27 +329,57 @@ private fun PatientRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (!patient.isCodename) {
-            IconButton(onClick = { isRevealed = !isRevealed }) {
+        Box {
+            IconButton(onClick = { menuExpanded = true }) {
                 Icon(
-                    imageVector = if (isRevealed) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
-                    contentDescription = stringResource(
-                        if (isRevealed) R.string.patients_mask_name_desc else R.string.patients_reveal_name_desc,
-                    ),
+                    imageVector = Icons.Outlined.MoreVert,
+                    contentDescription = stringResource(R.string.patients_menu_desc),
                     tint = colors.textSecondary,
                 )
             }
-        }
-        // The row itself opens this patient's smears, which is the common action. Editing
-        // their details is rarer and deliberate, so it gets its own target rather than
-        // displacing the tap. `material-icons-extended` per C11: this is an in-screen
-        // affordance, not house identity.
-        IconButton(onClick = onEdit) {
-            Icon(
-                imageVector = Icons.Outlined.Edit,
-                contentDescription = stringResource(R.string.patients_edit_desc, patient.maskedDisplayName),
-                tint = colors.textSecondary,
-            )
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false },
+            ) {
+                if (!patient.isCodename) {
+                    val revealLabel = if (isRevealed) {
+                        R.string.patients_mask_name_desc
+                    } else {
+                        R.string.patients_reveal_name_desc
+                    }
+                    val revealIcon = if (isRevealed) {
+                        Icons.Outlined.VisibilityOff
+                    } else {
+                        Icons.Outlined.Visibility
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(revealLabel)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = revealIcon,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            isRevealed = !isRevealed
+                            menuExpanded = false
+                        },
+                    )
+                }
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_edit_action)) },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Edit,
+                            contentDescription = null,
+                        )
+                    },
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
+                    },
+                )
+            }
         }
     }
 }

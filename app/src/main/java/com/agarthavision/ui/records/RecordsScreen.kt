@@ -8,10 +8,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -259,14 +261,18 @@ private fun StatsRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min),
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         val colors = AgarthaTheme.colors
         StatTile(
             label = "Reports",
             value = reportsCount,
-            modifier = Modifier.weight(STATS_REPORTS_WEIGHT),
+            modifier = Modifier
+                .weight(STATS_REPORTS_WEIGHT)
+                .fillMaxHeight(),
             colors = StatTileColors(
                 bgColor = colors.accent,
                 contentColor = colors.onAccent,
@@ -277,7 +283,9 @@ private fun StatsRow(
         StatTile(
             label = "Species filter",
             value = activeFilter,
-            modifier = Modifier.weight(STATS_SPECIES_WEIGHT),
+            modifier = Modifier
+                .weight(STATS_SPECIES_WEIGHT)
+                .fillMaxHeight(),
             colors = StatTileColors(
                 bgColor = colors.gold,
                 contentColor = colors.onGold,
@@ -328,7 +336,9 @@ private fun StatTile(
             .padding(horizontal = 10.dp, vertical = 12.dp),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -338,6 +348,7 @@ private fun StatTile(
                 fontWeight = FontWeight.SemiBold,
                 color = colors.labelColor,
                 letterSpacing = 0.6.sp,
+                lineHeight = 12.sp,
             )
             if (showDropdown) {
                 Icon(
@@ -348,7 +359,7 @@ private fun StatTile(
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = value,
             fontSize = valueFontSize,
@@ -357,7 +368,7 @@ private fun StatTile(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
-            lineHeight = 24.sp,
+            lineHeight = valueFontSize,
         )
     }
 }
