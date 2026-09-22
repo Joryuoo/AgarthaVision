@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.agarthavision.ui.records
 
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Download
 import com.agarthavision.ui.icons.RemoveCircle
 import androidx.compose.ui.res.stringResource
@@ -270,6 +273,77 @@ internal fun SampleTile(
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(6.dp),
+        )
+    }
+}
+
+@Composable
+internal fun SampleRow(
+    sample: SampleUi,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(10.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = sample.timeLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textSecondary,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                )
+                val sourceLabel = if (sample.source == SampleSource.Ai) {
+                    sample.confidence?.let { "$it%" } ?: "AI"
+                } else {
+                    "Manual"
+                }
+                Box(
+                    modifier = Modifier
+                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = sourceLabel,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            val fontStyle = if (sample.species.isBinomial()) {
+                androidx.compose.ui.text.font.FontStyle.Italic
+            } else {
+                androidx.compose.ui.text.font.FontStyle.Normal
+            }
+            Text(
+                text = sample.species,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontStyle = fontStyle,
+                color = colors.textPrimary,
+            )
+        }
+        Icon(
+            imageVector = AgarthaIcons.ChevronRight,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = colors.textTertiary,
         )
     }
 }

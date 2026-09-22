@@ -212,6 +212,10 @@
 
     <string name="session_detail_title">Session Detail</string>
     <string name="session_detail_empty">No verified samples in this session</string>
+    <string name="session_detail_tab_report">Report</string>
+    <string name="session_detail_tab_samples">Samples</string>
+    <string name="session_detail_samples_empty">No verified samples yet</string>
+    <string name="session_detail_samples_empty_body">Verified samples for this session will appear here.</string>
     <string name="report_section_title">Reports</string>
     <string name="report_generating">Generating…</string>
     <string name="report_export">Export report</string>

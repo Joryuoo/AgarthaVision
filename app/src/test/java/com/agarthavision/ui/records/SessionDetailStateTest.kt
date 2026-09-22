@@ -81,6 +81,12 @@ class SessionDetailStateTest {
     }
 
     @Test
+    fun `default state has selectedTab REPORT`() {
+        val state = SessionDetailState()
+        org.junit.Assert.assertEquals(SessionDetailTab.REPORT, state.selectedTab)
+    }
+
+    @Test
     fun `canOpenVerifyQueue is false when sessionResolved is false`() {
         // Simulate the loading skeleton: session not yet emitted, pendingFlagged unknown.
         val state = SessionDetailState(
