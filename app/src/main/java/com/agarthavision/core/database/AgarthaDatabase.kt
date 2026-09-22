@@ -2,6 +2,8 @@ package com.agarthavision.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
@@ -85,12 +87,9 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
  * an ordering token under destructive fallback, so a skipped number costs nothing.
  * Version 17 adds an index on `patients.updated_at` to support sorting by recent activity
- * (86d4bze80).
+ * (86d4bze80), migrated via [MIGRATION_16_17].
  *
- * No hand-written `Migration` is supplied: per [DatabaseModule] the app
- * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
- * these entities. Acceptable in Phase 1 (no production data). Local schema history is
- * exported under `app/schemas/`.
+ * Local schema history is exported under `app/schemas/`.
  */
 @Database(
     entities = [
@@ -117,4 +116,14 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun speciesSuggestionDao(): SpeciesSuggestionDao
 
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
+
+    companion object {
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_patients_updated_at` ON `patients` (`updated_at`)"
+                )
+            }
+        }
+    }
 }
