@@ -228,8 +228,12 @@ fun PatientFormSheet(
                         checked = state.useCustomCodename,
                         onCheckedChange = viewModel::onUseCustomCodenameToggled,
                         colors = SwitchDefaults.colors(
-                            checkedThumbColor = colors.onAccent,
-                            checkedTrackColor = colors.accent,
+                            checkedThumbColor = colors.surface,
+                            checkedTrackColor = colors.textPrimary,
+                            checkedBorderColor = colors.textPrimary,
+                            uncheckedThumbColor = colors.textSecondary,
+                            uncheckedTrackColor = colors.borderStrong,
+                            uncheckedBorderColor = colors.borderStrong,
                         ),
                     )
                 }

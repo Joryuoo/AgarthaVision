@@ -742,6 +742,32 @@ class PatientFormViewModelTest {
             assertEquals("", vm.state.value.lastname)
         }
 
+    @Test
+    fun `new patient form defaults to useCustomCodename true and not dirty`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertTrue(vm.state.value.useCustomCodename)
+            assertFalse(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `toggling useCustomCodename updates state and dirty tracking`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertTrue(vm.state.value.useCustomCodename)
+            assertFalse(vm.state.value.isDirty)
+
+            vm.onUseCustomCodenameToggled(false)
+            advanceUntilIdle()
+            assertFalse(vm.state.value.useCustomCodename)
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onUseCustomCodenameToggled(true)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.useCustomCodename)
+            assertFalse(vm.state.value.isDirty)
+        }
+
     private fun existingPatient() = Patient(
         id = PATIENT_ID,
         lastname = "Cruz",

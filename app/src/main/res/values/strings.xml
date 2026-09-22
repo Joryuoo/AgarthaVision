@@ -341,8 +341,8 @@
     <string name="patient_form_firstname_placeholder">e.g. Gerald</string>
     <string name="patient_form_middle_name">Middle name</string>
     <string name="patient_form_middle_name_placeholder">Optional</string>
-    <string name="patient_form_use_custom_codename">Use custom codename</string>
-    <string name="patient_form_use_custom_codename_desc">Assign a custom codename instead of real name</string>
+    <string name="patient_form_use_custom_codename">Use Codename</string>
+    <string name="patient_form_use_custom_codename_desc">Assign a codename instead of real name</string>
     <string name="patient_form_custom_codename">Custom codename</string>
     <string name="patient_form_custom_codename_placeholder">e.g. VISION-M22-001</string>
     <string name="patient_form_sex">Sex</string>

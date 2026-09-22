@@ -59,7 +59,7 @@ data class PatientFormState(
     val lastname: String = "",
     val firstname: String = "",
     val middleName: String = "",
-    val useCustomCodename: Boolean = false,
+    val useCustomCodename: Boolean = true,
     val customCodename: String = "",
     val sex: Sex? = null,
     val birthdate: LocalDate? = null,
@@ -130,7 +130,9 @@ class PatientFormViewModel @Inject constructor(
     // Shared with the session sheet rather than copied (PB-07b).
     private val barangayPicker = BarangayPickerDelegate(searchBarangaysUseCase)
 
-    private val fields = MutableStateFlow(PatientFormState(isEditing = patientId != null))
+    private val fields = MutableStateFlow(
+        PatientFormState(isEditing = patientId != null, useCustomCodename = patientId == null),
+    )
 
     private val eventFlow = MutableSharedFlow<PatientFormEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<PatientFormEvent> = eventFlow.asSharedFlow()
@@ -160,7 +162,10 @@ class PatientFormViewModel @Inject constructor(
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.Eagerly,
-                initialValue = PatientFormState(isEditing = patientId != null),
+                initialValue = PatientFormState(
+                    isEditing = patientId != null,
+                    useCustomCodename = patientId == null,
+                ),
             )
 
     init {
@@ -176,7 +181,7 @@ class PatientFormViewModel @Inject constructor(
         if (id == null) {
             patientId = null
             loaded = null
-            fields.value = PatientFormState(isEditing = false)
+            fields.value = PatientFormState(isEditing = false, useCustomCodename = true)
             barangayPicker.onCleared()
             return
         }
@@ -194,6 +199,8 @@ class PatientFormViewModel @Inject constructor(
                     lastname = patient.lastname,
                     firstname = patient.firstname,
                     middleName = patient.middleName.orEmpty(),
+                    useCustomCodename = patient.isCodename,
+                    customCodename = if (patient.isCodename) patient.lastname else "",
                     sex = patient.sex,
                     birthdate = patient.birthdate,
                     isEditing = true,
@@ -204,15 +211,27 @@ class PatientFormViewModel @Inject constructor(
     }
 
     fun onLastnameChanged(value: String) = fields.update {
-        it.copy(lastname = transformNameInput(it.lastname, value), errors = emptySet())
+        it.copy(
+            lastname = transformNameInput(it.lastname, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
     }
 
     fun onFirstnameChanged(value: String) = fields.update {
-        it.copy(firstname = transformNameInput(it.firstname, value), errors = emptySet())
+        it.copy(
+            firstname = transformNameInput(it.firstname, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
     }
 
     fun onMiddleNameChanged(value: String) = fields.update {
-        it.copy(middleName = transformNameInput(it.middleName, value), errors = emptySet())
+        it.copy(
+            middleName = transformNameInput(it.middleName, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
     }
 
     fun onUseCustomCodenameToggled(enabled: Boolean) = fields.update {
@@ -220,7 +239,11 @@ class PatientFormViewModel @Inject constructor(
     }
 
     fun onCustomCodenameChanged(value: String) = fields.update {
-        it.copy(customCodename = value.take(PATIENT_NAME_MAX_LENGTH).uppercase(), errors = emptySet())
+        it.copy(
+            customCodename = value.take(PATIENT_NAME_MAX_LENGTH).uppercase(),
+            useCustomCodename = true,
+            errors = emptySet(),
+        )
     }
 
     fun onSexSelected(sex: Sex) = fields.update { it.copy(sex = sex, errors = emptySet()) }
@@ -264,13 +287,15 @@ class PatientFormViewModel @Inject constructor(
                 lastname = existing.lastname,
                 firstname = existing.firstname,
                 middleName = existing.middleName.orEmpty(),
+                useCustomCodename = existing.isCodename,
+                customCodename = if (existing.isCodename) existing.lastname else "",
                 sex = existing.sex,
                 birthdate = existing.birthdate,
                 isEditing = true,
                 showDiscardConfirm = false,
             )
         } else {
-            PatientFormState(isEditing = false, showDiscardConfirm = false)
+            PatientFormState(isEditing = false, useCustomCodename = true, showDiscardConfirm = false)
         }
         if (existing != null) {
             viewModelScope.launch {
@@ -529,7 +554,7 @@ class PatientFormViewModel @Inject constructor(
     }
 
     private fun isNewPatientDirty(form: PatientFormState, barangay: PsgcBarangay?): Boolean =
-        form.useCustomCodename ||
+        !form.useCustomCodename ||
             form.customCodename.isNotEmpty() ||
             form.lastname.isNotEmpty() ||
             form.firstname.isNotEmpty() ||
@@ -543,7 +568,9 @@ class PatientFormViewModel @Inject constructor(
         barangay: PsgcBarangay?,
         loaded: Patient,
     ): Boolean =
-        form.lastname != loaded.lastname ||
+        form.useCustomCodename != loaded.isCodename ||
+            form.customCodename != (if (loaded.isCodename) loaded.lastname else "") ||
+            form.lastname != loaded.lastname ||
             form.firstname != loaded.firstname ||
             form.middleName != (loaded.middleName ?: "") ||
             form.sex != loaded.sex ||
