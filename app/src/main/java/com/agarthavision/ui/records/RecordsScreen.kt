@@ -464,19 +464,13 @@ private fun ReportCard(
     onShareCsv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val primaryOpen = when {
-        report.pdfFilePath != null -> onOpenPdf
-        report.csvFilePath != null -> onOpenCsv
-        else -> null
-    }
-
     Column(
         modifier = modifier
             .fillMaxWidth()
             .background(AgarthaTheme.colors.surface, RoundedCornerShape(12.dp))
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
-            .clickable(enabled = primaryOpen != null, onClick = { primaryOpen?.invoke() })
+            .clickable(onClick = onSessionClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(
@@ -499,19 +493,21 @@ private fun ReportCard(
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = AgarthaTheme.colors.accent,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clickable(onClick = onSessionClick),
+                    modifier = Modifier.padding(top = 2.dp),
                 )
             }
             ReportStatusPill(status = report.supabaseStatus)
         }
 
         Spacer(Modifier.height(8.dp))
+        val noSpeciesText = stringResource(R.string.report_no_positive_species)
+        val moreFormat = stringResource(R.string.reports_species_more)
         Text(
-            text = report.positiveSpecies.joinToString(", ").ifBlank {
-                stringResource(R.string.report_no_positive_species)
-            },
+            text = formatPositiveSpeciesSummary(
+                species = report.positiveSpecies,
+                emptyFallback = noSpeciesText,
+                moreFormat = moreFormat,
+            ),
             fontSize = 12.sp,
             color = AgarthaTheme.colors.textSecondary,
         )
@@ -635,6 +631,25 @@ internal fun StatusPill(linkState: SessionLinkState) {
             color = fg,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
         )
+    }
+}
+
+internal const val MAX_DISPLAYED_SPECIES = 3
+internal const val TRUNCATED_SPECIES_PREFIX_COUNT = 2
+
+internal fun formatPositiveSpeciesSummary(
+    species: List<String>,
+    emptyFallback: String,
+    moreFormat: String,
+): String {
+    return when {
+        species.isEmpty() -> emptyFallback
+        species.size <= MAX_DISPLAYED_SPECIES -> species.joinToString(", ")
+        else -> {
+            val visible = species.take(TRUNCATED_SPECIES_PREFIX_COUNT).joinToString(", ")
+            val remaining = species.size - TRUNCATED_SPECIES_PREFIX_COUNT
+            "$visible, ${String.format(moreFormat, remaining)}"
+        }
     }
 }
 

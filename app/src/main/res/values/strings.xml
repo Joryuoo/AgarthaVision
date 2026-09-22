@@ -221,6 +221,7 @@
     <string name="reports_share_csv">Share CSV</string>
     <string name="reports_total_count">%1$d reports</string>
     <string name="reports_session_link">Session %1$s</string>
+    <string name="reports_species_more">+%1$d more</string>
 
     <string name="records_session_title">Session %1$s</string>
     <string name="records_session_summary">%1$d verified samples · %2$s</string>
@@ -381,8 +382,8 @@
     <string name="patients_edit_desc">Edit %1$s</string>
     <string name="patients_edit_action">Edit</string>
     <string name="patients_menu_desc">Patient options</string>
-    <string name="patients_reveal_name_desc">Reveal patient name</string>
-    <string name="patients_mask_name_desc">Hide patient name</string>
+    <string name="patients_reveal_name_desc">Reveal</string>
+    <string name="patients_mask_name_desc">Hide</string>
     <!-- Row meta: sex · age · barangay. -->
     <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
     <string name="patients_age_years">%1$d yrs</string>
