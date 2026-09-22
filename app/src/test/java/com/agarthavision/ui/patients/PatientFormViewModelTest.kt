@@ -18,14 +18,20 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -46,6 +52,23 @@ class PatientFormViewModelTest {
     fun setUp() {
         whenever(authRepository.observeLocalIdentity())
             .thenReturn(flowOf(LocalIdentity(userId = USER_ID, email = "m@example.org")))
+        // Default: no duplicates found. Existing tests that call onSave() rely on this so
+        // duplicate dialogs don't surface where they aren't being tested. Individual tests
+        // can re-stub to return specific duplicates.
+        // findDuplicates is a suspend function, so the stub must run inside a coroutine context.
+        runBlocking {
+            whenever(
+                patientRepository.findDuplicates(
+                    userId = any(),
+                    lastname = any(),
+                    firstname = any(),
+                    middleName = anyOrNull(),
+                    birthdate = any(),
+                    sex = any(),
+                    excludingId = any(),
+                ),
+            ).thenReturn(emptyList())
+        }
     }
 
     private fun viewModel(patientId: String? = null) = PatientFormViewModel(
@@ -196,6 +219,463 @@ class PatientFormViewModelTest {
         assertEquals("Lahug", vm.state.value.barangay.selected?.name)
     }
 
+    // ── duplicate detection ───────────────────────────────────────────────────
+
+    @Test
+    fun `onSave sets pendingSameBarangayDuplicate for a same-barangay identity match`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        fillValid(vm)
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        val duplicate = existingPatient() // psgcBarangayCode == LAHUG — same barangay
+        whenever(
+            patientRepository.findDuplicates(any(), any(), any(), anyOrNull(), any(), any(), any()),
+        ).thenReturn(listOf(duplicate))
+        whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        assertNotNull(vm.state.value.pendingSameBarangayDuplicate)
+        assertTrue(vm.state.value.pendingDifferentBarangayDuplicates.isEmpty())
+        verify(patientRepository, never()).insert(any())
+    }
+
+    @Test
+    fun `onSave sets pendingDifferentBarangayDuplicates for a different-barangay identity match`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        fillValid(vm)
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        // Patient lives in a different barangay than the form's selected one (LAHUG)
+        val duplicate = existingPatient().copy(psgcBarangayCode = TALAMBAN)
+        whenever(
+            patientRepository.findDuplicates(any(), any(), any(), anyOrNull(), any(), any(), any()),
+        ).thenReturn(listOf(duplicate))
+        whenever(psgcRepository.getBarangay(TALAMBAN))
+            .thenReturn(PsgcBarangay(TALAMBAN, "Talamban", "City of Cebu", null, "Region VII"))
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.pendingSameBarangayDuplicate)
+        assertEquals(1, vm.state.value.pendingDifferentBarangayDuplicates.size)
+        assertEquals(TALAMBAN, vm.state.value.pendingDifferentBarangayDuplicates.first().patient.psgcBarangayCode)
+        verify(patientRepository, never()).insert(any())
+    }
+
+    @Test
+    fun `onSave passes excludingId equal to the patient being edited so it is not a self-duplicate`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val existing = existingPatient()
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existing)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+
+            // Trigger save without changing anything — all fields are already valid from load
+            vm.onSave()
+            advanceUntilIdle()
+
+            val captor = argumentCaptor<String>()
+            verify(patientRepository).findDuplicates(
+                userId = any(),
+                lastname = any(),
+                firstname = any(),
+                middleName = anyOrNull(),
+                birthdate = any(),
+                sex = any(),
+                excludingId = captor.capture(),
+            )
+            assertEquals(
+                "The excludingId passed to findDuplicates must be the patient's own id",
+                PATIENT_ID,
+                captor.firstValue,
+            )
+        }
+
+    @Test
+    fun `onSave passes middleName as null when the field is blank so duplicate check matches persist coercion`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            fillValid(vm)
+            advanceUntilIdle()
+            vm.onBarangaySelected(LAHUG)
+            vm.onMiddleNameChanged("   ") // whitespace only — must be coerced to null
+
+            vm.onSave()
+            advanceUntilIdle()
+
+            // isNull() matcher confirms findDuplicates receives null for a blank middle name,
+            // mirroring the trim().ifBlank { null } coercion used at persist time. A mismatch
+            // here would cause false negatives in the duplicate check.
+            verify(patientRepository).findDuplicates(
+                userId = any(),
+                lastname = any(),
+                firstname = any(),
+                middleName = isNull(),
+                birthdate = any(),
+                sex = any(),
+                excludingId = any(),
+            )
+        }
+
+    // ── post-duplicate callbacks ──────────────────────────────────────────────
+
+    @Test
+    fun `onProceedAsNewPatient clears duplicate state and persists the patient`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        fillValid(vm)
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        // Trigger the same-barangay duplicate dialog
+        whenever(
+            patientRepository.findDuplicates(any(), any(), any(), anyOrNull(), any(), any(), any()),
+        ).thenReturn(listOf(existingPatient()))
+        whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+        vm.onSave()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.pendingSameBarangayDuplicate)
+
+        vm.onProceedAsNewPatient()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.pendingSameBarangayDuplicate)
+        assertTrue(vm.state.value.pendingDifferentBarangayDuplicates.isEmpty())
+        verify(patientRepository).insert(any())
+    }
+
+    @Test
+    fun `onDismissDuplicate clears both duplicate states without saving`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        fillValid(vm)
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        whenever(
+            patientRepository.findDuplicates(any(), any(), any(), anyOrNull(), any(), any(), any()),
+        ).thenReturn(listOf(existingPatient()))
+        whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+        vm.onSave()
+        advanceUntilIdle()
+        assertNotNull(vm.state.value.pendingSameBarangayDuplicate)
+
+        vm.onDismissDuplicate()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.pendingSameBarangayDuplicate)
+        assertTrue(vm.state.value.pendingDifferentBarangayDuplicates.isEmpty())
+        verify(patientRepository, never()).insert(any())
+    }
+
+    @Test
+    fun `onGoToExistingPatient emits OpenExisting with the correct id and clears duplicate state`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onGoToExistingPatient(PATIENT_ID)
+            advanceUntilIdle()
+
+            assertEquals(listOf(PatientFormEvent.OpenExisting(PATIENT_ID)), events)
+            assertNull(vm.state.value.pendingSameBarangayDuplicate)
+            assertTrue(vm.state.value.pendingDifferentBarangayDuplicates.isEmpty())
+            job.cancel()
+        }
+
+    // ── dirty check / discard guard ───────────────────────────────────────────
+
+    @Test
+    fun `onCancel on a pristine form emits Cancelled immediately without showing the discard dialog`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onCancel()
+            advanceUntilIdle()
+
+            assertEquals(listOf(PatientFormEvent.Cancelled), events)
+            assertFalse(vm.state.value.showDiscardConfirm)
+            job.cancel()
+        }
+
+    @Test
+    fun `onCancel after typing any field shows the discard dialog instead of emitting Cancelled`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onLastnameChanged("A")
+
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onCancel()
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.showDiscardConfirm)
+            assertTrue(events.isEmpty())
+            job.cancel()
+        }
+
+    @Test
+    fun `onDiscardConfirmed emits Cancelled and resets form state`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onLastnameChanged("A")
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+            assertTrue(vm.state.value.isDirty)
+
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
+
+            assertEquals(listOf(PatientFormEvent.Cancelled), events)
+            assertFalse(vm.state.value.showDiscardConfirm)
+            assertFalse(vm.state.value.isDirty)
+            assertEquals("", vm.state.value.lastname)
+            job.cancel()
+        }
+
+    @Test
+    fun `onDiscardConfirmed when editing resets form to original patient values`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = existingPatient()
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patient)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertEquals("Cruz", vm.state.value.lastname)
+            assertFalse(vm.state.value.isDirty)
+
+            vm.onLastnameChanged("Modified")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
+
+            assertEquals(listOf(PatientFormEvent.Cancelled), events)
+            assertFalse(vm.state.value.showDiscardConfirm)
+            assertFalse(vm.state.value.isDirty)
+            assertEquals("Cruz", vm.state.value.lastname)
+            job.cancel()
+        }
+
+    @Test
+    fun `onDiscardDismissed clears showDiscardConfirm without emitting any event`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.onLastnameChanged("A")
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+
+            val events = mutableListOf<PatientFormEvent>()
+            val job = launch { vm.events.collect { events.add(it) } }
+
+            vm.onDiscardDismissed()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.showDiscardConfirm)
+            assertTrue(events.isEmpty())
+            job.cancel()
+        }
+
+    @Test
+    fun `isDirty is false initially for new patient and true after field change`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertFalse(vm.state.value.isDirty)
+            vm.onLastnameChanged("Reyes")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `isDirty is false after existing patient loads and true after field edit`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+            vm.onFirstnameChanged("Different")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
+    // ── loadPatient (sheet-reuse API) ─────────────────────────────────────────
+
+    @Test
+    fun `loadPatient null resets VM to blank new-patient form`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isEditing)
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            vm.loadPatient(null)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isEditing)
+            assertEquals("", vm.state.value.lastname)
+            assertNull(vm.state.value.barangay.selected)
+            assertFalse(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `loadPatient with same id and loaded set is a no-op and does not re-query the repository`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(existingPatient())
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+
+            // First loadPatient call with same id — should skip re-load
+            vm.loadPatient(PATIENT_ID)
+            advanceUntilIdle()
+
+            // getPatientById must have been called exactly once (from init's loadExisting, not again)
+            org.mockito.kotlin.verify(patientRepository, org.mockito.kotlin.times(1))
+                .getPatientById(PATIENT_ID)
+        }
+
+    @Test
+    fun `loadPatient with a different id loads the new patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientA = existingPatient()
+            val patientB = existingPatient().copy(id = "p-2", lastname = "Santos", firstname = "Liza")
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patientA)
+            whenever(patientRepository.getPatientById("p-2")).thenReturn(patientB)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            vm.loadPatient("p-2")
+            advanceUntilIdle()
+
+            assertEquals("Santos", vm.state.value.lastname)
+            assertEquals("Liza", vm.state.value.firstname)
+        }
+
+    @Test
+    fun `loadPatient after successful save reloads patient from DB — sheet re-open must not show blank form`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = existingPatient()
+            whenever(patientRepository.getPatientById(PATIENT_ID)).thenReturn(patient)
+            whenever(psgcRepository.getBarangay(LAHUG)).thenReturn(lahug())
+
+            val vm = viewModel(PATIENT_ID)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isEditing)
+            assertEquals("Cruz", vm.state.value.lastname)
+
+            // Save the patient (all required fields are already loaded — no validation error).
+            vm.onSave()
+            advanceUntilIdle()
+            // After save the fields StateFlow is cleared.
+            assertFalse(vm.state.value.isEditing)
+            assertEquals("", vm.state.value.lastname)
+
+            // Sheet dismissed then re-opened for the same patient: loadPatient is called again.
+            vm.loadPatient(PATIENT_ID)
+            advanceUntilIdle()
+
+            // The form must show the patient's data, not the blank cleared state.
+            // Fails today because loadPatient hits the early-return guard
+            // (patientId == PATIENT_ID && loaded != null) and never calls loadExisting again.
+            assertTrue(
+                "isEditing must be true after re-opening existing patient post-save",
+                vm.state.value.isEditing,
+            )
+            assertEquals(
+                "lastname must be restored to 'Cruz' after re-opening post-save",
+                "Cruz",
+                vm.state.value.lastname,
+            )
+        }
+
+    @Test
+    fun `isDirty reflects sex and birthdate changes for new patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            assertFalse(vm.state.value.isDirty)
+
+            vm.onSexSelected(Sex.FEMALE)
+            advanceUntilIdle()
+            assertTrue(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `isDirty is false immediately after successful save`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            fillValid(vm)
+            advanceUntilIdle()
+            vm.onBarangaySelected(LAHUG)
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onSave()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+        }
+
+    @Test
+    fun `onDiscardConfirmed for new patient resets isDirty and clears barangay`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            fillValid(vm)
+            advanceUntilIdle()
+            vm.onBarangaySelected(LAHUG)
+            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(lahug()))
+            assertTrue(vm.state.value.isDirty)
+
+            vm.onCancel()
+            advanceUntilIdle()
+            assertTrue(vm.state.value.showDiscardConfirm)
+
+            vm.onDiscardConfirmed()
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDirty)
+            assertFalse(vm.state.value.isEditing)
+            assertNull(vm.state.value.barangay.selected)
+            assertEquals("", vm.state.value.lastname)
+        }
+
     private fun existingPatient() = Patient(
         id = PATIENT_ID,
         lastname = "Cruz",
@@ -216,5 +696,6 @@ class PatientFormViewModelTest {
         const val USER_ID = "user-a"
         const val PATIENT_ID = "p-1"
         const val LAHUG = "0723017001"
+        const val TALAMBAN = "0723017002"
     }
 }

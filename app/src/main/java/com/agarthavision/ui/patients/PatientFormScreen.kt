@@ -1,5 +1,6 @@
 package com.agarthavision.ui.patients
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,24 +9,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -49,7 +57,6 @@ import com.agarthavision.ui.components.SearchableDropdown
 import com.agarthavision.ui.components.SearchableDropdownActions
 import com.agarthavision.ui.components.SearchableDropdownConfig
 import com.agarthavision.ui.components.SearchableDropdownState
-import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.toOption
@@ -62,60 +69,133 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
 /**
- * The New / Edit Patient form.
+ * The New / Edit Patient form, rendered as a bottom drawer / sheet matching [NewSessionSheet].
  *
  * Works entirely offline: the barangay picker searches the PSGC dataset bundled in the APK,
  * and the save is a local write that syncs when connectivity returns.
  *
- * **No duplicate-detection warning** — duplicates are an admin-side decision. **No delete**
- * — also admin-side.
+ * Duplicate detection runs before committing: an identity match in the same barangay
+ * surfaces a strong "already registered" dialog; a match in a different barangay surfaces a
+ * softer "possible duplicate" dialog. Both let the medtech proceed, navigate to the existing
+ * patient, or cancel.
+ *
+ * **No delete** — admin-side.
  */
+@Suppress("CyclomaticComplexMethod") // Composable root function: dialog visibility branches
+// are pattern-matched state, not logic. Decomposing them across multiple composables
+// would add indirection without reducing actual complexity.
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PatientFormScreen(
-    onDone: () -> Unit,
-    viewModel: PatientFormViewModel = hiltViewModel(),
+fun PatientFormSheet(
+    onDismiss: () -> Unit,
+    onOpenPatient: (String) -> Unit = {},
+    patientId: String? = null,
+    viewModel: PatientFormViewModel = hiltViewModel(key = patientId ?: "new"),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val colors = AgarthaTheme.colors
 
+    LaunchedEffect(patientId) {
+        viewModel.loadPatient(patientId)
+    }
+
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                PatientFormEvent.Saved, PatientFormEvent.Cancelled -> onDone()
+                PatientFormEvent.Saved, PatientFormEvent.Cancelled -> onDismiss()
+                is PatientFormEvent.OpenExisting -> onOpenPatient(event.patientId)
             }
         }
     }
 
-    var showDatePicker by remember { mutableStateOf(false) }
+    // Route system back through the dirty-check guard, the same way CaptureScreen routes it
+    // through its isBusy guard.
+    BackHandler { viewModel.onCancel() }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background),
+    var showDatePicker by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { targetValue ->
+            if (targetValue == SheetValue.Hidden && state.isDirty) {
+                viewModel.onCancel()
+                false
+            } else {
+                true
+            }
+        },
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = viewModel::onCancel,
+        sheetState = sheetState,
+        containerColor = colors.surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(colors.borderStrong, RoundedCornerShape(2.dp)),
+            )
+        },
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .widthIn(max = 480.dp)
-                .align(Alignment.TopCenter)
-                .verticalScroll(rememberScrollState())
-                // After verticalScroll so the inset is part of the scrolling content rather
-                // than a dead band around it: Save and Cancel are the last thing in the form,
-                // and without this they sit flush to the screen edge at full scroll with their
-                // lower half under the system navigation bar.
-                .navigationBarsPadding(),
+                .fillMaxWidth()
+                .padding(bottom = 20.dp),
         ) {
-            ScreenHeader(
-                title = stringResource(
-                    if (state.isEditing) R.string.patient_form_edit_title
-                    else R.string.patient_form_new_title,
-                ),
-                purpose = stringResource(R.string.patients_subtitle_purpose),
-            )
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 20.dp, top = 6.dp, bottom = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 12.dp),
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (state.isEditing) R.string.patient_form_edit_title
+                            else R.string.patient_form_new_title,
+                        ),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.textPrimary,
+                        letterSpacing = (-0.015).em,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = stringResource(R.string.patient_form_subtitle_purpose),
+                        fontSize = 12.sp,
+                        color = colors.textSecondary,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
+                IconButton(
+                    onClick = viewModel::onCancel,
+                    modifier = Modifier
+                        .size(32.dp)
+                        .background(colors.surfaceMuted, CircleShape),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.patient_form_cancel),
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
 
+            // Body
             Column(
-                modifier = Modifier.padding(horizontal = Spacing.lg),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 SheetInput(
@@ -126,6 +206,10 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_lastname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.LASTNAME_REQUIRED in state.errors,
+                        // Character counter removed: length is enforced via the VM's
+                        // transformNameInput pipeline, and "x / 2147483647" is meaningless
+                        // noise when no explicit maxLength is passed.
+                        showCounter = false,
                     ),
                 )
                 SheetInput(
@@ -136,6 +220,7 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_firstname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.FIRSTNAME_REQUIRED in state.errors,
+                        showCounter = false,
                     ),
                 )
                 // Optional on purpose: many patients do not supply one, and a required
@@ -148,20 +233,28 @@ fun PatientFormScreen(
                         placeholder = stringResource(R.string.patient_form_middle_name_placeholder),
                         isError = false,
                         isRequired = false,
+                        showCounter = false,
                     ),
                 )
 
-                SexSelector(
-                    selected = state.sex,
-                    onSelected = viewModel::onSexSelected,
-                    isError = state.showErrors && PatientFormError.SEX_REQUIRED in state.errors,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                ) {
+                    SexSelector(
+                        selected = state.sex,
+                        onSelected = viewModel::onSexSelected,
+                        isError = state.showErrors && PatientFormError.SEX_REQUIRED in state.errors,
+                        modifier = Modifier.weight(1f),
+                    )
 
-                BirthdateField(
-                    birthdate = state.birthdate,
-                    isError = state.showErrors && state.errors.any { it in BIRTHDATE_ERRORS },
-                    onClick = { showDatePicker = true },
-                )
+                    BirthdateField(
+                        birthdate = state.birthdate,
+                        isError = state.showErrors && state.errors.any { it in BIRTHDATE_ERRORS },
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
                 SearchableDropdown(
                     state = SearchableDropdownState(
@@ -179,7 +272,7 @@ fun PatientFormScreen(
                         noMatches = stringResource(R.string.patient_form_barangay_no_matches),
                         clearLabel = stringResource(R.string.patient_form_barangay_clear),
                         minQueryLength = SearchBarangaysUseCase.MIN_QUERY_LENGTH,
-                        badge = stringResource(R.string.patient_form_required_badge),
+                        isRequired = true,
                         isError = state.showErrors &&
                             PatientFormError.BARANGAY_REQUIRED in state.errors,
                     ),
@@ -205,17 +298,33 @@ fun PatientFormScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = Spacing.md),
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    TextButton(onClick = viewModel::onCancel, modifier = Modifier.weight(1f)) {
-                        Text(stringResource(R.string.patient_form_cancel), color = colors.textSecondary)
+                    Button(
+                        onClick = viewModel::onCancel,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(49.dp),
+                        shape = CircleShape,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.surfaceMuted,
+                            contentColor = colors.textPrimary,
+                        ),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.patient_form_cancel),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                     Button(
                         onClick = viewModel::onSave,
                         enabled = !state.isSaving,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(49.dp),
+                        shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = colors.accent,
                             contentColor = colors.onAccent,
@@ -223,6 +332,7 @@ fun PatientFormScreen(
                     ) {
                         Text(
                             text = stringResource(R.string.patient_form_save),
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
@@ -242,6 +352,34 @@ fun PatientFormScreen(
             },
         )
     }
+
+    // Discard-changes confirmation
+    if (state.showDiscardConfirm) {
+        DiscardConfirmDialog(
+            onConfirm = viewModel::onDiscardConfirmed,
+            onDismiss = viewModel::onDiscardDismissed,
+        )
+    }
+
+    // Same-barangay duplicate: stronger "already registered" wording
+    state.pendingSameBarangayDuplicate?.let { dup ->
+        SameBarangayDuplicateDialog(
+            duplicate = dup,
+            onProceed = viewModel::onProceedAsNewPatient,
+            onOpenExisting = { viewModel.onGoToExistingPatient(dup.patient.id) },
+            onDismiss = viewModel::onDismissDuplicate,
+        )
+    }
+
+    // Different-barangay duplicate: softer "possible duplicate" wording (first match)
+    state.pendingDifferentBarangayDuplicates.firstOrNull()?.let { dup ->
+        DifferentBarangayDuplicateDialog(
+            duplicate = dup,
+            onProceed = viewModel::onProceedAsNewPatient,
+            onOpenExisting = { viewModel.onGoToExistingPatient(dup.patient.id) },
+            onDismiss = viewModel::onDismissDuplicate,
+        )
+    }
 }
 
 /**
@@ -253,27 +391,37 @@ private fun SexSelector(
     selected: Sex?,
     onSelected: (Sex) -> Unit,
     isError: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Text(
-            text = stringResource(R.string.patient_form_sex),
-            color = colors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.patient_form_sex),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " *",
+                color = colors.danger,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
             Sex.entries.forEach { sex ->
                 val active = selected == sex
-                Text(
-                    text = stringResource(
-                        if (sex == Sex.MALE) R.string.patients_sex_male
-                        else R.string.patients_sex_female,
-                    ),
-                    color = if (active) colors.onAccent else colors.textPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                Box(
                     modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
                         .clip(RoundedCornerShape(12.dp))
                         .background(if (active) colors.accent else colors.surface)
                         .border(
@@ -281,9 +429,19 @@ private fun SexSelector(
                             if (isError && selected == null) colors.danger else colors.border,
                             RoundedCornerShape(12.dp),
                         )
-                        .clickable { onSelected(sex) }
-                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                )
+                        .clickable { onSelected(sex) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (sex == Sex.MALE) R.string.patients_sex_male
+                            else R.string.patients_sex_female,
+                        ),
+                        color = if (active) colors.onAccent else colors.textPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
             }
         }
     }
@@ -294,22 +452,31 @@ private fun BirthdateField(
     birthdate: LocalDate?,
     isError: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-        Text(
-            text = stringResource(R.string.patient_form_birthdate),
-            color = colors.textSecondary,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
-            text = birthdate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                ?: stringResource(R.string.patient_form_birthdate_placeholder),
-            color = if (birthdate == null) colors.textTertiary else colors.textPrimary,
-            fontSize = 14.sp,
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = stringResource(R.string.patient_form_birthdate),
+                color = colors.textSecondary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " *",
+                color = colors.danger,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .height(48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(colors.surface)
                 .border(
@@ -318,8 +485,16 @@ private fun BirthdateField(
                     RoundedCornerShape(12.dp),
                 )
                 .clickable(onClick = onClick)
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-        )
+                .padding(horizontal = Spacing.md),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Text(
+                text = birthdate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
+                    ?: stringResource(R.string.patient_form_birthdate_placeholder),
+                color = if (birthdate == null) colors.textTertiary else colors.textPrimary,
+                fontSize = 14.sp,
+            )
+        }
     }
 }
 
@@ -394,15 +569,27 @@ private fun EditNote() {
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surfaceVariant)
-            .padding(Spacing.sm),
+            .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.xs),
     ) {
+        Text(
+            text = stringResource(R.string.patient_form_edit_note_tag),
+            fontSize = 9.sp,
+            lineHeight = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.04.em,
+            color = colors.textSecondary,
+            modifier = Modifier
+                .background(colors.surfaceMuted, RoundedCornerShape(3.dp))
+                .padding(horizontal = 5.dp, vertical = 2.dp),
+        )
         Text(
             text = stringResource(R.string.patient_form_edit_note),
             color = colors.textSecondary,
-            fontSize = 12.sp,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
         )
     }
-    Spacer(modifier = Modifier.height(Spacing.xs))
 }
 
 /** Both birthdate failures light the same field. */

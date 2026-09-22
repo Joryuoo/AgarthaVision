@@ -284,7 +284,31 @@
     <string name="sample_detail_hide_box">Hide the box for %1$s</string>
     <string name="sample_detail_show_box">Show the box for %1$s</string>
 
-    <!-- Patient form (PB-07c) -->
+    <!-- Patient form (PB-07c / 86d4bzjkb duplicate detection) -->
+    <!-- Subtitle shown on the New / Edit Patient form only. patients_subtitle_purpose is the
+         Patients list screen's subtitle and must not be changed here. -->
+    <string name="patient_form_subtitle_purpose">Register patient details for smear tracking and surveillance.</string>
+
+    <!-- Discard-changes confirmation dialog -->
+    <string name="patient_form_discard_title">Discard changes?</string>
+    <string name="patient_form_discard_body">This patient record will not be saved.</string>
+    <string name="patient_form_discard_confirm">Discard</string>
+    <string name="patient_form_discard_keep">Keep editing</string>
+
+    <!-- Same-barangay duplicate: stronger wording because this is a true duplicate. -->
+    <string name="patient_form_same_duplicate_title">Patient already registered</string>
+    <string name="patient_form_same_duplicate_body">A patient named %1$s is already registered in this barangay with the same sex and birthdate. Adding another will create a true duplicate.</string>
+    <string name="patient_form_same_duplicate_proceed">Add anyway</string>
+    <string name="patient_form_same_duplicate_open">Go to existing</string>
+    <string name="patient_form_same_duplicate_cancel">Cancel</string>
+
+    <!-- Different-barangay duplicate: softer "possible duplicate" wording. -->
+    <string name="patient_form_duplicate_title">Possible duplicate</string>
+    <string name="patient_form_duplicate_body">A patient named %1$s is already registered in %2$s with the same sex and birthdate. This may be the same person.</string>
+    <string name="patient_form_duplicate_proceed">Add as new patient</string>
+    <string name="patient_form_duplicate_open">Go to existing</string>
+    <string name="patient_form_duplicate_cancel">Cancel</string>
+
     <string name="patient_form_new_title">New patient</string>
     <string name="patient_form_edit_title">Edit patient</string>
     <string name="patient_form_lastname">Lastname</string>
@@ -306,6 +330,7 @@
     <string name="patient_form_cancel">Cancel</string>
     <!-- Shown on the edit form. Without it, correcting a name and finding the old one still
          on a report reads as a bug rather than as the intended behaviour. -->
+    <string name="patient_form_edit_note_tag">NOTE</string>
     <string name="patient_form_edit_note">Editing these details does not change session labels already created or reports already generated. Generate a new report to pick up the change.</string>
     <string name="patient_form_error_lastname">Lastname is required.</string>
     <string name="patient_form_error_firstname">Firstname is required.</string>
