@@ -83,9 +83,18 @@ object SessionLabelGenerator {
     fun generate(patient: Patient, sequence: Int, asOf: Instant = Instant.now()): String {
         val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
         if (patient.isCodename) {
-            val sexAge = SEX_AGE_REGEX.find(patient.lastname.uppercase())?.value
-                ?: patient.lastname.substringBefore('-').uppercase()
-            return "-$sexAge-S$padded"
+            // Carry the word-segment (single or stacked) forward intact.
+            // e.g. "VISION-M22-001" → word="VISION", sexAge="M22" → "VISION-M22-S01"
+            //      "ALPHATEKNOY-F22" → word="ALPHATEKNOY", sexAge="F22" → "ALPHATEKNOY-F22-S01"
+            //      "M24-001" / "M24" → no word → "-M24-S01" (leading hyphen intentional)
+            val raw = patient.lastname.trim().uppercase()
+            val sexAgeMatch = SEX_AGE_REGEX.find(raw)
+            val sexAge = sexAgeMatch?.value ?: raw.substringBefore('-')
+            val word = sexAgeMatch
+                ?.let { raw.substring(0, it.range.first) }
+                ?.trimEnd('-')
+                ?: ""
+            return if (word.isNotEmpty()) "$word-$sexAge-S$padded" else "-$sexAge-S$padded"
         }
         val sexAge = patient.sex?.let {
             CodenameGenerator.bucketPrefix(it, patient.birthdate, asOf.atZone(CLINICAL_ZONE).toLocalDate())

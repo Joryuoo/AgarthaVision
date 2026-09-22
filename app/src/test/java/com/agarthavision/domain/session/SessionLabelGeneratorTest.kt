@@ -268,24 +268,108 @@ class SessionLabelGeneratorTest {
     // ---------- codename ----------
 
     @Test
-    fun `codenamed patient produces -SEXAGE-S01 label`() {
-        val labelVision = SessionLabelGenerator.generate(
+    fun `legacy VISION-prefixed codename carries the word forward in the label`() {
+        // Bug fix: word segment must no longer be dropped.
+        val label = SessionLabelGenerator.generate(
             patient(lastname = "VISION-M22-001", firstname = ""),
             sequence = 1,
         )
-        assertEquals("-M22-S01", labelVision)
+        assertEquals("VISION-M22-S01", label)
+    }
 
+    @Test
+    fun `bare legacy codename without word prefix produces leading-hyphen label`() {
         val label = SessionLabelGenerator.generate(
             patient(lastname = "M24-001", firstname = ""),
             sequence = 1,
         )
         assertEquals("-M24-S01", label)
+    }
 
-        val labelFemale = SessionLabelGenerator.generate(
+    @Test
+    fun `legacy VISION-prefixed female codename carries word forward with custom sequence`() {
+        val label = SessionLabelGenerator.generate(
             patient(lastname = "VISION-F05-002", firstname = ""),
             sequence = 3,
         )
-        assertEquals("-F05-S03", labelFemale)
+        assertEquals("VISION-F05-S03", label)
+    }
+
+    @Test
+    fun `new word-stacked codename carries the entire stacked word forward`() {
+        // "ALPHATEKNOY-F22" must not be split — the whole word segment is one unit.
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "ALPHATEKNOY-F22", firstname = ""),
+            sequence = 1,
+        )
+        assertEquals("ALPHATEKNOY-F22-S01", label)
+    }
+
+    @Test
+    fun `new single-word codename carries the word forward`() {
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "WILDCAT-F22", firstname = ""),
+            sequence = 6,
+        )
+        assertEquals("WILDCAT-F22-S06", label)
+    }
+
+    @Test
+    fun `bare new-format codename without word prefix produces leading-hyphen label`() {
+        // Bare "M24" (no numeric suffix, no word) — leading hyphen intentional, out of scope to fix.
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "M24", firstname = ""),
+            sequence = 1,
+        )
+        assertEquals("-M24-S01", label)
+    }
+
+    @Test
+    fun `lowercase codename is not treated as codename - falls through to named-patient path`() {
+        // Codenames are always stored uppercase by CodenameGenerator. A lowercase value cannot
+        // arrive from generate(), but if it ever does, isCodename() returns false (regex is
+        // uppercase-only) and it goes through the lastname-abbreviation path instead.
+        // "alpha-f22" as a lastname: filter letters -> ALPHAF (6 letters -> A, H, F) -> AHF;
+        // no initial (firstname = ""); sex = Female, age computed from 2000-01-01 at asOf
+        // (2021-06-15): age 21 -> F21.
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "alpha-f22", firstname = ""),
+            sequence = 1,
+            asOf = asOf,
+        )
+        // letters in "alpha-f22" = "alphaf" (digits/dash stripped) -> ALPHAF (6 letters,
+        // indices 0=A,1=L,2=P,3=H,4=A,5=F) -> first=A, middle=letters[6/2=3]=H, last=F -> "AHF"
+        assertEquals("AHF-F21-S01", label)
+    }
+
+    @Test
+    fun `codename with MIKE word - SEX_AGE_REGEX skips non-digit M in MIKE`() {
+        // MIKE-M24: the regex [MF]\d{2} finds M24 at the suffix, not M in MIKE (no digits follow).
+        // word = "MIKE", sexAge = "M24" -> "MIKE-M24-S01"
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "MIKE-M24", firstname = ""),
+            sequence = 1,
+        )
+        assertEquals("MIKE-M24-S01", label)
+    }
+
+    @Test
+    fun `codename with FOXTROT word - SEX_AGE_REGEX skips non-digit F in FOXTROT`() {
+        // FOXTROT-F05: F in FOXTROT is not followed by two digits, so SEX_AGE_REGEX finds F05.
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "FOXTROT-F05", firstname = ""),
+            sequence = 2,
+        )
+        assertEquals("FOXTROT-F05-S02", label)
+    }
+
+    @Test
+    fun `stacked codename with MIKEFOXTROT carries entire stacked segment forward`() {
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "MIKEFOXTROT-M22", firstname = ""),
+            sequence = 3,
+        )
+        assertEquals("MIKEFOXTROT-M22-S03", label)
     }
 
     /**

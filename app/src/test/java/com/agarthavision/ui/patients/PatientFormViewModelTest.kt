@@ -147,7 +147,10 @@ class PatientFormViewModelTest {
         verify(patientRepository).insert(captor.capture())
         val saved = captor.firstValue
         assertTrue(saved.isCodename)
-        assertTrue(saved.lastname.startsWith("VISION-M24-"))
+        assertTrue(
+            "Expected lastname to end with -M24 (word-based codename), got: ${saved.lastname}",
+            saved.lastname.endsWith("-M24"),
+        )
         assertEquals("", saved.firstname)
     }
 

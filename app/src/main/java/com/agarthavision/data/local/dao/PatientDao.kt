@@ -265,12 +265,28 @@ interface PatientDao {
         )
     }
 
+    /**
+     * All codename lastnames in this medtech's patient list whose bucket prefix matches
+     * [prefix] (e.g. `F22`), covering all four codename shapes:
+     * - bare-new:    `F22`             (exact match)
+     * - bare-old:    `F22-001`         (prefix + `-`)
+     * - worded-new:  `ALPHA-F22`       (`%-` + prefix, exact end)
+     * - worded-old:  `VISION-F22-001`  (`%-` + prefix + `-`)
+     *
+     * `:prefix` is always `[MF]\d{2}` by construction, so it contains no SQL wildcard
+     * characters — no ESCAPE clause is needed.
+     */
     @Query(
         """
         SELECT p.lastname FROM patients p
         INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
         WHERE pu.user_id = :userId
-          AND (p.lastname LIKE :prefix || '-%' OR p.lastname LIKE 'VISION-' || :prefix || '-%')
+          AND (
+            p.lastname = :prefix
+            OR p.lastname LIKE :prefix || '-%'
+            OR p.lastname LIKE '%-' || :prefix
+            OR p.lastname LIKE '%-' || :prefix || '-%'
+          )
         """,
     )
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
