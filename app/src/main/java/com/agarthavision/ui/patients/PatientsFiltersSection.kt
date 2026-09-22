@@ -218,10 +218,12 @@ private fun SortDropdownChip(
     }
     val isSelected = expanded || sort != PatientSort.RECENT
     val pillColors = FilterPillColors(
-        activeBg = colors.accentTint,
+        bg = colors.accentTint,
+        border = colors.accent,
+        text = colors.accent,
+        activeBg = colors.accent,
         activeBorder = colors.accent,
-        activeText = colors.accent,
-        activeIcon = colors.accent,
+        activeText = colors.onAccent,
     )
 
     Box {
@@ -229,7 +231,7 @@ private fun SortDropdownChip(
             label = label,
             selected = isSelected,
             onClick = { expanded = !expanded },
-            activeColors = pillColors,
+            pillColors = pillColors,
             trailingIcon = {
                 Icon(
                     imageVector = if (expanded) {
@@ -239,7 +241,7 @@ private fun SortDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
+                    tint = if (isSelected) pillColors.activeText else pillColors.text,
                 )
             },
         )
@@ -287,10 +289,12 @@ private fun SexDropdownChip(
     }
     val isSelected = expanded || selected != null
     val pillColors = FilterPillColors(
-        activeBg = colors.goldTint,
+        bg = colors.goldTint,
+        border = colors.gold,
+        text = colors.goldText,
+        activeBg = colors.gold,
         activeBorder = colors.gold,
-        activeText = colors.goldText,
-        activeIcon = colors.goldText,
+        activeText = colors.onGold,
     )
 
     Box {
@@ -298,7 +302,7 @@ private fun SexDropdownChip(
             label = label,
             selected = isSelected,
             onClick = { expanded = !expanded },
-            activeColors = pillColors,
+            pillColors = pillColors,
             trailingIcon = {
                 Icon(
                     imageVector = if (expanded) {
@@ -308,7 +312,7 @@ private fun SexDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
+                    tint = if (isSelected) pillColors.activeText else pillColors.text,
                 )
             },
         )
@@ -356,17 +360,19 @@ private fun BarangayToggleChip(
     }
     val isSelected = expanded || hasSelection
     val pillColors = FilterPillColors(
-        activeBg = colors.surfaceMuted,
+        bg = colors.surfaceMuted,
+        border = colors.textPrimary,
+        text = colors.textPrimary,
+        activeBg = colors.textPrimary,
         activeBorder = colors.textPrimary,
-        activeText = colors.textPrimary,
-        activeIcon = colors.textPrimary,
+        activeText = colors.background,
     )
 
     PatientFilterChip(
         label = label,
         selected = isSelected,
         onClick = onToggle,
-        activeColors = pillColors,
+        pillColors = pillColors,
         trailingIcon = {
             Icon(
                 imageVector = if (expanded) {
@@ -376,7 +382,7 @@ private fun BarangayToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
+                tint = if (isSelected) pillColors.activeText else pillColors.text,
             )
         },
     )
@@ -400,17 +406,19 @@ private fun AgeToggleChip(
     }
     val isSelected = expanded || hasFilter
     val pillColors = FilterPillColors(
-        activeBg = colors.surfaceMuted,
-        activeBorder = colors.borderStrong,
-        activeText = colors.textPrimary,
-        activeIcon = colors.textPrimary,
+        bg = colors.surfaceVariant,
+        border = colors.textSecondary,
+        text = colors.textSecondary,
+        activeBg = colors.textSecondary,
+        activeBorder = colors.textSecondary,
+        activeText = colors.background,
     )
 
     PatientFilterChip(
         label = label,
         selected = isSelected,
         onClick = onToggle,
-        activeColors = pillColors,
+        pillColors = pillColors,
         trailingIcon = {
             Icon(
                 imageVector = if (expanded) {
@@ -420,7 +428,7 @@ private fun AgeToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
+                tint = if (isSelected) pillColors.activeText else pillColors.text,
             )
         },
     )
@@ -550,10 +558,12 @@ private fun AgeInputField(
 }
 
 private data class FilterPillColors(
+    val bg: Color,
+    val border: Color,
+    val text: Color,
     val activeBg: Color,
     val activeBorder: Color,
     val activeText: Color,
-    val activeIcon: Color = activeText,
 )
 
 @Composable
@@ -561,31 +571,12 @@ private fun PatientFilterChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    activeColors: FilterPillColors? = null,
+    pillColors: FilterPillColors,
     trailingIcon: (@Composable () -> Unit)? = null,
 ) {
-    val colors = AgarthaTheme.colors
-    val bg = if (selected && activeColors != null) {
-        activeColors.activeBg
-    } else if (selected) {
-        colors.textPrimary
-    } else {
-        colors.surface
-    }
-    val border = if (selected && activeColors != null) {
-        activeColors.activeBorder
-    } else if (selected) {
-        colors.textPrimary
-    } else {
-        colors.borderStrong
-    }
-    val text = if (selected && activeColors != null) {
-        activeColors.activeText
-    } else if (selected) {
-        colors.background
-    } else {
-        colors.textSecondary
-    }
+    val bg = if (selected) pillColors.activeBg else pillColors.bg
+    val border = if (selected) pillColors.activeBorder else pillColors.border
+    val text = if (selected) pillColors.activeText else pillColors.text
 
     Row(
         modifier = Modifier
@@ -600,7 +591,7 @@ private fun PatientFilterChip(
         Text(
             text = label,
             fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = text,
         )
         trailingIcon?.invoke()
