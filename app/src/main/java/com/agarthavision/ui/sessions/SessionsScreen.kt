@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -70,6 +71,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
@@ -81,8 +84,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -102,11 +105,15 @@ fun SessionsScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val colors = AgarthaTheme.colors
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionsEvent.NavigateToCapture -> onNavigateToCapture(event.sessionId)
+                is SessionsEvent.NavigateToCapture -> {
+                    showCreateDialog = false
+                    onNavigateToCapture(event.sessionId)
+                }
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND
@@ -119,8 +126,6 @@ fun SessionsScreen(
             }
         }
     }
-
-    var showCreateDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -139,10 +144,19 @@ fun SessionsScreen(
                 // count is of frames awaiting review rather than of open sessions - the
                 // latter would have counted every session and said nothing.
                 AppBar(
-                    unverifiedCount = state.unverifiedCount,
-                    totalCount = state.totalCount,
                     onBack = onBack,
                 )
+
+                // Patient Identity Preview Header / Card
+                state.patient?.let { patient ->
+                    PatientPreviewCard(
+                        patient = patient,
+                        barangayName = state.barangayName,
+                        totalCount = state.totalCount,
+                        unverifiedCount = state.unverifiedCount,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    )
+                }
 
                 // Search + date filter row
                 SearchInput(
@@ -239,7 +253,10 @@ fun SessionsScreen(
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
-                        onClick = { showCreateDialog = true },
+                        onClick = {
+                            viewModel.onDismissError()
+                            showCreateDialog = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(49.dp),
@@ -269,11 +286,14 @@ fun SessionsScreen(
             // Leaving the sheet abandons the draft; the label is local `remember` state and
             // resets with it. There is nothing left in the ViewModel to reset — the barangay
             // moved to the patient and the note is gone.
-            suggestedLabel = state.suggestedLabel,
-            onDismiss = { showCreateDialog = false },
+            state = state,
+            onClearError = viewModel::onDismissError,
+            onDismiss = {
+                viewModel.onDismissError()
+                showCreateDialog = false
+            },
             onSubmit = { label ->
                 viewModel.onCreateSession(label)
-                showCreateDialog = false
             }
         )
     }
@@ -286,24 +306,122 @@ fun SessionsScreen(
  * `patients/{patientId}`, which is not in `bottomBarRoutes`, so without this the only way
  * back is the system gesture — and a screen reachable only by gesture reads as a dead end.
  *
- * [ScreenHeader] is deliberately not given a leading slot: its doc scopes it to the root
- * tabs, and four screens share it. The arrow sits beside it instead, matching
- * `SessionDetailScreen`'s top bar.
+ * The [Row] owns `.statusBarsPadding()` so the back arrow and the title text share the
+ * same inset origin and align correctly. The old implementation wrapped [ScreenHeader] (a
+ * component that applies its own `.statusBarsPadding()` internally) inside a plain [Row]
+ * alongside [BackArrow], which caused the title to sit lower than the arrow by the height
+ * of the status bar.
+ *
+ * Pattern matches `SessionDetailScreen.SessionDetailAppBar`.
  */
 @Composable
-private fun AppBar(unverifiedCount: Int, totalCount: Int, onBack: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        BackArrow(onBack = onBack, modifier = Modifier.padding(start = Spacing.xs))
-        ScreenHeader(
-            title = stringResource(R.string.sessions_title),
-            purpose = stringResource(R.string.sessions_subtitle_purpose),
-            status = pluralStringResource(
+private fun AppBar(onBack: () -> Unit) {
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .statusBarsPadding()
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+    ) {
+        BackArrow(onBack = onBack)
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
+            Text(
+                text = stringResource(R.string.sessions_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.textPrimary,
+            )
+            Text(
+                text = stringResource(R.string.sessions_subtitle_purpose),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Patient identity preview card shown below the app bar.
+ *
+ * Establishes immediate clinical context (full name, age, sex, barangay) so the medtech
+ * can verify they are reading smears for the correct patient without navigating back.
+ * Persists while scrolling the session list below.
+ */
+@Composable
+private fun PatientPreviewCard(
+    patient: Patient,
+    barangayName: String?,
+    totalCount: Int,
+    unverifiedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val context = LocalContext.current
+    val age = patient.ageYears(Instant.now())
+    val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
+    val sexLabel = when (patient.sex) {
+        Sex.MALE -> stringResource(R.string.patients_sex_male)
+        Sex.FEMALE -> stringResource(R.string.patients_sex_female)
+        null -> stringResource(R.string.patients_sex_unknown)
+    }
+    val ageSex = stringResource(R.string.patient_preview_age_sex, ageText, sexLabel)
+    val barangay = barangayName ?: patient.psgcBarangayCode
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.accent)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = patient.displayName,
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = colors.onAccent,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = ageSex,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = barangay,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = pluralStringResource(
                 R.plurals.sessions_subtitle,
                 totalCount,
                 totalCount,
                 unverifiedCount,
             ),
-            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
@@ -456,7 +574,8 @@ fun LiveDot() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
-    suggestedLabel: String,
+    state: SessionsState,
+    onClearError: () -> Unit,
     onDismiss: () -> Unit,
     onSubmit: (label: String) -> Unit
 ) {
@@ -480,8 +599,15 @@ private fun NewSessionSheet(
         // Keyed on the suggestion so a sheet opened after the previous smear was created
         // starts on the new number rather than the one already used. It is only a seed: the
         // field is editable from the first keystroke, and nothing re-applies it.
-        var label by remember(suggestedLabel) { mutableStateOf(suggestedLabel) }
-        var showError by remember { mutableStateOf(false) }
+        var label by remember(state.suggestedLabel) { mutableStateOf(state.suggestedLabel) }
+        var showEmptyError by remember { mutableStateOf(false) }
+
+        val activeErrorMessage = when {
+            showEmptyError && label.isBlank() -> stringResource(R.string.session_new_label_required)
+            !state.errorMessage.isNullOrBlank() -> state.errorMessage
+            else -> null
+        }
+        val isError = activeErrorMessage != null
 
         Column(
             modifier = Modifier
@@ -531,18 +657,22 @@ private fun NewSessionSheet(
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 SheetInput(
                     value = label,
-                    onValueChange = { label = it; showError = false },
+                    onValueChange = {
+                        label = it
+                        showEmptyError = false
+                        if (state.errorMessage != null) onClearError()
+                    },
                     config = SheetInputConfig(
                         label = stringResource(R.string.session_label_field_label),
                         placeholder = stringResource(R.string.session_label_placeholder),
-                        isError = showError && label.isBlank(),
+                        isError = isError,
                         maxLength = SESSION_LABEL_MAX_LENGTH
                     )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                if (showError && label.isBlank()) {
+                if (activeErrorMessage != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -561,7 +691,7 @@ private fun NewSessionSheet(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            stringResource(R.string.session_new_label_required),
+                            text = activeErrorMessage,
                             fontSize = 12.sp,
                             color = colors.dangerText,
                             fontWeight = FontWeight.Medium,
@@ -602,6 +732,7 @@ private fun NewSessionSheet(
             ) {
                 Button(
                     onClick = onDismiss,
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
@@ -613,20 +744,29 @@ private fun NewSessionSheet(
                 }
                 Button(
                     onClick = {
-                        if (label.isBlank()) showError = true else onSubmit(label)
+                        if (label.isBlank()) showEmptyError = true else onSubmit(label)
                     },
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
                 ) {
-                    Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
-                        contentDescription = null,
-                        tint = colors.onAccent,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    if (state.isCreating) {
+                        CircularProgressIndicator(
+                            color = colors.onAccent,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                            contentDescription = null,
+                            tint = colors.onAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }

@@ -126,6 +126,24 @@ interface SessionDao {
     @Query("SELECT COUNT(*) FROM sessions WHERE patient_id = :patientId")
     suspend fun countSessionsForPatient(patientId: String): Int
 
+    /**
+     * Counts how many sessions for [patientId] already carry [label], excluding
+     * [excludingSessionId] so an in-place rename does not flag itself.
+     *
+     * Used by [com.agarthavision.data.repository.SessionRepositoryImpl.isSessionLabelTaken]
+     * to enforce per-patient label uniqueness before writing. Pass an empty string for
+     * [excludingSessionId] when checking a new session (no id to exclude yet).
+     */
+    @Query(
+        "SELECT COUNT(*) FROM sessions " +
+        "WHERE patient_id = :patientId AND label = :label AND session_id != :excludingSessionId"
+    )
+    suspend fun countLabelCollisions(
+        patientId: String,
+        label: String,
+        excludingSessionId: String,
+    ): Int
+
     /** Updates the Room-only cloud sync status for a session. Per ADR-007. */
     @Query("UPDATE sessions SET supabase_status = :status WHERE session_id = :sessionId")
     suspend fun updateSupabaseStatus(sessionId: String, status: String)

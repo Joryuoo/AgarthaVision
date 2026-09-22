@@ -9,6 +9,8 @@ import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
@@ -16,6 +18,7 @@ import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -29,6 +32,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -56,6 +60,11 @@ class SessionPickerViewModelTest {
             .thenReturn(countsFlow)
         // Keep the old stub so any residual call doesn't NPE (defensive).
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
+        // Unstubbed, this suspend fun returns null through Mockito's default answer, which
+        // NPEs when unboxed to Boolean and silently kills onCreateSession's coroutine.
+        it.stub {
+            onBlocking { isSessionLabelTaken(any(), any(), anyOrNull()) } doReturn false
+        }
     }
     private val sessionManager: SessionManager = mock {
         on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
@@ -71,6 +80,10 @@ class SessionPickerViewModelTest {
                 MutableStateFlow(LocalIdentity(userId = "user-1", email = "user@example.com")),
             )
         }
+    private val patientRepository: PatientRepository = mock {
+        on { observePatientById(any()) } doReturn flowOf(null)
+    }
+    private val psgcRepository: PsgcRepository = mock()
 
     /**
      * The screen is reached at `patients/{patientId}`, so the patient a new session belongs
@@ -82,6 +95,8 @@ class SessionPickerViewModelTest {
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
         generateSessionLabelUseCase = generateSessionLabelUseCase,
+        patientRepository = patientRepository,
+        psgcRepository = psgcRepository,
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),
@@ -130,7 +145,7 @@ class SessionPickerViewModelTest {
 
             // sessions.patient_id is NOT NULL with a foreign key onto patients, so getting
             // this wrong is an insert failure rather than a mis-filed smear.
-            verify(sessionManager).startSession(label = eq("Smear 1"), patientId = eq(PATIENT_ID))
+            verify(sessionManager).startSession(label = eq("SMEAR 1"), patientId = eq(PATIENT_ID))
         }
 
     @Test

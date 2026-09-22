@@ -34,7 +34,10 @@ import androidx.room.PrimaryKey
             childColumns = ["patient_id"],
         ),
     ],
-    indices = [Index("patient_id")],
+    indices = [
+        Index("patient_id"),
+        Index(value = ["patient_id", "label"], unique = true),
+    ],
 )
 data class SessionEntity(
     @PrimaryKey
@@ -58,8 +61,16 @@ data class SessionEntity(
     val startedAt: Long,
 
     /**
-     * The smear label, auto-generated as `C.G.-0730600000-001` and editable thereafter.
-     * Cosmetic and deliberately not unique — the session id is the real key.
+     * The smear label, auto-generated as `GarciaM-S01` and editable thereafter.
+     *
+     * Labels are unique **per patient** (not globally): the unique index on
+     * `(patient_id, label)` enforces this at the SQLite level, and
+     * [com.agarthavision.domain.repository.SessionRepository.isSessionLabelTaken] guards
+     * it at the application level before a write. SQLite treats NULL as distinct in a
+     * unique index, so unlabelled rows never collide with each other or with a labelled row.
+     *
+     * The session id remains the real key; the label exists to orient a medtech looking at
+     * a list, not to identify a row globally.
      */
     @ColumnInfo(name = "label")
     val label: String? = null,

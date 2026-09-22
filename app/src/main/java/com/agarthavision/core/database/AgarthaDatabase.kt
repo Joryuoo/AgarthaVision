@@ -63,6 +63,11 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * new number rather than a reshaped 14 for the reason immediately below: 14 is already
  * committed and installed, and changing its shape in place is the collision, not the bump.
  *
+ * Version 17 adds a unique composite index on `sessions(patient_id, label)` enforcing
+ * per-patient label uniqueness (86d4bzjhw). Labels are still per-patient scoped, not
+ * globally unique, and remain user-editable subject to the uniqueness guard. SQLite treats
+ * NULL as distinct in a unique index so unlabelled rows never collide.
+ *
  * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
  * already committed and on devices. Adding a table without changing the number is precisely
  * the equal-version-different-hash case described below: destructive fallback does not
@@ -102,7 +107,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 16,
+    version = 17,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
