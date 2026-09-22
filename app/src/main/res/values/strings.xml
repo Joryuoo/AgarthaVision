@@ -343,6 +343,7 @@
     <string name="patients_filter_sex">Sex</string>
     <string name="patients_filter_sex_all">All</string>
     <string name="patients_filter_age">Age range</string>
+    <string name="patients_filter_age_chip">Age</string>
     <string name="patients_filter_age_min_placeholder">Min</string>
     <string name="patients_filter_age_max_placeholder">Max</string>
     <string name="patients_empty_filtered_title">No matching patients</string>
