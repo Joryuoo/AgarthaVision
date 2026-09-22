@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
@@ -58,7 +64,7 @@ import java.time.Instant
  * and this has to clear a ~48dp button plus its own 16dp inset. It is a layout clearance for
  * one specific control, not a spacing step.
  */
-private val FloatingActionClearance = 64.dp
+private val FloatingActionClearance = 80.dp
 
 /**
  * The patient list: everyone the signed-in medtech is linked to.
@@ -192,7 +198,9 @@ fun PatientsScreen(
                 onClick = viewModel::onCreatePatient,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = Spacing.lg),
+                    .widthIn(max = 480.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.lg),
             )
         }
     }
@@ -230,14 +238,25 @@ private fun NewPatientButton(
     val colors = AgarthaTheme.colors
     Button(
         onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.height(49.dp),
+        shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.accent,
             contentColor = colors.onAccent,
         ),
     ) {
-        Text(text = stringResource(R.string.patients_new), fontWeight = FontWeight.SemiBold)
+        Icon(
+            imageVector = Icons.Outlined.Add,
+            contentDescription = null,
+            tint = colors.onAccent,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.patients_new),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 

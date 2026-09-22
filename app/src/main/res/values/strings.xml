@@ -349,7 +349,7 @@
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name.</string>
-    <string name="patients_new">New patient</string>
+    <string name="patients_new">New Patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
     <!-- Row meta: sex · age · barangay. -->
