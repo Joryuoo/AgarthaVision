@@ -161,6 +161,133 @@ class PatientRepositoryImplTest {
         assertEquals(0, repository.observePatientCount(USER_B, "").first())
     }
 
+    @Test
+    fun `observePatients filters by sex`() = runTest {
+        repository.insert(patient(id = "p-1").copy(sex = Sex.MALE))
+        repository.insert(patient(id = "p-2").copy(sex = Sex.FEMALE))
+
+        val males = repository.observePatients(USER_A, "", 50, sex = Sex.MALE).first()
+        val females = repository.observePatients(USER_A, "", 50, sex = Sex.FEMALE).first()
+
+        assertEquals(listOf("p-1"), males.map { it.id })
+        assertEquals(listOf("p-2"), females.map { it.id })
+    }
+
+    @Test
+    fun `observePatients filters by barangayCode`() = runTest {
+        repository.insert(patient(id = "p-1").copy(psgcBarangayCode = "0102801001"))
+        repository.insert(patient(id = "p-2").copy(psgcBarangayCode = "0723017001"))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            barangayCode = "0723017001",
+        ).first()
+
+        assertEquals(listOf("p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients filters by birthdate range`() = runTest {
+        // p-1: 1990-01-01 (epoch millis 631152000000)
+        // p-2: 2000-01-01 (epoch millis 946684800000)
+        // p-3: 2010-01-01 (epoch millis 1262304000000)
+        repository.insert(patient(id = "p-1").copy(birthdate = LocalDate.of(1990, 1, 1)))
+        repository.insert(patient(id = "p-2").copy(birthdate = LocalDate.of(2000, 1, 1)))
+        repository.insert(patient(id = "p-3").copy(birthdate = LocalDate.of(2010, 1, 1)))
+
+        val minMillis = LocalDate.of(1995, 1, 1)
+            .atStartOfDay(com.agarthavision.domain.model.CLINICAL_ZONE).toInstant().toEpochMilli()
+        val maxMillis = LocalDate.of(2005, 1, 1)
+            .atStartOfDay(com.agarthavision.domain.model.CLINICAL_ZONE).toInstant().toEpochMilli()
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 50,
+            minBirthdate = minMillis,
+            maxBirthdate = maxMillis,
+        ).first()
+
+        assertEquals(listOf("p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients combines query, sex, barangay, and birthdate`() = runTest {
+        repository.insert(
+            patient(id = "p-1", lastname = "Cruz").copy(
+                sex = Sex.MALE,
+                psgcBarangayCode = "0723017001",
+                birthdate = LocalDate.of(2000, 1, 1),
+            ),
+        )
+        repository.insert(
+            patient(id = "p-2", lastname = "Cruz").copy(
+                sex = Sex.FEMALE,
+                psgcBarangayCode = "0723017001",
+                birthdate = LocalDate.of(2000, 1, 1),
+            ),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "Cruz",
+            limit = 50,
+            sex = Sex.MALE,
+            barangayCode = "0723017001",
+        ).first()
+
+        assertEquals(listOf("p-1"), results.map { it.id })
+
+        val count = repository.observePatientCount(
+            userId = USER_A,
+            query = "Cruz",
+            sex = Sex.MALE,
+            barangayCode = "0723017001",
+        ).first()
+        assertEquals(1, count)
+    }
+
+    // ── sorting ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `observePatients orders by recent activity by default`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by lastname when LAST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Abad").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.LAST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by firstname when FIRST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", firstname = "Zoren").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", firstname = "Ana").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.FIRST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
     // ── single reads and update ───────────────────────────────────────────────
 
     @Test

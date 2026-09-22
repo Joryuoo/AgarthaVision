@@ -344,12 +344,12 @@
     <string name="patients_title">Patients</string>
     <string name="patients_subtitle_purpose">The people whose smears you have read</string>
     <string name="patients_status_counts">%1$d patients</string>
-    <string name="patients_search_placeholder">Search name or barangay…</string>
+    <string name="patients_search_placeholder">Search by name…</string>
     <string name="patients_empty_title">No patients yet</string>
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
     <string name="patients_empty_search_title">No matches</string>
-    <string name="patients_empty_search_body">No patient matches that name or barangay.</string>
-    <string name="patients_new">New patient</string>
+    <string name="patients_empty_search_body">No patient matches that name.</string>
+    <string name="patients_new">New Patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
     <!-- Row meta: sex · age · barangay. -->
@@ -359,6 +359,23 @@
     <string name="patients_sex_female">Female</string>
     <!-- Shown when a stored sex is neither M nor F, which only a hand-edited row produces. -->
     <string name="patients_sex_unknown">Sex not recorded</string>
+    <string name="patients_sort_label">Sort by</string>
+    <string name="patients_sort_recent">Recent activity</string>
+    <string name="patients_sort_lastname">Last name</string>
+    <string name="patients_sort_firstname">First name</string>
+    <string name="patients_filters_title">Filters</string>
+    <string name="patients_filters_clear">Clear filters</string>
+    <string name="patients_filters_clear_short">Clear</string>
+    <string name="patients_filters_apply">Apply filters</string>
+    <string name="patients_filters_button_count">Filters · %1$d</string>
+    <string name="patients_filter_sex">Sex</string>
+    <string name="patients_filter_sex_all">All</string>
+    <string name="patients_filter_age">Age range</string>
+    <string name="patients_filter_age_chip">Age</string>
+    <string name="patients_filter_age_min_placeholder">Min</string>
+    <string name="patients_filter_age_max_placeholder">Max</string>
+    <string name="patients_empty_filtered_title">No matching patients</string>
+    <string name="patients_empty_filtered_body">Try adjusting your filters or search query.</string>
 
     <string name="sessions_title">Sessions</string>
     <string name="sessions_status_counts">%1$d sessions · %2$d active</string>

@@ -1,14 +1,18 @@
 package com.agarthavision.data.local.psgc
 
 import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.room.withTransaction
 import kotlinx.coroutines.CancellationException
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.PsgcBarangayDao
+import com.agarthavision.data.local.entity.PsgcBarangayEntity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.io.File
@@ -23,16 +27,21 @@ import javax.inject.Inject
  *
  * Re-entrant, and deliberately gated on **two** conditions:
  *
- * - The table being empty. `fallbackToDestructiveMigration(dropAllTables = true)` is in force
+ * - The table being empty. `fallbackToDestructiveMigration(dropAllTables = false)` is in force
  *   (`core/di/DatabaseModule.kt`), so any Room version bump wipes this table; the recorded
  *   vintage alone would wrongly report it as already seeded.
  * - The recorded vintage differing from [PsgcDataset.VINTAGE]. This is what makes changing
  *   the pinned PSGC release a dataset swap plus a constant, with no migration.
  *
- * **The asset is a SQLite file, not a CSV, and this class no longer parses anything.** It
- * used to gunzip a CSV, build 42,010 entities in Kotlin and insert them in chunks, which cost
- * roughly a minute on a Redmi Note 11 and made the app feel unresponsive for the whole of a
- * first launch. The rows now move in one `INSERT ... SELECT` over an attached database.
+ * **The asset is a SQLite file, not a CSV.** It used to gunzip a CSV and build 42,010
+ * entities in Kotlin, which cost roughly a minute on a Redmi Note 11 and made the app feel
+ * unresponsive for the whole of a first launch. The rows now come straight off a cursor
+ * against the bundled `.db` file, in chunks, through the DAO — not `ATTACH DATABASE`, which
+ * an earlier version of this class used: attaching a second file to Room's WAL-mode pooled
+ * connection makes Android's framework try to disable WAL, which throws
+ * `IllegalStateException` the moment any other connection in the pool is mid-transaction,
+ * which at app startup it usually is. Opening the asset as its own standalone, read-only
+ * `SQLiteDatabase` outside Room's pool avoids that entirely.
  *
  * The asset carries no `room_master_table` and is never opened as a Room database, which is
  * what keeps it independent of Room's `identityHash`: bumping the schema version does not
@@ -77,33 +86,71 @@ class PsgcSeeder @Inject constructor(
     /**
      * Replaces the table from the bundled database, and returns the row count that landed.
      *
-     * `ATTACH` is issued outside any transaction because SQLite rejects it inside one, which
-     * is why this does not use `database.withTransaction` the way the rest of the data layer
-     * does. The replacement itself still gets a transaction — an interrupted copy must not
-     * leave the picker holding half a country — it is just opened around the two statements
-     * rather than around the attach.
+     * The copy is atomic: `database.withTransaction` wraps the DELETE + all INSERT batches
+     * so an interrupted copy cannot leave the picker holding half a country.
+     *
+     * **Why no ATTACH DATABASE here:** the previous implementation issued
+     * `ATTACH DATABASE … AS psgc_src` on Room's `openHelper.writableDatabase` to move the
+     * rows via a single `INSERT … SELECT`. Android's SQLite framework automatically calls
+     * `disableWriteAheadLogging()` when ATTACH is issued against a WAL-mode connection, and
+     * that reconfiguration requires every other connection in the pool to be idle first.
+     * Because multiple coroutines touch the database concurrently at startup, a connection
+     * is almost always busy, causing an `IllegalStateException` on every first launch. The
+     * fix opens the staged asset file as a plain, read-only `android.database.sqlite.SQLiteDatabase`
+     * outside Room's pool — no ATTACH, no WAL reconfiguration, no race.
      */
     private suspend fun replaceAll(): Int {
         val staged = stageAsset()
         try {
-            val db = database.openHelper.writableDatabase
-            db.execSQL("ATTACH DATABASE ? AS $SOURCE_SCHEMA", arrayOf(staged.absolutePath))
-            try {
-                db.beginTransaction()
-                try {
-                    db.execSQL("DELETE FROM $TABLE")
-                    db.execSQL(COPY_SQL)
-                    db.setTransactionSuccessful()
-                } finally {
-                    db.endTransaction()
-                }
-            } finally {
-                db.execSQL("DETACH DATABASE $SOURCE_SCHEMA")
+            val rows = readStagedRows(staged)
+            database.withTransaction {
+                barangayDao.deleteAll()
+                rows.chunked(COPY_CHUNK_SIZE).forEach { chunk -> barangayDao.insertAll(chunk) }
             }
         } finally {
             staged.delete()
         }
         return barangayDao.count()
+    }
+
+    /** Reads every row of the staged asset's `psgc_barangays` table into entities. */
+    private fun readStagedRows(staged: File): List<PsgcBarangayEntity> =
+        SQLiteDatabase.openDatabase(staged.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { src ->
+            src.rawQuery(
+                "SELECT code, name, city_muni_code, city_muni_name," +
+                    " province_code, province_name, region_code, region_name, search_text" +
+                    " FROM $TABLE",
+                null,
+            ).use { cursor -> cursor.toBarangayEntities() }
+        }
+
+    private fun Cursor.toBarangayEntities(): List<PsgcBarangayEntity> {
+        val codeIndex = getColumnIndexOrThrow("code")
+        val nameIndex = getColumnIndexOrThrow("name")
+        val cityMuniCodeIndex = getColumnIndexOrThrow("city_muni_code")
+        val cityMuniNameIndex = getColumnIndexOrThrow("city_muni_name")
+        val provinceCodeIndex = getColumnIndexOrThrow("province_code")
+        val provinceNameIndex = getColumnIndexOrThrow("province_name")
+        val regionCodeIndex = getColumnIndexOrThrow("region_code")
+        val regionNameIndex = getColumnIndexOrThrow("region_name")
+        val searchTextIndex = getColumnIndexOrThrow("search_text")
+        return buildList {
+            while (moveToNext()) {
+                add(
+                    PsgcBarangayEntity(
+                        code = getString(codeIndex),
+                        name = getString(nameIndex),
+                        cityMuniCode = getString(cityMuniCodeIndex),
+                        cityMuniName = getString(cityMuniNameIndex),
+                        provinceCode = getString(provinceCodeIndex),
+                        provinceName = getString(provinceNameIndex),
+                        regionCode = getString(regionCodeIndex),
+                        regionName = getString(regionNameIndex),
+                        searchText = getString(searchTextIndex),
+                    ),
+                )
+            }
+        }
     }
 
     /**
@@ -127,22 +174,7 @@ class PsgcSeeder @Inject constructor(
 
         private const val TABLE = "psgc_barangays"
 
-        /** Attach alias for the bundled file. Scoped to one call, so it only has to be unused. */
-        private const val SOURCE_SCHEMA = "psgc_src"
-
-        /**
-         * Columns are named rather than `SELECT *` so a column added to either side fails
-         * loudly instead of shifting every value one place to the left.
-         */
-        private val COPY_SQL = """
-            INSERT INTO $TABLE (
-                code, name, city_muni_code, city_muni_name,
-                province_code, province_name, region_code, region_name, search_text
-            )
-            SELECT
-                code, name, city_muni_code, city_muni_name,
-                province_code, province_name, region_code, region_name, search_text
-            FROM $SOURCE_SCHEMA.$TABLE
-        """.trimIndent()
+        /** Rows inserted per Room transaction batch. Keeps heap pressure low on first seed. */
+        private const val COPY_CHUNK_SIZE = 1_000
     }
 }

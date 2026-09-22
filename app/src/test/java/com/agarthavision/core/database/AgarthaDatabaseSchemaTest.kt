@@ -263,6 +263,28 @@ class AgarthaDatabaseSchemaTest {
             }
 
     @Test
+    fun `patients carries an index on updated_at for recent activity sort`() {
+        val indices = database.openHelper.writableDatabase
+            .query("PRAGMA index_list('patients')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+            }
+        val indexedColumns = indices.flatMap { indexName ->
+            database.openHelper.writableDatabase
+                .query("PRAGMA index_info('$indexName')")
+                .use { cursor ->
+                    val colIndex = cursor.getColumnIndexOrThrow("name")
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(colIndex)) }
+                }
+        }
+        assertTrue(
+            "patients.updated_at is not indexed at v$EXPECTED_VERSION — recent-activity sort would scan.",
+            indexedColumns.contains("updated_at"),
+        )
+    }
+
+    @Test
     fun `sessions carry a unique per-patient label index`() {
         // v17 (86d4bzjhw): per-patient label uniqueness is enforced at the SQLite level.
         // Without this index two concurrent offline creates with the same label collide
@@ -305,6 +327,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 17
+        private const val EXPECTED_VERSION = 19
     }
 }

@@ -33,6 +33,7 @@ import androidx.room.PrimaryKey
     indices = [
         Index("psgc_barangay_code"),
         Index("lastname", "firstname"),
+        Index("updated_at"),
     ],
 )
 data class PatientEntity(

@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.usecase.patients.PatientSort
 import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
@@ -170,9 +171,34 @@ private class FakePatientRepository(private val patient: Patient?) : PatientRepo
     override suspend fun getPatientById(patientId: String): Patient? = patient
     override suspend fun insert(patient: Patient) = Unit
     override suspend fun update(patient: Patient) = Unit
-    override fun observePatients(userId: String, query: String, limit: Int): Flow<List<Patient>> = flowOf(emptyList())
-    override fun observePatientCount(userId: String, query: String): Flow<Int> = flowOf(0)
+    override fun observePatients(
+        userId: String,
+        query: String,
+        limit: Int,
+        sort: PatientSort,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
+    ): Flow<List<Patient>> = flowOf(emptyList())
+    override fun observePatientCount(
+        userId: String,
+        query: String,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
+    ): Flow<Int> = flowOf(0)
     override fun observePatientById(patientId: String): Flow<Patient?> = flowOf(patient)
+    override suspend fun findDuplicates(
+        userId: String,
+        lastname: String,
+        firstname: String,
+        middleName: String?,
+        birthdate: LocalDate,
+        sex: Sex,
+        excludingId: String,
+    ): List<Patient> = emptyList()
 }
 
 /** A fake that maps taken labels to return true from isSessionLabelTaken. */

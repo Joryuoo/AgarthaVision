@@ -68,6 +68,20 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * globally unique, and remain user-editable subject to the uniqueness guard. SQLite treats
  * NULL as distinct in a unique index so unlabelled rows never collide.
  *
+ * Version 18 was meant to add an index on `patients.updated_at` to support sorting by
+ * recent activity (86d4bze80), landing as a plain version bump after two branches
+ * independently minted version 17 for different shapes (this one, and the session-label
+ * branch, 86d4bzjhw). It was poisoned the same way: a dev device had already installed a
+ * build declaring version 18 for the patients-only shape (hash b9e65459a2a73a08bb31d7ccb34af5a2)
+ * before the two branches' schemas were reconciled into one combined 18 (hash
+ * cb092c054b468b6f6b59a2a24e4ff0c3) — an equal-version-different-hash collision, not a
+ * version change, so destructive fallback does not fire and Room throws on open. Version 18
+ * is therefore left free too, and the combined shape (both the `patients.updated_at` index
+ * and the `sessions(patient_id, label)` unique index) moves to version 19. **Never re-export
+ * an already-committed version's schema under the same number, even to merge two branches'
+ * changes together — reconciling divergent schemas always earns a new version, the same way
+ * version 15 carried a merged change in rather than reshaping 14.**
+ *
  * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
  * already committed and on devices. Adding a table without changing the number is precisely
  * the equal-version-different-hash case described below: destructive fallback does not
@@ -107,7 +121,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 17,
+    version = 19,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

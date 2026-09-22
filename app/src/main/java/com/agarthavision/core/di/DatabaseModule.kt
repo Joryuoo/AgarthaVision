@@ -1,7 +1,10 @@
 package com.agarthavision.core.di
 
 import android.content.Context
+import androidx.room.ExperimentalRoomApi
 import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -45,6 +48,7 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+    @OptIn(ExperimentalRoomApi::class)
     @Provides
     @Singleton
     fun provideDatabase(
@@ -55,6 +59,18 @@ object DatabaseModule {
             AgarthaDatabase::class.java,
             "agarthavision.db",
         )
+            .addCallback(
+                object : RoomDatabase.Callback() {
+                    override fun onOpen(db: SupportSQLiteDatabase) {
+                        super.onOpen(db)
+                        db.execSQL(
+                            "CREATE TABLE IF NOT EXISTS room_table_modification_log " +
+                                "(table_id INTEGER PRIMARY KEY, invalidated INTEGER NOT NULL DEFAULT 0)",
+                        )
+                    }
+                },
+            )
+            .setInMemoryTrackingMode(false)
             // Phase 1 has no production data — destructive migrations are acceptable.
             //
             // dropAllTables = false, deliberately. On Room 2.7.0 `true` drops every table in

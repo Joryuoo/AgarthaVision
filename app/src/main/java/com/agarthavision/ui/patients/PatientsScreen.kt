@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
@@ -58,17 +64,17 @@ import java.time.Instant
  * and this has to clear a ~48dp button plus its own 16dp inset. It is a layout clearance for
  * one specific control, not a spacing step.
  */
-private val FloatingActionClearance = 64.dp
+private val FloatingActionClearance = 80.dp
 
 /**
  * The patient list: everyone the signed-in medtech is linked to.
  *
- * Every read behind this screen is local, so it renders and searches with the radio off —
- * including the barangay filter, which joins the PSGC table bundled in the APK.
+ * Every read behind this screen is local, so it renders and searches with the radio off.
  *
  * **There is no delete affordance, and none should be added.** Removing a patient is an
  * admin-side action.
  */
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun PatientsScreen(
     onPatientSelected: (String) -> Unit,
@@ -78,6 +84,7 @@ fun PatientsScreen(
     val colors = AgarthaTheme.colors
 
     var showPatientSheet by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var activePatientId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(viewModel) {
@@ -120,6 +127,17 @@ fun PatientsScreen(
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
             )
 
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+            ) {
+                PatientsFilterButton(
+                    activeCount = state.activeFilterCount,
+                    onClick = { showFilterSheet = true },
+                )
+            }
+
             val listState = rememberLazyListState()
             val shouldLoadMore by remember {
                 derivedStateOf {
@@ -132,12 +150,8 @@ fun PatientsScreen(
             }
 
             if (!state.isLoading && state.patients.isEmpty()) {
-                // A blank query with no rows is a new account; a non-blank one that matches
-                // nothing is a failed search. Telling the medtech to add a patient in the
-                // second case would be wrong — theirs may already exist under another
-                // spelling.
-                val searching = state.searchQuery.isNotBlank()
-                val emptyAction: (@Composable () -> Unit)? = if (searching) {
+                val narrowed = state.isNarrowed
+                val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
                     null
                 } else {
                     { NewPatientButton(onClick = viewModel::onCreatePatient) }
@@ -145,11 +159,11 @@ fun PatientsScreen(
                 EmptyState(
                     icon = Icons.Outlined.Inbox,
                     title = stringResource(
-                        if (searching) R.string.patients_empty_search_title
+                        if (narrowed) R.string.patients_empty_filtered_title
                         else R.string.patients_empty_title,
                     ),
                     body = stringResource(
-                        if (searching) R.string.patients_empty_search_body
+                        if (narrowed) R.string.patients_empty_filtered_body
                         else R.string.patients_empty_body,
                     ),
                     modifier = Modifier.padding(top = Spacing.xxl),
@@ -184,9 +198,20 @@ fun PatientsScreen(
                 onClick = viewModel::onCreatePatient,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = Spacing.lg),
+                    .widthIn(max = 480.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg, vertical = Spacing.lg),
             )
         }
+    }
+
+    if (showFilterSheet) {
+        PatientsFilterSheet(
+            state = state,
+            onDismiss = { showFilterSheet = false },
+            onApply = viewModel::onApplyFilters,
+            onBarangayQueryChange = viewModel::onBarangayQueryChanged,
+        )
     }
 
     if (showPatientSheet) {
@@ -213,14 +238,25 @@ private fun NewPatientButton(
     val colors = AgarthaTheme.colors
     Button(
         onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        modifier = modifier.height(49.dp),
+        shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.accent,
             contentColor = colors.onAccent,
         ),
     ) {
-        Text(text = stringResource(R.string.patients_new), fontWeight = FontWeight.SemiBold)
+        Icon(
+            imageVector = Icons.Outlined.Add,
+            contentDescription = null,
+            tint = colors.onAccent,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.patients_new),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
@@ -298,3 +334,4 @@ private fun PatientRow(
         }
     }
 }
+

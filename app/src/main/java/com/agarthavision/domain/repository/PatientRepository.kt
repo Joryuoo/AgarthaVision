@@ -2,6 +2,7 @@ package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.usecase.patients.PatientSort
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 
@@ -22,11 +23,10 @@ import kotlinx.coroutines.flow.Flow
  */
 interface PatientRepository {
     /**
-     * One page of the signed-in medtech's patients, ordered by name.
+     * One page of the signed-in medtech's patients, ordered by recent activity or name.
      *
-     * [query] matches lastname, firstname or barangay name; a blank query matches
-     * everything. The barangay half joins the bundled PSGC reference table, so this search
-     * works with the radio off.
+     * [query] matches lastname or firstname; a blank query matches everything.
+     * Barangay filtering is handled via [barangayCode], not free-text search.
      *
      * **A growing [limit], not an offset.** The list is infinite-scroll, so each page
      * includes the rows above it — the same shape `RecordsViewModel` and `SessionsViewModel`
@@ -34,14 +34,28 @@ interface PatientRepository {
      * parameter here that every caller passed 0, which reads as a paging control that works
      * and is not one.
      */
+    @Suppress("LongParameterList")
     fun observePatients(
         userId: String,
         query: String,
         limit: Int,
+        sort: PatientSort = PatientSort.RECENT,
+        sex: Sex? = null,
+        barangayCode: String? = null,
+        minBirthdate: Long? = null,
+        maxBirthdate: Long? = null,
     ): Flow<List<Patient>>
 
     /** Total matching [observePatients] under the same filter, for the pager. */
-    fun observePatientCount(userId: String, query: String): Flow<Int>
+    @Suppress("LongParameterList")
+    fun observePatientCount(
+        userId: String,
+        query: String,
+        sex: Sex? = null,
+        barangayCode: String? = null,
+        minBirthdate: Long? = null,
+        maxBirthdate: Long? = null,
+    ): Flow<Int>
 
     /** Loads one patient by identifier, or null when it is not on this device. */
     suspend fun getPatientById(patientId: String): Patient?

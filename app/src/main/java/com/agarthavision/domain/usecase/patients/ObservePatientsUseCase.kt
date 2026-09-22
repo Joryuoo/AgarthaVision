@@ -1,21 +1,36 @@
 package com.agarthavision.domain.usecase.patients
 
 import com.agarthavision.core.util.escapeLike
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
+import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
 
-/** What the list asks for: a filter and a page size. */
+/** Sort order for the patient list. */
+enum class PatientSort {
+    RECENT,
+    LAST_NAME,
+    FIRST_NAME,
+}
+
+/** What the list asks for: search filter, sort, category filters, and a page size. */
 data class PatientsQuery(
     val query: String = "",
+    val sort: PatientSort = PatientSort.RECENT,
+    val sex: Sex? = null,
+    val barangayCode: String? = null,
+    val minAge: Int? = null,
+    val maxAge: Int? = null,
     val limit: Int = PAGE_SIZE,
 ) {
     companion object {
-        const val PAGE_SIZE = 20
+        const val PAGE_SIZE = 10
     }
 }
 
@@ -45,11 +60,9 @@ data class PatientsResult(
 /**
  * Observes the signed-in medtech's patients, with their barangay labels resolved.
  *
- * Filtering is not done here. `PatientDao.observePatients` already filters on lastname,
- * firstname and barangay name in SQL — including the join against the bundled
- * `psgc_barangays` table, which is what makes barangay search work with the radio off.
- * This use case supplies the query and turns each stored PSGC code into something the row
- * can display.
+ * Filtering is not done here. `PatientDao.observePatients` already filters on lastname
+ * and firstname in SQL. This use case supplies the query and turns each stored PSGC code
+ * into something the row can display.
  *
  * A null [userId] yields nothing rather than everything. Login is mandatory on first run
  * so it should not arise, but defaulting to "show all patients on the device" if it ever
@@ -59,8 +72,22 @@ class ObservePatientsUseCase @Inject constructor(
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
 ) {
-    operator fun invoke(userId: String?, query: PatientsQuery): Flow<PatientsResult> {
+    operator fun invoke(
+        userId: String?,
+        query: PatientsQuery,
+        asOf: Instant = Instant.now(),
+    ): Flow<PatientsResult> {
         if (userId == null) return flowOf(PatientsResult())
+
+        val today = asOf.atZone(CLINICAL_ZONE).toLocalDate()
+        val minBirthdate = query.maxAge?.let { maxAge ->
+            today.minusYears((maxAge + 1).toLong()).plusDays(1)
+                .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+        }
+        val maxBirthdate = query.minAge?.let { minAge ->
+            today.minusYears(minAge.toLong())
+                .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+        }
 
         // Escaped here, once, for both the page and the count — they run the same predicate
         // and must not disagree. Without it a surname containing `_` is a wildcard and a
@@ -70,8 +97,20 @@ class ObservePatientsUseCase @Inject constructor(
             userId = userId,
             query = needle,
             limit = query.limit,
+            sort = query.sort,
+            sex = query.sex,
+            barangayCode = query.barangayCode,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
         )
-        val total = patientRepository.observePatientCount(userId, needle)
+        val total = patientRepository.observePatientCount(
+            userId = userId,
+            query = needle,
+            sex = query.sex,
+            barangayCode = query.barangayCode,
+            minBirthdate = minBirthdate,
+            maxBirthdate = maxBirthdate,
+        )
 
         return combine(page, total) { patients, count ->
             PatientsResult(items = patients.mapToItems(), total = count)
