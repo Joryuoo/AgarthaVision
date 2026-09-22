@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
@@ -215,13 +216,20 @@ private fun SortDropdownChip(
         PatientSort.LAST_NAME -> stringResource(R.string.patients_sort_lastname)
         PatientSort.FIRST_NAME -> stringResource(R.string.patients_sort_firstname)
     }
-    val isSelected = sort != PatientSort.RECENT
+    val isSelected = expanded || sort != PatientSort.RECENT
+    val pillColors = FilterPillColors(
+        activeBg = colors.accentTint,
+        activeBorder = colors.accent,
+        activeText = colors.accent,
+        activeIcon = colors.accent,
+    )
 
     Box {
         PatientFilterChip(
             label = label,
             selected = isSelected,
             onClick = { expanded = !expanded },
+            activeColors = pillColors,
             trailingIcon = {
                 Icon(
                     imageVector = if (expanded) {
@@ -231,7 +239,7 @@ private fun SortDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) colors.background else colors.textSecondary,
+                    tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
                 )
             },
         )
@@ -277,13 +285,20 @@ private fun SexDropdownChip(
         Sex.MALE -> "$sexLabel: ${stringResource(R.string.patients_sex_male)}"
         Sex.FEMALE -> "$sexLabel: ${stringResource(R.string.patients_sex_female)}"
     }
-    val isSelected = selected != null
+    val isSelected = expanded || selected != null
+    val pillColors = FilterPillColors(
+        activeBg = colors.goldTint,
+        activeBorder = colors.gold,
+        activeText = colors.goldText,
+        activeIcon = colors.goldText,
+    )
 
     Box {
         PatientFilterChip(
             label = label,
             selected = isSelected,
             onClick = { expanded = !expanded },
+            activeColors = pillColors,
             trailingIcon = {
                 Icon(
                     imageVector = if (expanded) {
@@ -293,7 +308,7 @@ private fun SexDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) colors.background else colors.textSecondary,
+                    tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
                 )
             },
         )
@@ -340,11 +355,18 @@ private fun BarangayToggleChip(
         stringResource(R.string.patient_form_barangay)
     }
     val isSelected = expanded || hasSelection
+    val pillColors = FilterPillColors(
+        activeBg = colors.surfaceMuted,
+        activeBorder = colors.textPrimary,
+        activeText = colors.textPrimary,
+        activeIcon = colors.textPrimary,
+    )
 
     PatientFilterChip(
         label = label,
         selected = isSelected,
         onClick = onToggle,
+        activeColors = pillColors,
         trailingIcon = {
             Icon(
                 imageVector = if (expanded) {
@@ -354,7 +376,7 @@ private fun BarangayToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) colors.background else colors.textSecondary,
+                tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
             )
         },
     )
@@ -377,11 +399,18 @@ private fun AgeToggleChip(
         else -> ageChipPrefix
     }
     val isSelected = expanded || hasFilter
+    val pillColors = FilterPillColors(
+        activeBg = colors.surfaceMuted,
+        activeBorder = colors.borderStrong,
+        activeText = colors.textPrimary,
+        activeIcon = colors.textPrimary,
+    )
 
     PatientFilterChip(
         label = label,
         selected = isSelected,
         onClick = onToggle,
+        activeColors = pillColors,
         trailingIcon = {
             Icon(
                 imageVector = if (expanded) {
@@ -391,7 +420,7 @@ private fun AgeToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) colors.background else colors.textSecondary,
+                tint = if (isSelected) pillColors.activeIcon else colors.textSecondary,
             )
         },
     )
@@ -520,21 +549,46 @@ private fun AgeInputField(
     )
 }
 
+private data class FilterPillColors(
+    val activeBg: Color,
+    val activeBorder: Color,
+    val activeText: Color,
+    val activeIcon: Color = activeText,
+)
+
 @Composable
 private fun PatientFilterChip(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    activeColors: FilterPillColors? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
-    val bg = if (selected) colors.textPrimary else colors.surface
-    val border = if (selected) colors.textPrimary else colors.borderStrong
-    val text = if (selected) colors.background else colors.textSecondary
+    val bg = if (selected && activeColors != null) {
+        activeColors.activeBg
+    } else if (selected) {
+        colors.textPrimary
+    } else {
+        colors.surface
+    }
+    val border = if (selected && activeColors != null) {
+        activeColors.activeBorder
+    } else if (selected) {
+        colors.textPrimary
+    } else {
+        colors.borderStrong
+    }
+    val text = if (selected && activeColors != null) {
+        activeColors.activeText
+    } else if (selected) {
+        colors.background
+    } else {
+        colors.textSecondary
+    }
 
     Row(
-        modifier = modifier
+        modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
             .background(bg, RoundedCornerShape(999.dp))
             .border(1.dp, border, RoundedCornerShape(999.dp))
