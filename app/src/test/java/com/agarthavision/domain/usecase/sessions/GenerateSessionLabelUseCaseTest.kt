@@ -199,6 +199,7 @@ private class FakePatientRepository(private val patient: Patient?) : PatientRepo
         sex: Sex,
         excludingId: String,
     ): List<Patient> = emptyList()
+    override suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String> = emptyList()
 }
 
 /** A fake that maps taken labels to return true from isSessionLabelTaken. */

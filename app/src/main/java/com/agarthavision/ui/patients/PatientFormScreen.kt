@@ -206,6 +206,7 @@ fun PatientFormSheet(
                         placeholder = stringResource(R.string.patient_form_lastname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.LASTNAME_REQUIRED in state.errors,
+                        isRequired = false,
                         // Character counter removed: length is enforced via the VM's
                         // transformNameInput pipeline, and "x / 2147483647" is meaningless
                         // noise when no explicit maxLength is passed.
@@ -220,6 +221,7 @@ fun PatientFormSheet(
                         placeholder = stringResource(R.string.patient_form_firstname_placeholder),
                         isError = state.showErrors &&
                             PatientFormError.FIRSTNAME_REQUIRED in state.errors,
+                        isRequired = false,
                         showCounter = false,
                     ),
                 )

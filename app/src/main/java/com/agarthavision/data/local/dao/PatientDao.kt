@@ -264,4 +264,14 @@ interface PatientDao {
             ),
         )
     }
+
+    @Query(
+        """
+        SELECT p.lastname FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId
+          AND p.lastname LIKE :prefix || '-%'
+        """,
+    )
+    suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
 }

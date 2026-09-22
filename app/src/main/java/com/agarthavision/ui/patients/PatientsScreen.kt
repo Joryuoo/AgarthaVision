@@ -306,7 +306,7 @@ private fun PatientRow(
             verticalArrangement = Arrangement.spacedBy(Spacing.xs),
         ) {
             Text(
-                text = patient.displayName,
+                text = patient.maskedDisplayName,
                 color = colors.textPrimary,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -328,7 +328,7 @@ private fun PatientRow(
         IconButton(onClick = onEdit) {
             Icon(
                 imageVector = Icons.Outlined.Edit,
-                contentDescription = stringResource(R.string.patients_edit_desc, patient.displayName),
+                contentDescription = stringResource(R.string.patients_edit_desc, patient.maskedDisplayName),
                 tint = colors.textSecondary,
             )
         }

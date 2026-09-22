@@ -68,20 +68,20 @@ object SessionLabelGenerator {
      * the extra character.
      */
     fun generate(patient: Patient, sequence: Int): String {
+        val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
+        if (patient.isCodename) {
+            val sexAge = patient.lastname.substringBefore('-').uppercase()
+            return "-$sexAge-S$padded"
+        }
         val lastname = patient.lastname.trim().uppercase()
         val firstInitial = initial(patient.firstname)
-        val padded = sequence.coerceAtLeast(1).toString().padStart(SEQUENCE_DIGITS, '0')
 
         // Try the full-lastname form first
         val fullForm = "$lastname$firstInitial-S$padded".uppercase()
-        if (fullForm.length <= MAX_LABEL_LENGTH) {
-            return fullForm
-        }
-
-        // Fallback: use initials for both lastname and firstname
         val lastInitial = initial(patient.lastname)
         val fallbackForm = "$lastInitial$firstInitial-S$padded".uppercase()
-        return fallbackForm
+
+        return if (fullForm.length <= MAX_LABEL_LENGTH) fullForm else fallbackForm
     }
 
     /**

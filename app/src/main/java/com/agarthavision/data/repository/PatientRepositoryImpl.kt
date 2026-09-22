@@ -124,4 +124,7 @@ class PatientRepositoryImpl @Inject constructor(
         patientDao.updatePatient(patient.toEntity())
         syncScheduler.requestSync()
     }
+
+    override suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String> =
+        patientDao.getExistingCodenamesByPrefix(userId, prefix)
 }

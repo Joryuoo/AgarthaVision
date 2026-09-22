@@ -377,6 +377,17 @@ class PatientRepositoryImplTest {
         assertEquals(listOf("p-1"), dao.getPatientsPendingSync(USER_B).map { it.patientId })
     }
 
+    @Test
+    fun `getExistingCodenamesByPrefix returns matching lastname prefixes`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "M24-001"))
+        repository.insert(patient(id = "p-2", lastname = "M24-002"))
+        repository.insert(patient(id = "p-3", lastname = "F30-001"))
+        repository.insert(patient(id = "p-4", lastname = "M25-001"))
+
+        val results = repository.getExistingCodenamesByPrefix(USER_A, "M24")
+        assertEquals(listOf("M24-001", "M24-002"), results.sorted())
+    }
+
     private companion object {
         const val USER_A = "user-a"
         const val USER_B = "user-b"

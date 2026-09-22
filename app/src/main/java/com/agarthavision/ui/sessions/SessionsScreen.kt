@@ -378,7 +378,7 @@ private fun PatientPreviewCard(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
-            text = patient.displayName,
+            text = patient.maskedDisplayName,
             style = MaterialTheme.typography.headlineSmall.copy(
                 fontSize = 24.sp,
                 lineHeight = 30.sp,

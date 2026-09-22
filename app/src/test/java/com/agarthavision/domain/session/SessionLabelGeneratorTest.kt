@@ -229,6 +229,21 @@ class SessionLabelGeneratorTest {
         assertEquals("AM-S01", label)
     }
 
+    @Test
+    fun `codenamed patient produces -SEXAGE-S01 label`() {
+        val label = SessionLabelGenerator.generate(
+            patient(lastname = "M24-001", firstname = ""),
+            sequence = 1,
+        )
+        assertEquals("-M24-S01", label)
+
+        val labelFemale = SessionLabelGenerator.generate(
+            patient(lastname = "F05-002", firstname = ""),
+            sequence = 3,
+        )
+        assertEquals("-F05-S03", labelFemale)
+    }
+
     private fun patient(
         lastname: String = "Garcia",
         firstname: String = "Maria",

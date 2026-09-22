@@ -93,7 +93,7 @@ class PatientFormViewModelTest {
     // ── validation ────────────────────────────────────────────────────────────
 
     @Test
-    fun `an empty form does not save and reports every missing field`() = runTest(
+    fun `an empty form does not save and reports missing clinical fields`() = runTest(
         mainDispatcherRule.testDispatcher.scheduler,
     ) {
         val vm = viewModel()
@@ -102,12 +102,53 @@ class PatientFormViewModelTest {
         advanceUntilIdle()
 
         val errors = vm.state.value.errors
-        assertTrue(PatientFormError.LASTNAME_REQUIRED in errors)
-        assertTrue(PatientFormError.FIRSTNAME_REQUIRED in errors)
+        // Both names blank falls back to codename mode, so name errors are not added
+        assertTrue(PatientFormError.LASTNAME_REQUIRED !in errors)
+        assertTrue(PatientFormError.FIRSTNAME_REQUIRED !in errors)
         assertTrue(PatientFormError.SEX_REQUIRED in errors)
         assertTrue(PatientFormError.BIRTHDATE_REQUIRED in errors)
         assertTrue(PatientFormError.BARANGAY_REQUIRED in errors)
         verify(patientRepository, never()).insert(any())
+    }
+
+    @Test
+    fun `partial name requires the missing name field`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        vm.onLastnameChanged("Cruz")
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        val errors = vm.state.value.errors
+        assertTrue(PatientFormError.FIRSTNAME_REQUIRED in errors)
+        assertTrue(PatientFormError.LASTNAME_REQUIRED !in errors)
+    }
+
+    @Test
+    fun `saving with blank names generates codename`() = runTest(
+        mainDispatcherRule.testDispatcher.scheduler,
+    ) {
+        val vm = viewModel()
+        vm.onSexSelected(Sex.MALE)
+        val birthdate = LocalDate.now(CLINICAL_ZONE).minusYears(24)
+        vm.onBirthdateSelected(birthdate)
+        whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(lahug()))
+        whenever(patientRepository.getExistingCodenamesByPrefix(any(), any())).thenReturn(emptyList())
+        vm.onBarangayQueryChanged("Lahug")
+        advanceUntilIdle()
+        vm.onBarangaySelected(LAHUG)
+
+        vm.onSave()
+        advanceUntilIdle()
+
+        val captor = argumentCaptor<Patient>()
+        verify(patientRepository).insert(captor.capture())
+        val saved = captor.firstValue
+        assertTrue(saved.isCodename)
+        assertTrue(saved.lastname.startsWith("M24-"))
+        assertEquals("", saved.firstname)
     }
 
     @Test
