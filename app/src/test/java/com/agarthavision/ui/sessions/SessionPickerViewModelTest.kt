@@ -134,6 +134,22 @@ class SessionPickerViewModelTest {
     }
 
     @Test
+    fun `onOpenVerificationQueue resumes session and emits NavigateToVerificationQueue`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            whenever(sessionManager.resumeSession("session-1"))
+                .thenReturn(makeSessionEntity("session-1"))
+
+            vm.events.test {
+                vm.onOpenVerificationQueue("session-1")
+                advanceUntilIdle()
+                val event = awaitItem() as SessionsEvent.NavigateToVerificationQueue
+                assertEquals("session-1", event.sessionId)
+            }
+            verify(sessionManager).resumeSession("session-1")
+        }
+
+    @Test
     fun `onCreateSession attributes the session to the patient from the route`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()

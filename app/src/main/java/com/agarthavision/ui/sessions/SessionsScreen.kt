@@ -114,6 +114,9 @@ fun SessionsScreen(
                     showCreateDialog = false
                     onNavigateToCapture(event.sessionId)
                 }
+                is SessionsEvent.NavigateToVerificationQueue -> {
+                    onNavigate(Screen.VerificationQueue.route)
+                }
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND
@@ -219,6 +222,7 @@ fun SessionsScreen(
                                     // from Records, which is where reading a finished
                                     // session belongs.
                                     onClick = { viewModel.onResumeSession(sessionData.session.id) },
+                                    onVerifyClick = { viewModel.onOpenVerificationQueue(sessionData.session.id) },
                                 )
                             )
                         }
@@ -429,6 +433,7 @@ private fun PatientPreviewCard(
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
+    val onVerifyClick: () -> Unit = {},
 )
 
 internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
@@ -503,7 +508,15 @@ private fun SessionCard(
                 }
                 Row(
                     modifier = Modifier
-                        .background(badgeBg, CircleShape)
+                        .clip(CircleShape)
+                        .background(badgeBg)
+                        .then(
+                            if (hasPending) {
+                                Modifier.clickable { actions.onVerifyClick() }
+                            } else {
+                                Modifier
+                            }
+                        )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
