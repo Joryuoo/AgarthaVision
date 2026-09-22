@@ -69,10 +69,10 @@ interface ReportDao {
           AND (:species IS NULL OR r.positive_species_json LIKE '%' || :species || '%')
           AND (
             :query = ''
-            OR r.report_id LIKE '%' || :query || '%'
-            OR r.positive_species_json LIKE '%' || :query || '%'
-            OR r.session_id LIKE '%' || :query || '%'
-            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%')
+            OR r.report_id LIKE '%' || :query || '%' ESCAPE '\'
+            OR r.positive_species_json LIKE '%' || :query || '%' ESCAPE '\'
+            OR r.session_id LIKE '%' || :query || '%' ESCAPE '\'
+            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%' ESCAPE '\')
           )
         ORDER BY r.generated_at DESC
         LIMIT :limit OFFSET :offset
@@ -99,10 +99,10 @@ interface ReportDao {
           AND (:species IS NULL OR r.positive_species_json LIKE '%' || :species || '%')
           AND (
             :query = ''
-            OR r.report_id LIKE '%' || :query || '%'
-            OR r.positive_species_json LIKE '%' || :query || '%'
-            OR r.session_id LIKE '%' || :query || '%'
-            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%')
+            OR r.report_id LIKE '%' || :query || '%' ESCAPE '\'
+            OR r.positive_species_json LIKE '%' || :query || '%' ESCAPE '\'
+            OR r.session_id LIKE '%' || :query || '%' ESCAPE '\'
+            OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%' ESCAPE '\')
           )
         """,
     )
