@@ -225,7 +225,13 @@ fun SessionsScreen(
                                     // from Records, which is where reading a finished
                                     // session belongs.
                                     onClick = { viewModel.onResumeSession(sessionData.session.id) },
-                                    onVerifyClick = { viewModel.onOpenVerificationQueue(sessionData.session.id) },
+                                    onVerifyClick = {
+                                        viewModel.onOpenVerificationQueue(sessionData.session.id)
+                                    },
+                                    onViewReportClick = {
+                                        val route = Screen.SessionDetail.createRoute(sessionData.session.id)
+                                        onNavigate(route)
+                                    },
                                 )
                             )
                         }
@@ -463,6 +469,7 @@ private fun PatientPreviewCard(
 private data class SessionCardActions(
     val onClick: () -> Unit,
     val onVerifyClick: () -> Unit = {},
+    val onViewReportClick: () -> Unit = {},
 )
 
 internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
@@ -540,10 +547,10 @@ private fun SessionCard(
                         .clip(CircleShape)
                         .background(badgeBg)
                         .then(
-                            if (hasPending) {
-                                Modifier.clickable { actions.onVerifyClick() }
-                            } else {
-                                Modifier
+                            when (queueBadge) {
+                                SessionQueueBadge.PENDING -> Modifier.clickable { actions.onVerifyClick() }
+                                SessionQueueBadge.ALL_VERIFIED -> Modifier.clickable { actions.onViewReportClick() }
+                                SessionQueueBadge.NO_ITEMS -> Modifier
                             }
                         )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
@@ -576,7 +583,9 @@ private fun SessionCard(
                 val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
                 Box(
                     modifier = Modifier
+                        .clip(CircleShape)
                         .background(badgeBg, CircleShape)
+                        .clickable { actions.onViewReportClick() }
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
                     Text("$eggs eggs", color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)

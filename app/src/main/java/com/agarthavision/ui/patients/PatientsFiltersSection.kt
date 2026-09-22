@@ -178,6 +178,8 @@ internal fun PatientsFilterSheet(
                             draftBarangay = null
                             draftMinAge = null
                             draftMaxAge = null
+                            onApply(PatientSort.RECENT, null, null, null, null)
+                            onDismiss()
                         }
                         .padding(4.dp),
                 )
