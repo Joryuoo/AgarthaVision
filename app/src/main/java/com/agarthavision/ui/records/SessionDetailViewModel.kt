@@ -13,6 +13,7 @@ import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
+import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
@@ -141,6 +142,7 @@ class SessionDetailViewModel @Inject constructor(
         .distinctUntilChanged()
 
     private val selectedTab = MutableStateFlow(SessionDetailTab.REPORT)
+    private var cachedEggCounts: Pair<List<SampleRecordItem>, SessionEggCounts>? = null
 
     private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
@@ -153,12 +155,24 @@ class SessionDetailViewModel @Inject constructor(
             generationState,
             currentReportPage,
         ) { result, reports, totalReports, generation, page ->
-            val eggCounts = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
             val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
             val unavail = when (result) {
                 is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
                 is SessionSamplesResult.NotVisible -> SessionUnavailable.NOT_VISIBLE
                 else -> null
+            }
+            val eggCounts = if (resolvedSession != null) {
+                val samples = resolvedSession.samples
+                val cached = cachedEggCounts
+                if (cached != null && cached.first == samples) {
+                    cached.second
+                } else {
+                    val fresh = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
+                    cachedEggCounts = samples to fresh
+                    fresh
+                }
+            } else {
+                SessionEggCounts.empty()
             }
             SessionDetailState(
                 session = resolvedSession,
