@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -69,8 +70,10 @@ import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
 
 private const val REPORTS_SKELETON_COUNT = 6
-private const val STATS_REPORTS_WEIGHT = 0.32f
-private const val STATS_SPECIES_WEIGHT = 0.68f
+private const val STATS_REPORTS_WEIGHT = 0.25f
+private const val STATS_SPECIES_WEIGHT = 0.75f
+private val STATS_REPORT_NUMBER_FONT_SIZE = 24.sp
+private val STATS_SPECIES_NAME_FONT_SIZE = 18.sp
 
 @Composable
 fun RecordsScreen(
@@ -269,16 +272,18 @@ private fun StatsRow(
                 contentColor = colors.onAccent,
                 labelColor = colors.onAccent.copy(alpha = 0.8f),
             ),
+            valueFontSize = STATS_REPORT_NUMBER_FONT_SIZE,
         )
         StatTile(
             label = "Species filter",
             value = activeFilter,
             modifier = Modifier.weight(STATS_SPECIES_WEIGHT),
             colors = StatTileColors(
-                bgColor = colors.surfaceVariant,
-                contentColor = colors.textPrimary,
-                labelColor = colors.textSecondary,
+                bgColor = colors.gold,
+                contentColor = colors.onGold,
+                labelColor = colors.onGold.copy(alpha = 0.75f),
             ),
+            valueFontSize = STATS_SPECIES_NAME_FONT_SIZE,
             onClick = onSpeciesFilterClick,
             showDropdown = true,
         )
@@ -297,6 +302,7 @@ private fun StatTile(
     value: String,
     modifier: Modifier = Modifier,
     colors: StatTileColors,
+    valueFontSize: TextUnit = 20.sp,
     onClick: (() -> Unit)? = null,
     showDropdown: Boolean = false,
 ) {
@@ -319,7 +325,7 @@ private fun StatTile(
                     Modifier
                 },
             )
-            .padding(12.dp),
+            .padding(horizontal = 10.dp, vertical = 12.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -345,13 +351,13 @@ private fun StatTile(
         Spacer(Modifier.height(4.dp))
         Text(
             text = value,
-            fontSize = 16.sp,
+            fontSize = valueFontSize,
             fontWeight = FontWeight.Bold,
             color = colors.contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum, cv11, ss01, ss03"),
-            lineHeight = 22.sp,
+            lineHeight = 24.sp,
         )
     }
 }
@@ -392,11 +398,18 @@ private fun SpeciesFilterDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
+                            .then(
+                                if (isSelected) {
+                                    Modifier.background(AgarthaTheme.colors.accentTint)
+                                } else {
+                                    Modifier
+                                },
+                            )
                             .clickable {
                                 onSelectSpecies(species)
                                 onDismiss()
                             }
-                            .padding(vertical = 12.dp, horizontal = 8.dp),
+                            .padding(vertical = 12.dp, horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
