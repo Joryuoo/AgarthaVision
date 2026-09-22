@@ -50,6 +50,7 @@ import com.agarthavision.ui.components.SearchableDropdownConfig
 import com.agarthavision.ui.components.SearchableDropdownState
 import com.agarthavision.ui.components.toOption
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 
 internal data class PatientsFiltersActions(
@@ -218,12 +219,8 @@ private fun SortDropdownChip(
     }
     val isSelected = expanded || sort != PatientSort.RECENT
     val pillColors = FilterPillColors(
-        bg = colors.accentTint,
-        border = colors.accent,
-        text = colors.accent,
-        activeBg = colors.accent,
-        activeBorder = colors.accent,
-        activeText = colors.onAccent,
+        bg = colors.accent,
+        contentColor = colors.onAccent,
     )
 
     Box {
@@ -241,7 +238,7 @@ private fun SortDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) pillColors.activeText else pillColors.text,
+                    tint = pillColors.contentColor,
                 )
             },
         )
@@ -289,12 +286,8 @@ private fun SexDropdownChip(
     }
     val isSelected = expanded || selected != null
     val pillColors = FilterPillColors(
-        bg = colors.goldTint,
-        border = colors.gold,
-        text = colors.goldText,
-        activeBg = colors.gold,
-        activeBorder = colors.gold,
-        activeText = colors.onGold,
+        bg = colors.gold,
+        contentColor = colors.onGold,
     )
 
     Box {
@@ -312,7 +305,7 @@ private fun SexDropdownChip(
                     },
                     contentDescription = null,
                     modifier = Modifier.size(16.dp),
-                    tint = if (isSelected) pillColors.activeText else pillColors.text,
+                    tint = pillColors.contentColor,
                 )
             },
         )
@@ -360,12 +353,10 @@ private fun BarangayToggleChip(
     }
     val isSelected = expanded || hasSelection
     val pillColors = FilterPillColors(
-        bg = colors.surfaceMuted,
-        border = colors.textPrimary,
-        text = colors.textPrimary,
-        activeBg = colors.textPrimary,
-        activeBorder = colors.textPrimary,
-        activeText = colors.background,
+        bg = if (colors.isDark) AppColors.DarkSurfaceAlt else AppColors.Gray900,
+        contentColor = AppColors.White,
+        border = if (colors.isDark) colors.borderStrong else Color.Transparent,
+        activeBorder = AppColors.White,
     )
 
     PatientFilterChip(
@@ -382,7 +373,7 @@ private fun BarangayToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) pillColors.activeText else pillColors.text,
+                tint = pillColors.contentColor,
             )
         },
     )
@@ -406,12 +397,8 @@ private fun AgeToggleChip(
     }
     val isSelected = expanded || hasFilter
     val pillColors = FilterPillColors(
-        bg = colors.surfaceVariant,
-        border = colors.textSecondary,
-        text = colors.textSecondary,
-        activeBg = colors.textSecondary,
-        activeBorder = colors.textSecondary,
-        activeText = colors.background,
+        bg = AppColors.Gray700,
+        contentColor = AppColors.White,
     )
 
     PatientFilterChip(
@@ -428,7 +415,7 @@ private fun AgeToggleChip(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(16.dp),
-                tint = if (isSelected) pillColors.activeText else pillColors.text,
+                tint = pillColors.contentColor,
             )
         },
     )
@@ -559,11 +546,9 @@ private fun AgeInputField(
 
 private data class FilterPillColors(
     val bg: Color,
-    val border: Color,
-    val text: Color,
-    val activeBg: Color,
-    val activeBorder: Color,
-    val activeText: Color,
+    val contentColor: Color,
+    val border: Color = Color.Transparent,
+    val activeBorder: Color = contentColor,
 )
 
 @Composable
@@ -574,15 +559,17 @@ private fun PatientFilterChip(
     pillColors: FilterPillColors,
     trailingIcon: (@Composable () -> Unit)? = null,
 ) {
-    val bg = if (selected) pillColors.activeBg else pillColors.bg
-    val border = if (selected) pillColors.activeBorder else pillColors.border
-    val text = if (selected) pillColors.activeText else pillColors.text
+    val borderColor = if (selected) pillColors.activeBorder else pillColors.border
 
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
-            .background(bg, RoundedCornerShape(999.dp))
-            .border(1.dp, border, RoundedCornerShape(999.dp))
+            .background(pillColors.bg, RoundedCornerShape(999.dp))
+            .border(
+                width = if (selected) 2.dp else 1.dp,
+                color = borderColor,
+                shape = RoundedCornerShape(999.dp),
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -591,8 +578,8 @@ private fun PatientFilterChip(
         Text(
             text = label,
             fontSize = 12.sp,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            color = text,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = pillColors.contentColor,
         )
         trailingIcon?.invoke()
     }
