@@ -86,8 +86,16 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * carrying one of the other builds crashes at launch. That has already happened once on this
  * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
  * an ordering token under destructive fallback, so a skipped number costs nothing.
- * Version 17 adds an index on `patients.updated_at` to support sorting by recent activity
- * (86d4bze80), migrated via [MIGRATION_16_17].
+ * Version 17 was meant to add an index on `patients.updated_at` to support sorting by recent
+ * activity (86d4bze80), migrated via [MIGRATION_16_17]. It was poisoned the same way 10/11 and
+ * 13 were: a dev device carried a local build that also declared version 17 but with a different
+ * identity hash (cace33f87dcf89735c12df13025f3a08), so the two collided into an
+ * equal-version-different-hash mismatch. Destructive fallback does not fire in that case — Room
+ * throws `IllegalStateException: Room cannot verify the data integrity` on open and the app crashes
+ * at launch. Version 17 is therefore left free, exactly the way 11 was left free after the 10/12
+ * skip. The index shape moves to version 18 via [MIGRATION_17_18], which re-runs the same
+ * idempotent `CREATE INDEX IF NOT EXISTS` statement: a safe no-op on devices whose poisoned v17
+ * already had the index, and the fix-up for devices whose poisoned v17 did not.
  *
  * Local schema history is exported under `app/schemas/`.
  */
@@ -103,7 +111,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
@@ -119,6 +127,14 @@ abstract class AgarthaDatabase : RoomDatabase() {
 
     companion object {
         val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_patients_updated_at` ON `patients` (`updated_at`)"
+                )
+            }
+        }
+
+        val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE INDEX IF NOT EXISTS `index_patients_updated_at` ON `patients` (`updated_at`)"

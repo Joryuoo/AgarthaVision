@@ -338,8 +338,65 @@ class AgarthaDatabaseSchemaTest {
         }
     }
 
+    @Test
+    fun `migration 17 to 18 creates updated_at index on patients table`() {
+        // Version 17 is poisoned (equal-version-different-hash collision). MIGRATION_17_18
+        // re-runs the same idempotent CREATE INDEX statement: a no-op for devices whose v17
+        // already had the index, and a fix-up for devices whose poisoned v17 did not.
+        val context: Context = RuntimeEnvironment.getApplication()
+        val dbHelper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name("test_v17_to_18.db")
+                .callback(
+                    object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(17) {
+                        override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                            db.execSQL(
+                                "CREATE TABLE IF NOT EXISTS `patients` (" +
+                                    "`patient_id` TEXT NOT NULL, " +
+                                    "`lastname` TEXT NOT NULL, " +
+                                    "`firstname` TEXT NOT NULL, " +
+                                    "`middle_name` TEXT, " +
+                                    "`sex` TEXT NOT NULL, " +
+                                    "`birthdate` INTEGER NOT NULL, " +
+                                    "`psgc_barangay_code` TEXT NOT NULL, " +
+                                    "`created_by` TEXT NOT NULL, " +
+                                    "`created_at` INTEGER NOT NULL, " +
+                                    "`updated_at` INTEGER NOT NULL, " +
+                                    "`supabase_status` TEXT NOT NULL DEFAULT 'pending', " +
+                                    "PRIMARY KEY(`patient_id`))",
+                            )
+                        }
+
+                        override fun onUpgrade(
+                            db: androidx.sqlite.db.SupportSQLiteDatabase,
+                            oldVersion: Int,
+                            newVersion: Int,
+                        ) {
+                            // Test helper does not need to handle upgrade.
+                        }
+                    },
+                )
+                .build(),
+        )
+        val db = dbHelper.writableDatabase
+        try {
+            AgarthaDatabase.MIGRATION_17_18.migrate(db)
+            val indices = db.query("PRAGMA index_list('patients')").use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+            }
+            assertTrue(
+                "index_patients_updated_at was not created by MIGRATION_17_18",
+                indices.contains("index_patients_updated_at"),
+            )
+        } finally {
+            db.close()
+            context.deleteDatabase("test_v17_to_18.db")
+        }
+    }
+
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 17
+        private const val EXPECTED_VERSION = 18
     }
 }
