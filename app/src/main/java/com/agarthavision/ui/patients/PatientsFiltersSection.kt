@@ -29,6 +29,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -62,8 +63,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
 /**
- * Compact pill trigger on the main Patients screen: `[ Filters ]` when 0 filters active,
- * or highlighted `[ Filters · N ]` when filters are active.
+ * Icon-only filter trigger embedded in the search bar.
  */
 @Composable
 internal fun PatientsFilterButton(
@@ -73,36 +73,27 @@ internal fun PatientsFilterButton(
 ) {
     val colors = AgarthaTheme.colors
     val hasActive = activeCount > 0
-    val bg = if (hasActive) colors.accent else colors.surface
-    val border = if (hasActive) colors.accent else colors.borderStrong
-    val content = if (hasActive) colors.onAccent else colors.textPrimary
-
-    Row(
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(bg, RoundedCornerShape(999.dp))
-            .border(1.dp, border, RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    IconButton(
+        onClick = onClick,
+        modifier = modifier.size(36.dp),
     ) {
-        Icon(
-            imageVector = Icons.Outlined.Tune,
-            contentDescription = stringResource(R.string.patients_filters_title),
-            tint = content,
-            modifier = Modifier.size(16.dp),
-        )
-        Text(
-            text = if (hasActive) {
-                stringResource(R.string.patients_filters_button_count, activeCount)
-            } else {
-                stringResource(R.string.patients_filters_title)
-            },
-            fontSize = 13.sp,
-            fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Medium,
-            color = content,
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = Icons.Outlined.Tune,
+                contentDescription = stringResource(R.string.patients_filters_title),
+                tint = if (hasActive) colors.accent else colors.textTertiary,
+                modifier = Modifier.size(20.dp),
+            )
+            if (hasActive) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .align(Alignment.TopEnd)
+                        .clip(CircleShape)
+                        .background(colors.accent),
+                )
+            }
+        }
     }
 }
 

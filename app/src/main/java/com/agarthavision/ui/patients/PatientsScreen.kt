@@ -131,18 +131,13 @@ fun PatientsScreen(
                 onValueChange = viewModel::onSearchQueryChanged,
                 placeholder = stringResource(R.string.patients_search_placeholder),
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.xs),
+                trailingIcon = {
+                    PatientsFilterButton(
+                        activeCount = state.activeFilterCount,
+                        onClick = { showFilterSheet = true },
+                    )
+                },
             )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = Spacing.lg, vertical = Spacing.xs),
-            ) {
-                PatientsFilterButton(
-                    activeCount = state.activeFilterCount,
-                    onClick = { showFilterSheet = true },
-                )
-            }
 
             val listState = rememberLazyListState()
             val shouldLoadMore by remember {
