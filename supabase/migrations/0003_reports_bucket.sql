@@ -1,4 +1,4 @@
--- 0002_reports_bucket.sql
+-- 0003_reports_bucket.sql
 --
 -- Report files move off device-local MediaStore URIs and into object storage, so a report
 -- generated on one device opens on any device its owner signs in to. Before this there was no

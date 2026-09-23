@@ -1,6 +1,7 @@
 package com.agarthavision.data.supabase
 
 import com.agarthavision.data.local.dao.ReportDao
+import com.agarthavision.data.local.dao.ReportWithSessionLabel
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.repository.ReportFileStore
@@ -182,6 +183,32 @@ private class FakeDao(seeded: List<ReportEntity>) : ReportDao {
 
     override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> =
         flowOf(0)
+
+    override fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>> = flowOf(emptyList())
+
+    override fun observeAllReportsCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportWithSessionLabel>> = flowOf(emptyList())
+
+    override fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
 
     override suspend fun getReportsPendingSync(userId: String): List<ReportEntity> = emptyList()
 
