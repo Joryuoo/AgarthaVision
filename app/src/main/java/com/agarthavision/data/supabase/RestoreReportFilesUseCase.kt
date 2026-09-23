@@ -61,21 +61,24 @@ class RestoreReportFilesUseCase @Inject constructor(
             extension = ReportRemoteDataSource.CSV_EXTENSION,
         )
 
-        if (pdfPath == null && csvPath == null) {
-            return Result.failure(
+        return if (pdfPath == null && csvPath == null) {
+            Result.failure(
                 IllegalStateException("No stored file could be recovered for report $reportId."),
             )
+        } else {
+            // Only touch the row when a path actually changed; a no-op write would bump the row
+            // for nothing and, on a shared session, race the sync that is reading it.
+            if (pdfPath != report.pdfFilePath || csvPath != report.csvFilePath) {
+                reportDao.updateFilePaths(reportId, pdfPath, csvPath)
+            }
+            Result.success(RestoredReportFiles(pdfFilePath = pdfPath, csvFilePath = csvPath))
         }
-
-        // Only touch the row when a path actually changed; a no-op write would bump the row
-        // for nothing and, on a shared session, race the sync that is reading it.
-        if (pdfPath != report.pdfFilePath || csvPath != report.csvFilePath) {
-            reportDao.updateFilePaths(reportId, pdfPath, csvPath)
-        }
-        return Result.success(RestoredReportFiles(pdfFilePath = pdfPath, csvFilePath = csvPath))
     }
 
     /**
+     * A null [localPath] means the report was never generated in this format, so nothing was
+     * uploaded for it either — asking Storage would only spend a round trip on a certain miss.
+     *
      * @return a path whose bytes this device can read, or null when the file is neither here
      *   nor in Storage.
      */
@@ -87,22 +90,23 @@ class RestoreReportFilesUseCase @Inject constructor(
         localPath: String?,
         extension: String,
     ): String? {
-        if (localPath != null && reportFileStore.readBytes(localPath) != null) return localPath
+        if (localPath == null || reportFileStore.readBytes(localPath) != null) return localPath
 
         val objectPath = ReportRemoteDataSource.objectPathFor(userId, reportId, extension)
         val bytes = runCatching { remoteDataSource.downloadReportFile(objectPath) }
             .onFailure { Log.w(TAG, "No stored $extension for report $reportId", it) }
             .getOrNull()
-            ?: return null
 
-        return runCatching {
-            if (extension == ReportRemoteDataSource.PDF_EXTENSION) {
-                reportFileStore.writePdf(reportId, sessionId, bytes)
-            } else {
-                reportFileStore.writeCsv(reportId, sessionId, bytes.decodeToString())
-            }
-        }.onFailure { Log.e(TAG, "Could not write restored $extension for $reportId", it) }
-            .getOrNull()
+        return bytes?.let {
+            runCatching {
+                if (extension == ReportRemoteDataSource.PDF_EXTENSION) {
+                    reportFileStore.writePdf(reportId, sessionId, it)
+                } else {
+                    reportFileStore.writeCsv(reportId, sessionId, it.decodeToString())
+                }
+            }.onFailure { e -> Log.e(TAG, "Could not write restored $extension for $reportId", e) }
+                .getOrNull()
+        }
     }
 
     private companion object {
