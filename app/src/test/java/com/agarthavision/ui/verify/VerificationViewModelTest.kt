@@ -698,6 +698,7 @@ class VerificationViewModelTest {
             val findings = vm.state.value.findings
             assertEquals("The two cards became one.", 1, findings.size)
             assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
         }
 
     @Test
@@ -921,5 +922,180 @@ class VerificationViewModelTest {
             assertNull(vm.state.value.missedEgg)
         }
 
+    @Test
+    fun `adding species with no added rows appends and expands the row`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
 
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while existing added row has no species is blocked and emits event`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while existing added row has null or 0 field total is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onFieldTotalChanged(0, "0")
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+        }
+
+    @Test
+    fun `adding species while Other row has blank text is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while total is below floor is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+            vm.onDetectionNext()
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(2, "1")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(3, vm.state.value.findings.size)
+            assertEquals(2, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species after a complete row appends and expands the new row`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `expanding and collapsing added species updates expandedFindingIndex correctly`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.TRICHURIS)
+            vm.onFieldTotalChanged(2, "1")
+
+            assertEquals(2, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(1)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(0)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(99)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onCollapseFinding(2)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onCollapseFinding(1)
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `removing findings adjusts or clears expandedFindingIndex`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.TRICHURIS)
+            vm.onFieldTotalChanged(1, "1")
+
+            vm.onRemoveFinding(0)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onRemoveFinding(0)
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `setFrame resets expandedFindingIndex to null`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.setFrame(makeFrame(predictions = 1))
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
 }

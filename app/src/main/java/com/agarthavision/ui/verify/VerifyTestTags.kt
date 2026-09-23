@@ -117,8 +117,6 @@ internal object VerifyTestTags {
      */
     const val LOCATE_TOGGLE = "locate_toggle"
 
-    /** The live per-species summary of what submitting would write. */
-    const val FINDINGS_SUMMARY = "findings_summary"
 
     /**
      * The species already on this device, offered under whichever "Other species" field is
@@ -149,6 +147,9 @@ internal object VerifyTestTags {
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
+
+    fun addedSpeciesSummary(index: Int): String = "added_species_summary_" + index
+    fun addedSpeciesForm(index: Int): String = "added_species_form_" + index
 
     /**
      * Draw / redraw affordance for egg [slot] of the added species at [findingIndex].

@@ -11,12 +11,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -26,7 +26,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -34,11 +38,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.inference.ImageBox
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.boxedCountOf
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
-import com.agarthavision.domain.usecase.verify.toFindingRows
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.ui.theme.AgarthaTheme
 
@@ -52,8 +56,8 @@ import com.agarthavision.ui.theme.AgarthaTheme
  * zero-detection frame with an empty predictions list precisely so the clean field is recorded.
  *
  * What it reports is the **model's own claim**, before any human answer — deliberately not the
- * same number as [FindingsSummary], which shows what submitting would write. The gap between the
- * two is what the medtech is here to create.
+ * same number as what submitting would write. The gap between the two is what the medtech is
+ * here to create.
  */
 @Composable
 internal fun ModelOutputSection(
@@ -61,6 +65,11 @@ internal fun ModelOutputSection(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    val containerBg = if (output is ModelOutput.Unavailable) {
+        colors.accentTint2
+    } else {
+        colors.surfaceMuted
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -71,7 +80,7 @@ internal fun ModelOutputSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colors.surfaceMuted, RoundedCornerShape(12.dp))
+                .background(containerBg, RoundedCornerShape(12.dp))
                 .padding(12.dp),
         ) {
             when (output) {
@@ -83,11 +92,24 @@ internal fun ModelOutputSection(
                         .size(24.dp),
                 )
 
-                ModelOutput.Unavailable -> Text(
-                    text = stringResource(R.string.verify_model_unavailable),
-                    color = colors.textSecondary,
-                    fontSize = 13.sp,
-                )
+                ModelOutput.Unavailable -> Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = colors.accent,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.verify_model_unavailable),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                }
 
                 is ModelOutput.Read -> if (output.species.isEmpty()) {
                     // A result, not a failure. The wording says what the model did, not what it
@@ -166,18 +188,20 @@ internal fun ModelOutputSection(
  * the only part of the system that thought otherwise, and two cards naming one species came back
  * merged anyway.
  *
- * Rendered as a stacked, always-visible list rather than the one-at-a-time carousel the model's
- * boxes use. A box row is paged because `FrameWithBoxes` highlights exactly one box at a time
- * and the highlight is the point; an added species has no single box to highlight and has to be
- * scanned as a set, because the whole reason it exists is that a field can hold several species
- * at once.
+ * Rendered as compact summary cards by default, expanding into an editable form when tapped.
+ * Only one added species card is expanded at a time to keep the screen concise while still
+ * allowing the medtech to review and edit previous answers.
  */
+// VerificationSheetActions bundles callbacks, so card-expansion state adds distinct parameters.
+@Suppress("LongParameterList")
 @Composable
 internal fun AddedFindings(
     findings: List<Finding>,
     boxCount: Int,
     actions: VerificationSheetActions,
+    expandedIndex: Int?,
     modifier: Modifier = Modifier,
+    onExpandedCardPositioned: (LayoutCoordinates) -> Unit = {},
     /**
      * Species already on this device matching what the added row at this index is typing.
      *
@@ -195,17 +219,28 @@ internal fun AddedFindings(
         }
 
         addedIndices.forEach { index ->
-            AddedFindingCard(
-                index = index,
-                finding = findings[index],
-                // The eggs of this species the frame already accounts for: boxes the medtech
-                // kept, plus boxes they drew themselves. Shown under the field as context, and
-                // it is the floor the typed total may not go below.
-                floor = findings.floorFor(findings[index].answers.speciesLabel),
-                boxed = findings.boxedCountOf(findings[index].answers.speciesLabel),
-                actions = actions,
-                suggestions = suggestionsFor(index),
-            )
+            val floor = findings.floorFor(findings[index].answers.speciesLabel)
+            if (index == expandedIndex) {
+                AddedFindingCard(
+                    index = index,
+                    finding = findings[index],
+                    // The eggs of this species the frame already accounts for: boxes the medtech
+                    // kept, plus boxes they drew themselves. Shown under the field as context, and
+                    // it is the floor the typed total may not go below.
+                    floor = floor,
+                    boxed = findings.boxedCountOf(findings[index].answers.speciesLabel),
+                    actions = actions,
+                    suggestions = suggestionsFor(index),
+                    onExpandedCardPositioned = onExpandedCardPositioned,
+                )
+            } else {
+                AddedFindingSummary(
+                    index = index,
+                    finding = findings[index],
+                    floor = floor,
+                    onExpand = { actions.onExpandFinding(index) },
+                )
+            }
         }
 
         Text(
@@ -234,6 +269,7 @@ private fun AddedFindingCard(
     boxed: Int,
     actions: VerificationSheetActions,
     suggestions: List<String> = emptyList(),
+    onExpandedCardPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
     val total = finding.answers.fieldTotal
     val belowFloor = (total ?: 0) < floor
@@ -242,23 +278,10 @@ private fun AddedFindingCard(
             .fillMaxWidth()
             .padding(bottom = 12.dp)
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .onGloballyPositioned(onExpandedCardPositioned)
+            .testTag(VerifyTestTags.addedSpeciesForm(index))
             .padding(12.dp),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            horizontalArrangement = Arrangement.End,
-        ) {
-            Text(
-                text = stringResource(R.string.verify_remove_species),
-                color = AgarthaTheme.colors.danger,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .testTag(VerifyTestTags.removeFinding(index))
-                    .clickable { actions.onRemoveFinding(index) },
-            )
-        }
-
         SpeciesDropdown(
             selected = finding.answers.species,
             otherText = finding.answers.otherSpeciesText,
@@ -271,25 +294,118 @@ private fun AddedFindingCard(
                 .padding(bottom = 10.dp),
         )
 
-        // The field asks for the **total** for this species, not the eggs beyond the model's
-        // boxes. A medtech counting 23 Ascaris against nine boxed ones would otherwise have to
-        // work out 14 in their head, under time pressure, with nothing anywhere to catch a slip
-        // - and the wrong number reaches the low-power-field count in silence.
-        OutlinedTextField(
-            value = total?.toString().orEmpty(),
-            onValueChange = { actions.onFieldTotalChanged(index, it) },
-            label = { Text(stringResource(R.string.verify_field_total_label)) },
-            isError = belowFloor,
-            supportingText = when {
-                belowFloor -> { { Text(stringResource(R.string.verify_field_total_floor, floor)) } }
-                boxed > 0 -> { { Text(stringResource(R.string.verify_field_total_boxed, boxed)) } }
-                else -> null
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+        ) {
+            // The field asks for the **total** for this species, not the eggs beyond the model's
+            // boxes. A medtech counting 23 Ascaris against nine boxed ones would otherwise have to
+            // work out 14 in their head, under time pressure, with nothing anywhere to catch a slip
+            // - and the wrong number reaches the low-power-field count in silence.
+            OutlinedTextField(
+                value = total?.toString().orEmpty(),
+                onValueChange = { actions.onFieldTotalChanged(index, it) },
+                label = { Text(stringResource(R.string.verify_field_total_label)) },
+                isError = belowFloor,
+                supportingText = when {
+                    belowFloor -> { { Text(stringResource(R.string.verify_field_total_floor, floor)) } }
+                    boxed > 0 -> { { Text(stringResource(R.string.verify_field_total_boxed, boxed)) } }
+                    else -> null
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag(VerifyTestTags.countField(index)),
+            )
+
+            Text(
+                text = stringResource(R.string.verify_remove_species),
+                color = AgarthaTheme.colors.danger,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .testTag(VerifyTestTags.removeFinding(index))
+                    .clickable { actions.onRemoveFinding(index) }
+                    .padding(start = 12.dp, top = 20.dp, bottom = 20.dp, end = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AddedFindingSummary(
+    index: Int,
+    finding: Finding,
+    floor: Int,
+    onExpand: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val total = finding.answers.fieldTotal ?: 0
+    val isUnfinished = !finding.isComplete || total < floor
+    val species = finding.answers.species
+    val speciesName = when (species) {
+        EggSpecies.OTHER -> finding.answers.otherSpeciesText.trim().ifEmpty {
+            species.displayName
+        }
+        null -> stringResource(R.string.verify_added_species_not_chosen)
+        else -> species.displayName
+    }
+    val cardModifier = if (isUnfinished) {
+        modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .border(1.dp, colors.danger, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+    } else {
+        modifier
+            .fillMaxWidth()
+            .padding(bottom = 6.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(colors.accent)
+    }
+    val speciesColor = when {
+        !isUnfinished -> colors.onAccent
+        species == null -> colors.textTertiary
+        else -> colors.textPrimary
+    }
+    val countColor = if (isUnfinished) colors.textPrimary else colors.onAccent
+
+    Row(
+        modifier = cardModifier
+            .testTag(VerifyTestTags.addedSpeciesSummary(index))
+            .clickable(
+                onClickLabel = stringResource(R.string.verify_added_species_edit),
+                onClick = onExpand,
+            )
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
             modifier = Modifier
-                .width(220.dp)
-                .testTag(VerifyTestTags.countField(index)),
+                .weight(1f)
+                .padding(end = 8.dp),
+        ) {
+            Text(
+                text = speciesName,
+                color = speciesColor,
+                fontSize = 13.sp,
+            )
+            if (isUnfinished) {
+                Text(
+                    text = stringResource(R.string.verify_added_species_unfinished),
+                    color = colors.danger,
+                    fontSize = 11.sp,
+                )
+            }
+        }
+        Text(
+            text = pluralStringResource(R.plurals.verify_added_species_eggs, total, total),
+            color = countColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
         )
     }
 }
@@ -422,56 +538,6 @@ private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
         }
     }
 
-/**
- * What submitting would actually write, recomputed as the medtech answers.
- *
- * This is the annotator's feedback loop: the clinical record forming in front of them, per
- * species, which is the unit the count is interpreted in — WHO intensity thresholds differ
- * between species by more than an order of magnitude, so a combined total is uninterpretable.
- * Read-only — the numbers come from the box answers and the typed counts above it.
- */
-@Composable
-internal fun FindingsSummary(
-    findings: List<Finding>,
-    modifier: Modifier = Modifier,
-) {
-    val rows = findings.toFindingRows()
-    if (rows.isEmpty()) return
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag(VerifyTestTags.FINDINGS_SUMMARY)
-            .padding(bottom = 14.dp),
-    ) {
-        SectionLabel(stringResource(R.string.verify_will_be_saved))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(AgarthaTheme.colors.accentTint, RoundedCornerShape(12.dp))
-                .padding(12.dp),
-        ) {
-            rows.forEach { row ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = row.species,
-                        color = AgarthaTheme.colors.textPrimary,
-                        fontSize = 13.sp,
-                    )
-                    Text(
-                        text = row.eggCount.toString(),
-                        color = AgarthaTheme.colors.textPrimary,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-            }
-        }
-    }
-}
 
 @Composable
 private fun SectionLabel(text: String) {

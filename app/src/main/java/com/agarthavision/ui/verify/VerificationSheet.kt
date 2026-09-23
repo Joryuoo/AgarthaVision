@@ -7,6 +7,8 @@ import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,8 +38,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
@@ -56,6 +63,8 @@ import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
+import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
@@ -78,6 +87,8 @@ fun VerificationSheet(
     prior: VerificationTarget? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val toastState = rememberAgarthaToastState()
+    val finishFirst = stringResource(R.string.verify_add_species_blocked)
 
     // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
     // such as the answers already given, so keying on the frame would re-seed it — and wipe
@@ -86,11 +97,12 @@ fun VerificationSheet(
         viewModel.setFrame(frame, prior)
     }
 
-    LaunchedEffect(viewModel) {
+    LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
             when (event) {
                 is VerificationEvent.Dismiss -> onDismiss()
                 is VerificationEvent.ShowError -> Unit
+                VerificationEvent.FinishCurrentSpeciesFirst -> toastState.show(finishFirst)
             }
         }
     }
@@ -122,6 +134,8 @@ fun VerificationSheet(
                 onUserNoteChanged = viewModel::onUserNoteChanged,
                 onAddSpecies = viewModel::onAddSpecies,
                 onRemoveFinding = viewModel::onRemoveFinding,
+                onExpandFinding = viewModel::onExpandFinding,
+                onCollapseFinding = viewModel::onCollapseFinding,
                 onFieldTotalChanged = viewModel::onFieldTotalChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
@@ -130,11 +144,19 @@ fun VerificationSheet(
                 onCancelDraw = viewModel::onCancelDraw,
             ),
         )
+        AgarthaToastHost(
+            state = toastState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+        )
     }
 }
 
 @VisibleForTesting
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
@@ -151,23 +173,34 @@ internal fun VerificationSheetContent(
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
     val boxCount = frame.predictions.size
+    val anchor = remember { ExpandedCardAnchor() }
+    val expandedIndexState = rememberUpdatedState(state.expandedFindingIndex)
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 32.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize(),
     ) {
-        // 1. Top bar: back, and the sample's label. The frame counter that used to live in the
-        //    meta line is now the Current Sample indicator, beneath the frame it counts.
+        // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
         ScreenTopBar(
             title = capturedAtLabel,
             metaText = "",
             onBack = actions.onCancel,
         )
 
-        Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-            // 2. Frame section: the image, then one row carrying where you are and how to move.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(bottom = 32.dp)
+                .onGloballyPositioned { anchor.sheet = it }
+                .collapseOnOutsideTap(
+                    anchor = anchor,
+                    expandedIndex = { expandedIndexState.value },
+                    onOutsideTap = actions.onCollapseFinding,
+                )
+                .verticalScroll(rememberScrollState()),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 22.dp)) {
+                // 2. Frame section: the image, then one row carrying where you are and how to move.
             val imageModel = rememberFrameImageModel(frame, state.imageSource)
             if (imageModel == null) {
                 // Honest about it, rather than opening a blank canvas the medtech might
@@ -278,6 +311,8 @@ internal fun VerificationSheetContent(
                 findings = state.findings,
                 boxCount = boxCount,
                 actions = actions,
+                expandedIndex = state.expandedFindingIndex,
+                onExpandedCardPositioned = { anchor.card = it },
                 suggestionsFor = { index ->
                     state.suggestionsFor(
                         SuggestionTarget.AddedFinding(index),
@@ -285,8 +320,6 @@ internal fun VerificationSheetContent(
                     )
                 },
             )
-
-            FindingsSummary(findings = state.findings)
 
             // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
             // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
@@ -326,6 +359,7 @@ internal fun VerificationSheetContent(
             )
         }
     }
+}
 
     if (showDiscardConfirm.value) {
         AlertDialog(
@@ -673,3 +707,41 @@ private fun NoteField(
         ),
     )
 }
+
+private class ExpandedCardAnchor {
+    var sheet: LayoutCoordinates? = null
+    var card: LayoutCoordinates? = null
+}
+
+private fun Modifier.collapseOnOutsideTap(
+    anchor: ExpandedCardAnchor,
+    expandedIndex: () -> Int?,
+    onOutsideTap: (Int) -> Unit,
+): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val index = expandedIndex() ?: return@awaitEachGesture
+        val sheet = anchor.sheet
+        val card = anchor.card
+        val isAttached = card?.isAttached == true
+        if (sheet != null && card != null && isAttached) {
+            if (sheet.localBoundingBoxOf(card, clipBounds = false).contains(down.position)) {
+                return@awaitEachGesture
+            }
+        }
+        var isTap = true
+        var pointerPressed = true
+        while (pointerPressed) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                break
+            }
+            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                isTap = false
+            }
+            pointerPressed = change.pressed
+        }
+        if (isTap) onOutsideTap(index)
+    }
+}
+

@@ -1,11 +1,15 @@
 package com.agarthavision.ui.verify
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -25,6 +29,7 @@ import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -87,6 +92,8 @@ class VerificationSheetContentTest {
         var cancels = 0
         var addFindings = 0
         val removedFindings = mutableListOf<Int>()
+        val expandedFindings = mutableListOf<Int>()
+        val collapsedFindings = mutableListOf<Int>()
         val counts = mutableListOf<Pair<Int, String>>()
         val addedSpecies = mutableListOf<Pair<Int, EggSpecies>>()
         val beganDraw = mutableListOf<Pair<Int, Int?>>()
@@ -111,6 +118,8 @@ class VerificationSheetContentTest {
         onUserNoteChanged = { r.notes += it },
         onAddSpecies = { r.addFindings++ },
         onRemoveFinding = { r.removedFindings += it },
+        onExpandFinding = { r.expandedFindings += it },
+        onCollapseFinding = { r.collapsedFindings += it },
         onFieldTotalChanged = { index, text -> r.counts += index to text },
         onAddedSpeciesSelected = { index, species -> r.addedSpecies += index to species },
         onAddedOtherSpeciesChanged = { _, _ -> },
@@ -320,15 +329,9 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
 
-    /**
-     * The species field is a filterable combobox: typing a query must never persist unless a
-     * result is tapped. Filtering and then moving focus away without picking a result has to
-     * revert the field to whatever species is still the committed answer - anything else lets
-     * the operator see one species while a different one gets submitted.
-     */
     @Test
-    fun `filtering species then losing focus without picking a result reverts to the committed species`() {
-        val r = setContent(
+    fun `species dropdown field is not editable`() {
+        setContent(
             state(
                 answers = listOf(
                     answered(
@@ -341,21 +344,12 @@ class VerificationSheetContentTest {
             ),
         )
 
-        // Scoped to the dropdown. The "will be saved" summary renders the same species
-        // name, and the detection card renders the model's class label, so an unscoped text
-        // lookup matches more than one node.
         val speciesField = composeRule
             .onNode(
                 hasAnyAncestor(hasTestTag(VerifyTestTags.SPECIES_DROPDOWN)) and
                     hasText(EggSpecies.ASCARIS.displayName),
             )
-        typeInto(speciesField.performScrollTo(), "Tri")
-        composeRule.mainClock.autoAdvance = true
-        sheetNode(VerifyTestTags.NOTE_FIELD).performClick()
-
-        speciesField.assertIsDisplayed()
-        composeRule.onNodeWithText("Ascaris lumbricoidesTri").assertDoesNotExist()
-        assertEquals(emptyList<EggSpecies>(), r.species)
+        speciesField.assert(SemanticsMatcher.expectValue(SemanticsProperties.IsEditable, false))
     }
 
     // The question chain: what unlocks submit
@@ -859,7 +853,7 @@ class VerificationSheetContentTest {
                         ),
                     ),
                 ),
-            ),
+            ).copy(expandedFindingIndex = 0),
         )
 
         sheetNode(VerifyTestTags.addedSpeciesDropdown(0)).assertIsDisplayed()
@@ -942,7 +936,7 @@ class VerificationSheetContentTest {
         val r = setContent(
             noModelOutputState(
                 findings = listOf(Finding(answers = VerificationAnswers(fieldTotal = 1))),
-            ),
+            ).copy(expandedFindingIndex = 0),
         )
 
         sheetNode(VerifyTestTags.removeFinding(0)).performClick()
@@ -1020,5 +1014,111 @@ class VerificationSheetContentTest {
         )
 
         composeRule.onNodeWithTag(VerifyTestTags.OTHER_SPECIES_SUGGESTIONS).assertDoesNotExist()
+    }
+
+    @Test
+    fun `compact card shows species name and egg count and has no dropdown`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 1,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.addedSpeciesSummary(0)).assertIsDisplayed()
+        composeRule.onNodeWithText("Ascaris lumbricoides").assertIsDisplayed()
+        composeRule.onNodeWithText("1 egg").assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesDropdown(0)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping compact card triggers onExpandFinding`() {
+        val r = setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(answers = VerificationAnswers(species = EggSpecies.ASCARIS, fieldTotal = 1)),
+                    Finding(answers = VerificationAnswers(species = EggSpecies.TRICHURIS, fieldTotal = 2)),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.addedSpeciesSummary(1)).performClick()
+
+        assertEquals(listOf(1), r.expandedFindings)
+    }
+
+    @Test
+    fun `tapping outside expanded card triggers onCollapseFinding while tapping count field does not`() {
+        val r = setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(answers = VerificationAnswers(species = EggSpecies.ASCARIS, fieldTotal = 1)),
+                ),
+            ).copy(expandedFindingIndex = 0),
+        )
+
+        sheetNode(VerifyTestTags.countField(0)).performClick()
+        assertEquals(emptyList<Int>(), r.collapsedFindings)
+
+        sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).performClick()
+        assertEquals(listOf(0), r.collapsedFindings)
+    }
+
+    @Test
+    fun `unfinished summary displays warning and not chosen label`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(answers = VerificationAnswers(fieldTotal = 0)),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.addedSpeciesSummary(0)).assertIsDisplayed()
+        composeRule.onNodeWithText("Species not chosen").assertIsDisplayed()
+        composeRule.onNodeWithText("Not finished. Tap to complete.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `remove button is positioned at lower right beside the count field`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(answers = VerificationAnswers(species = EggSpecies.ASCARIS, fieldTotal = 1)),
+                ),
+            ).copy(expandedFindingIndex = 0),
+        )
+
+        val countBounds = sheetNode(VerifyTestTags.countField(0)).getBoundsInRoot()
+        val removeBounds = sheetNode(VerifyTestTags.removeFinding(0)).getBoundsInRoot()
+
+        assertTrue(
+            "Remove left edge (${removeBounds.left}) should be >= count field right edge (${countBounds.right})",
+            removeBounds.left >= countBounds.right,
+        )
+        assertTrue(
+            "Remove top edge (${removeBounds.top}) should be >= count field top edge (${countBounds.top})",
+            removeBounds.top >= countBounds.top,
+        )
+    }
+
+    @Test
+    fun `will be saved section does not exist`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(answers = VerificationAnswers(species = EggSpecies.ASCARIS, fieldTotal = 1)),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithText("WILL BE SAVED").assertDoesNotExist()
     }
 }

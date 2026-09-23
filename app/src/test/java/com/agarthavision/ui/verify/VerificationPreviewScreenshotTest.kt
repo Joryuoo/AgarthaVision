@@ -107,6 +107,8 @@ class VerificationPreviewScreenshotTest {
         onUserNoteChanged = {},
         onAddSpecies = {},
         onRemoveFinding = {},
+        onExpandFinding = {},
+        onCollapseFinding = {},
         onFieldTotalChanged = { _, _ -> },
         onAddedSpeciesSelected = { _, _ -> },
         onAddedOtherSpeciesChanged = { _, _ -> },

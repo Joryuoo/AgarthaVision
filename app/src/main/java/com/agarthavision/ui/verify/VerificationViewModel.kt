@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.totalsAreConsistent
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -90,6 +91,11 @@ data class VerificationUiState(
     val speciesSuggestions: List<String> = emptyList(),
     val speciesSuggestionTarget: SuggestionTarget? = null,
     val speciesSuggestionQuery: String = "",
+    /**
+     * Index into [findings] of the one added species card shown as an editable form, or null when
+     * all are compact. Always >= frame.predictions.size.
+     */
+    val expandedFindingIndex: Int? = null,
 ) {
     /**
      * The suggestions to show under [target]'s free-text field, given what it currently holds.
@@ -209,6 +215,16 @@ sealed interface SuggestionTarget {
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
+    data object FinishCurrentSpeciesFirst : VerificationEvent
+}
+
+private fun VerificationUiState.firstUnfinishedAddedIndex(): Int? {
+    val boxCount = frame?.predictions?.size ?: 0
+    return findings.indices.firstOrNull { i ->
+        i >= boxCount && findings[i].let { f ->
+            !f.isComplete || (f.answers.fieldTotal ?: 0) < findings.floorFor(f.answers.speciesLabel)
+        }
+    }
 }
 
 /**
@@ -220,6 +236,8 @@ sealed interface VerificationEvent {
  * - **Detection-level navigation** within the current frame
  *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
  *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
+ * - **Added-species card expansion and lifecycle**
+ *   ([onAddSpecies], [onRemoveFinding], [onExpandFinding], [onCollapseFinding]).
  * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
  *   the frame is removed from the store; the verdict model (per ADR-004)
  *   persists every detection regardless of mix (false positives, wrong
@@ -320,6 +338,7 @@ class VerificationViewModel @Inject constructor(
                 isSubmitting = false,
                 errorMessage = null,
                 userNote = prior?.userNote.orEmpty(),
+                expandedFindingIndex = null,
             )
         }
     }
@@ -488,8 +507,47 @@ class VerificationViewModel @Inject constructor(
      * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
     fun onAddSpecies() {
-        _state.update {
-            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(fieldTotal = 1)))
+        val unfinished = _state.value.firstUnfinishedAddedIndex()
+        if (unfinished != null) {
+            _state.update { it.copy(expandedFindingIndex = unfinished) }
+            viewModelScope.launch { _events.emit(VerificationEvent.FinishCurrentSpeciesFirst) }
+        } else {
+            _state.update {
+                val nextIndex = it.findings.size
+                it.copy(
+                    findings = it.findings + Finding(answers = VerificationAnswers(fieldTotal = 1)),
+                    expandedFindingIndex = nextIndex,
+                )
+            }
+        }
+    }
+
+    /**
+     * Expands an added finding at [index] into an editable card.
+     *
+     * Refused on a prediction-backed row (index < boxCount) or out-of-range index.
+     */
+    fun onExpandFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index >= boxCount && index in current.findings.indices) {
+                current.copy(expandedFindingIndex = index)
+            } else {
+                current
+            }
+        }
+    }
+
+    /**
+     * Collapses an added finding at [index] if it is currently expanded.
+     */
+    fun onCollapseFinding(index: Int) {
+        _state.update { current ->
+            if (current.expandedFindingIndex == index) {
+                current.copy(expandedFindingIndex = null)
+            } else {
+                current
+            }
         }
     }
 
@@ -507,7 +565,16 @@ class VerificationViewModel @Inject constructor(
             if (index < boxCount || index !in current.findings.indices) {
                 current
             } else {
-                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+                val newExpanded = when {
+                    current.expandedFindingIndex == index -> null
+                    current.expandedFindingIndex != null && current.expandedFindingIndex > index ->
+                        current.expandedFindingIndex - 1
+                    else -> current.expandedFindingIndex
+                }
+                current.copy(
+                    findings = current.findings.filterIndexed { i, _ -> i != index },
+                    expandedFindingIndex = newExpanded,
+                )
             }
         }
     }
@@ -556,12 +623,14 @@ class VerificationViewModel @Inject constructor(
                     drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
                     speciesTouched = true,
                 )
+                val newExpanded = if (twinIndex < index) twinIndex else twinIndex - 1
                 current.copy(
                     findings = current.findings
                         .mapIndexed { i, finding ->
                             if (i == twinIndex) finding.copy(answers = merged) else finding
                         }
                         .filterIndexed { i, _ -> i != index },
+                    expandedFindingIndex = newExpanded,
                 )
             }
         }

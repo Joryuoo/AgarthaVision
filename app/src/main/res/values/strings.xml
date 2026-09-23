@@ -56,7 +56,14 @@
     <string name="verify_locate_eggs">Locate eggs · %1$d of %2$d located</string>
     <string name="verify_locate_eggs_note">Optional. Drawing where they are improves future results.</string>
     <string name="verify_locate_egg_row">%1$s · egg %2$d of %3$d</string>
-    <string name="verify_will_be_saved">WILL BE SAVED</string>
+    <string name="verify_add_species_blocked">Finish the species above first: choose a species and enter its egg count.</string>
+    <string name="verify_added_species_not_chosen">Species not chosen</string>
+    <string name="verify_added_species_unfinished">Not finished. Tap to complete.</string>
+    <string name="verify_added_species_edit">Edit species</string>
+    <plurals name="verify_added_species_eggs">
+        <item quantity="one">%1$d egg</item>
+        <item quantity="other">%1$d eggs</item>
+    </plurals>
     <string name="verify_model_output">MODEL OUTPUT</string>
     <!--
       Kept distinct on purpose: "no signal was collected" and "the model looked and found
