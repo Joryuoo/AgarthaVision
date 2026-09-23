@@ -72,7 +72,7 @@ class SessionPickerViewModelTest {
     // Called from the VM's init. An unstubbed mock returns null for a non-null Result and
     // takes down every test here, so it is stubbed even though the label is not asserted.
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase = mock {
-        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+        onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
     }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {
@@ -132,6 +132,22 @@ class SessionPickerViewModelTest {
             assertEquals("session-1", event.sessionId)
         }
     }
+
+    @Test
+    fun `onOpenVerificationQueue resumes session and emits NavigateToVerificationQueue`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            whenever(sessionManager.resumeSession("session-1"))
+                .thenReturn(makeSessionEntity("session-1"))
+
+            vm.events.test {
+                vm.onOpenVerificationQueue("session-1")
+                advanceUntilIdle()
+                val event = awaitItem() as SessionsEvent.NavigateToVerificationQueue
+                assertEquals("session-1", event.sessionId)
+            }
+            verify(sessionManager).resumeSession("session-1")
+        }
 
     @Test
     fun `onCreateSession attributes the session to the patient from the route`() =

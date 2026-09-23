@@ -72,6 +72,7 @@ data class SessionsState(
 
 sealed interface SessionsEvent {
     data class NavigateToCapture(val sessionId: String) : SessionsEvent
+    data class NavigateToVerificationQueue(val sessionId: String) : SessionsEvent
     data class ShareExport(val content: String) : SessionsEvent
 }
 
@@ -354,6 +355,18 @@ class SessionsViewModel @Inject constructor(
                 .onFailure { error ->
                     internalState.update {
                         it.copy(errorMessage = error.message ?: "Could not open session.")
+                    }
+                }
+        }
+    }
+
+    fun onOpenVerificationQueue(sessionId: String) {
+        viewModelScope.launch {
+            runCatching { sessionManager.resumeSession(sessionId) }
+                .onSuccess { eventChannel.send(SessionsEvent.NavigateToVerificationQueue(sessionId)) }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(errorMessage = error.message ?: "Could not open verification queue.")
                     }
                 }
         }

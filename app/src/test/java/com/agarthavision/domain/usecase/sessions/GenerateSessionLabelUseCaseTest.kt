@@ -37,10 +37,11 @@ class GenerateSessionLabelUseCaseTest {
             takenLabels = emptySet(),
         )
 
-        val result = useCase("patient-1")
+        // Garcia → GCA (6/2=3 → C), Maria → M, FEMALE born 2000-01-01, age 21 at asOf → F21
+        val result = useCase("patient-1", asOf)
 
         assertTrue(result.isSuccess)
-        assertEquals("GARCIAM-S01", result.getOrThrow())
+        assertEquals("GCAM-F21-S01", result.getOrThrow())
     }
 
     @Test
@@ -48,14 +49,14 @@ class GenerateSessionLabelUseCaseTest {
         // Three smears already exist; the suggestion must be S04.
         val useCase = useCaseFor(
             patient = garcia(),
-            existingLabels = listOf("GARCIAM-S01", "GARCIAM-S02", "GARCIAM-S03"),
+            existingLabels = listOf("GCAM-F21-S01", "GCAM-F21-S02", "GCAM-F21-S03"),
             takenLabels = emptySet(),
         )
 
-        val result = useCase("patient-1")
+        val result = useCase("patient-1", asOf)
 
         assertTrue(result.isSuccess)
-        assertEquals("GARCIAM-S04", result.getOrThrow())
+        assertEquals("GCAM-F21-S04", result.getOrThrow())
     }
 
     // ---------------------------------------------------------------------------
@@ -69,13 +70,13 @@ class GenerateSessionLabelUseCaseTest {
         val useCase = useCaseFor(
             patient = garcia(),
             existingLabels = emptyList(),
-            takenLabels = setOf("GARCIAM-S01"),
+            takenLabels = setOf("GCAM-F21-S01"),
         )
 
-        val result = useCase("patient-1")
+        val result = useCase("patient-1", asOf)
 
         assertTrue(result.isSuccess)
-        assertEquals("GARCIAM-S02", result.getOrThrow())
+        assertEquals("GCAM-F21-S02", result.getOrThrow())
     }
 
     @Test
@@ -84,13 +85,13 @@ class GenerateSessionLabelUseCaseTest {
         val useCase = useCaseFor(
             patient = garcia(),
             existingLabels = emptyList(),
-            takenLabels = setOf("GARCIAM-S01", "GARCIAM-S02"),
+            takenLabels = setOf("GCAM-F21-S01", "GCAM-F21-S02"),
         )
 
-        val result = useCase("patient-1")
+        val result = useCase("patient-1", asOf)
 
         assertTrue(result.isSuccess)
-        assertEquals("GARCIAM-S03", result.getOrThrow())
+        assertEquals("GCAM-F21-S03", result.getOrThrow())
     }
 
     @Test
@@ -107,7 +108,7 @@ class GenerateSessionLabelUseCaseTest {
             sessionRepository = recording,
         )
 
-        useCase("patient-1")
+        useCase("patient-1", asOf)
 
         assertTrue(
             "isSessionLabelTaken must be called with the same patient id passed to the use case",
@@ -199,6 +200,7 @@ private class FakePatientRepository(private val patient: Patient?) : PatientRepo
         sex: Sex,
         excludingId: String,
     ): List<Patient> = emptyList()
+    override suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String> = emptyList()
 }
 
 /** A fake that maps taken labels to return true from isSessionLabelTaken. */
@@ -366,3 +368,6 @@ private class NoOpSessionRepository : SessionRepository {
         query: String,
     ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
+
+// Fixed reference instant: 2021-06-15 UTC → Asia/Manila local date 2021-06-15 → garcia() age 21.
+private val asOf: Instant = Instant.parse("2021-06-15T00:00:00Z")

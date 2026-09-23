@@ -29,6 +29,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.SheetValue
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -198,44 +200,98 @@ fun PatientFormSheet(
                     .padding(horizontal = 20.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
-                SheetInput(
-                    value = state.lastname,
-                    onValueChange = viewModel::onLastnameChanged,
-                    config = SheetInputConfig(
-                        label = stringResource(R.string.patient_form_lastname),
-                        placeholder = stringResource(R.string.patient_form_lastname_placeholder),
-                        isError = state.showErrors &&
-                            PatientFormError.LASTNAME_REQUIRED in state.errors,
-                        // Character counter removed: length is enforced via the VM's
-                        // transformNameInput pipeline, and "x / 2147483647" is meaningless
-                        // noise when no explicit maxLength is passed.
-                        showCounter = false,
-                    ),
-                )
-                SheetInput(
-                    value = state.firstname,
-                    onValueChange = viewModel::onFirstnameChanged,
-                    config = SheetInputConfig(
-                        label = stringResource(R.string.patient_form_firstname),
-                        placeholder = stringResource(R.string.patient_form_firstname_placeholder),
-                        isError = state.showErrors &&
-                            PatientFormError.FIRSTNAME_REQUIRED in state.errors,
-                        showCounter = false,
-                    ),
-                )
-                // Optional on purpose: many patients do not supply one, and a required
-                // field here would only collect junk.
-                SheetInput(
-                    value = state.middleName,
-                    onValueChange = viewModel::onMiddleNameChanged,
-                    config = SheetInputConfig(
-                        label = stringResource(R.string.patient_form_middle_name),
-                        placeholder = stringResource(R.string.patient_form_middle_name_placeholder),
-                        isError = false,
-                        isRequired = false,
-                        showCounter = false,
-                    ),
-                )
+                // Custom codename toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surfaceVariant)
+                        .clickable { viewModel.onUseCustomCodenameToggled(!state.useCustomCodename) }
+                        .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.patient_form_use_custom_codename),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.textPrimary,
+                        )
+                        Text(
+                            text = stringResource(R.string.patient_form_use_custom_codename_desc),
+                            fontSize = 11.sp,
+                            color = colors.textSecondary,
+                        )
+                    }
+                    Switch(
+                        checked = state.useCustomCodename,
+                        onCheckedChange = viewModel::onUseCustomCodenameToggled,
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = colors.surface,
+                            checkedTrackColor = colors.textPrimary,
+                            checkedBorderColor = colors.textPrimary,
+                            uncheckedThumbColor = colors.textSecondary,
+                            uncheckedTrackColor = colors.borderStrong,
+                            uncheckedBorderColor = colors.borderStrong,
+                        ),
+                    )
+                }
+
+                if (state.useCustomCodename) {
+                    SheetInput(
+                        value = state.customCodename,
+                        onValueChange = viewModel::onCustomCodenameChanged,
+                        config = SheetInputConfig(
+                            label = stringResource(R.string.patient_form_custom_codename),
+                            placeholder = stringResource(R.string.patient_form_custom_codename_placeholder),
+                            isError = false,
+                            isRequired = false,
+                            showCounter = false,
+                        ),
+                    )
+                } else {
+                    SheetInput(
+                        value = state.lastname,
+                        onValueChange = viewModel::onLastnameChanged,
+                        config = SheetInputConfig(
+                            label = stringResource(R.string.patient_form_lastname),
+                            placeholder = stringResource(R.string.patient_form_lastname_placeholder),
+                            isError = state.showErrors &&
+                                PatientFormError.LASTNAME_REQUIRED in state.errors,
+                            isRequired = false,
+                            // Character counter removed: length is enforced via the VM's
+                            // transformNameInput pipeline, and "x / 2147483647" is meaningless
+                            // noise when no explicit maxLength is passed.
+                            showCounter = false,
+                        ),
+                    )
+                    SheetInput(
+                        value = state.firstname,
+                        onValueChange = viewModel::onFirstnameChanged,
+                        config = SheetInputConfig(
+                            label = stringResource(R.string.patient_form_firstname),
+                            placeholder = stringResource(R.string.patient_form_firstname_placeholder),
+                            isError = state.showErrors &&
+                                PatientFormError.FIRSTNAME_REQUIRED in state.errors,
+                            isRequired = false,
+                            showCounter = false,
+                        ),
+                    )
+                    // Optional on purpose: many patients do not supply one, and a required
+                    // field here would only collect junk.
+                    SheetInput(
+                        value = state.middleName,
+                        onValueChange = viewModel::onMiddleNameChanged,
+                        config = SheetInputConfig(
+                            label = stringResource(R.string.patient_form_middle_name),
+                            placeholder = stringResource(R.string.patient_form_middle_name_placeholder),
+                            isError = false,
+                            isRequired = false,
+                            showCounter = false,
+                        ),
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

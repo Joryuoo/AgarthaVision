@@ -202,6 +202,26 @@
     <string name="records_filter_apply">Apply</string>
     <string name="records_filter_clear">Clear</string>
     <string name="records_species_all">All species</string>
+    <string name="records_species_modal_title">Filter by species</string>
+    <string name="records_species_others">Others</string>
+
+    <!-- Reports tab (PB-22 cross-patient report browser) -->
+    <string name="reports_title">Reports</string>
+    <string name="reports_subtitle_purpose">Generated surveillance reports across all patients</string>
+    <string name="reports_scope_all">All reports</string>
+    <string name="reports_scope_filtered">Filtered reports</string>
+    <string name="reports_empty_title">No reports yet</string>
+    <string name="reports_empty_body">Reports appear here once generated from session details.</string>
+    <string name="reports_no_match_title">No matching reports</string>
+    <string name="reports_no_match_body">Try adjusting your filters or search query.</string>
+    <string name="reports_search_placeholder">Search reports by id, session, or species</string>
+    <string name="reports_open_pdf">Open PDF</string>
+    <string name="reports_open_csv">Open CSV</string>
+    <string name="reports_share_pdf">Share PDF</string>
+    <string name="reports_share_csv">Share CSV</string>
+    <string name="reports_total_count">%1$d reports</string>
+    <string name="reports_session_link">Session %1$s</string>
+    <string name="reports_species_more">+%1$d more</string>
 
     <string name="records_session_title">Session %1$s</string>
     <string name="records_session_summary">%1$d verified samples · %2$s</string>
@@ -212,6 +232,10 @@
 
     <string name="session_detail_title">Session Detail</string>
     <string name="session_detail_empty">No verified samples in this session</string>
+    <string name="session_detail_tab_report">Report</string>
+    <string name="session_detail_tab_samples">Samples</string>
+    <string name="session_detail_samples_empty">No verified samples yet</string>
+    <string name="session_detail_samples_empty_body">Verified samples for this session will appear here.</string>
     <string name="report_section_title">Reports</string>
     <string name="report_generating">Generating…</string>
     <string name="report_export">Export report</string>
@@ -317,6 +341,10 @@
     <string name="patient_form_firstname_placeholder">e.g. Gerald</string>
     <string name="patient_form_middle_name">Middle name</string>
     <string name="patient_form_middle_name_placeholder">Optional</string>
+    <string name="patient_form_use_custom_codename">Use Codename</string>
+    <string name="patient_form_use_custom_codename_desc">Assign a codename instead of real name</string>
+    <string name="patient_form_custom_codename">Custom codename</string>
+    <string name="patient_form_custom_codename_placeholder">e.g. VISION-M22-001</string>
     <string name="patient_form_sex">Sex</string>
     <string name="patient_form_birthdate">Birthdate</string>
     <string name="patient_form_birthdate_placeholder">Select a date</string>
@@ -352,6 +380,10 @@
     <string name="patients_new">New Patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
+    <string name="patients_edit_action">Edit</string>
+    <string name="patients_menu_desc">Patient options</string>
+    <string name="patients_reveal_name_desc">Reveal</string>
+    <string name="patients_mask_name_desc">Hide</string>
     <!-- Row meta: sex · age · barangay. -->
     <string name="patients_row_meta">%1$s · %2$s · %3$s</string>
     <string name="patients_age_years">%1$d yrs</string>

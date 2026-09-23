@@ -2,12 +2,11 @@ package com.agarthavision.ui.records
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.usecase.records.GetRecordsUseCase
-import com.agarthavision.domain.usecase.records.RecordsQuery
-import com.agarthavision.domain.usecase.records.SessionRecordItem
 import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.usecase.records.ObserveReportsUseCase
+import com.agarthavision.domain.usecase.records.ReportsQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.LocalDate
 import javax.inject.Inject
@@ -23,11 +22,11 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 /**
- * UI state for the session-first records browser.
+ * UI state for the cross-patient reports browser.
  */
 data class RecordsState(
-    val sessions: List<SessionRecordItem> = emptyList(),
-    val totals: RecordsTotals = RecordsTotals(),
+    val reports: List<Report> = emptyList(),
+    val totalReports: Int = 0,
     val isLoading: Boolean = true,
     val selectedSpecies: EggSpecies? = null,
     val startDate: LocalDate? = null,
@@ -37,12 +36,12 @@ data class RecordsState(
 )
 
 /**
- * Drives the Records screen with SQL-backed filtering, pagination, and search.
+ * Drives the Reports/Records screen with SQL-backed filtering, pagination, and search.
  */
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class RecordsViewModel @Inject constructor(
-    getRecordsUseCase: GetRecordsUseCase,
+    observeReportsUseCase: ObserveReportsUseCase,
 ) : ViewModel() {
 
     private val selectedSpecies = MutableStateFlow<EggSpecies?>(null)
@@ -55,15 +54,15 @@ class RecordsViewModel @Inject constructor(
     // is still combined into the final state so the text field reflects input immediately.
     private val debouncedSearch = searchQuery.debounce(SEARCH_DEBOUNCE_MS)
 
-    // Upstream pipeline: query params (debounced search) → use-case → (RecordsQuery, RecordsResult)
+    // Upstream pipeline: query params (debounced search) → use-case → (ReportsQuery, ReportsResult)
     private val resultFlow = combine(
         selectedSpecies, startDate, endDate, debouncedSearch, limit,
     ) { sp, st, en, q, lim ->
-        RecordsQuery(species = sp, startDate = st, endDate = en, searchQuery = q, limit = lim)
-    }.flatMapLatest { q -> getRecordsUseCase(q).map { q to it } }
+        ReportsQuery(species = sp, startDate = st, endDate = en, searchQuery = q, limit = lim)
+    }.flatMapLatest { q -> observeReportsUseCase(q).map { q to it } }
 
     /**
-     * Observable UI state for the Records screen.
+     * Observable UI state for the Records/Reports screen.
      *
      * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
      * Room query is cancelled when there are no active collectors (e.g. the screen leaves
@@ -73,19 +72,19 @@ class RecordsViewModel @Inject constructor(
      * restarts and emits a fresh update.
      *
      * [searchQuery] is combined from the raw (un-debounced) flow so the text field
-     * reflects every keystroke immediately, while [sessions] and [totals] only update
+     * reflects every keystroke immediately, while [reports] and [totalReports] only update
      * after the debounce window.
      */
     val state: StateFlow<RecordsState> = combine(resultFlow, searchQuery) { (q, result), rawSearch ->
         RecordsState(
-            sessions = result.items,
-            totals = result.totals,
+            reports = result.items,
+            totalReports = result.totalCount,
             isLoading = false,
             selectedSpecies = q.species,
             startDate = q.startDate,
             endDate = q.endDate,
             searchQuery = rawSearch,
-            canLoadMore = result.items.size >= q.limit,
+            canLoadMore = result.items.size < result.totalCount,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -102,10 +101,9 @@ class RecordsViewModel @Inject constructor(
     }
 
     /**
-     * Applies an inclusive session-start date range. Resets pagination.
+     * Applies an inclusive date range. Resets pagination.
      */
     fun onDateRangeSelected(start: LocalDate?, end: LocalDate?) {
-        // Sessions cannot have started in the future; clamp before the range hits SQL.
         val (safeStart, safeEnd) = sanitizeDateRange(start, end)
         startDate.value = safeStart
         endDate.value = safeEnd
