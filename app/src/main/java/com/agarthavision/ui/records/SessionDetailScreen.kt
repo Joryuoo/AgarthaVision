@@ -18,10 +18,10 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -96,6 +96,7 @@ internal data class SampleUi(
     val confidence: Int?,
     val filePath: String?,
     val storagePath: String?,
+    val timeLabel: String,
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -233,21 +234,32 @@ fun SessionDetailScreen(
             onPrevPage = viewModel::goToPreviousReportPage,
             onNextPage = viewModel::goToNextReportPage,
         )
-        if (sessionDetail.verifiedSamples.isEmpty()) {
-            SessionDetailEmpty(
-                state = contentState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(inner),
+        ) {
+            SessionDetailTabBar(
+                selectedTab = state.selectedTab,
+                samplesCount = sessionDetail.verifiedSamples.size,
+                onTabSelected = viewModel::onTabSelected,
             )
-        } else {
-            SessionDetailPopulated(
-                state = contentState,
-                onSampleClick = { sample -> onSampleClick(sample.id) },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(inner),
-            )
+
+            when (state.selectedTab) {
+                SessionDetailTab.REPORT -> {
+                    SessionDetailReportTab(
+                        state = contentState,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                SessionDetailTab.SAMPLES -> {
+                    SessionDetailSamplesTab(
+                        samples = sessionDetail.verifiedSamples,
+                        onSampleClick = { sample -> onSampleClick(sample.id) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
     }
 }
@@ -261,6 +273,8 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
     val samples = sessionData.samples.map { item ->
         val primary = item.primaryDetection
         val hasAi = item.detections.isNotEmpty() && !item.sample.isManual
+        val sampleTime = Instant.ofEpochMilli(item.sample.timestamp)
+            .atZone(ZoneId.systemDefault())
         SampleUi(
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
@@ -268,6 +282,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
             storagePath = item.sample.storagePath,
+            timeLabel = sampleTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
         )
     }
 
@@ -412,67 +427,137 @@ internal data class SessionDetailContentState(
 )
 
 @Composable
-private fun SessionDetailPopulated(
-    state: SessionDetailContentState,
-    onSampleClick: (SampleUi) -> Unit,
+private fun SessionDetailTabBar(
+    selectedTab: SessionDetailTab,
+    samplesCount: Int,
+    onTabSelected: (SessionDetailTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val session = state.session
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(3),
-        modifier = modifier,
-        contentPadding = PaddingValues(
-            start = Spacing.xl,
-            end = Spacing.xl,
-            top = Spacing.xs,
-            bottom = Spacing.xxl,
-        ),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.xl, vertical = Spacing.xs),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        item(span = { GridItemSpan(maxLineSpan) }) {
-            Column {
-                LpfHeroCard(
-                    session = session,
-                    modifier = Modifier.semantics(mergeDescendants = true) {
-                        contentDescription = "Total confirmed: ${session.confirmedEggs}, " +
-                            "${session.speciesCount} species, " +
-                            "${session.samplesTotal} fields"
-                    },
-                )
-                Spacer(Modifier.height(Spacing.md))
-                ReportsSection(state = state)
-                Spacer(Modifier.height(Spacing.lg))
-                SectionHeader(
-                    title = "Verified samples",
-                    count = "${session.verifiedSamples.size} of ${session.samplesTotal}",
-                )
-                Spacer(Modifier.height(Spacing.sm))
-            }
-        }
-        items(session.verifiedSamples, key = { it.id }) { sample ->
-            SampleTile(sample = sample, onClick = { onSampleClick(sample) })
-        }
+        TabButton(
+            text = stringResource(R.string.session_detail_tab_report),
+            selected = selectedTab == SessionDetailTab.REPORT,
+            onClick = { onTabSelected(SessionDetailTab.REPORT) },
+            modifier = Modifier.weight(1f),
+        )
+        TabButton(
+            text = "${stringResource(R.string.session_detail_tab_samples)} ($samplesCount)",
+            selected = selectedTab == SessionDetailTab.SAMPLES,
+            onClick = { onTabSelected(SessionDetailTab.SAMPLES) },
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
 @Composable
-private fun SessionDetailEmpty(
+private fun TabButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val bg = if (selected) colors.accent else colors.surface
+    val border = if (selected) colors.accent else colors.border
+    val fg = if (selected) colors.onAccent else colors.textSecondary
+
+    Box(
+        modifier = modifier
+            .height(38.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .border(1.dp, border, RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            color = fg,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        )
+    }
+}
+
+@Composable
+private fun SessionDetailReportTab(
     state: SessionDetailContentState,
     modifier: Modifier = Modifier,
 ) {
     val session = state.session
     Column(
         modifier = modifier
-            .padding(horizontal = Spacing.xl)
-            .padding(top = Spacing.xs)
-            .verticalScroll(rememberScrollState()),
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
-        LpfHeroCard(session = session)
-        Spacer(Modifier.height(Spacing.md))
+        LpfHeroCard(
+            session = session,
+            modifier = Modifier.semantics(mergeDescendants = true) {
+                contentDescription = "Total confirmed: ${session.confirmedEggs}, " +
+                    "${session.speciesCount} species, " +
+                    "${session.samplesTotal} fields"
+            },
+        )
         ReportsSection(state = state)
-        Spacer(Modifier.height(60.dp))
-        EmptyStateGraphic()
+        Spacer(Modifier.height(Spacing.xxl))
+    }
+}
+
+@Composable
+private fun SessionDetailSamplesTab(
+    samples: List<SampleUi>,
+    onSampleClick: (SampleUi) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (samples.isEmpty()) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = Spacing.xl),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_detail_samples_empty),
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = stringResource(R.string.session_detail_samples_empty_body),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = Spacing.xl,
+                end = Spacing.xl,
+                top = Spacing.sm,
+                bottom = Spacing.xxl,
+            ),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(samples, key = { it.id }) { sample ->
+                SampleRow(
+                    sample = sample,
+                    onClick = { onSampleClick(sample) },
+                )
+            }
+        }
     }
 }
 

@@ -2,15 +2,15 @@ package com.agarthavision.ui.records
 
 import app.cash.turbine.test
 import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.model.Session
-import com.agarthavision.domain.model.SessionsCounts
-import com.agarthavision.domain.model.SessionWithStats
-import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.records.GetRecordsUseCase
+import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.model.ReportType
+import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.usecase.records.FakeAuthRepository
-import com.agarthavision.domain.usecase.records.FakeDetectionRepository
+import com.agarthavision.domain.usecase.records.ObserveReportsUseCase
 import com.agarthavision.util.MainDispatcherRule
+import java.time.Instant
+import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -22,7 +22,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
-import java.time.LocalDate
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordsViewModelTest {
@@ -39,12 +38,13 @@ class RecordsViewModelTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `first emission sets isLoading false with sessions from use case`() =
+    fun `first emission sets isLoading false with reports from use case`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val session = makeSession("s1", "u1")
+            val report = makeReport("r1", "s1", "u1")
             val vm = viewModelWith(
                 userId = "u1",
-                rowsByLimit = { limit -> listOf(sessionWithStats(session)).take(limit) },
+                rowsByLimit = { limit -> listOf(report).take(limit) },
+                totalCount = 1,
             )
 
             vm.state.test {
@@ -52,24 +52,25 @@ class RecordsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(1, settled.sessions.size)
-                assertEquals("s1", settled.sessions.single().session.id)
+                assertEquals(1, settled.reports.size)
+                assertEquals("r1", settled.reports.single().id)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     // ---------------------------------------------------------------------------
-    // CORE PART-B REGRESSION GUARD: stateIn WhileSubscribed retains last value
+    // CORE REGRESSION GUARD: stateIn WhileSubscribed retains last value
     // after the upstream is cancelled (past the 5-second stop timeout).
     // ---------------------------------------------------------------------------
 
     @Test
     fun `stateIn WhileSubscribed retains last value after upstream cancellation`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val session = makeSession("s1", "u1")
+            val report = makeReport("r1", "s1", "u1")
             val vm = viewModelWith(
                 userId = "u1",
-                rowsByLimit = { limit -> listOf(sessionWithStats(session)).take(limit) },
+                rowsByLimit = { limit -> listOf(report).take(limit) },
+                totalCount = 1,
             )
 
             // First collection — let the VM settle to a non-loading state.
@@ -77,7 +78,7 @@ class RecordsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(1, settled.sessions.size)
+                assertEquals(1, settled.reports.size)
                 cancelAndIgnoreRemainingEvents()
             }
 
@@ -86,7 +87,6 @@ class RecordsViewModelTest {
             advanceTimeBy(6_000)
 
             // Second collection — stateIn must immediately replay the last non-loading state.
-            // A fresh RecordsState() (isLoading=true) would indicate the cache was reset.
             vm.state.test {
                 val resubscribed = awaitItem()
                 assertFalse(
@@ -94,79 +94,78 @@ class RecordsViewModelTest {
                     resubscribed.isLoading,
                 )
                 assertEquals(
-                    "stateIn replay should return the last session list, not an empty one",
+                    "stateIn replay should return the last report list, not an empty one",
                     1,
-                    resubscribed.sessions.size,
+                    resubscribed.reports.size,
                 )
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     // ---------------------------------------------------------------------------
-    // Pagination: onLoadMore grows sessions; canLoadMore reflects size vs limit
+    // Pagination: onLoadMore grows reports; canLoadMore reflects size vs totalCount
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `canLoadMore is true when returned size equals limit`() =
+    fun `canLoadMore is true when returned size is less than totalCount`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Return exactly PAGE_SIZE sessions so size == limit
-            val rows = (1..PAGE_SIZE).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..PAGE_SIZE).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = 25,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(PAGE_SIZE, settled.sessions.size)
-                assertTrue("canLoadMore should be true when size == limit", settled.canLoadMore)
+                assertEquals(PAGE_SIZE, settled.reports.size)
+                assertTrue("canLoadMore should be true when size < totalCount", settled.canLoadMore)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     @Test
-    fun `canLoadMore is false when returned size is less than limit`() =
+    fun `canLoadMore is false when returned size equals totalCount`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Return only 5 sessions, less than PAGE_SIZE
-            val rows = (1..5).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..5).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = 5,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(5, settled.sessions.size)
-                assertFalse("canLoadMore should be false when size < limit", settled.canLoadMore)
+                assertEquals(5, settled.reports.size)
+                assertFalse("canLoadMore should be false when size == totalCount", settled.canLoadMore)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     @Test
-    fun `onLoadMore increases limit and grows session list`() =
+    fun `onLoadMore increases limit and grows report list`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val rows = (1..(PAGE_SIZE + 5)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..(PAGE_SIZE + 5)).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = PAGE_SIZE + 5,
             )
 
             vm.state.test {
-                // Wait for the initial settled state
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, settled.sessions.size)
+                assertEquals(PAGE_SIZE, settled.reports.size)
 
-                // Trigger load-more and let the pipeline re-execute
                 vm.onLoadMore()
                 advanceUntilIdle()
 
                 val afterLoadMore = expectMostRecentItem()
-                assertEquals(PAGE_SIZE + 5, afterLoadMore.sessions.size)
+                assertEquals(PAGE_SIZE + 5, afterLoadMore.reports.size)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -178,27 +177,26 @@ class RecordsViewModelTest {
     @Test
     fun `onSpeciesSelected resets limit to PAGE_SIZE`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val rows = (1..(PAGE_SIZE + 10)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..(PAGE_SIZE + 10)).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = PAGE_SIZE + 10,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, settled.sessions.size)
+                assertEquals(PAGE_SIZE, settled.reports.size)
 
-                // Expand limit
                 vm.onLoadMore()
                 advanceUntilIdle()
-                expectMostRecentItem() // PAGE_SIZE + 10 items
+                expectMostRecentItem()
 
-                // Filter resets limit → back to PAGE_SIZE results
                 vm.onSpeciesSelected(EggSpecies.ASCARIS)
                 advanceUntilIdle()
                 val afterReset = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, afterReset.sessions.size)
+                assertEquals(PAGE_SIZE, afterReset.reports.size)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -206,16 +204,17 @@ class RecordsViewModelTest {
     @Test
     fun `onDateRangeSelected resets limit to PAGE_SIZE`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val rows = (1..(PAGE_SIZE + 10)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..(PAGE_SIZE + 10)).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = PAGE_SIZE + 10,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, settled.sessions.size)
+                assertEquals(PAGE_SIZE, settled.reports.size)
 
                 vm.onLoadMore()
                 advanceUntilIdle()
@@ -224,7 +223,7 @@ class RecordsViewModelTest {
                 vm.onDateRangeSelected(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 3, 31))
                 advanceUntilIdle()
                 val afterReset = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, afterReset.sessions.size)
+                assertEquals(PAGE_SIZE, afterReset.reports.size)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -251,25 +250,26 @@ class RecordsViewModelTest {
     @Test
     fun `onSearchChanged resets limit to PAGE_SIZE`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val rows = (1..(PAGE_SIZE + 10)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..(PAGE_SIZE + 10)).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = PAGE_SIZE + 10,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, settled.sessions.size)
+                assertEquals(PAGE_SIZE, settled.reports.size)
 
                 vm.onLoadMore()
                 advanceUntilIdle()
                 expectMostRecentItem()
 
-                vm.onSearchChanged("smear")
+                vm.onSearchChanged("ascaris")
                 advanceUntilIdle()
                 val afterReset = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, afterReset.sessions.size)
+                assertEquals(PAGE_SIZE, afterReset.reports.size)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -281,40 +281,33 @@ class RecordsViewModelTest {
     @Test
     fun `typing fast - searchQuery in state reflects raw input before debounce and repo called only once`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val recording = RecordingSessionRepository(rowsByLimit = { emptyList() })
+            val recording = RecordingReportRepository(rowsByLimit = { emptyList() })
             val vm = viewModelWithRecording(recording)
 
             vm.state.test {
-                // Settle the initial load (debounce elapses for the empty query).
                 advanceUntilIdle()
-                expectMostRecentItem() // isLoading=false, searchQuery=""
+                expectMostRecentItem()
 
                 val baseCallCount = recording.capturedQueries.size
 
-                // Three rapid changes inside the 300 ms debounce window.
                 vm.onSearchChanged("a")
                 vm.onSearchChanged("ab")
                 vm.onSearchChanged("abc")
 
-                // Advance less than the 300 ms debounce so raw searchQuery has propagated
-                // through the combine but the debounced flow has not yet re-emitted.
                 advanceTimeBy(250)
 
-                // state.searchQuery must reflect "abc" immediately (from raw flow in combine).
                 val midState = expectMostRecentItem()
                 assertEquals(
                     "state.searchQuery should reflect the latest raw input before debounce elapses",
                     "abc",
                     midState.searchQuery,
                 )
-                // Debounce hasn't fired yet — no new repo call.
                 assertEquals(
                     "repo should not have been called again before debounce elapses",
                     baseCallCount,
                     recording.capturedQueries.size,
                 )
 
-                // Now let the debounce fire.
                 advanceUntilIdle()
 
                 val newCalls = recording.capturedQueries.drop(baseCallCount)
@@ -333,32 +326,25 @@ class RecordsViewModelTest {
             }
         }
 
-    // ---------------------------------------------------------------------------
-    // onSearchChanged with unchanged text — documents actual behaviour
-    // ---------------------------------------------------------------------------
-
     @Test
     fun `onSearchChanged same text resets limit even when search needle is unchanged`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Enough rows to fill PAGE_SIZE + extra pages.
-            val rows = (1..(PAGE_SIZE + 10)).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
+            val rows = (1..(PAGE_SIZE + 10)).map { i -> makeReport("r$i", "s1", "u1") }
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { limit -> rows.take(limit) },
+                totalCount = PAGE_SIZE + 10,
             )
 
             vm.state.test {
                 advanceUntilIdle()
-                expectMostRecentItem() // 20 sessions
+                expectMostRecentItem()
 
-                vm.onLoadMore() // limit → 40
+                vm.onLoadMore()
                 advanceUntilIdle()
                 val expanded = expectMostRecentItem()
-                assertEquals(PAGE_SIZE + 10, expanded.sessions.size)
+                assertEquals(PAGE_SIZE + 10, expanded.reports.size)
 
-                // Call onSearchChanged with the SAME text that's already in the field ("").
-                // Even though the search needle is unchanged (no new debounce emission),
-                // limit MUST be reset to PAGE_SIZE because onSearchChanged always resets it.
                 vm.onSearchChanged("")
                 advanceUntilIdle()
 
@@ -366,43 +352,7 @@ class RecordsViewModelTest {
                 assertEquals(
                     "limit must reset to PAGE_SIZE even when the search text did not change",
                     PAGE_SIZE,
-                    afterSameText.sessions.size,
-                )
-
-                cancelAndIgnoreRemainingEvents()
-            }
-        }
-
-    // ---------------------------------------------------------------------------
-    // Double load-more: limit increments twice before the pipeline settles
-    // ---------------------------------------------------------------------------
-
-    @Test
-    fun `onLoadMore twice increments limit by two full pages`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // 55 rows: enough to fill PAGE_SIZE*2=40 but not PAGE_SIZE*3=60.
-            val rows = (1..55).map { i -> sessionWithStats(makeSession("s$i", "u1")) }
-            val vm = viewModelWith(
-                userId = "u1",
-                rowsByLimit = { limit -> rows.take(limit) },
-            )
-
-            vm.state.test {
-                advanceUntilIdle()
-                val initial = expectMostRecentItem()
-                assertEquals(PAGE_SIZE, initial.sessions.size) // 20
-
-                // Fire both load-mores before the pipeline settles.
-                vm.onLoadMore() // limit → 40
-                vm.onLoadMore() // limit → 60
-                advanceUntilIdle()
-
-                // rows.take(60) = 55; size < limit, so canLoadMore = false.
-                val settled = expectMostRecentItem()
-                assertEquals(55, settled.sessions.size)
-                assertFalse(
-                    "canLoadMore should be false when returned size (55) < limit (60)",
-                    settled.canLoadMore,
+                    afterSameText.reports.size,
                 )
 
                 cancelAndIgnoreRemainingEvents()
@@ -414,7 +364,7 @@ class RecordsViewModelTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `null user yields empty sessions and isLoading false`() =
+    fun `null user yields empty reports and isLoading false`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModelWith(
                 userId = null,
@@ -425,53 +375,31 @@ class RecordsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(emptyList<Any>(), settled.sessions)
-                cancelAndIgnoreRemainingEvents()
-            }
-        }
-
-    @Test
-    fun `null user state has default RecordsTotals`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModelWith(
-                userId = null,
-                rowsByLimit = { emptyList() },
-            )
-
-            vm.state.test {
-                advanceUntilIdle()
-                val settled = expectMostRecentItem()
-                assertFalse(settled.isLoading)
-                assertEquals(
-                    "null-user state must carry default RecordsTotals (no sessionCount, etc.)",
-                    RecordsTotals(),
-                    settled.totals,
-                )
+                assertEquals(emptyList<Report>(), settled.reports)
+                assertEquals(0, settled.totalReports)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     // ---------------------------------------------------------------------------
-    // Totals surfaced in state
+    // Total reports surfaced in state
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `state totals reflect repository totals`() =
+    fun `state totalReports reflects repository total count`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val expectedTotals = RecordsTotals(sessionCount = 5, totalSamples = 30, totalEggs = 12)
+            val expectedCount = 42
             val vm = viewModelWith(
                 userId = "u1",
                 rowsByLimit = { emptyList() },
-                totals = expectedTotals,
+                totalCount = expectedCount,
             )
 
             vm.state.test {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertFalse(settled.isLoading)
-                assertEquals(expectedTotals.sessionCount, settled.totals.sessionCount)
-                assertEquals(expectedTotals.totalSamples, settled.totals.totalSamples)
-                assertEquals(expectedTotals.totalEggs, settled.totals.totalEggs)
+                assertEquals(expectedCount, settled.totalReports)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -482,168 +410,122 @@ class RecordsViewModelTest {
 
     private fun viewModelWith(
         userId: String?,
-        rowsByLimit: (Int) -> List<SessionWithStats>,
-        totals: RecordsTotals = RecordsTotals(),
+        rowsByLimit: (Int) -> List<Report>,
+        totalCount: Int = 0,
     ): RecordsViewModel {
-        val sessionRepo = LambdaSessionRepository(rowsByLimit, totals)
-        val detectionRepo = FakeDetectionRepository(emptyMap())
+        val reportRepo = LambdaReportRepository(rowsByLimit, totalCount)
         val authRepo = FakeAuthRepository(userId)
-        val useCase = GetRecordsUseCase(authRepo, sessionRepo, detectionRepo)
+        val useCase = ObserveReportsUseCase(authRepo, reportRepo)
         return RecordsViewModel(useCase)
     }
 
     private fun viewModelWithRecording(
-        sessionRepo: RecordingSessionRepository,
+        reportRepo: RecordingReportRepository,
         userId: String = "u1",
     ): RecordsViewModel {
-        val detectionRepo = FakeDetectionRepository(emptyMap())
         val authRepo = FakeAuthRepository(userId)
-        val useCase = GetRecordsUseCase(authRepo, sessionRepo, detectionRepo)
+        val useCase = ObserveReportsUseCase(authRepo, reportRepo)
         return RecordsViewModel(useCase)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Recording fake session repository (captures query args for debounce assertions)
+// Recording fake report repository
 // ---------------------------------------------------------------------------
 
-private class RecordingSessionRepository(
-    private val rowsByLimit: (Int) -> List<SessionWithStats> = { emptyList() },
-    private val totals: RecordsTotals = RecordsTotals(),
-) : SessionRepository {
-    /** All query strings that reached observeSessionRecordsPage, in call order. */
+private class RecordingReportRepository(
+    private val rowsByLimit: (Int) -> List<Report> = { emptyList() },
+    private val totalCount: Int = 0,
+) : ReportRepository {
     val capturedQueries = mutableListOf<String>()
 
-    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun getSessionById(sessionId: String): Session? = null
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+    override suspend fun insert(report: Report) = Unit
+    override fun observeForSession(sessionId: String, userId: String, limit: Int, offset: Int): Flow<List<Report>> =
         flowOf(emptyList())
-    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
-    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
-    override suspend fun isSessionLabelTaken(
-        patientId: String,
-        label: String,
-        excludingSessionId: String?,
-    ): Boolean = false
-    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+    override fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>> = flowOf(emptyList())
+    override fun observeAllCount(userId: String): Flow<Int> = flowOf(0)
 
-    override fun observeSessionRecordsPage(
-        userId: String?,
+    override fun observeFiltered(
+        userId: String,
         startMillis: Long?,
         endMillis: Long?,
-        query: String,
         species: String?,
+        query: String,
         limit: Int,
-    ): Flow<List<SessionWithStats>> {
+        offset: Int,
+    ): Flow<List<Report>> {
         capturedQueries += query
         return flowOf(rowsByLimit(limit))
     }
 
-    override fun observeSessionRecordsTotals(
-        userId: String?,
+    override fun observeFilteredCount(
+        userId: String,
         startMillis: Long?,
         endMillis: Long?,
-        query: String,
         species: String?,
-    ): Flow<RecordsTotals> = flowOf(totals)
-
-    override fun observeVisibleSessionsPage(
-        userId: String?,
-        patientId: String,
-        activeSessionId: String?,
-        sinceMillis: Long,
-        startMillis: Long?,
-        endMillis: Long?,
         query: String,
-        limit: Int,
-    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    ): Flow<Int> = flowOf(totalCount)
 
-    override fun observeVisibleSessionsCounts(
-        userId: String?,
-        patientId: String,
-        activeSessionId: String?,
-        sinceMillis: Long,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
+    override suspend fun getById(reportId: String): Report? = null
+    override suspend fun getReportsPendingSync(userId: String): List<Report> = emptyList()
+    override suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus) = Unit
 }
 
 // ---------------------------------------------------------------------------
-// Controllable fake session repository
+// Controllable fake report repository
 // ---------------------------------------------------------------------------
 
-private class LambdaSessionRepository(
-    private val rowsByLimit: (Int) -> List<SessionWithStats>,
-    private val totals: RecordsTotals = RecordsTotals(),
-) : SessionRepository {
-    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun getSessionById(sessionId: String): Session? = null
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+private class LambdaReportRepository(
+    private val rowsByLimit: (Int) -> List<Report>,
+    private val totalCount: Int = 0,
+) : ReportRepository {
+    override suspend fun insert(report: Report) = Unit
+    override fun observeForSession(sessionId: String, userId: String, limit: Int, offset: Int): Flow<List<Report>> =
         flowOf(emptyList())
-    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
-    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
-    override suspend fun isSessionLabelTaken(
-        patientId: String,
-        label: String,
-        excludingSessionId: String?,
-    ): Boolean = false
-    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override fun observeSessionRecordsPage(
-        userId: String?,
+    override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+    override fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>> = flowOf(emptyList())
+    override fun observeAllCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeFiltered(
+        userId: String,
         startMillis: Long?,
         endMillis: Long?,
-        query: String,
         species: String?,
-        limit: Int,
-    ): Flow<List<SessionWithStats>> = flowOf(rowsByLimit(limit))
-    override fun observeSessionRecordsTotals(
-        userId: String?,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-        species: String?,
-    ): Flow<RecordsTotals> = flowOf(totals)
-    override fun observeVisibleSessionsPage(
-        userId: String?,
-        patientId: String,
-        activeSessionId: String?,
-        sinceMillis: Long,
-        startMillis: Long?,
-        endMillis: Long?,
         query: String,
         limit: Int,
-    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
-    override fun observeVisibleSessionsCounts(
-        userId: String?,
-        patientId: String,
-        activeSessionId: String?,
-        sinceMillis: Long,
+        offset: Int,
+    ): Flow<List<Report>> = flowOf(rowsByLimit(limit))
+
+    override fun observeFilteredCount(
+        userId: String,
         startMillis: Long?,
         endMillis: Long?,
+        species: String?,
         query: String,
-    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
+    ): Flow<Int> = flowOf(totalCount)
+
+    override suspend fun getById(reportId: String): Report? = null
+    override suspend fun getReportsPendingSync(userId: String): List<Report> = emptyList()
+    override suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus) = Unit
 }
 
 // ---------------------------------------------------------------------------
 // Model helpers
 // ---------------------------------------------------------------------------
 
-private fun makeSession(id: String, userId: String): Session =
-    Session(
+private fun makeReport(id: String, sessionId: String, userId: String): Report =
+    Report(
         id = id,
+        sessionId = sessionId,
         userId = userId,
-        deviceId = "device-1",
-        startedAt = 1_000L,
-        patientId = "patient-1",
-        label = null,
-    )
-
-private fun sessionWithStats(session: Session): SessionWithStats =
-    SessionWithStats(
-        session = session,
+        reportType = ReportType.SESSION,
+        generatedAt = Instant.ofEpochMilli(1_000L),
         totalSamples = 1,
-        verifiedSamples = 1,
-        unverifiedSamples = 0,
-        totalEggs = 0,
+        totalEggsConfirmed = 0,
+        positiveSpecies = emptyList(),
+        lpfPerSpecies = emptyMap(),
+        csvFilePath = "/path/$id.csv",
+        pdfFilePath = "/path/$id.pdf",
+        supabaseStatus = ReportSyncStatus.SYNCED,
     )

@@ -14,6 +14,7 @@ import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
+import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
@@ -41,6 +42,11 @@ import kotlinx.coroutines.launch
 enum class SessionUnavailable { NOT_FOUND, NOT_VISIBLE }
 
 /**
+ * Tab options on the Session Detail screen.
+ */
+enum class SessionDetailTab { REPORT, SAMPLES }
+
+/**
  * UI state for one session's verified samples + persisted reports.
  */
 data class SessionDetailState(
@@ -64,6 +70,7 @@ data class SessionDetailState(
      * for every session ever opened and the shortcut appeared on all of them.
      */
     val isActiveSession: Boolean = false,
+    val selectedTab: SessionDetailTab = SessionDetailTab.REPORT,
 ) {
     /**
      * The Verify Queue always shows the *active* session, so the shortcut into it is only
@@ -128,6 +135,7 @@ sealed interface SessionDetailEvent {
  */
 // Each parameter here is a separately tested, separately named use case — bundling would not
 // simplify the dependency graph; LongParameterList is the expected cost of composing 7 flows.
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Suppress("LongParameterList")
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
@@ -157,6 +165,9 @@ class SessionDetailViewModel @Inject constructor(
         .map { (it as? SessionState.Active)?.session?.sessionId == sessionId }
         .distinctUntilChanged()
 
+    private val selectedTab = MutableStateFlow(SessionDetailTab.REPORT)
+    private var cachedEggCounts: Pair<List<SampleRecordItem>, SessionEggCounts>? = null
+
     private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
 
@@ -168,12 +179,24 @@ class SessionDetailViewModel @Inject constructor(
             generationState,
             currentReportPage,
         ) { result, reports, totalReports, generation, page ->
-            val eggCounts = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
             val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
             val unavail = when (result) {
                 is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
                 is SessionSamplesResult.NotVisible -> SessionUnavailable.NOT_VISIBLE
                 else -> null
+            }
+            val eggCounts = if (resolvedSession != null) {
+                val samples = resolvedSession.samples
+                val cached = cachedEggCounts
+                if (cached != null && cached.first == samples) {
+                    cached.second
+                } else {
+                    val fresh = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
+                    cachedEggCounts = samples to fresh
+                    fresh
+                }
+            } else {
+                SessionEggCounts.empty()
             }
             SessionDetailState(
                 session = resolvedSession,
@@ -192,8 +215,9 @@ class SessionDetailViewModel @Inject constructor(
         },
         observeSessionPendingCountUseCase(sessionId),
         isActiveSessionFlow,
-    ) { partial, pending, isActive ->
-        partial.copy(pendingFlagged = pending, isActiveSession = isActive)
+        selectedTab,
+    ) { partial, pending, isActive, tab ->
+        partial.copy(pendingFlagged = pending, isActiveSession = isActive, selectedTab = tab)
     }
         .mapLatest { it }
         .stateIn(
@@ -201,6 +225,10 @@ class SessionDetailViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = SessionDetailState(),
         )
+
+    fun onTabSelected(tab: SessionDetailTab) {
+        selectedTab.value = tab
+    }
 
     /**
      * Generates a fresh report for this session in the chosen [format] (the use case writes only

@@ -144,6 +144,48 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
     override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> =
         flowOf(rows.values.count { it.sessionId == sessionId && it.userId == userId })
 
+    override fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<ReportEntity>> =
+        flowOf(
+            rows.values
+                .filter { it.userId == userId }
+                .sortedByDescending { it.generatedAt }
+                .drop(offset)
+                .take(limit),
+        )
+
+    override fun observeAllReportsCount(userId: String): Flow<Int> =
+        flowOf(rows.values.count { it.userId == userId })
+
+    override fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> =
+        flowOf(
+            rows.values
+                .filter { it.userId == userId }
+                .drop(offset)
+                .take(limit)
+                .map { com.agarthavision.data.local.dao.ReportWithSessionLabel(it) },
+        )
+
+    override fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> =
+        flowOf(rows.values.count { it.userId == userId })
+
     override suspend fun getReportById(reportId: String): ReportEntity? = rows[reportId]
 
     override suspend fun getReportsPendingSync(userId: String): List<ReportEntity> =

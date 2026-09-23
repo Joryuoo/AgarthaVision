@@ -101,6 +101,9 @@ android {
         // Robolectric resolves resources, themes, and the merged debug manifest from
         // the built variant. Required for the Compose UI tests under src/test/.
         unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            it.maxHeapSize = "2048m"
+        }
     }
 }
 

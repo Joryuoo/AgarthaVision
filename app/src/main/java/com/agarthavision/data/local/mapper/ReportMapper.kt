@@ -21,7 +21,7 @@ private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>
  * of what was found at generation time. Correcting a finding afterwards does not rewrite a
  * report that already went out — PB-20 makes that explicit.
  */
-fun ReportEntity.toDomain(gson: Gson): Report {
+fun ReportEntity.toDomain(gson: Gson, sessionLabel: String? = null): Report {
     val positives: List<String> = runCatching {
         gson.fromJson<List<String>>(positiveSpeciesJson, stringListType)
     }.getOrNull().orEmpty()
@@ -41,6 +41,7 @@ fun ReportEntity.toDomain(gson: Gson): Report {
         csvFilePath = csvFilePath,
         pdfFilePath = pdfFilePath,
         supabaseStatus = ReportSyncStatus.fromValue(supabaseStatus),
+        sessionLabel = sessionLabel,
     )
 }
 

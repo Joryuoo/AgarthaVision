@@ -343,6 +343,32 @@ private class FakeReportRepository : ReportRepository {
 
     override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
 
+    override fun observeAll(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeAllCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
+
     override suspend fun getById(reportId: String): com.agarthavision.domain.model.Report? = null
 
     override suspend fun getReportsPendingSync(
@@ -446,6 +472,28 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
         offset: Int,
     ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
     override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+    override fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
+    override fun observeAllReportsCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> = flowOf(emptyList())
+    override fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
     override suspend fun getReportsPendingSync(
         userId: String,

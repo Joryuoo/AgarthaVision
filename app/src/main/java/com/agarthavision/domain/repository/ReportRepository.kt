@@ -1,3 +1,5 @@
+@file:Suppress("LongParameterList")
+
 package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.Report
@@ -24,6 +26,40 @@ interface ReportRepository {
      * Observes the total number of reports for [sessionId] / [userId], ignoring any page limit.
      */
     fun observeCountForSession(sessionId: String, userId: String): Flow<Int>
+
+    /**
+     * Observes one page of all reports for [userId] ordered by `generatedAt` DESC.
+     */
+    fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>>
+
+    /**
+     * Observes the total number of reports for [userId], ignoring any page limit.
+     */
+    fun observeAllCount(userId: String): Flow<Int>
+
+    /**
+     * Observes filtered reports across all sessions for [userId].
+     */
+    fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+        limit: Int,
+        offset: Int,
+    ): Flow<List<Report>>
+
+    /**
+     * Observes the total number of filtered reports for [userId].
+     */
+    fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+    ): Flow<Int>
 
     /**
      * Loads a single report by id, or `null` if it doesn't exist.

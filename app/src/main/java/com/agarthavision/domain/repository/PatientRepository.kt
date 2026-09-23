@@ -100,4 +100,9 @@ interface PatientRepository {
         sex: Sex,
         excludingId: String,
     ): List<Patient>
+
+    /**
+     * Returns existing patient codenames matching [prefix] (e.g. "M24") visible to [userId].
+     */
+    suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
 }
