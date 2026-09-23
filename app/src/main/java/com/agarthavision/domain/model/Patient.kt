@@ -51,20 +51,33 @@ data class Patient(
     val createdAt: Instant,
     val updatedAt: Instant,
 ) {
+    val isCodename: Boolean
+        get() = com.agarthavision.domain.patient.CodenameGenerator.isCodename(lastname)
+
     /**
      * `"Cruz, Gerald M."` — surname first, then the given name and a middle initial.
-     *
-     * The initial appears only when a middle name exists, and a blank or whitespace-only
-     * middle name is treated as absent so the result never trails a stray `" ."`.
+     * Codenamed patients return their codename directly (e.g. `M24-001`).
      */
     val displayName: String
         get() {
+            if (isCodename) return lastname
+            if (firstname.isBlank()) return lastname
             val initial = middleName?.trim()?.firstOrNull()
             return if (initial == null) {
                 "$lastname, $firstname"
             } else {
                 "$lastname, $firstname $initial."
             }
+        }
+
+    /**
+     * GCash-masked display name (`"C**z, G****d M."`).
+     * Codenamed patients are never masked and return their codename directly.
+     */
+    val maskedDisplayName: String
+        get() {
+            if (isCodename) return lastname
+            return com.agarthavision.core.util.NameMasking.maskName(displayName)
         }
 
     /**

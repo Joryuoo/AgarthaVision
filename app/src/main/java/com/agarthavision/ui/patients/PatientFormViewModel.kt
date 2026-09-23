@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.patient.CodenameGenerator
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
@@ -58,6 +59,8 @@ data class PatientFormState(
     val lastname: String = "",
     val firstname: String = "",
     val middleName: String = "",
+    val useCustomCodename: Boolean = true,
+    val customCodename: String = "",
     val sex: Sex? = null,
     val birthdate: LocalDate? = null,
     val barangay: BarangayPickerState = BarangayPickerState(),
@@ -127,7 +130,9 @@ class PatientFormViewModel @Inject constructor(
     // Shared with the session sheet rather than copied (PB-07b).
     private val barangayPicker = BarangayPickerDelegate(searchBarangaysUseCase)
 
-    private val fields = MutableStateFlow(PatientFormState(isEditing = patientId != null))
+    private val fields = MutableStateFlow(
+        PatientFormState(isEditing = patientId != null, useCustomCodename = patientId == null),
+    )
 
     private val eventFlow = MutableSharedFlow<PatientFormEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<PatientFormEvent> = eventFlow.asSharedFlow()
@@ -157,7 +162,10 @@ class PatientFormViewModel @Inject constructor(
             .stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.Eagerly,
-                initialValue = PatientFormState(isEditing = patientId != null),
+                initialValue = PatientFormState(
+                    isEditing = patientId != null,
+                    useCustomCodename = patientId == null,
+                ),
             )
 
     init {
@@ -173,7 +181,7 @@ class PatientFormViewModel @Inject constructor(
         if (id == null) {
             patientId = null
             loaded = null
-            fields.value = PatientFormState(isEditing = false)
+            fields.value = PatientFormState(isEditing = false, useCustomCodename = true)
             barangayPicker.onCleared()
             return
         }
@@ -191,6 +199,8 @@ class PatientFormViewModel @Inject constructor(
                     lastname = patient.lastname,
                     firstname = patient.firstname,
                     middleName = patient.middleName.orEmpty(),
+                    useCustomCodename = patient.isCodename,
+                    customCodename = if (patient.isCodename) patient.lastname else "",
                     sex = patient.sex,
                     birthdate = patient.birthdate,
                     isEditing = true,
@@ -201,15 +211,39 @@ class PatientFormViewModel @Inject constructor(
     }
 
     fun onLastnameChanged(value: String) = fields.update {
-        it.copy(lastname = transformNameInput(it.lastname, value), errors = emptySet())
+        it.copy(
+            lastname = transformNameInput(it.lastname, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
     }
 
     fun onFirstnameChanged(value: String) = fields.update {
-        it.copy(firstname = transformNameInput(it.firstname, value), errors = emptySet())
+        it.copy(
+            firstname = transformNameInput(it.firstname, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
     }
 
     fun onMiddleNameChanged(value: String) = fields.update {
-        it.copy(middleName = transformNameInput(it.middleName, value), errors = emptySet())
+        it.copy(
+            middleName = transformNameInput(it.middleName, value),
+            useCustomCodename = false,
+            errors = emptySet(),
+        )
+    }
+
+    fun onUseCustomCodenameToggled(enabled: Boolean) = fields.update {
+        it.copy(useCustomCodename = enabled, errors = emptySet())
+    }
+
+    fun onCustomCodenameChanged(value: String) = fields.update {
+        it.copy(
+            customCodename = value.take(PATIENT_NAME_MAX_LENGTH).uppercase(),
+            useCustomCodename = true,
+            errors = emptySet(),
+        )
     }
 
     fun onSexSelected(sex: Sex) = fields.update { it.copy(sex = sex, errors = emptySet()) }
@@ -253,13 +287,15 @@ class PatientFormViewModel @Inject constructor(
                 lastname = existing.lastname,
                 firstname = existing.firstname,
                 middleName = existing.middleName.orEmpty(),
+                useCustomCodename = existing.isCodename,
+                customCodename = if (existing.isCodename) existing.lastname else "",
                 sex = existing.sex,
                 birthdate = existing.birthdate,
                 isEditing = true,
                 showDiscardConfirm = false,
             )
         } else {
-            PatientFormState(isEditing = false, showDiscardConfirm = false)
+            PatientFormState(isEditing = false, useCustomCodename = true, showDiscardConfirm = false)
         }
         if (existing != null) {
             viewModelScope.launch {
@@ -353,56 +389,60 @@ class PatientFormViewModel @Inject constructor(
                 return@launch
             }
 
-            // Middle-name coercion must exactly mirror the coercion used at persist time so
-            // the query sees the same value the row will be stored with. A blank middle name
-            // is absent, not an empty string, because displayName keys off null.
-            val middleName = snapshot.middleName.trim().ifBlank { null }
+            val isAnonymous = snapshot.useCustomCodename ||
+                (snapshot.lastname.isBlank() && snapshot.firstname.isBlank())
+            if (!isAnonymous) {
+                // Middle-name coercion must exactly mirror the coercion used at persist time so
+                // the query sees the same value the row will be stored with. A blank middle name
+                // is absent, not an empty string, because displayName keys off null.
+                val middleName = snapshot.middleName.trim().ifBlank { null }
 
-            val duplicates = runCatching {
-                patientRepository.findDuplicates(
-                    userId = userId,
-                    lastname = snapshot.lastname.trim(),
-                    firstname = snapshot.firstname.trim(),
-                    middleName = middleName,
-                    birthdate = requireNotNull(snapshot.birthdate),
-                    sex = requireNotNull(snapshot.sex),
-                    excludingId = patientId ?: "",
-                )
-            }.getOrElse { throwable ->
-                Log.e(TAG, "Duplicate check failed — proceeding without it", throwable)
-                emptyList()
-            }
-
-            if (duplicates.isNotEmpty()) {
-                val inputBarangayCode = requireNotNull(barangay).code
-                val sameBarangay = duplicates.firstOrNull { it.psgcBarangayCode == inputBarangayCode }
-                val differentBarangay = duplicates.filter { it.psgcBarangayCode != inputBarangayCode }
-
-                if (sameBarangay != null) {
-                    val barangayName = psgcRepository.getBarangay(sameBarangay.psgcBarangayCode)?.name
-                        ?: sameBarangay.psgcBarangayCode
-                    fields.update {
-                        it.copy(
-                            isSaving = false,
-                            pendingSameBarangayDuplicate = PatientDuplicate(sameBarangay, barangayName),
-                        )
-                    }
-                    return@launch
+                val duplicates = runCatching {
+                    patientRepository.findDuplicates(
+                        userId = userId,
+                        lastname = snapshot.lastname.trim(),
+                        firstname = snapshot.firstname.trim(),
+                        middleName = middleName,
+                        birthdate = requireNotNull(snapshot.birthdate),
+                        sex = requireNotNull(snapshot.sex),
+                        excludingId = patientId ?: "",
+                    )
+                }.getOrElse { throwable ->
+                    Log.e(TAG, "Duplicate check failed — proceeding without it", throwable)
+                    emptyList()
                 }
 
-                if (differentBarangay.isNotEmpty()) {
-                    val entries = differentBarangay.map { patient ->
-                        val name = psgcRepository.getBarangay(patient.psgcBarangayCode)?.name
-                            ?: patient.psgcBarangayCode
-                        PatientDuplicate(patient, name)
+                if (duplicates.isNotEmpty()) {
+                    val inputBarangayCode = requireNotNull(barangay).code
+                    val sameBarangay = duplicates.firstOrNull { it.psgcBarangayCode == inputBarangayCode }
+                    val differentBarangay = duplicates.filter { it.psgcBarangayCode != inputBarangayCode }
+
+                    if (sameBarangay != null) {
+                        val barangayName = psgcRepository.getBarangay(sameBarangay.psgcBarangayCode)?.name
+                            ?: sameBarangay.psgcBarangayCode
+                        fields.update {
+                            it.copy(
+                                isSaving = false,
+                                pendingSameBarangayDuplicate = PatientDuplicate(sameBarangay, barangayName),
+                            )
+                        }
+                        return@launch
                     }
-                    fields.update {
-                        it.copy(
-                            isSaving = false,
-                            pendingDifferentBarangayDuplicates = entries,
-                        )
+
+                    if (differentBarangay.isNotEmpty()) {
+                        val entries = differentBarangay.map { patient ->
+                            val name = psgcRepository.getBarangay(patient.psgcBarangayCode)?.name
+                                ?: patient.psgcBarangayCode
+                            PatientDuplicate(patient, name)
+                        }
+                        fields.update {
+                            it.copy(
+                                isSaving = false,
+                                pendingDifferentBarangayDuplicates = entries,
+                            )
+                        }
+                        return@launch
                     }
-                    return@launch
                 }
             }
 
@@ -421,10 +461,30 @@ class PatientFormViewModel @Inject constructor(
         val barangay = barangayPicker.state.value.selected
         val now = Instant.now()
         val existing = loaded
+
+        val isAnonymous = snapshot.useCustomCodename ||
+            (snapshot.lastname.isBlank() && snapshot.firstname.isBlank())
+        val (finalLastname, finalFirstname) = if (isAnonymous) {
+            if (snapshot.useCustomCodename && snapshot.customCodename.isNotBlank()) {
+                snapshot.customCodename.trim() to ""
+            } else if (existing != null && existing.isCodename && !snapshot.useCustomCodename) {
+                existing.lastname to ""
+            } else {
+                val sex = requireNotNull(snapshot.sex)
+                val birthdate = requireNotNull(snapshot.birthdate)
+                val prefix = CodenameGenerator.bucketPrefix(sex, birthdate)
+                val existingCodenames = patientRepository.getExistingCodenamesByPrefix(userId, prefix)
+                val codename = CodenameGenerator.generate(sex, birthdate, existingCodenames)
+                codename to ""
+            }
+        } else {
+            snapshot.lastname.trim() to snapshot.firstname.trim()
+        }
+
         val patient = Patient(
             id = existing?.id ?: UUID.randomUUID().toString(),
-            lastname = snapshot.lastname.trim(),
-            firstname = snapshot.firstname.trim(),
+            lastname = finalLastname,
+            firstname = finalFirstname,
             // A blank middle name is absent, not an empty string: displayName keys off
             // null to decide whether an initial belongs in the name at all.
             middleName = snapshot.middleName.trim().ifBlank { null },
@@ -465,8 +525,12 @@ class PatientFormViewModel @Inject constructor(
      */
     private fun validate(form: PatientFormState, barangay: PsgcBarangay?): Set<PatientFormError> =
         buildSet {
-            if (form.lastname.isBlank()) add(PatientFormError.LASTNAME_REQUIRED)
-            if (form.firstname.isBlank()) add(PatientFormError.FIRSTNAME_REQUIRED)
+            val isAnonymous = form.useCustomCodename ||
+                (form.lastname.isBlank() && form.firstname.isBlank())
+            if (!isAnonymous) {
+                if (form.lastname.isBlank()) add(PatientFormError.LASTNAME_REQUIRED)
+                if (form.firstname.isBlank()) add(PatientFormError.FIRSTNAME_REQUIRED)
+            }
             if (form.sex == null) add(PatientFormError.SEX_REQUIRED)
             when {
                 form.birthdate == null -> add(PatientFormError.BIRTHDATE_REQUIRED)
@@ -485,25 +549,33 @@ class PatientFormViewModel @Inject constructor(
         form: PatientFormState = fields.value,
         barangay: PsgcBarangay? = barangayPicker.state.value.selected,
     ): Boolean {
-        val l = loaded
-        return if (l == null) {
-            // New patient — dirty if anything has been typed or picked.
-            form.lastname.isNotEmpty() ||
-                form.firstname.isNotEmpty() ||
-                form.middleName.isNotEmpty() ||
-                form.sex != null ||
-                form.birthdate != null ||
-                barangay != null
-        } else {
-            // Editing — dirty if any field differs from the loaded value.
-            form.lastname != l.lastname ||
-                form.firstname != l.firstname ||
-                form.middleName != (l.middleName ?: "") ||
-                form.sex != l.sex ||
-                form.birthdate != l.birthdate ||
-                barangay?.code != l.psgcBarangayCode
-        }
+        val l = loaded ?: return isNewPatientDirty(form, barangay)
+        return isEditingDirty(form, barangay, l)
     }
+
+    private fun isNewPatientDirty(form: PatientFormState, barangay: PsgcBarangay?): Boolean =
+        !form.useCustomCodename ||
+            form.customCodename.isNotEmpty() ||
+            form.lastname.isNotEmpty() ||
+            form.firstname.isNotEmpty() ||
+            form.middleName.isNotEmpty() ||
+            form.sex != null ||
+            form.birthdate != null ||
+            barangay != null
+
+    private fun isEditingDirty(
+        form: PatientFormState,
+        barangay: PsgcBarangay?,
+        loaded: Patient,
+    ): Boolean =
+        form.useCustomCodename != loaded.isCodename ||
+            form.customCodename != (if (loaded.isCodename) loaded.lastname else "") ||
+            form.lastname != loaded.lastname ||
+            form.firstname != loaded.firstname ||
+            form.middleName != (loaded.middleName ?: "") ||
+            form.sex != loaded.sex ||
+            form.birthdate != loaded.birthdate ||
+            barangay?.code != loaded.psgcBarangayCode
 
     private companion object {
         const val TAG = "PatientForm"

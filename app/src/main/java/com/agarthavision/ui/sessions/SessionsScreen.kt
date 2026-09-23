@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -83,6 +84,8 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
@@ -113,6 +116,9 @@ fun SessionsScreen(
                 is SessionsEvent.NavigateToCapture -> {
                     showCreateDialog = false
                     onNavigateToCapture(event.sessionId)
+                }
+                is SessionsEvent.NavigateToVerificationQueue -> {
+                    onNavigate(Screen.VerificationQueue.route)
                 }
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
@@ -219,6 +225,13 @@ fun SessionsScreen(
                                     // from Records, which is where reading a finished
                                     // session belongs.
                                     onClick = { viewModel.onResumeSession(sessionData.session.id) },
+                                    onVerifyClick = {
+                                        viewModel.onOpenVerificationQueue(sessionData.session.id)
+                                    },
+                                    onViewReportClick = {
+                                        val route = Screen.SessionDetail.createRoute(sessionData.session.id)
+                                        onNavigate(route)
+                                    },
                                 )
                             )
                         }
@@ -359,6 +372,7 @@ private fun PatientPreviewCard(
 ) {
     val colors = AgarthaTheme.colors
     val context = LocalContext.current
+    var isRevealed by rememberSaveable { mutableStateOf(false) }
     val age = patient.ageYears(Instant.now())
     val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
     val sexLabel = when (patient.sex) {
@@ -377,17 +391,42 @@ private fun PatientPreviewCard(
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text(
-            text = patient.displayName,
-            style = MaterialTheme.typography.headlineSmall.copy(
-                fontSize = 24.sp,
-                lineHeight = 30.sp,
-                fontWeight = FontWeight.Bold,
-            ),
-            color = colors.onAccent,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = colors.onAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (!patient.isCodename) {
+                val icon = if (isRevealed) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff
+                val descRes = if (isRevealed) {
+                    R.string.patients_mask_name_desc
+                } else {
+                    R.string.patients_reveal_name_desc
+                }
+                IconButton(
+                    onClick = { isRevealed = !isRevealed },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = stringResource(descRes),
+                        tint = colors.onAccent,
+                    )
+                }
+            }
+        }
         Text(
             text = ageSex,
             style = MaterialTheme.typography.labelSmall.copy(
@@ -429,6 +468,8 @@ private fun PatientPreviewCard(
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
+    val onVerifyClick: () -> Unit = {},
+    val onViewReportClick: () -> Unit = {},
 )
 
 internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
@@ -503,7 +544,15 @@ private fun SessionCard(
                 }
                 Row(
                     modifier = Modifier
-                        .background(badgeBg, CircleShape)
+                        .clip(CircleShape)
+                        .background(badgeBg)
+                        .then(
+                            when (queueBadge) {
+                                SessionQueueBadge.PENDING -> Modifier.clickable { actions.onVerifyClick() }
+                                SessionQueueBadge.ALL_VERIFIED -> Modifier.clickable { actions.onViewReportClick() }
+                                SessionQueueBadge.NO_ITEMS -> Modifier
+                            }
+                        )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -534,7 +583,9 @@ private fun SessionCard(
                 val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
                 Box(
                     modifier = Modifier
+                        .clip(CircleShape)
                         .background(badgeBg, CircleShape)
+                        .clickable { actions.onViewReportClick() }
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
                     Text("$eggs eggs", color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)

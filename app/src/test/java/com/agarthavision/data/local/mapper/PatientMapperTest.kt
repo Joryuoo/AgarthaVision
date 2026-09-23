@@ -101,4 +101,25 @@ class PatientMapperTest {
         val roundTripped = entity(supabaseStatus = "synced").toDomain().toEntity()
         assertEquals("pending", roundTripped.supabaseStatus)
     }
+
+    // ── Anonymous / codenamed patient contract ────────────────────────────────
+    // PatientFormViewModel.persist() writes firstname = "" for every codename path.
+    // PatientRemoteDataSource.toRow() passes that value straight to Supabase unchanged,
+    // so the only guard is the DB-side CHECK — which 0002_optional_patient_firstname.sql
+    // drops.  These tests confirm the app-side mapping never rejects or mangles "".
+    // (toRow() itself is private; these cover the entity ↔ domain layer that feeds it.)
+
+    @Test
+    fun `an anonymous patient with empty firstname survives entity-to-domain mapping`() {
+        val anon = entity().copy(lastname = "WILDCAT-F22", firstname = "")
+        val domain = anon.toDomain()
+        assertEquals("WILDCAT-F22", domain.lastname)
+        assertEquals("", domain.firstname)
+    }
+
+    @Test
+    fun `an anonymous patient with empty firstname round-trips through entity and domain`() {
+        val anon = entity().copy(lastname = "WILDCAT-F22", firstname = "")
+        assertEquals("", anon.toDomain().toEntity().firstname)
+    }
 }

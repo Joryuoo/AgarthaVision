@@ -1164,7 +1164,7 @@ class SessionsViewModelTest {
      * `Result` and take down every test in this file.
      */
     private fun stubLabelUseCase() = mock<GenerateSessionLabelUseCase> {
-        onBlocking { invoke(any()) } doReturn Result.success("C.G.-0730600000-001")
+        onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
     }
 
     private fun buildViewModelWithIdentityFlow(
