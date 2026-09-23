@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
+import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
@@ -98,6 +99,28 @@ sealed interface SessionDetailEvent {
         val csvPath: String?,
         val format: ExportFormat,
     ) : SessionDetailEvent
+
+    /**
+     * A report's file was not on this device and is being fetched from Storage. Emitted so
+     * the tap has a visible consequence: a download over a field connection is not instant,
+     * and silence reads as the same dead tap this whole change exists to remove.
+     */
+    data object ReportRestoreStarted : SessionDetailEvent
+
+    /**
+     * A report's file is now on this device, at these paths. Either may be null — a report is
+     * generated in one format, not both.
+     */
+    data class ReportRestored(
+        val pdfPath: String?,
+        val csvPath: String?,
+    ) : SessionDetailEvent
+
+    /**
+     * Nothing could be recovered: the report predates the `reports` bucket, or the device is
+     * offline. Distinct from [ReportRestoreStarted] so the screen can stop saying "fetching".
+     */
+    data object ReportRestoreFailed : SessionDetailEvent
 }
 
 /**
@@ -115,6 +138,7 @@ class SessionDetailViewModel @Inject constructor(
     observeSessionPendingCountUseCase: ObserveSessionPendingCountUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val generateSessionReportUseCase: GenerateSessionReportUseCase,
+    private val restoreReportFilesUseCase: RestoreReportFilesUseCase,
     sessionManager: SessionManager,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
@@ -204,6 +228,32 @@ class SessionDetailViewModel @Inject constructor(
                         GenerationState(error = error.message ?: error::class.simpleName)
                     }
                 },
+            )
+        }
+    }
+
+    /**
+     * Fetches a report's files from Storage when this device does not have them.
+     *
+     * A report row syncs between devices; its `pdf_file_path` does not travel with it,
+     * because that path is a MediaStore id or an absolute path and means nothing anywhere
+     * else. So a report generated on another device — or on this one before its `Documents`
+     * folder was cleared — opens to nothing. Rather than report that as an error, fetch the
+     * document and open it.
+     */
+    fun restoreReportFiles(reportId: String) {
+        viewModelScope.launch {
+            _events.emit(SessionDetailEvent.ReportRestoreStarted)
+            restoreReportFilesUseCase(reportId).fold(
+                onSuccess = { files ->
+                    _events.emit(
+                        SessionDetailEvent.ReportRestored(
+                            pdfPath = files.pdfFilePath,
+                            csvPath = files.csvFilePath,
+                        ),
+                    )
+                },
+                onFailure = { _events.emit(SessionDetailEvent.ReportRestoreFailed) },
             )
         }
     }

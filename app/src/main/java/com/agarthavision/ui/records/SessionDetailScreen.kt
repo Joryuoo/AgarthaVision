@@ -73,6 +73,7 @@ import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.launch
 
 internal data class SessionDetailUi(
     val id: String,
@@ -119,6 +120,7 @@ fun SessionDetailScreen(
     val shareActionLabel = stringResource(R.string.report_share_action)
     var shareError by remember { mutableStateOf<Int?>(null) }
     val generationFailedTemplate = stringResource(R.string.report_generation_failed)
+    val restoringMessage = stringResource(R.string.report_restoring)
     val sessionDetail = mapToUiModel(state)
 
     LaunchedEffect(viewModel) {
@@ -139,6 +141,24 @@ fun SessionDetailScreen(
                         }
                     }
                 }
+
+                // Launched rather than awaited: showSnackbar suspends until the snackbar
+                // goes away, and collecting the next event behind it would hold the opened
+                // file back by the length of a snackbar.
+                SessionDetailEvent.ReportRestoreStarted -> {
+                    launch { snackbarHostState.showSnackbar(restoringMessage) }
+                }
+
+                is SessionDetailEvent.ReportRestored -> {
+                    shareError = when {
+                        event.pdfPath != null -> viewReportPdf(context, event.pdfPath)
+                        event.csvPath != null -> viewReportCsv(context, event.csvPath)
+                        else -> R.string.report_share_file_gone
+                    }
+                }
+
+                SessionDetailEvent.ReportRestoreFailed ->
+                    shareError = R.string.report_restore_failed
             }
         }
     }
@@ -195,10 +215,19 @@ fun SessionDetailScreen(
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
             onOpenReport = { report ->
-                shareError = when {
+                val result = when {
                     report.pdfFilePath != null -> viewReportPdf(context, report.pdfFilePath)
                     report.csvFilePath != null -> viewReportCsv(context, report.csvFilePath)
                     else -> R.string.report_share_missing_path
+                }
+                // A file this device has never had is the synced-from-elsewhere case, not a
+                // mistake to scold the medtech for. Fetch it instead of reporting it.
+                if (result == R.string.report_share_file_gone ||
+                    result == R.string.report_share_missing_path
+                ) {
+                    viewModel.restoreReportFiles(report.id)
+                } else {
+                    shareError = result
                 }
             },
             onPrevPage = viewModel::goToPreviousReportPage,

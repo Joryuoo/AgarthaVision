@@ -61,6 +61,23 @@ interface ReportDao {
     suspend fun updateSupabaseStatus(reportId: String, status: String)
 
     /**
+     * Repoints a report at the files it now has on *this* device, after they were restored
+     * from Storage.
+     *
+     * The paths are device-local by nature — a MediaStore id or an absolute path — so the
+     * row arriving from another device always names a file this one does not have. Writing
+     * the local path back is what makes the second open a plain local read.
+     */
+    @Query(
+        """
+        UPDATE reports
+        SET pdf_file_path = :pdfFilePath, csv_file_path = :csvFilePath
+        WHERE report_id = :reportId
+        """,
+    )
+    suspend fun updateFilePaths(reportId: String, pdfFilePath: String?, csvFilePath: String?)
+
+    /**
      * Live count of owned reports still awaiting cloud upload (`pending` only, not
      * `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
      */

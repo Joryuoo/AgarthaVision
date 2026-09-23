@@ -372,6 +372,12 @@ private class FakeReportFileStore : ReportFileStore {
         lastPdfBytes = pdf
         return "/Documents/AgarthaVision/report.pdf"
     }
+
+    override suspend fun readBytes(path: String): ByteArray? = when (path) {
+        "/Documents/AgarthaVision/report.pdf" -> lastPdfBytes
+        "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
+        else -> null
+    }
 }
 
 private fun reportSession(sessionId: String, userId: String): Session =
@@ -423,10 +429,16 @@ private fun noOpSyncReportUseCase(): SyncReportUseCase =
     SyncReportUseCase(
         reportDao = NoOpReportDao(),
         remoteDataSource = NoOpReportRemoteDataSource(),
+        reportFileStore = FakeReportFileStore(),
     )
 
 private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun insertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit
+    override suspend fun updateFilePaths(
+        reportId: String,
+        pdfFilePath: String?,
+        csvFilePath: String?,
+    ) = Unit
     override fun observeReportsForSession(
         sessionId: String,
         userId: String,

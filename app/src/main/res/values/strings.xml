@@ -236,6 +236,8 @@
     <string name="report_share_no_app">No app available to share the report.</string>
     <string name="report_open_no_app">No app available to open the report.</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
+    <string name="report_restoring">Fetching the report file\u2026</string>
+    <string name="report_restore_failed">This report\'s file could not be fetched. Check your connection and try again.</string>
     <string name="report_pdf_document_title">AgarthaVision Session Report</string>
     <string name="report_pdf_session_label">Session</string>
     <string name="report_pdf_device_label">Device</string>
