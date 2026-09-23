@@ -1,6 +1,7 @@
 package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.model.EggStage
 
 /**
  * One thing the medtech is asserting about the frame in front of them.
@@ -64,8 +65,10 @@ data class Finding(
  * counting the unnamed ones together would put a floor under a freshly added card drawn from
  * boxes that have nothing to do with it.
  */
-fun List<Finding>.boxedCountOf(species: String?): Int =
-    if (species == null) 0 else count { it.countsAsEgg && it.answers.speciesLabel == species }
+fun List<Finding>.boxedCountOf(species: String?, stage: EggStage? = null): Int =
+    if (species == null) 0 else count {
+        it.countsAsEgg && it.answers.speciesLabel == species && (stage == null || it.answers.stage == stage)
+    }
 
 /**
  * What the medtech says is in this field for [species]: their own total when they gave one,
@@ -74,10 +77,10 @@ fun List<Finding>.boxedCountOf(species: String?): Int =
  * The two are not added. A total already includes the boxes — that is what makes it a total —
  * and summing them is the double-count the old per-row contribution walked into.
  */
-fun List<Finding>.fieldTotalOf(species: String?): Int =
-    firstOrNull { it.prediction == null && it.answers.speciesLabel == species }
-        ?.answers?.fieldTotal
-        ?: boxedCountOf(species)
+fun List<Finding>.fieldTotalOf(species: String?, stage: EggStage? = null): Int =
+    firstOrNull {
+        it.prediction == null && it.answers.speciesLabel == species && (stage == null || it.answers.stage == stage)
+    }?.answers?.fieldTotal ?: boxedCountOf(species, stage)
 
 /**
  * Eggs of [species] with no box behind them.
@@ -123,38 +126,36 @@ fun List<Finding>.speciesPresent(): List<String> =
         finding.answers.speciesLabel?.takeIf { finding.countsAsEgg || finding.prediction == null }
     }.distinct().sorted()
 
+data class SpeciesStageKey(
+    val species: String,
+    val stage: EggStage? = null,
+)
+
+fun List<Finding>.speciesStageKeysPresent(): List<SpeciesStageKey> =
+    mapNotNull { finding ->
+        val species = finding.answers.speciesLabel ?: return@mapNotNull null
+        if (finding.countsAsEgg || finding.prediction == null) {
+            SpeciesStageKey(species, finding.answers.stage)
+        } else null
+    }.distinct()
+
 /**
- * One species and its egg count for this field — the shape that reaches
+ * One species, stage, and its egg count for this field — the shape that reaches
  * `sample_species_findings`.
- *
- * The table also has a `stage` column, always null here. 86d4a6jwy shipped a developmental
- * stage dropdown, staging reverted it (`9dcfd5d`) because its four values were never checked
- * against literature, and the migration that carries the column is already applied and frozen
- * under C6. The column stays, dormant, for the ticket's return.
  */
 data class FindingRow(
     val species: String,
+    val stage: EggStage? = null,
     val eggCount: Int,
 )
 
 /**
  * Collapses a frame's findings into the rows that get persisted.
- *
- * One row per species, because that is what `sample_species_findings` holds — it is unique on
- * `(sample_id, species)` and `0001_init.sql` records that a per-egg count column was considered
- * and rejected.
- *
- * **This is no longer a sum.** It used to add every finding's contribution together, which was
- * correct only while an added row meant "eggs beyond the boxes". An added row now carries the
- * field total for its species, boxes included, so the rule is [fieldTotalOf]: the medtech's
- * total when they gave one, the kept boxes otherwise.
- *
- * Species contributing zero eggs drop out, which is how a rejected box (`isEgg = false`) leaves
- * no trace in the count while still persisting as a labelled `FALSE_POSITIVE` detection.
  */
 fun List<Finding>.toFindingRows(): List<FindingRow> =
-    speciesPresent()
-        .mapNotNull { species ->
-            fieldTotalOf(species).takeIf { it > 0 }?.let { FindingRow(species, it) }
+    speciesStageKeysPresent()
+        .mapNotNull { key ->
+            val count = fieldTotalOf(key.species, key.stage)
+            if (count > 0) FindingRow(key.species, key.stage, count) else null
         }
-        .sortedBy { it.species }
+        .sortedWith(compareBy({ it.species }, { it.stage?.name }))
