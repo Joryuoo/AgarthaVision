@@ -2,28 +2,20 @@ package com.agarthavision.domain.model
 
 enum class EggStage(
     val displayName: String,
-    val applicableSpecies: Set<EggSpecies>,
+    val applicableSpecies: Set<EggSpecies> = setOf(
+        EggSpecies.ASCARIS,
+        EggSpecies.TRICHURIS,
+        EggSpecies.HOOKWORM,
+    ),
 ) {
-    // Ascaris lumbricoides
-    CORTICATED_FERTILIZED("Corticated Fertilized", setOf(EggSpecies.ASCARIS)),
-    DECORTICATED_FERTILIZED("Decorticated Fertilized", setOf(EggSpecies.ASCARIS)),
-    CORTICATED_UNFERTILIZED("Corticated Unfertilized", setOf(EggSpecies.ASCARIS)),
-    DECORTICATED_UNFERTILIZED("Decorticated Unfertilized", setOf(EggSpecies.ASCARIS)),
-
-    // Trichuris trichiura
-    UNSEGMENTED("Unsegmented / Zygote", setOf(EggSpecies.TRICHURIS)),
-
-    // Hookworm
-    EARLY_CLEAVAGE("Early Cleavage / Morula", setOf(EggSpecies.HOOKWORM)),
-
-    // Shared across species
-    EMBRYONATED("Embryonated", setOf(EggSpecies.ASCARIS, EggSpecies.TRICHURIS, EggSpecies.HOOKWORM)),
+    CORTICATED_FERTILIZED("Corticated Fertilized"),
+    CORTICATED_UNFERTILIZED("Corticated Unfertilized"),
+    DECORTICATED_FERTILIZED("Decorticated Fertilized"),
+    DECORTICATED_UNFERTILIZED("Decorticated Unfertilized"),
     ;
 
-    fun getDisplayName(species: EggSpecies?): String = when {
-        this == EMBRYONATED && species == EggSpecies.HOOKWORM -> "Embryonated / Larvated"
-        else -> displayName
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun getDisplayName(species: EggSpecies? = null): String = displayName
 
     companion object {
         fun forSpecies(species: EggSpecies?): List<EggStage> {
