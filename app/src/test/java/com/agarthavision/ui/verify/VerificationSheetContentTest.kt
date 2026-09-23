@@ -793,6 +793,32 @@ class VerificationSheetContentTest {
     // No model output — verified through the same Add Egg section as every other frame
 
     /** A frame captured while the inference container was unreachable. */
+    // ---- 86d4by5n4 / 86d4by5n5: drawn boxes on the frame, and drawing as one action ----
+
+    /**
+     * The toggle used to live inside the Current Detection block, which needs a model box to
+     * exist. A manual capture the medtech located eggs on by hand therefore had boxes to hide
+     * and no control anywhere that could hide them.
+     */
+    @Test
+    fun `a frame with no model output offers the box toggle once a box is drawn`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 1,
+                            drawnBoxes = listOf(ImageBox(x = 10f, y = 10f, width = 4f, height = 4f)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.BOXES_TOGGLE).assertExists()
+    }
+
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(
         frame = frame(source = FrameSource.MANUAL, predictions = 0),
         frameIndexInQueue = 1,

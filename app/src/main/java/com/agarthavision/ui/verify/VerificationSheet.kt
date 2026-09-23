@@ -186,8 +186,12 @@ internal fun VerificationSheetContent(
             } else {
                 FrameWithBoxes(
                     imageModel = imageModel,
-                    predictions = frame.predictions,
-                    highlightedIndex = state.currentDetectionIndex,
+                    // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
+                    // `frame.predictions` alone never held a hand-drawn box, so every one of them
+                    // was invisible and a replaced box left the model's wrong rectangle on screen.
+                    boxes = state.findings.frameBoxes(
+                        active = DrawTarget(state.currentDetectionIndex),
+                    ),
                     showBoxes = state.showBoundingBoxes,
                     inferenceImageWidth = frame.imageWidth,
                     inferenceImageHeight = frame.imageHeight,
@@ -250,12 +254,21 @@ internal fun VerificationSheetContent(
                     onNext = actions.onDetectionNext,
                     modifier = Modifier.padding(bottom = 12.dp),
                 )
+            }
 
+            // Offered whenever the frame has anything to show, which since 86d4by5n4 includes a
+            // frame with no model output at all: a manual capture the medtech located eggs on by
+            // hand has boxes to hide and used to have no control that could hide them, because
+            // this sat inside the Current Detection block and that block needs a model box to
+            // exist. Its position is unchanged for every frame that has one.
+            if (boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }) {
                 BoundingBoxesToggle(
                     checked = state.showBoundingBoxes,
                     onToggle = actions.onToggleBoundingBoxes,
                 )
+            }
 
+            if (boxCount > 0) {
                 BoxQuestionChain(
                     answers = currentAnswers,
                     suggestedSpecies = currentPrediction
@@ -523,7 +536,7 @@ private fun BoxQuestionChain(
  * outlives the signature instead of missing on every open.
  */
 @Composable
-private fun rememberFrameImageModel(frame: FlaggedFrame, source: SampleImageSource?): Any? {
+internal fun rememberFrameImageModel(frame: FlaggedFrame, source: SampleImageSource?): Any? {
     val context = LocalContext.current
     return remember(frame.sampleId, frame.jpegBytes.size, source) {
         when {
@@ -547,7 +560,7 @@ private fun rememberFrameImageModel(frame: FlaggedFrame, source: SampleImageSour
  * connection — and neither is "carry on annotating", which is what a blank canvas invites.
  */
 @Composable
-private fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = Modifier) {
+internal fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .background(AgarthaTheme.colors.surfaceVariant)

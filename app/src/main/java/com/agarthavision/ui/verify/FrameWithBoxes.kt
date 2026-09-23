@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -49,7 +50,6 @@ import kotlin.math.abs
 import com.agarthavision.R
 import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
 import com.agarthavision.domain.inference.ImageBox
-import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -67,6 +67,11 @@ import com.agarthavision.ui.theme.AgarthaTheme
  *
  * While a box is being drawn the same rule holds, stated from the other side: the box under the
  * medtech's finger is the only coloured one, and every existing box recedes to gray.
+ *
+ * **Colour is orthogonal to trust.** A rectangle the medtech has disowned is drawn dashed rather
+ * than in a third colour, so the two rules compose instead of competing: a voided box you happen
+ * to be paged onto is dashed *and* coloured, which says exactly the right thing — this is the one
+ * you are looking at, and you have struck it out.
  */
 object VerificationBoxColors {
     /** The detection the question chain is currently about, or the box being drawn. */
@@ -78,21 +83,13 @@ object VerificationBoxColors {
         @Composable get() = AgarthaTheme.colors.textTertiary
 }
 
-/**
- * Picks a box's colour from its position in the prediction list.
- *
- * Pure, and separated out so the rule can be tested without a renderer. Note what happens when
- * [highlightedIndex] is outside the list: **no box is coloured**, which is correct rather than a
- * gap. Once a medtech adds an egg through Add Egg, the answer list is longer than the prediction
- * list and the current index runs past the end — at that point the subject of the questions has
- * no drawn box at all, and colouring an arbitrary prediction instead would point the medtech at
- * the wrong specimen. It is also how drawing dims everything: the draft passes [NO_HIGHLIGHT].
- */
-internal fun boxColorAt(index: Int, highlightedIndex: Int, active: Color, inactive: Color): Color =
-    if (index == highlightedIndex) active else inactive
+/** Stroke width every box on the frame is drawn at, trusted or not. */
+private const val BOX_STROKE_WIDTH = 3f
 
-/** A highlight index no box can hold, so every existing box renders gray. */
-internal const val NO_HIGHLIGHT = -1
+// The dash a disowned rectangle is drawn with. Long enough on to still read as a box at the size
+// a 640px frame lands on a phone, and a visible gap so it cannot be mistaken for a solid one.
+private const val VOID_DASH_ON = 10f
+private const val VOID_DASH_OFF = 8f
 
 /**
  * The frame, its detection boxes, and — when [isDrawing] — a box the medtech is drawing on it.
@@ -100,6 +97,11 @@ internal const val NO_HIGHLIGHT = -1
  * Drawing is the primitive only: drag to define a rect, then accept or cancel. What the accepted
  * box *means* is the caller's business (PB-14b wires it to a Q2 redraw and to Add Egg), which is
  * why this emits geometry and nothing else.
+ *
+ * @param boxes every rectangle to draw, already decided. **Not `frame.predictions`** — that is
+ *   what made every hand-drawn box invisible, because a replacement and a located egg both live
+ *   on the answers and never appeared in the model's list. Which boxes those are, and which of
+ *   them the medtech has disowned, is [frameBoxes]' business; this only draws them.
  *
  * @param imageModel what Coil should load: the frame's own JPEG bytes on the device that
  *   captured it, or an `ImageRequest` built from a local file or a signed Storage URL for a
@@ -125,8 +127,7 @@ internal const val NO_HIGHLIGHT = -1
 @Composable
 fun FrameWithBoxes(
     imageModel: Any,
-    predictions: List<Prediction>,
-    highlightedIndex: Int,
+    boxes: List<FrameBox>,
     showBoxes: Boolean,
     inferenceImageWidth: Int?,
     inferenceImageHeight: Int?,
@@ -140,6 +141,13 @@ fun FrameWithBoxes(
     // Capture tokens at composition time — DrawScope inside Canvas is not @Composable.
     val activeBoxColor = VerificationBoxColors.active
     val otherBoxColor = VerificationBoxColors.inactive
+    val solidStroke = remember { Stroke(width = BOX_STROKE_WIDTH) }
+    val voidedStroke = remember {
+        Stroke(
+            width = BOX_STROKE_WIDTH,
+            pathEffect = PathEffect.dashPathEffect(floatArrayOf(VOID_DASH_ON, VOID_DASH_OFF)),
+        )
+    }
 
     // The drag, in canvas pixels. Held here rather than hoisted because it is transient
     // interaction state with no meaning outside the gesture: only the accepted box leaves.
@@ -203,21 +211,16 @@ fun FrameWithBoxes(
                     ?: return@Canvas
 
                 if (showBoxes) {
-                    predictions.forEachIndexed { index, box ->
-                        // Predictions are centre-based: box.x is the centre, not the left edge.
+                    boxes.forEach { frameBox ->
+                        val box = frameBox.box
+                        // Boxes are centre-based: box.x is the centre, not the left edge.
                         val left = transform.toCanvasX(box.x - box.width / 2f)
                         val top = transform.toCanvasY(box.y - box.height / 2f)
                         drawRect(
-                            // While drawing, the draft is the only coloured box.
-                            color = boxColorAt(
-                                index = index,
-                                highlightedIndex = if (isDrawing) NO_HIGHLIGHT else highlightedIndex,
-                                active = activeBoxColor,
-                                inactive = otherBoxColor,
-                            ),
+                            color = if (frameBox.active) activeBoxColor else otherBoxColor,
                             topLeft = Offset(left, top),
                             size = Size(box.width * transform.scale, box.height * transform.scale),
-                            style = Stroke(width = 3f),
+                            style = if (frameBox.trusted) solidStroke else voidedStroke,
                         )
                     }
                 }
@@ -229,7 +232,7 @@ fun FrameWithBoxes(
                         color = activeBoxColor,
                         topLeft = Offset(minOf(start.x, end.x), minOf(start.y, end.y)),
                         size = Size(abs(end.x - start.x), abs(end.y - start.y)),
-                        style = Stroke(width = 3f),
+                        style = solidStroke,
                     )
                 }
             }
