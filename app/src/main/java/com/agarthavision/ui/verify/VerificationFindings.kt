@@ -383,6 +383,18 @@ private fun LocateEggsSection(
                         tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
                         onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
                     )
+                    // Offered only where there is a box to discard. Accepting one used to be
+                    // final: the species' total is floored at the boxes drawn on it, so a box in
+                    // the wrong place made its own count unlowerable and the only way out was to
+                    // remove the species and retype it. Removing leaves the count alone — the egg
+                    // is still there, it simply goes back to unlocated.
+                    if (slot.box != null) {
+                        DrawBoxAction(
+                            label = stringResource(R.string.verify_remove_box),
+                            tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
+                            onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },
+                        )
+                    }
                 }
             }
         }

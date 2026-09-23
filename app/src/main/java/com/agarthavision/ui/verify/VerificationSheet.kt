@@ -128,6 +128,7 @@ fun VerificationSheet(
                 onBeginDraw = viewModel::onBeginDraw,
                 onBoxDrawn = viewModel::onBoxDrawn,
                 onCancelDraw = viewModel::onCancelDraw,
+                onRemoveDrawnBox = viewModel::onRemoveDrawnBox,
             ),
         )
     }
@@ -140,6 +141,15 @@ internal fun VerificationSheetContent(
     actions: VerificationSheetActions,
 ) {
     val frame = state.frame ?: return
+
+    // Drawing replaces the sheet rather than living inside it. See DrawModeScreen for why, and
+    // note that this is the whole of the layout change: no section moved, so PB-13a's ordering
+    // (86d4bk51n) is untouched and there is nothing for 86d4by5n5 to flag there.
+    if (state.isDrawing) {
+        DrawModeScreen(state = state, actions = actions)
+        return
+    }
+
     val showDiscardConfirm = remember { mutableStateOf(false) }
     // The sample's label is the moment it was captured. The same label the queue row carries,
     // so the row the medtech tapped names the screen they land on.
@@ -195,9 +205,6 @@ internal fun VerificationSheetContent(
                     showBoxes = state.showBoundingBoxes,
                     inferenceImageWidth = frame.imageWidth,
                     inferenceImageHeight = frame.imageHeight,
-                    isDrawing = state.isDrawing,
-                    onBoxDrawn = actions.onBoxDrawn,
-                    onDrawCancelled = actions.onCancelDraw,
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(frame.previewAspectRatio())

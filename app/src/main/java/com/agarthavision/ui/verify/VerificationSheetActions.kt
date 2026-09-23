@@ -43,4 +43,9 @@ data class VerificationSheetActions(
     /** The medtech accepted a drawn box, already in the model's centre-based image space. */
     val onBoxDrawn: (ImageBox) -> Unit,
     val onCancelDraw: () -> Unit,
+    /**
+     * Discards the box on egg `slot` of the added species at this finding, leaving the count
+     * alone. Only reachable where a box exists, and never on a model box.
+     */
+    val onRemoveDrawnBox: (Int, Int) -> Unit,
 )

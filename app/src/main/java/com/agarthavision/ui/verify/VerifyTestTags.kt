@@ -84,6 +84,10 @@ internal object VerifyTestTags {
     const val DRAW_ACCEPT = "draw_accept"
     const val DRAW_CANCEL = "draw_cancel"
 
+    /** The full-screen surface a box is drawn on, and the line naming what it is for. */
+    const val DRAW_MODE = "draw_mode"
+    const val DRAW_MODE_TARGET = "draw_mode_target"
+
     /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
     const val REDRAW_BOX = "redraw_box"
 
@@ -157,6 +161,10 @@ internal object VerifyTestTags {
      * naming only the row would collide across every egg under it.
      */
     fun drawBox(findingIndex: Int, slot: Int): String = "draw_box_" + findingIndex + "_" + slot
+
+    /** Discards the box already drawn on egg [slot] of the added species at [findingIndex]. */
+    fun removeDrawnBox(findingIndex: Int, slot: Int): String =
+        "remove_drawn_box_" + findingIndex + "_" + slot
 
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.

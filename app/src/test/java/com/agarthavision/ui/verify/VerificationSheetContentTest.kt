@@ -2,6 +2,7 @@ package com.agarthavision.ui.verify
 
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -92,6 +93,7 @@ class VerificationSheetContentTest {
         val beganDraw = mutableListOf<Pair<Int, Int?>>()
         val drawnBoxes = mutableListOf<ImageBox>()
         var cancelledDraws = 0
+        val removedBoxes = mutableListOf<Pair<Int, Int>>()
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -117,6 +119,7 @@ class VerificationSheetContentTest {
         onBeginDraw = { index, slot -> r.beganDraw += index to slot },
         onBoxDrawn = { r.drawnBoxes += it },
         onCancelDraw = { r.cancelledDraws++ },
+        onRemoveDrawnBox = { index, slot -> r.removedBoxes += index to slot },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -817,6 +820,88 @@ class VerificationSheetContentTest {
         )
 
         sheetNode(VerifyTestTags.BOXES_TOGGLE).assertExists()
+    }
+
+    /**
+     * Drawing takes the whole screen rather than happening inside the sheet, which is the whole
+     * of 86d4by5n5: the frame is full-width at the capture aspect, so every affordance that
+     * starts a drawing sits below it by construction and the medtech had to scroll back up to
+     * find the egg they had just decided to aim at.
+     */
+    @Test
+    fun `drawing replaces the sheet with a surface holding the frame and nothing else`() {
+        setContent(state().copy(drawTarget = DrawTarget(findingIndex = 0)))
+
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_MODE).assertExists()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertExists()
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_ACCEPT).assertExists()
+        // The sheet itself is gone, so nothing to scroll past and nothing to lose your place in.
+        composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).assertDoesNotExist()
+        composeRule.onNodeWithTag(VerifyTestTags.ADD_SPECIES).assertDoesNotExist()
+    }
+
+    /** Leaving the sheet must not cost the medtech the egg they were aiming at. */
+    @Test
+    fun `the drawing surface names the egg it is for`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 3,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ).copy(drawTarget = DrawTarget(findingIndex = 0, slot = 1)),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_MODE_TARGET)
+            .assertTextContains("Ascaris lumbricoides · egg 2 of 3")
+    }
+
+    /** No box drawn yet, so there is nothing to discard and nothing offered. */
+    @Test
+    fun `an unlocated egg offers no way to remove a box`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 1,
+                            speciesTouched = true,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.removeDrawnBox(0, 0)).assertDoesNotExist()
+    }
+
+    @Test
+    fun `a located egg can have its box discarded`() {
+        val r = setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            fieldTotal = 1,
+                            speciesTouched = true,
+                            drawnBoxes = listOf(ImageBox(x = 10f, y = 10f, width = 4f, height = 4f)),
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).performClick()
+        sheetNode(VerifyTestTags.removeDrawnBox(0, 0)).performClick()
+
+        assertEquals(listOf(0 to 0), r.removedBoxes)
     }
 
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(

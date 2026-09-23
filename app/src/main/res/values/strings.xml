@@ -98,6 +98,9 @@
     <string name="verify_redraw_box">Redraw the box</string>
     <string name="verify_box_replaced">You replaced this box, so the model\'s placement stays recorded as wrong.</string>
     <string name="verify_draw_cancel">Cancel</string>
+    <string name="verify_draw_hint">Drag across the egg to draw a box around it.</string>
+    <string name="verify_draw_target_box">Redrawing detection %1$d of %2$d</string>
+    <string name="verify_remove_box">Remove box</string>
     <string name="verify_prev_egg">Previous egg</string>
     <string name="verify_next_egg">Next egg</string>
     <string name="verify_ai_suggestion_note">This is an AI-suggested result and may contain inaccuracies. Review the frame and confirm the species yourself before submitting.</string>

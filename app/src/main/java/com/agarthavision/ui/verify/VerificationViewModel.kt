@@ -727,6 +727,45 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Discards a box the medtech drew on an added egg, without touching the count.
+     *
+     * The gap this closes: accepting a box committed it with no way back. Lowering the species'
+     * total is not a way back either — `totalsAreConsistent` floors it at the drawn boxes, so a
+     * badly placed box made the count it belongs to unlowerable too, and the only escape was to
+     * remove the species card and retype everything.
+     *
+     * Removing shifts the later boxes down a slot, which is what keeps drawn boxes packed at the
+     * front — the invariant that makes "lowering the count drops undrawn eggs first" true. The
+     * species still claims the same number of eggs; one of them simply goes back to unlocated,
+     * which is a complete answer.
+     *
+     * Refused on a prediction-backed row: there is no slot there, and a model box is never
+     * removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
+        _state.update { current ->
+            val finding = current.findings.getOrNull(findingIndex)
+            if (finding == null || finding.prediction != null ||
+                slot !in finding.answers.drawnBoxes.indices
+            ) {
+                return@update current
+            }
+            val boxes = finding.answers.drawnBoxes.toMutableList().apply { removeAt(slot) }
+            val updated = current.findings.toMutableList()
+            updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+            // A draw aimed at a slot that just moved would land on the wrong egg.
+            val target = current.drawTarget
+            val keepTarget = target == null ||
+                target.findingIndex != findingIndex ||
+                (target.slot ?: 0) < slot
+            current.copy(
+                findings = updated,
+                drawTarget = if (keepTarget) target else null,
+            )
+        }
+    }
+
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }
