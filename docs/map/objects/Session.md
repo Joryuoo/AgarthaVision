@@ -68,6 +68,7 @@ Documented shape: `schema.ts:244-276`.
   (`domain/usecase/sync/SyncPendingDataUseCase.kt:76-90`).
 - The PDF header block, which prints session id, label, patient details, timestamps, and device id.
 - The New Session sheet, which creates a session for an already-selected patient.
+- The Patients list Recent sort (`PatientDao.observePatients`), which reads `sessions.started_at` to sort active patients to the top.
 
 **Does not hit**
 - **Supabase**, if you are adding a Room-only column. `supabase_status` exists locally with no migration.

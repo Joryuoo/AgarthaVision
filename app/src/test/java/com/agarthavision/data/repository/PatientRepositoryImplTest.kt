@@ -5,11 +5,15 @@ import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.entity.PatientUserEntity
+import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
 import java.time.Instant
 import java.time.LocalDate
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -77,6 +81,37 @@ class PatientRepositoryImplTest {
 
     private suspend fun page(userId: String, query: String = "") =
         repository.observePatients(userId, query, limit = 50).first()
+
+    private fun session(
+        sessionId: String = "s-1",
+        patientId: String = "p-1",
+        startedAt: Long = 1_000L,
+        userId: String? = USER_A,
+    ) = SessionEntity(
+        sessionId = sessionId,
+        userId = userId,
+        patientId = patientId,
+        deviceId = "device-1",
+        startedAt = startedAt,
+    )
+
+    private fun sample(
+        sampleId: String = "sa-1",
+        sessionId: String = "s-1",
+        timestamp: Long = 1_000L,
+        verifiedAt: Long = 0L,
+        deletedAt: Long? = null,
+    ) = SampleEntity(
+        sampleId = sampleId,
+        sessionId = sessionId,
+        userId = USER_A,
+        deviceId = "device-1",
+        timestamp = timestamp,
+        verifiedAt = verifiedAt,
+        imagePath = "/tmp/$sampleId.jpg",
+        status = if (verifiedAt > 0) "verified" else "flagged",
+        deletedAt = deletedAt,
+    )
 
     // ── visibility resolves through patient_users ─────────────────────────────
 
@@ -286,6 +321,106 @@ class PatientRepositoryImplTest {
             sort = com.agarthavision.domain.usecase.patients.PatientSort.FIRST_NAME,
         ).first()
         assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with recent session start to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 3_000L))
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with validated sample to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 600L, verifiedAt = 5_000L),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with unvalidated sample capture to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 4_000L, verifiedAt = 0L),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients ignores tombstoned samples when sorting by recent activity`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(
+                sampleId = "sa-1",
+                sessionId = "s-1",
+                timestamp = 600L,
+                verifiedAt = 9_000L,
+                deletedAt = 9_500L,
+            ),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-1", "p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `name sorts ignore session and sample activity`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Abad").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+
+        // Even though p-2 has newer session and sample activity, LAST_NAME puts Abad (p-1) first
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 5_000L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 6_000L, verifiedAt = 7_000L),
+        )
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.LAST_NAME,
+        ).first()
+        assertEquals(listOf("p-1", "p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients flow re-emits when a session is added`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val channel = Channel<List<Patient>>(Channel.UNLIMITED)
+        backgroundScope.launch {
+            repository.observePatients(USER_A, "", 50).collect { list ->
+                channel.send(list)
+            }
+        }
+
+        val initial = channel.receive()
+        assertEquals(listOf("p-1", "p-2"), initial.map { it.id })
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 3_000L))
+
+        val updated = channel.receive()
+        assertEquals(listOf("p-2", "p-1"), updated.map { it.id })
     }
 
     // ── single reads and update ───────────────────────────────────────────────
