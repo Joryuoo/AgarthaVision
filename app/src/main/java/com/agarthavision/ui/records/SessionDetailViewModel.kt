@@ -168,6 +168,12 @@ class SessionDetailViewModel @Inject constructor(
     private val selectedTab = MutableStateFlow(SessionDetailTab.REPORT)
     private var cachedEggCounts: Pair<List<SampleRecordItem>, SessionEggCounts>? = null
 
+    /**
+     * Reports with a restore in flight. Only touched from the main thread — the tap and
+     * [viewModelScope]'s dispatcher — so a plain set is enough.
+     */
+    private val restoringReportIds = mutableSetOf<String>()
+
     private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
 
@@ -270,19 +276,26 @@ class SessionDetailViewModel @Inject constructor(
      * document and open it.
      */
     fun restoreReportFiles(reportId: String) {
+        // A second tap while the first download is still running would fetch the same object
+        // again and write a second copy beside the first — and nothing deletes the extra (C8).
+        if (!restoringReportIds.add(reportId)) return
         viewModelScope.launch {
-            _events.emit(SessionDetailEvent.ReportRestoreStarted)
-            restoreReportFilesUseCase(reportId).fold(
-                onSuccess = { files ->
-                    _events.emit(
-                        SessionDetailEvent.ReportRestored(
-                            pdfPath = files.pdfFilePath,
-                            csvPath = files.csvFilePath,
-                        ),
-                    )
-                },
-                onFailure = { _events.emit(SessionDetailEvent.ReportRestoreFailed) },
-            )
+            try {
+                _events.emit(SessionDetailEvent.ReportRestoreStarted)
+                restoreReportFilesUseCase(reportId).fold(
+                    onSuccess = { files ->
+                        _events.emit(
+                            SessionDetailEvent.ReportRestored(
+                                pdfPath = files.pdfFilePath,
+                                csvPath = files.csvFilePath,
+                            ),
+                        )
+                    },
+                    onFailure = { _events.emit(SessionDetailEvent.ReportRestoreFailed) },
+                )
+            } finally {
+                restoringReportIds.remove(reportId)
+            }
         }
     }
 
