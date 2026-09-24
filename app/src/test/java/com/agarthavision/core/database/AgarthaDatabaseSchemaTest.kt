@@ -79,16 +79,12 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the species provenance flag is present and is not verified_by_user`() {
+    fun `detections carry neither species_touched nor verified_by_user`() {
+        // Both dropped at version 22 (14zcqnthrx8). `species_touched` recorded taps rather than
+        // judgements, and `verified_by_user` had been gone from Postgres since legacy 0002.
         val columns = columnsOf("detections")
-        assertTrue(
-            "detections.species_touched is missing — an untouched model pre-fill would be " +
-                "indistinguishable from a deliberate human confirmation in the training corpus.",
-            columns.contains("species_touched"),
-        )
-        // Deliberately a new column rather than reusing the dead one. If verified_by_user has
-        // gone, ticket 86d4akgmf landed and this assertion is the one to delete.
-        assertTrue(columns.contains("verified_by_user"))
+        assertFalse(columns.contains("species_touched"))
+        assertFalse(columns.contains("verified_by_user"))
     }
 
     @Test
@@ -326,6 +322,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 20
+        private const val EXPECTED_VERSION = 22
     }
 }

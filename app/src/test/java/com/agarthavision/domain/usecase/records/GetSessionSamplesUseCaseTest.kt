@@ -304,5 +304,4 @@ private fun sessionsDetection(id: String, sampleId: String) = Detection(
     bboxH = 0.4f,
     verdict = DetectionVerdict.CONFIRMED,
     expertClass = null,
-    verifiedByUser = true,
 )

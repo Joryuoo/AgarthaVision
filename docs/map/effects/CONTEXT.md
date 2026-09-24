@@ -13,8 +13,9 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 `supabase/migrations/` (highest number wins) · the matching Room entity.
 
 **Then check, in order:**
-1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`,
-   `samples.status`, `reports.supabase_status`, `psgc_barangays`.
+1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`
+   (its content syncs as `predictions` rows instead), `samples.status`, `reports.supabase_status`,
+   `psgc_barangays`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
 3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:105`.

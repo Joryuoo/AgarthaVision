@@ -1,6 +1,6 @@
 package com.agarthavision.domain.usecase.verify
 
-import com.agarthavision.data.inference.toDomainPredictions
+import com.agarthavision.data.inference.decodePredictions
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
@@ -8,7 +8,6 @@ import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDomain
-import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
@@ -19,11 +18,9 @@ import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import java.io.File
 import java.time.Instant
 import javax.inject.Inject
-import kotlin.math.abs
 
 /**
  * What the verification screen opens with, for any sample in the queue.
@@ -45,18 +42,15 @@ class OpenVerificationTargetUseCase @Inject constructor(
         }
         val storedDetections = detectionDao.getDetectionsForSample(sampleId)
 
-        // predictions_json is written on capture and survives verification, but it is **not**
-        // pulled down from Supabase - the remote samples table has no such column. A sample
-        // synced from another device therefore arrives with no model output at all, and this
-        // screen used to open it with no boxes, silently. The detection rows *are* pulled down
-        // (FetchRemoteDataUseCase), carry the same centre-based geometry, and keep the model's
-        // own class label and confidence, so they reconstruct what was lost rather than
-        // inventing it.
+        // predictions_json is written on capture, survives verification, and on any other device
+        // is restored by the pull from the `predictions` table (FetchRemoteDataUseCase). It can
+        // still be missing - a sample whose model output never reached the server, such as one
+        // pushed before that table existed - and then the detection rows stand in: they carry
+        // the same centre-based geometry and keep the model's own class label and confidence,
+        // so they reconstruct what was lost rather than inventing it.
         val storedById = storedDetections.associateBy { it.detectionId }
-        val fromJson = entity.predictionsJson
-            ?.let { gson.fromJson<List<PredictionDto>>(it, PREDICTION_LIST).toDomainPredictions() }
-        val predictions = fromJson ?: reconstructPredictions(sampleId, storedById)
-        val reconstructed = fromJson == null && predictions.isNotEmpty()
+        val predictions = gson.decodePredictions(entity.predictionsJson)
+            ?: reconstructPredictions(sampleId, storedById)
 
         val frame = FlaggedFrame(
             sampleId = entity.sampleId,
@@ -81,13 +75,12 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 // than leaving the booleans null, because the questions are checkboxes now and
                 // a checkbox has no way to draw "unanswered": a null would render unchecked,
                 // which reads as "not an egg" — an answer nobody gave.
-                answers = stored?.toAnswers(prediction, reconstructed) ?: VerificationAnswers(
+                answers = stored?.toAnswers(prediction) ?: VerificationAnswers(
                     isEgg = true,
                     isBoxCorrect = true,
                     speciesConfirmed = EggSpecies.fromClassLabel(prediction.classLabel)
                         ?.let { true },
                     species = EggSpecies.fromClassLabel(prediction.classLabel),
-                    speciesTouched = false,
                 ),
             )
         }
@@ -113,7 +106,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     stage = parsedStage,
                     otherStageText = otherStage,
                     fieldTotal = row.eggCount,
-                    speciesTouched = true,
                     drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
                 ),
             )
@@ -144,24 +136,34 @@ class OpenVerificationTargetUseCase @Inject constructor(
      *
      * The class label and confidence are the model's, persisted at verification time. Nothing is
      * invented - this recovers data the sync does not carry, it does not synthesise it.
+     *
+     * **It also stops at the first row with no box**, and must not skip it. A `BOX_INCORRECT` row
+     * the medtech did not redraw carries no geometry, so there is no prediction to rebuild from
+     * it — and dropping it from the middle of the list would slide every later prediction one
+     * ordinal early, reopen each against its neighbour's detection, and write their rulings onto
+     * the wrong rows on re-submit. Stopping leaves the later boxes off the screen but every row
+     * intact. It is a fallback in any case: the pull restores `predictions_json` from the
+     * `predictions` table, so this runs only for a sample whose model output never reached the
+     * server.
      */
     private fun reconstructPredictions(
         sampleId: String,
         storedById: Map<String, DetectionEntity>,
     ): List<Prediction> = generateSequence(0) { it + 1 }
         .map { ordinal -> storedById[detectionIdFor(sampleId, ordinal)] }
-        .takeWhile { it != null }
-        .filterNotNull()
-        .mapNotNull { detection ->
+        .map { detection ->
+            val box = detection?.storedBox() ?: return@map null
             Prediction(
                 classLabel = detection.classLabel,
                 confidence = detection.confidence,
-                x = detection.bboxX ?: return@mapNotNull null,
-                y = detection.bboxY ?: return@mapNotNull null,
-                width = detection.bboxW ?: return@mapNotNull null,
-                height = detection.bboxH ?: return@mapNotNull null,
+                x = box.x,
+                y = box.y,
+                width = box.width,
+                height = box.height,
             )
         }
+        .takeWhile { it != null }
+        .filterNotNull()
         .toList()
 
     /**
@@ -181,32 +183,23 @@ class OpenVerificationTargetUseCase @Inject constructor(
      * a species the medtech had confirmed, and the picker stayed hidden (it opens on `false`,
      * not on null), leaving an answer that looked wrong and no control to correct it with.
      *
-     * The obvious correction — tap the checkbox — is the reason this is a C7 problem rather than
-     * a cosmetic one. `onSpeciesConfirmed(true)` sets [VerificationAnswers.speciesTouched], so
-     * re-saving flipped `detections.species_touched` to 1 on a row no human ever adjudicated,
-     * and the retraining corpus began recording "a human confirmed this" for an answer nobody
-     * gave. Which is exactly the distinction that flag exists to keep.
+     * **A replaced box is read off the row, not compared against the model's (14zcqnthrx8).**
+     * `VerificationMapper` writes a `BOX_INCORRECT` row with a box only when the medtech drew
+     * one — the one they rejected is not kept — so on that verdict a stored box *is* the redraw
+     * and a null box is a rejection nobody redrew. This used to be a geometry comparison against
+     * `predictions_json` with a half-pixel tolerance, which was right only while both sides
+     * survived every round trip, and could not see anything at all on a device that had to
+     * rebuild its predictions from these same rows.
      *
-     * So: `speciesTouched` keeps coming from its column and never from this comparison. Deriving
-     * it here would recreate the same corruption from the other direction — every reopened row
-     * that happened to match the model would start claiming a human had agreed with it.
-     *
-     * @param reconstructed true when [prediction] came from this very detection row rather than
-     *   from `predictions_json`. The model's original geometry is then unknown on this device,
-     *   so the two compare equal and the geometry test cannot see a replacement. A BOX_INCORRECT
-     *   verdict is the durable statement that the model localised this wrong, so it locks Q2 on
-     *   its own — stricter than the comparison, never looser, and the training label survives.
-     *   A medtech who answered "No" by mistake on the capturing device can still correct it
-     *   there, where `predictions_json` lives.
+     * Rows written before that rule may carry the rejected model box on a `BOX_INCORRECT`
+     * verdict, and they now reopen as redrawn. That is the direction that keeps the label:
+     * Q2 stays locked at "No", and a re-submit writes back the same geometry it read.
      */
-    private fun DetectionEntity.toAnswers(
-        prediction: Prediction,
-        reconstructed: Boolean,
-    ): VerificationAnswers {
+    private fun DetectionEntity.toAnswers(prediction: Prediction): VerificationAnswers {
         val label = expertClass ?: classLabel
         val species = EggSpecies.fromClassLabel(label)
         val (parsedStage, otherStage) = parseStage(stage)
-        val replaced = reconstructed || replacesBoxOf(prediction)
+        val replaced = storedBox() != null
         // Null when the model's class maps to no EggSpecies: there was never anything to
         // confirm, so the picker is offered directly and the checkbox never renders. Compared
         // against the coerced species rather than the raw one, so that a free-text expert_class
@@ -223,7 +216,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 otherSpeciesText = if (species == null) label else "",
                 stage = parsedStage,
                 otherStageText = otherStage,
-                speciesTouched = speciesTouched,
                 drawnBox = if (replaced) storedBox() else null,
                 boxReplaced = replaced,
             )
@@ -235,7 +227,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 otherSpeciesText = if (species == null) label else "",
                 stage = parsedStage,
                 otherStageText = otherStage,
-                speciesTouched = speciesTouched,
             )
         }
     }
@@ -267,19 +258,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
     }
 
     /**
-     * Whether the stored box is somewhere other than where the model put it.
-     *
-     * This is the durable record that a box was **replaced**, and it is what re-locks Q2 to "No"
-     * on reopen. There is no column for it, and adding one would mean a Room version bump — the
-     * one change this project has already been burned by. The comparison is safe because both
-     * sides are the same numbers: `VerificationMapper` copies a prediction's geometry through
-     * unchanged unless a drawn box overrides it, so an untouched box compares exactly equal and
-     * only a redraw moves it.
-     *
-     * [BOX_TOLERANCE_PX] absorbs the float round-trip through Room and Postgres rather than any
-     * real movement; a hand-drawn box is never within half a pixel of the model's.
-     */
-    /**
      * The boxes the medtech drew for an added species, in slot order.
      *
      * Added eggs are one detection row each, keyed `#finding#<species>#<slot>`, and the drawn
@@ -298,20 +276,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
         .filterNotNull()
         .toList()
 
-    private fun DetectionEntity.replacesBoxOf(prediction: Prediction): Boolean {
-        val stored = storedBox() ?: return false
-        return abs(stored.x - prediction.x) > BOX_TOLERANCE_PX ||
-            abs(stored.y - prediction.y) > BOX_TOLERANCE_PX ||
-            abs(stored.width - prediction.width) > BOX_TOLERANCE_PX ||
-            abs(stored.height - prediction.height) > BOX_TOLERANCE_PX
-    }
-
-    private companion object {
-        private val PREDICTION_LIST = object : TypeToken<List<PredictionDto>>() {}.type
-
-        /** Float round-trip slack, not a movement threshold. */
-        private const val BOX_TOLERANCE_PX = 0.5f
-    }
 }
 
 /** A frame plus whatever the medtech has already said about it. */

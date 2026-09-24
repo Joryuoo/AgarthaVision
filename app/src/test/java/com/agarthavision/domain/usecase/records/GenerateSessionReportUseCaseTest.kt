@@ -448,7 +448,6 @@ private fun reportDetection(
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = expertClass,
-        verifiedByUser = true,
     )
 
 private fun noOpSyncReportUseCase(): SyncReportUseCase =

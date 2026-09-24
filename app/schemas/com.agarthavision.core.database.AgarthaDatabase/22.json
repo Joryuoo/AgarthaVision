@@ -1,12 +1,12 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 21,
-    "identityHash": "f5d3e79ad25167cf191f63c9e47c6b4a",
+    "version": 22,
+    "identityHash": "7b85750836e1ed7feb44e1aedc9fabb3",
     "entities": [
       {
         "tableName": "samples",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, `is_edited` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`sample_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, PRIMARY KEY(`sample_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "sampleId",
@@ -106,13 +106,6 @@
             "fieldPath": "deletedAt",
             "columnName": "deleted_at",
             "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "isEdited",
-            "columnName": "is_edited",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -398,7 +391,7 @@
       },
       {
         "tableName": "detections",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `verified_by_user` INTEGER NOT NULL, `species_touched` INTEGER NOT NULL DEFAULT 0, `stage` TEXT, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `stage` TEXT, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "detectionId",
@@ -455,19 +448,6 @@
             "fieldPath": "expertClass",
             "columnName": "expert_class",
             "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "verifiedByUser",
-            "columnName": "verified_by_user",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "speciesTouched",
-            "columnName": "species_touched",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           },
           {
             "fieldPath": "stage",
@@ -843,7 +823,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f5d3e79ad25167cf191f63c9e47c6b4a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '7b85750836e1ed7feb44e1aedc9fabb3')"
     ]
   }
 }

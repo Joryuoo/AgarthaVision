@@ -203,6 +203,6 @@ class VerificationNoModelOutputTest {
                 userNote = anyOrNull(),
             )
             assertEquals(1, findingsCaptor.firstValue.size)
-            assertTrue(findingsCaptor.firstValue[0].answers.speciesTouched)
+            assertEquals(EggSpecies.ASCARIS, findingsCaptor.firstValue[0].answers.species)
         }
 }

@@ -21,7 +21,6 @@ The human-in-the-loop gate. Nothing counts until this runs.
    presents the model's prediction: is it an egg (Q1), is the bounding box placed correctly (Q2),
    and which species is it (Q3). These are pre-filled from model inference so the medtech confirms
    or overrides with minimal taps. Medtechs can also use "Add Egg" to draw/tag missed eggs on the frame.
-   When the medtech confirms or re-selects a species, `species_touched` is marked `true` for retraining provenance.
    A "no" to the egg question records `FALSE_POSITIVE`. A "no" to the box question records `BOX_INCORRECT`
    while still asking for species.
 3. **Derived / frame-level reannotation.** Missed eggs or misclassified detections feed
@@ -32,8 +31,8 @@ The human-in-the-loop gate. Nothing counts until this runs.
    (`data/local/mapper/VerificationMapper.kt:10-17`). Note a null species also yields `FALSE_POSITIVE`.
 5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and navigates on success.
 6. **Update the sample and findings.** One UPDATE sets `status = verified`, `verified_at`,
-   `needs_reannotation`, `user_note`, and nulls `predictions_json`
-   (`domain/usecase/verify/SubmitVerificationUseCase.kt:50-56`). GPS and the legacy repeat flag
+   `needs_reannotation` and `user_note`, and leaves `predictions_json` in place — it is what the
+   sync pushes as `predictions` rows (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`). GPS and the legacy repeat flag
    are completely absent. `SampleSpeciesFindingDao.replaceFindingsForSample` updates the per-species
    counts for the low-power field (`:69-72`).
 7. **Insert detections.** Predictions are mapped to `DetectionEntity` rows with their verdicts
