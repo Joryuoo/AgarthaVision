@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.WindowInsets
@@ -202,7 +203,14 @@ fun SessionDetailScreen(
                 onOpenVerifyQueue = onOpenVerifyQueue,
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // The zeroed insets below also zero the Scaffold's snackbar offset, and this screen has
+        // no bottom bar to sit above, so without its own navigation-bar padding the snackbar
+        // lands behind the system buttons and its Share action can't be tapped (14zcqnthuac).
+        // Padding the host rather than the content moves only the snackbar. Records needs none
+        // of this: it is a tab, and the app's bottom bar already carries the inset.
+        snackbarHost = {
+            SnackbarHost(snackbarHostState, modifier = Modifier.navigationBarsPadding())
+        },
         containerColor = AgarthaTheme.colors.background,
         // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
         // its own. Without this the app bar draws under the status bar.
