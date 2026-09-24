@@ -258,6 +258,7 @@
     <string name="report_pager_previous">Previous page</string>
     <string name="report_pager_next">Next page</string>
     <string name="report_empty">No reports yet.</string>
+    <string name="report_needs_verified_sample">Verify at least one sample to generate a report.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
     <string name="records_status_pending_sync">Pending sync</string>
