@@ -102,6 +102,8 @@ class VerificationSheetContentTest {
         val drawnBoxes = mutableListOf<ImageBox>()
         var cancelledDraws = 0
         val removedBoxes = mutableListOf<Pair<Int, Int>>()
+        var confirmedLeaves = 0
+        var dismissedLeaves = 0
     }
 
     private fun actionsFor(r: Recorder) = VerificationSheetActions(
@@ -128,6 +130,8 @@ class VerificationSheetContentTest {
         onBoxDrawn = { r.drawnBoxes += it },
         onCancelDraw = { r.cancelledDraws++ },
         onRemoveDrawnBox = { index, slot -> r.removedBoxes += index to slot },
+        onConfirmLeave = { r.confirmedLeaves++ },
+        onDismissLeave = { r.dismissedLeaves++ },
     )
 
     /** An unanswered single-detection frame - the state the sheet opens in. */
@@ -1039,6 +1043,43 @@ class VerificationSheetContentTest {
 
         assertEquals(1, r.drawnBoxes.size)
         assertEquals(frameAtTop, composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot())
+    }
+
+    // Leaving a sample with unsubmitted edits
+
+    @Test
+    fun `a held leave asks before anything is lost`() {
+        val r = setContent(state().copy(pendingLeave = LeaveIntent.NEXT_SAMPLE))
+
+        dialogNode(VerifyTestTags.LEAVE_DIALOG_CONFIRM).assertIsDisplayed()
+        assertEquals(0, r.confirmedLeaves)
+    }
+
+    @Test
+    fun `confirming the leave dialog reports it`() {
+        val r = setContent(state().copy(pendingLeave = LeaveIntent.EXIT))
+
+        dialogNode(VerifyTestTags.LEAVE_DIALOG_CONFIRM).performClick()
+
+        assertEquals(1, r.confirmedLeaves)
+        assertEquals(0, r.dismissedLeaves)
+    }
+
+    @Test
+    fun `keep editing reports the medtech is staying`() {
+        val r = setContent(state().copy(pendingLeave = LeaveIntent.PREVIOUS_SAMPLE))
+
+        dialogNode(VerifyTestTags.LEAVE_DIALOG_DISMISS).performClick()
+
+        assertEquals(1, r.dismissedLeaves)
+        assertEquals(0, r.confirmedLeaves)
+    }
+
+    @Test
+    fun `nothing held, nothing asked`() {
+        setContent(state())
+
+        composeRule.onNodeWithTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM).assertDoesNotExist()
     }
 
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(

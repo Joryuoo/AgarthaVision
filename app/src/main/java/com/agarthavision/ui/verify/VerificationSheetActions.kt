@@ -48,4 +48,8 @@ data class VerificationSheetActions(
      * alone. Only reachable where a box exists, and never on a model box.
      */
     val onRemoveDrawnBox: (Int, Int) -> Unit,
+    /** Leave the sample after all, dropping the unsubmitted edits the dialog warned about. */
+    val onConfirmLeave: () -> Unit,
+    /** Stay on the sample, edits intact. */
+    val onDismissLeave: () -> Unit,
 )

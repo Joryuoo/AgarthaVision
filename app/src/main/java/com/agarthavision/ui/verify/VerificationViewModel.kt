@@ -90,7 +90,25 @@ data class VerificationUiState(
     val speciesSuggestions: List<String> = emptyList(),
     val speciesSuggestionTarget: SuggestionTarget? = null,
     val speciesSuggestionQuery: String = "",
+    /**
+     * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
+     * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
+     */
+    val openedFindings: List<Finding> = emptyList(),
+    val openedNote: String = "",
+    /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
+    val pendingLeave: LeaveIntent? = null,
 ) {
+    /**
+     * True when leaving now would throw away something the medtech entered.
+     *
+     * Compared by value against what the sample opened with, so an answer changed and changed
+     * back reads as untouched: there is nothing to lose. The Boxes toggle and which detection is
+     * on screen are not inputs, and moving them costs nothing.
+     */
+    val hasUnsavedChanges: Boolean
+        get() = frame != null && (findings != openedFindings || userNote != openedNote)
+
     /**
      * The suggestions to show under [target]'s free-text field, given what it currently holds.
      *
@@ -206,6 +224,13 @@ sealed interface SuggestionTarget {
     data class AddedFinding(val index: Int) : SuggestionTarget
 }
 
+/**
+ * A way off the sample that drops whatever has not been submitted.
+ *
+ * Submit and Discard are not here: one saves the edits and the other already asks first.
+ */
+enum class LeaveIntent { PREVIOUS_SAMPLE, NEXT_SAMPLE, EXIT }
+
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
@@ -307,6 +332,8 @@ class VerificationViewModel @Inject constructor(
      */
     fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
+        val findings = prior?.findings?.takeIf { it.isNotEmpty() } ?: frame.initialFindings()
+        val note = prior?.userNote.orEmpty()
         _state.update {
             it.copy(
                 isVisible = true,
@@ -314,12 +341,14 @@ class VerificationViewModel @Inject constructor(
                 imageSource = prior?.imageSource,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
-                    ?: frame.initialFindings(),
+                findings = findings,
                 drawTarget = null,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = prior?.userNote.orEmpty(),
+                userNote = note,
+                openedFindings = findings,
+                openedNote = note,
+                pendingLeave = null,
             )
         }
     }
@@ -638,20 +667,59 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onFramePrev() {
-        val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx <= 0) return
-        setFrame(frames[idx - 1])
+    fun onFramePrev() = requestLeave(LeaveIntent.PREVIOUS_SAMPLE)
+
+    fun onFrameNext() = requestLeave(LeaveIntent.NEXT_SAMPLE)
+
+    /**
+     * Leaves the sample, or asks first when that would drop unsubmitted edits.
+     *
+     * Nothing on this screen is saved until Submit — paging to another sample or backing out
+     * re-seeds from scratch — and the cycle buttons sit right beside the frame, where a stray
+     * thumb lands. So a way off a sample with edits on it is held until the medtech confirms,
+     * and one with nothing to lose goes straight through, as it always did.
+     *
+     * A cycle button at the end of the queue does nothing and asks nothing: there is nowhere to
+     * go, so there is nothing to confirm.
+     */
+    private fun requestLeave(intent: LeaveIntent) {
+        if (intent != LeaveIntent.EXIT && neighbourFor(intent) == null) return
+        if (_state.value.hasUnsavedChanges) {
+            _state.update { it.copy(pendingLeave = intent) }
+        } else {
+            leave(intent)
+        }
     }
 
-    fun onFrameNext() {
+    /** The medtech chose to leave and lose the edits. */
+    fun onConfirmLeave() {
+        val intent = _state.value.pendingLeave ?: return
+        _state.update { it.copy(pendingLeave = null) }
+        leave(intent)
+    }
+
+    /** The medtech chose to stay. Everything they entered is still there. */
+    fun onDismissLeave() {
+        _state.update { it.copy(pendingLeave = null) }
+    }
+
+    private fun leave(intent: LeaveIntent) {
+        when (intent) {
+            LeaveIntent.EXIT -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+            else -> neighbourFor(intent)?.let { setFrame(it) }
+        }
+    }
+
+    /** The sample a cycle button would open, or null at either end or off the queue. */
+    private fun neighbourFor(intent: LeaveIntent): FlaggedFrame? {
         val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx < 0 || idx >= frames.size - 1) return
-        setFrame(frames[idx + 1])
+        val idx = currentFrame?.let { frames.indexOfSample(it) } ?: -1
+        val step = when (intent) {
+            LeaveIntent.PREVIOUS_SAMPLE -> -1
+            LeaveIntent.NEXT_SAMPLE -> 1
+            LeaveIntent.EXIT -> 0
+        }
+        return if (idx < 0 || step == 0) null else frames.getOrNull(idx + step)
     }
 
     fun onDeleteFrame() {
@@ -806,9 +874,8 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onCancel() {
-        viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
-    }
+    /** The top bar's back and the hardware back gesture. Asks first when edits would be lost. */
+    fun onCancel() = requestLeave(LeaveIntent.EXIT)
 
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity

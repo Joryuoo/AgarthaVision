@@ -114,6 +114,8 @@ class VerificationPreviewScreenshotTest {
         onBoxDrawn = {},
         onCancelDraw = {},
         onRemoveDrawnBox = { _, _ -> },
+        onConfirmLeave = {},
+        onDismissLeave = {},
     )
 
     @Test

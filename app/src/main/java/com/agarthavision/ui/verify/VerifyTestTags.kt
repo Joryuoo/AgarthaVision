@@ -47,6 +47,8 @@ internal object VerifyTestTags {
      */
     const val DISCARD_DIALOG_CONFIRM = "discard_dialog_confirm"
     const val DISCARD_DIALOG_DISMISS = "discard_dialog_dismiss"
+    const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
+    const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
     /** Custom-species dialog opened by [SPECIES_CHIP_OTHER]. */
     const val CUSTOM_SPECIES_FIELD = "custom_species_field"

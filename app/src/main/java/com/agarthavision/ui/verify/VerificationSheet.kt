@@ -132,6 +132,8 @@ fun VerificationSheet(
                 onBoxDrawn = viewModel::onBoxDrawn,
                 onCancelDraw = viewModel::onCancelDraw,
                 onRemoveDrawnBox = viewModel::onRemoveDrawnBox,
+                onConfirmLeave = viewModel::onConfirmLeave,
+                onDismissLeave = viewModel::onDismissLeave,
             ),
         )
     }
@@ -378,6 +380,13 @@ internal fun VerificationSheetContent(
             )
         }
 
+        if (state.pendingLeave != null) {
+            LeaveSampleDialog(
+                onConfirm = actions.onConfirmLeave,
+                onDismiss = actions.onDismissLeave,
+            )
+        }
+
         // Drawing covers the sheet rather than replacing it, so the sheet - and its scroll - is
         // still there to come back to. See DrawModeScreen for why drawing gets a screen at all. No
         // section of the sheet moved, so PB-13a's ordering (86d4bk51n) is untouched.
@@ -394,6 +403,39 @@ internal fun VerificationSheetContent(
             )
         }
     }
+}
+
+/**
+ * Asks before a cycle button or back throws away edits that were never submitted.
+ *
+ * Nothing on the sheet is kept until Submit, and the cycle buttons sit right beside the frame
+ * where a stray thumb lands, so leaving a sample that has edits on it is a question rather than
+ * an accident. Keep editing is the dismiss action, so tapping outside the dialog is also "stay".
+ */
+@Composable
+private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = DialogShape,
+        title = { Text(stringResource(R.string.verify_leave_title)) },
+        text = { Text(stringResource(R.string.verify_leave_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = onConfirm,
+                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+            ) {
+                Text(stringResource(R.string.verify_leave_confirm), color = AgarthaTheme.colors.danger)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
+            ) {
+                Text(stringResource(R.string.verify_leave_dismiss))
+            }
+        },
+    )
 }
 
 /**
