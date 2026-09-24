@@ -455,6 +455,92 @@ class VerificationMapperTest {
         assertTrue(cfEntity.detectionId != dfEntity.detectionId)
     }
 
+    /**
+     * **The fix under test (14zcqnthz6e follow-up).** A staged card and an unstaged card of the
+     * same species used to collide: the staged card is elected primary (plain id), but the
+     * unstaged non-primary card used to derive its stage segment from `stageLabel`, which is
+     * `null` for an unstaged card — the very same value the primary's plain id is built with. Two
+     * distinct cards landed on one id and `REPLACE` silently kept only one.
+     */
+    @Test
+    fun `a staged primary card and an unstaged non-primary card of one species get distinct ids`() {
+        val staged = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+        val unstaged = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                fieldTotal = 1,
+            ),
+        )
+
+        val entities = listOf(staged, unstaged).toDetectionEntities("sample-1")
+
+        assertEquals(2, entities.size)
+        assertEquals(2, entities.map { it.detectionId }.distinct().size)
+
+        val plainId = addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = null)
+        val sentinelId = addedDetectionIdFor(
+            "sample-1",
+            "Ascaris lumbricoides",
+            0,
+            stageKey = UNSTAGED_ADDED_STAGE_KEY,
+        )
+        assertEquals(
+            "The list-order fallback elects the first card (staged) primary, so it keeps the plain id.",
+            setOf(plainId, sentinelId),
+            entities.map { it.detectionId }.toSet(),
+        )
+        assertTrue(
+            "The unstaged non-primary card's id must actually use the sentinel, not null.",
+            entities.any { it.detectionId == sentinelId },
+        )
+    }
+
+    /**
+     * **Regression check — the auditor's original reproduction.** Two Ascaris cards, one at
+     * stage CF with two eggs, one unstaged with one egg: both must persist under distinct ids so
+     * neither's drawn boxes are silently overwritten by the other on submit.
+     */
+    @Test
+    fun `Ascaris CF and unstaged Ascaris cards persist distinct detections with no overwrite`() {
+        val cfBoxes = listOf(
+            ImageBox(x = 5f, y = 5f, width = 4f, height = 4f),
+            ImageBox(x = 15f, y = 15f, width = 4f, height = 4f),
+        )
+        val unstagedBox = ImageBox(x = 50f, y = 50f, width = 4f, height = 4f)
+        val cf = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 2,
+                drawnBoxes = cfBoxes,
+            ),
+        )
+        val unstaged = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                fieldTotal = 1,
+                drawnBoxes = listOf(unstagedBox),
+            ),
+        )
+
+        val entities = listOf(cf, unstaged).toDetectionEntities("sample-1")
+
+        assertEquals(3, entities.size)
+        assertEquals(3, entities.map { it.detectionId }.distinct().size)
+        // All three boxes survive - none was silently REPLACE-d away by an id collision.
+        assertEquals(setOf(5f, 15f, 50f), entities.map { it.bboxX }.toSet())
+    }
+
     @Test
     fun `derived ids match the SQL derivation in 0004`() {
         val sampleId = "f14f3504-0d9f-433e-a0c2-c960a4e5801b"

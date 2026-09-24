@@ -79,6 +79,22 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * rule in a second place — two derivations of one key is how an edit starts appending instead of
  * replacing.
  */
+
+/**
+ * The stage segment a non-primary card with NO stage gets, in place of `null`.
+ *
+ * `stageLabel` is already `null` for an unstaged card, which is the same value the *primary*
+ * card's plain id is built with — a non-primary unstaged card cannot use `null` here or its id
+ * collapses onto the primary card's, silently dropping the primary's boxes on submit
+ * (14zcqnthz6e). This sentinel gives it a distinct segment instead. It cannot collide with a real
+ * [com.agarthavision.domain.usecase.verify.VerificationAnswers.stageLabel]: every non-`OTHER`
+ * stage resolves to an [com.agarthavision.domain.model.EggStage] enum name, and `OTHER` resolves
+ * to trimmed free text a medtech would have to type verbatim, including the marker characters, to
+ * collide — a risk accepted the same way the id scheme already accepts species free text as a
+ * segment.
+ */
+const val UNSTAGED_ADDED_STAGE_KEY: String = "#_unstaged#"
+
 fun addedDetectionIdFor(sampleId: String, species: String, slot: Int, stageKey: String? = null): String =
     if (stageKey == null) {
         derive("$sampleId#finding#$species#$slot")
@@ -238,7 +254,16 @@ private fun Finding.toDetectionEntity(
         detectionId = if (slot == null) {
             detectionIdFor(sampleId, ordinal)
         } else {
-            addedDetectionIdFor(sampleId, label.orEmpty(), slot, answers.stageLabel.takeIf { useStageSegment })
+            // A primary card always writes the plain id (stageKey null), whatever its own stage
+            // is. A non-primary card writes its real stage segment when it has one, or the
+            // unstaged sentinel when it doesn't — never null, which would collide with the
+            // primary's plain id.
+            val stageKey = when {
+                !useStageSegment -> null
+                answers.stageLabel != null -> answers.stageLabel
+                else -> UNSTAGED_ADDED_STAGE_KEY
+            }
+            addedDetectionIdFor(sampleId, label.orEmpty(), slot, stageKey)
         },
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }

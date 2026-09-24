@@ -6,6 +6,7 @@ import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDetectionEntities
@@ -40,6 +41,9 @@ import org.mockito.kotlin.whenever
  * `predictionsJson = null`, so there were no boxes either. A missing image was indistinguishable
  * from an empty one. This suite is what keeps the recovery path honest.
  */
+// One subject, one fixture. Splitting by concern would duplicate the use-case setup across
+// files and make the reopen/pin cases harder to read against the rest of the suite.
+@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
 class OpenVerificationTargetUseCaseTest {
 
@@ -613,6 +617,109 @@ class OpenVerificationTargetUseCaseTest {
                 "The CF row is already covered by the model's box, so only the DF row is a " +
                     "genuine added card - and being the only one, the legacy fallback must find " +
                     "its boxes under the old species-only id.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
+        }
+
+    /**
+     * **Round-trip regression guard (14zcqnthz6e follow-up).** A staged card and an unstaged
+     * card of one species, submitted, then reopened: the staged card must come back pinned
+     * primary (plain id) and the unstaged one pinned non-primary (sentinel id) - the same
+     * election `withResolvedPrimaryPins` would have made at submit time - and an unedited
+     * resubmit must not move either id.
+     */
+    @Test
+    fun `a staged primary and unstaged non-primary card round-trip through reopen with stable ids`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val sentinelId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = UNSTAGED_ADDED_STAGE_KEY,
+            )
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = null),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = UNSTAGED_ADDED_STAGE_KEY),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val added = reopened.findings.filter { it.prediction == null }
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val unstaged = added.first { it.answers.stage == null }
+
+            assertEquals("The plain-id row must come back pinned primary.", true, cf.answers.isPrimaryAdded)
+            assertEquals(
+                "The sentinel-id row must come back pinned non-primary.",
+                false,
+                unstaged.answers.isPrimaryAdded,
+            )
+
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+            assertEquals(
+                "An unedited resubmit must not churn either id.",
+                setOf(plainId, sentinelId),
+                resubmitted.map { it.detectionId }.toSet(),
+            )
+        }
+
+    /**
+     * A lone unstaged row with no persisted history at all must still be electable primary - the
+     * `ownsNonPlainId` OR-check (stage-aware id OR the sentinel) must not spuriously flag a
+     * genuinely primary-eligible row just because it happens to have no stage.
+     */
+    @Test
+    fun `a lone unstaged row with no history becomes primary, not flagged as owning a non-plain id`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f, stageKey = null)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(true, added.answers.isPrimaryAdded)
+            assertEquals(
+                "Its boxes are still under the plain id.",
                 listOf(15f),
                 added.answers.drawnBoxes.map { it.x },
             )

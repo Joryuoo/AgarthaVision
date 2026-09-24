@@ -6,6 +6,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDomain
@@ -129,23 +130,24 @@ class OpenVerificationTargetUseCase @Inject constructor(
     /**
      * Rebuilds one added finding from its `sample_species_findings` row.
      *
-     * A row's own on-disk id is checked first: a row whose stage-aware slot-0 id is already
-     * present in `storedById` already carries a stage segment and is pinned non-primary,
-     * regardless of how many rows of that species currently survive. This matters because a
-     * species can genuinely end up with exactly one surviving row that already owns a
-     * stage-aware id - e.g. a sibling that used to pin it non-primary was later removed - and
-     * that row must stay pinned non-primary so its id does not flip back to plain on the next
-     * unedited resubmit (which would leave its old stage-aware rows stranded remotely while a
-     * duplicate set gets written under the plain id).
+     * A row's own on-disk id is checked first: a row whose non-plain slot-0 id (its real stage
+     * segment, or [UNSTAGED_ADDED_STAGE_KEY] when it has none) is already present in `storedById`
+     * already carries a segment distinct from the plain id and is pinned non-primary, regardless
+     * of how many rows of that species currently survive. This matters because a species can
+     * genuinely end up with exactly one surviving row that already owns a non-plain id - e.g. a
+     * sibling that used to pin it non-primary was later removed - and that row must stay pinned
+     * non-primary so its id does not flip back to plain on the next unedited resubmit (which
+     * would leave its old non-plain rows stranded remotely while a duplicate set gets written
+     * under the plain id).
      *
-     * Only once a row does not already own a stage-aware id does row count decide the pin: a
-     * lone row (`rowCountBySpecies == 1`) with no stage-aware id of its own is pinned primary -
-     * being alone with no stage segment already on disk is what makes primary correct, whether
-     * it is a brand-new species or a legacy plain-id row. With two-or-more such rows, each row's
-     * own on-disk id is checked directly: the one row with no stage-aware id of its own is the
-     * one whose boxes (if any) are still filed under the old, stage-less id, so it is pinned
-     * primary and keeps that id. A pinned-non-primary row is never re-elected primary later just
-     * because siblings are removed - see [VerificationAnswers.isPrimaryAdded].
+     * Only once a row does not already own a non-plain id does row count decide the pin: a lone
+     * row (`rowCountBySpecies == 1`) with no non-plain id of its own is pinned primary - being
+     * alone with no distinct segment already on disk is what makes primary correct, whether it is
+     * a brand-new species or a legacy plain-id row. With two-or-more such rows, each row's own
+     * on-disk id is checked directly: the one row with no non-plain id of its own is the one
+     * whose boxes (if any) are still filed under the old, stage-less id, so it is pinned primary
+     * and keeps that id. A pinned-non-primary row is never re-elected primary later just because
+     * siblings are removed - see [VerificationAnswers.isPrimaryAdded].
      */
     private fun recoverAddedFinding(
         sampleId: String,
@@ -164,11 +166,14 @@ class OpenVerificationTargetUseCase @Inject constructor(
             fieldTotal = row.eggCount,
         )
         val isLoneRow = rowCountBySpecies[row.species] == 1
-        val ownsStageAwareId = answers.stageLabel?.let { stageKey ->
-            storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey))
-        } ?: false
+        // "Owns a non-plain id" - a stage-aware one when this row has a real stage, or the
+        // unstaged sentinel when it does not (14zcqnthz6e). Either form means this row was
+        // written non-primary and must stay pinned non-primary; only a row that owns neither can
+        // ever be (re-)elected primary below.
+        val nonPlainStageKey = answers.stageLabel ?: UNSTAGED_ADDED_STAGE_KEY
+        val ownsNonPlainId = storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, nonPlainStageKey))
         val isPrimaryAdded = when {
-            ownsStageAwareId -> false
+            ownsNonPlainId -> false
             isLoneRow -> true
             else -> storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey = null))
         }
@@ -179,7 +184,11 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 drawnBoxes = recoverDrawnBoxes(
                     sampleId,
                     row.species,
-                    answers.stageLabel,
+                    // A primary card's boxes are always filed under the plain id, whatever its own
+                    // stage; a non-primary card's are filed under its real stage segment, or the
+                    // unstaged sentinel when it has none - never under `null`, which would read the
+                    // primary's boxes instead of its own.
+                    if (isPrimaryAdded) answers.stageLabel else nonPlainStageKey,
                     isPrimaryAdded,
                     storedById,
                 ),
