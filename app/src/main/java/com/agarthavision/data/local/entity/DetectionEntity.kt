@@ -83,4 +83,7 @@ data class DetectionEntity(
      */
     @ColumnInfo(name = "species_touched", defaultValue = "0")
     val speciesTouched: Boolean = false,
+
+    @ColumnInfo(name = "stage")
+    val stage: String? = null,
 )

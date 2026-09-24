@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
@@ -119,6 +120,7 @@ fun VerificationSheet(
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
+                onStageSelected = viewModel::onStageSelected,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onDetectionPrev = viewModel::onDetectionPrev,
                 onDetectionNext = viewModel::onDetectionNext,
@@ -133,6 +135,7 @@ fun VerificationSheet(
                 onRemoveFinding = viewModel::onRemoveFinding,
                 onFieldTotalChanged = viewModel::onFieldTotalChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
+                onAddedStageSelected = viewModel::onAddedStageSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
                 onBeginDraw = viewModel::onBeginDraw,
                 onBoxDrawn = viewModel::onBoxDrawn,
@@ -608,6 +611,19 @@ private fun BoxQuestionChain(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.SPECIES_DROPDOWN)
+                .padding(bottom = 14.dp),
+        )
+    }
+
+    val selectedSpecies = answers.species
+    if (selectedSpecies != null && EggStage.forSpecies(selectedSpecies).isNotEmpty()) {
+        StageDropdown(
+            selectedSpecies = selectedSpecies,
+            selectedStage = answers.stage,
+            onStageSelected = actions.onStageSelected,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(VerifyTestTags.STAGE_DROPDOWN)
                 .padding(bottom = 14.dp),
         )
     }

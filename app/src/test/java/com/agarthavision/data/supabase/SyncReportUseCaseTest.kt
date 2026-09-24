@@ -3,6 +3,7 @@ package com.agarthavision.data.supabase
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.repository.ReportFileStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -29,7 +30,7 @@ class SyncReportUseCaseTest {
         val report = entity("report-1")
         val dao = FakeReportDao(seeded = listOf(report))
         val remote = StubRemoteDataSource(shouldThrow = false)
-        val useCase = SyncReportUseCase(dao, remote)
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
 
         val result = useCase("report-1")
 
@@ -43,7 +44,7 @@ class SyncReportUseCaseTest {
         val report = entity("report-2")
         val dao = FakeReportDao(seeded = listOf(report))
         val remote = StubRemoteDataSource(shouldThrow = true)
-        val useCase = SyncReportUseCase(dao, remote)
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
 
         val result = useCase("report-2")
 
@@ -52,10 +53,42 @@ class SyncReportUseCaseTest {
     }
 
     @Test
+    fun `uploads both report files to the owner-scoped object paths`() = runTest {
+        val dao = FakeReportDao(seeded = listOf(entity("report-3")))
+        val remote = StubRemoteDataSource(shouldThrow = false)
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
+
+        useCase("report-3")
+
+        // The leading uid is not decoration: the bucket's RLS matches on it, so a path
+        // built any other way is refused.
+        assertEquals(
+            listOf("user-1/report-3.pdf", "user-1/report-3.csv"),
+            remote.uploadedPaths,
+        )
+    }
+
+    @Test
+    fun `still syncs the row when the local files are gone`() = runTest {
+        val dao = FakeReportDao(seeded = listOf(entity("report-4")))
+        val remote = StubRemoteDataSource(shouldThrow = false)
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore(present = emptySet()))
+
+        val result = useCase("report-4")
+
+        // Losing the bytes must not cost the metadata too: parking the row in sync_failed
+        // forever over a file the medtech cleared would lose the report entirely.
+        assertTrue(result.isSuccess)
+        assertEquals(ReportSyncStatus.SYNCED.value, dao.statusOf("report-4"))
+        assertTrue(remote.uploadedPaths.isEmpty())
+        assertEquals(1, remote.upsertCallCount)
+    }
+
+    @Test
     fun `returns failure when report is not found`() = runTest {
         val dao = FakeReportDao(seeded = emptyList())
         val remote = StubRemoteDataSource(shouldThrow = false)
-        val useCase = SyncReportUseCase(dao, remote)
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
 
         val result = useCase("missing")
 
@@ -164,6 +197,16 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
         rows[reportId]?.let { rows[reportId] = it.copy(supabaseStatus = status) }
     }
 
+    override suspend fun updateFilePaths(
+        reportId: String,
+        pdfFilePath: String?,
+        csvFilePath: String?,
+    ) {
+        rows[reportId]?.let {
+            rows[reportId] = it.copy(pdfFilePath = pdfFilePath, csvFilePath = csvFilePath)
+        }
+    }
+
     override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) {
         rows.replaceAll { _, row ->
             if (row.sessionId in sessionIds && row.userId == null) {
@@ -187,10 +230,30 @@ private class StubRemoteDataSource(
     var upsertCallCount = 0
         private set
 
+    val uploadedPaths = mutableListOf<String>()
+
     override suspend fun upsertReport(report: ReportEntity) {
         upsertCallCount++
         if (shouldThrow) {
             error("simulated upstream failure")
         }
     }
+
+    override suspend fun uploadReportFile(objectPath: String, bytes: ByteArray) {
+        uploadedPaths += objectPath
+    }
+}
+
+/** Holds bytes for the two paths [entity] uses, and nothing else. */
+private class FakeReportFileStore(
+    private val present: Set<String> = setOf("/downloads/report.pdf", "/downloads/report.csv"),
+) : ReportFileStore {
+    override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String =
+        "/downloads/report.csv"
+
+    override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
+        "/downloads/report.pdf"
+
+    override suspend fun readBytes(path: String): ByteArray? =
+        if (path in present) "bytes-for-$path".toByteArray() else null
 }
