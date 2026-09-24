@@ -223,8 +223,14 @@ internal fun SampleTile(
             .background(AppColors.MicroscopeBrush)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "Sample ${sample.id}, $species" +
-                    (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
+                // No confidence and not manual means the medtech rejected every box: no eggs,
+                // which the species label already says. It is not a manual capture.
+                val provenance = when {
+                    sample.confidence != null -> ", ${sample.confidence} percent confidence"
+                    sample.source == SampleSource.Manual -> ", manual capture"
+                    else -> ""
+                }
+                contentDescription = "Sample ${sample.id}, $species$provenance"
             },
     ) {
         SubcomposeAsyncImage(

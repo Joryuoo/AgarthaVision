@@ -132,7 +132,7 @@ fun SampleDetailScreen(
 }
 
 @Composable
-private fun SampleDetailContent(
+internal fun SampleDetailContent(
     item: SampleRecordItem,
     imageSource: SampleImageSource,
     onBack: () -> Unit,
