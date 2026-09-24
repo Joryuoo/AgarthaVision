@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongParameterList")
 @file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.agarthavision.ui.verify
@@ -196,6 +196,7 @@ private fun OtherSpeciesSuggestions(
 /** Matches shown at once. See [OtherSpeciesSuggestions]. */
 private const val DISPLAY_LIMIT = 5
 
+@Suppress("LongParameterList")
 @Composable
 fun StageDropdown(
     selectedSpecies: EggSpecies?,

@@ -65,14 +65,19 @@ data class Finding(
  * counting the unnamed ones together would put a floor under a freshly added card drawn from
  * boxes that have nothing to do with it.
  */
+private fun Finding.matchesStage(stage: EggStage?, otherStageText: String): Boolean = when {
+    stage == null -> true
+    answers.stage != stage -> false
+    else -> stage != EggStage.OTHER || answers.otherStageText == otherStageText
+}
+
 fun List<Finding>.boxedCountOf(
     species: String?,
     stage: EggStage? = null,
     otherStageText: String = "",
 ): Int =
     if (species == null) 0 else count {
-        it.countsAsEgg && it.answers.speciesLabel == species &&
-            (stage == null || (it.answers.stage == stage && (stage != EggStage.OTHER || it.answers.otherStageText == otherStageText)))
+        it.countsAsEgg && it.answers.speciesLabel == species && it.matchesStage(stage, otherStageText)
     }
 
 /**
@@ -89,7 +94,7 @@ fun List<Finding>.fieldTotalOf(
 ): Int =
     firstOrNull {
         it.prediction == null && it.answers.speciesLabel == species &&
-            (stage == null || (it.answers.stage == stage && (stage != EggStage.OTHER || it.answers.otherStageText == otherStageText)))
+            it.matchesStage(stage, otherStageText)
     }?.answers?.fieldTotal ?: boxedCountOf(species, stage, otherStageText)
 
 /**
