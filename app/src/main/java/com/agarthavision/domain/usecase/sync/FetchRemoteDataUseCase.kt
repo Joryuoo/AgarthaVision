@@ -13,6 +13,7 @@ import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.local.mapper.toFramePredictionsOrNull
@@ -458,12 +459,31 @@ class FetchRemoteDataUseCase @Inject constructor(
             // E4 guard: skip if local row is pending or sync_failed
             val local = reportDao.getReportById(remote.reportId)
             if (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value) {
-                reportDao.insertReport(remote)
+                reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
                 fetched++
             }
         }
         return fetched
     }
+
+    /**
+     * Keeps the file paths this device already recorded for a report it holds.
+     *
+     * `pdf_file_path` and `csv_file_path` are device-local — a MediaStore id or an absolute path —
+     * and the server's copy is whatever the *generating* device wrote. Writing it straight through
+     * undid every restore: `RestoreReportFilesUseCase` repoints the row at the file it just
+     * downloaded, the next pull put the generating device's id back, and the report reopened to a
+     * file that is not here — prompting another download, and another copy nothing deletes (C8).
+     *
+     * Unlike [withLocalImagePath] there is no derived path to ask the disk for: a MediaStore id is
+     * assigned on write. The local row is the only record of where this device put the file. A
+     * format the local row has no path for falls back to the remote value, which is what a first
+     * pull would have written anyway.
+     */
+    private fun ReportEntity.withLocalFilePaths(local: ReportEntity): ReportEntity = copy(
+        pdfFilePath = local.pdfFilePath ?: pdfFilePath,
+        csvFilePath = local.csvFilePath ?: csvFilePath,
+    )
 
     private companion object {
         const val TAG = "FetchRemoteDataUseCase"

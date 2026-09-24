@@ -102,9 +102,9 @@ class ReportCsvBuilderTest {
             # lpf_range_trichuris_trichiura: 0-0
             # lpf_range_hookworm: 0-0
 
-            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict,is_manual,user_note,model_version
-            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,confirmed,false,"note,one",model-1
-            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,true,,model-2
+            sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,stage,verdict,is_manual,user_note,model_version
+            sample-1,1970-01-01T00:00:01Z,1970-01-01T00:00:02Z,Ascaris lumbricoides,0.91,Ascaris lumbricoides,,confirmed,false,"note,one",model-1
+            sample-2,1970-01-01T00:00:03Z,1970-01-01T00:00:04Z,,,,,,true,,model-2
 
         """.trimIndent() + "\n"
 

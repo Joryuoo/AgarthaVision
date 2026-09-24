@@ -39,6 +39,7 @@
     <string name="verify_q2">The bounding box is correctly placed</string>
     <string name="verify_q3">This egg is %1$s</string>
     <string name="verify_species_picker_label">Which species is it?</string>
+    <string name="verify_stage_picker_label">Developmental stage</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
@@ -94,10 +95,17 @@
     <string name="verify_detection_counter">Detection %1$d of %2$d</string>
     <string name="verify_boxes_toggle">Boxes</string>
     <string name="verify_draw_accept">Save box</string>
-    <string name="verify_draw_box">Draw its box</string>
-    <string name="verify_redraw_box">Redraw the box</string>
+    <string name="verify_draw_box">Draw box</string>
+    <string name="verify_redraw_box">Redraw</string>
     <string name="verify_box_replaced">You replaced this box, so the model\'s placement stays recorded as wrong.</string>
     <string name="verify_draw_cancel">Cancel</string>
+    <string name="verify_draw_hint">Drag across the egg to draw a box around it.</string>
+    <string name="verify_leave_title">Discard your changes?</string>
+    <string name="verify_leave_body">Your answers on this sample have not been submitted. Leaving now loses them.</string>
+    <string name="verify_leave_confirm">Discard changes</string>
+    <string name="verify_leave_dismiss">Keep editing</string>
+    <string name="verify_draw_target_box">Redrawing detection %1$d of %2$d</string>
+    <string name="verify_remove_box">Remove</string>
     <string name="verify_prev_egg">Previous egg</string>
     <string name="verify_next_egg">Next egg</string>
     <string name="verify_ai_suggestion_note">This is an AI-suggested result and may contain inaccuracies. Review the frame and confirm the species yourself before submitting.</string>
@@ -260,6 +268,8 @@
     <string name="report_share_no_app">No app available to share the report.</string>
     <string name="report_open_no_app">No app available to open the report.</string>
     <string name="report_generation_failed">Report failed: %1$s</string>
+    <string name="report_restoring">Fetching the report file\u2026</string>
+    <string name="report_restore_failed">This report\'s file could not be fetched. Check your connection and try again.</string>
     <string name="report_pdf_document_title">AgarthaVision Session Report</string>
     <string name="report_pdf_session_label">Session</string>
     <string name="report_pdf_device_label">Device</string>

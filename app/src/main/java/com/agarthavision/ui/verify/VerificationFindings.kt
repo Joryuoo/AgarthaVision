@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.inference.ImageBox
+import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.boxedCountOf
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
@@ -271,6 +273,19 @@ private fun AddedFindingCard(
                 .padding(bottom = 10.dp),
         )
 
+        val addedSpecies = finding.answers.species
+        if (addedSpecies != null && EggStage.forSpecies(addedSpecies).isNotEmpty()) {
+            StageDropdown(
+                selectedSpecies = addedSpecies,
+                selectedStage = finding.answers.stage,
+                onStageSelected = { actions.onAddedStageSelected(index, it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(VerifyTestTags.addedStageDropdown(index))
+                    .padding(bottom = 10.dp),
+            )
+        }
+
         // The field asks for the **total** for this species, not the eggs beyond the model's
         // boxes. A medtech counting 23 Ascaris against nine boxed ones would otherwise have to
         // work out 14 in their head, under time pressure, with nothing anywhere to catch a slip
@@ -377,12 +392,26 @@ private fun LocateEggsSection(
                         modifier = Modifier.weight(1f),
                     )
                     DrawBoxAction(
+                        icon = if (slot.box == null) BoxIcons.draw else BoxIcons.redraw,
                         label = stringResource(
                             if (slot.box == null) R.string.verify_draw_box else R.string.verify_redraw_box,
                         ),
                         tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
                         onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
                     )
+                    // Offered only where there is a box to discard. Accepting one used to be
+                    // final: the species' total is floored at the boxes drawn on it, so a box in
+                    // the wrong place made its own count unlowerable and the only way out was to
+                    // remove the species and retype it. Removing leaves the count alone — the egg
+                    // is still there, it simply goes back to unlocated.
+                    if (slot.box != null) {
+                        DrawBoxAction(
+                            icon = BoxIcons.remove,
+                            label = stringResource(R.string.verify_remove_box),
+                            tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
+                            onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },
+                        )
+                    }
                 }
             }
         }
@@ -452,12 +481,18 @@ internal fun FindingsSummary(
                 .padding(12.dp),
         ) {
             rows.forEach { row ->
+                val labelText = if (row.stage != null) {
+                    val speciesEnum = EggSpecies.fromClassLabel(row.species)
+                    "${row.species} (${row.stage.getDisplayName(speciesEnum)})"
+                } else {
+                    row.species
+                }
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = row.species,
+                        text = labelText,
                         color = AgarthaTheme.colors.textPrimary,
                         fontSize = 13.sp,
                     )
