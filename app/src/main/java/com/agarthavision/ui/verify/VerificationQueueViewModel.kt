@@ -3,6 +3,7 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.domain.usecase.verify.DeleteQueueItemsUseCase
 import com.agarthavision.domain.usecase.verify.ObserveVerificationQueueUseCase
@@ -16,9 +17,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class QueueFilter { ALL, AI, MANUAL }
+
 data class VerificationQueueState(
     /** Every row, and every row is unverified — there is no second list to filter out of this. */
     val samples: List<QueueSample> = emptyList(),
+    val filter: QueueFilter = QueueFilter.ALL,
     /**
      * How many samples in this session have already been verified.
      *
@@ -50,6 +54,13 @@ data class VerificationQueueState(
 
     val verificationTarget: FlaggedFrame?
         get() = priorTarget?.frame
+
+    val filteredSamples: List<QueueSample>
+        get() = when (filter) {
+            QueueFilter.ALL -> samples
+            QueueFilter.AI -> samples.filter { it.source == FrameSource.MODEL }
+            QueueFilter.MANUAL -> samples.filter { it.source == FrameSource.MANUAL }
+        }
 }
 
 /** Which empty body to show when there is nothing left to verify. */
@@ -126,6 +137,10 @@ class VerificationQueueViewModel @Inject constructor(
 
     fun onClearSelection() {
         _state.update { it.copy(selectedIds = emptySet()) }
+    }
+
+    fun onFilterSelected(filter: QueueFilter) {
+        _state.update { it.copy(filter = filter) }
     }
 
     fun onDeleteRequested() {

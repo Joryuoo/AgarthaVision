@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod", "LongParameterList")
+@file:Suppress("FunctionNaming", "LongMethod", "LongParameterList", "CyclomaticComplexMethod")
 
 package com.agarthavision.ui.verify
 
@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -21,10 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material.icons.outlined.CropSquare
-import androidx.compose.material.icons.outlined.Delete
-import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -38,18 +34,19 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -68,7 +65,6 @@ import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
-import kotlinx.coroutines.launch
 import java.io.File
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -107,6 +103,8 @@ fun VerificationSheet(
 
     BackHandler(onBack = viewModel::onCancel)
 
+    val isEditing = prior != null || state.frameIndexInQueue == 0
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -115,13 +113,13 @@ fun VerificationSheet(
     ) {
         VerificationSheetContent(
             state = state,
+            isEditing = isEditing,
             actions = VerificationSheetActions(
                 onQ1Selected = viewModel::onQ1Selected,
                 onQ2Selected = viewModel::onQ2Selected,
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onStageSelected = viewModel::onStageSelected,
-                onOtherStageChanged = viewModel::onOtherStageChanged,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onDetectionPrev = viewModel::onDetectionPrev,
                 onDetectionNext = viewModel::onDetectionNext,
@@ -138,7 +136,6 @@ fun VerificationSheet(
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedStageSelected = viewModel::onAddedStageSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
-                onAddedOtherStageChanged = viewModel::onAddedOtherStageChanged,
                 onBeginDraw = viewModel::onBeginDraw,
                 onBoxDrawn = viewModel::onBoxDrawn,
                 onCancelDraw = viewModel::onCancelDraw,
@@ -156,14 +153,12 @@ fun VerificationSheet(
 internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
+    isEditing: Boolean = false,
 ) {
     val frame = state.frame ?: return
-
-    // Hoisted above the draw screen and kept for the sheet's whole life, so cancelling a draw
-    // lands the medtech on the exact scroll they left rather than back at the top.
-    val scrollState = rememberScrollState()
-    val scope = rememberCoroutineScope()
     val showDiscardConfirm = remember { mutableStateOf(false) }
+    val showDiscardChangesDialog = remember { mutableStateOf(false) }
+
     // The sample's label is the moment it was captured. The same label the queue row carries,
     // so the row the medtech tapped names the screen they land on.
     val capturedAtLabel = remember(frame.capturedAt) {
@@ -174,32 +169,35 @@ internal fun VerificationSheetContent(
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
     val boxCount = frame.predictions.size
+    val scrollState = rememberScrollState()
+    val coroutineScope = rememberCoroutineScope()
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 32.dp)
                 .verticalScroll(scrollState)
-                // Out of reach while the draw screen covers it, for TalkBack as much as for a finger.
-                .then(if (state.isDrawing) Modifier.clearAndSetSemantics {} else Modifier),
+                .then(
+                    if (state.isDrawing) Modifier.clearAndSetSemantics { } else Modifier
+                ),
         ) {
-            // 1. Top bar: back, and the sample's label. The frame counter that used to live in the
-            //    meta line is now the Current Sample indicator, beneath the frame it counts.
+            // 1. Top bar: back, and the sample's label.
             ScreenTopBar(
-                title = capturedAtLabel,
-                metaText = "",
-                onBack = actions.onCancel,
+                title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
+                metaText = if (isEditing) capturedAtLabel else "",
+                onBack = {
+                    if (state.isDirty || isEditing) {
+                        showDiscardChangesDialog.value = true
+                    } else {
+                        actions.onCancel()
+                    }
+                },
             )
 
             Column(modifier = Modifier.padding(horizontal = 22.dp)) {
                 // 2. Frame section: the image, then one row carrying where you are and how to move.
                 val imageModel = rememberFrameImageModel(frame, state.imageSource)
                 if (imageModel == null) {
-                    // Honest about it, rather than opening a blank canvas the medtech might
-                    // annotate into the void. A missing image and an empty one used to be
-                    // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
-                    // and every sample synced from another device opened silently empty.
                     FrameUnavailable(
                         reason = state.imageSource,
                         modifier = Modifier
@@ -210,17 +208,14 @@ internal fun VerificationSheetContent(
                             .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
                     )
                 } else {
+                    val activeTarget = DrawTarget(findingIndex = state.currentDetectionIndex)
                     FrameWithBoxes(
                         imageModel = imageModel,
-                        // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
-                        // `frame.predictions` alone never held a hand-drawn box, so every one of them
-                        // was invisible and a replaced box left the model's wrong rectangle on screen.
-                        boxes = state.findings.frameBoxes(
-                            active = DrawTarget(state.currentDetectionIndex),
-                        ),
+                        boxes = state.findings.frameBoxes(active = activeTarget),
                         showBoxes = state.showBoundingBoxes,
                         inferenceImageWidth = frame.imageWidth,
                         inferenceImageHeight = frame.imageHeight,
+                        isDrawing = state.isDrawing,
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(frame.previewAspectRatio())
@@ -255,6 +250,13 @@ internal fun VerificationSheetContent(
                 //    not answered yet. Always present, never collapsed to two states.
                 ModelOutputSection(output = frame.modelOutput())
 
+                if (boxCount > 0 || state.findings.frameBoxes(active = null).isNotEmpty()) {
+                    BoundingBoxesToggle(
+                        checked = state.showBoundingBoxes,
+                        onToggle = actions.onToggleBoundingBoxes,
+                    )
+                }
+
                 // 4. Current detection. Only when there is model output with at least one box -
                 //    every question in here is a question about a box.
                 if (boxCount > 0) {
@@ -268,38 +270,19 @@ internal fun VerificationSheetContent(
                         nextDescription = stringResource(R.string.verify_next_egg),
                         prevTag = VerifyTestTags.DETECTION_PREV,
                         nextTag = VerifyTestTags.DETECTION_NEXT,
-                        // Counted from frame.predictions, never from the answer list: the medtech
-                        // can append a species the model never boxed, so the answer list is the
-                        // longer of the two and paging by it would walk off the end of the boxes.
                         canGoPrev = state.currentDetectionIndex > 0,
                         canGoNext = state.currentDetectionIndex < boxCount - 1,
                         onPrev = actions.onDetectionPrev,
                         onNext = actions.onDetectionNext,
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
-                }
 
-                // Offered whenever the frame has anything to show, which since 86d4by5n4 includes a
-                // frame with no model output at all: a manual capture the medtech located eggs on by
-                // hand has boxes to hide and used to have no control that could hide them, because
-                // this sat inside the Current Detection block and that block needs a model box to
-                // exist. Its position is unchanged for every frame that has one.
-                if (boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }) {
-                    BoundingBoxesToggle(
-                        checked = state.showBoundingBoxes,
-                        onToggle = actions.onToggleBoundingBoxes,
-                    )
-                }
-
-                if (boxCount > 0) {
                     BoxQuestionChain(
                         answers = currentAnswers,
                         suggestedSpecies = currentPrediction
                             ?.let { EggSpecies.fromClassLabel(it.classLabel) },
                         detectionIndex = state.currentDetectionIndex,
                         actions = actions,
-                        // Derived against this field's own text, so a list fetched for another row
-                        // - or for a keystroke since typed over - simply does not come back.
                         suggestions = state.suggestionsFor(
                             SuggestionTarget.CurrentDetection,
                             currentAnswers?.otherSpeciesText.orEmpty(),
@@ -307,9 +290,7 @@ internal fun VerificationSheetContent(
                     )
                 }
 
-                // 5. Add Species. Always present, with or without model output - it is the only
-                //    path by which a frame captured with the container unreachable can be verified
-                //    at all, and a frame with model output still needs it for eggs the model missed.
+                // 5. Add Species. Always present, with or without model output.
                 AddedFindings(
                     findings = state.findings,
                     boxCount = boxCount,
@@ -323,11 +304,6 @@ internal fun VerificationSheetContent(
                 )
 
                 FindingsSummary(findings = state.findings)
-
-                // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
-                // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
-                // species than the model boxed already answers it, and asking again lets the two
-                // disagree.
 
                 // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
                 SheetSectionLabel(
@@ -352,10 +328,16 @@ internal fun VerificationSheetContent(
 
                 SheetActionRow(
                     SheetActionRowState(
-                        primaryLabel = "Submit",
+                        primaryLabel = if (isEditing) "Save" else "Submit",
                         secondaryLabel = "Discard",
                         onPrimaryClick = actions.onSubmit,
-                        onSecondaryClick = { showDiscardConfirm.value = true },
+                        onSecondaryClick = {
+                            if (state.isDirty || isEditing) {
+                                showDiscardChangesDialog.value = true
+                            } else {
+                                showDiscardConfirm.value = true
+                            }
+                        },
                         primaryLoading = state.isSubmitting,
                         primaryEnabled = state.canSubmit,
                     )
@@ -363,91 +345,85 @@ internal fun VerificationSheetContent(
             }
         }
 
-        if (showDiscardConfirm.value) {
-            AlertDialog(
-                onDismissRequest = { showDiscardConfirm.value = false },
-                shape = DialogShape,
-                title = { Text("Discard this frame?") },
-                text = { Text("This will remove the current frame from the verification queue.") },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            showDiscardConfirm.value = false
-                            actions.onDeleteFrame()
-                        },
-                        enabled = !state.isSubmitting,
-                        modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
-                    ) {
-                        Text("Discard", color = AgarthaTheme.colors.danger)
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { showDiscardConfirm.value = false },
-                        modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
-                    ) {
-                        Text("Cancel")
-                    }
-                },
-            )
-        }
-
-        if (state.pendingLeave != null) {
-            LeaveSampleDialog(
-                onConfirm = actions.onConfirmLeave,
-                onDismiss = actions.onDismissLeave,
-            )
-        }
-
-        // Drawing covers the sheet rather than replacing it, so the sheet - and its scroll - is
-        // still there to come back to. See DrawModeScreen for why drawing gets a screen at all. No
-        // section of the sheet moved, so PB-13a's ordering (86d4bk51n) is untouched.
         if (state.isDrawing) {
             DrawModeScreen(
                 state = state,
                 actions = actions,
-                // Back to the top on a save, where the frame is, so the box just drawn is the first
-                // thing the medtech sees. A cancel has nothing new to show, and leaves them in place.
                 onSaved = { box ->
+                    coroutineScope.launch {
+                        scrollState.scrollTo(0)
+                    }
                     actions.onBoxDrawn(box)
-                    scope.launch { scrollState.scrollTo(0) }
                 },
             )
         }
     }
-}
 
-/**
- * Asks before a cycle button or back throws away edits that were never submitted.
- *
- * Nothing on the sheet is kept until Submit, and the cycle buttons sit right beside the frame
- * where a stray thumb lands, so leaving a sample that has edits on it is a question rather than
- * an accident. Keep editing is the dismiss action, so tapping outside the dialog is also "stay".
- */
-@Composable
-private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = DialogShape,
-        title = { Text(stringResource(R.string.verify_leave_title)) },
-        text = { Text(stringResource(R.string.verify_leave_body)) },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
-            ) {
-                Text(stringResource(R.string.verify_leave_confirm), color = AgarthaTheme.colors.danger)
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
-            ) {
-                Text(stringResource(R.string.verify_leave_dismiss))
-            }
-        },
-    )
+    if (showDiscardConfirm.value) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm.value = false },
+            shape = DialogShape,
+            title = { Text("Discard this frame?") },
+            text = { Text("This will remove the current frame from the verification queue.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardConfirm.value = false
+                        actions.onDeleteFrame()
+                    },
+                    enabled = !state.isSubmitting,
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
+                ) {
+                    Text("Discard", color = AgarthaTheme.colors.danger)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showDiscardConfirm.value = false },
+                    modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
+                ) {
+                    Text("Cancel")
+                }
+            },
+        )
+    }
+
+    if (showDiscardChangesDialog.value || state.pendingLeave != null) {
+        AlertDialog(
+            onDismissRequest = {
+                showDiscardChangesDialog.value = false
+                actions.onDismissLeave()
+            },
+            shape = DialogShape,
+            title = { Text(stringResource(R.string.verify_discard_changes_title)) },
+            text = { Text(stringResource(R.string.verify_discard_changes_body)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardChangesDialog.value = false
+                        actions.onConfirmLeave()
+                    },
+                    modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+                ) {
+                    Text(
+                        stringResource(R.string.verify_discard_changes_confirm),
+                        color = AgarthaTheme.colors.danger,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDiscardChangesDialog.value = false
+                        actions.onDismissLeave()
+                    },
+                    modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
+                ) {
+                    Text(stringResource(R.string.verify_discard_changes_keep))
+                }
+            },
+        )
+    }
 }
 
 /**
@@ -496,12 +472,10 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
 }
 
 /**
- * The per-box statements: there is an egg → the box is placed right → it is the species the model
- * named. All three arrive pre-filled from model output, so a frame the model got right is
- * submitted without a tap, and unchecking is how the medtech disagrees. A ticked Q1 shows Q2 and
- * Q3 together; an unticked one hides both, since neither means anything without an egg.
- *
- * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
+ * The per-box statements, each revealed by the one above it: there is an egg → the box is placed
+ * right → it is the species the model named. All three arrive pre-filled from model output, so a
+ * frame the model got right is submitted without a tap, and unchecking is how the medtech
+ * disagrees.
  *
  * The species step is a confirmation before a picker: the common answer is agreement, and
  * agreeing should not cost a pick from a list the medtech has just agreed with. Only unchecking
@@ -515,8 +489,8 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
  *   right, which is why redrawing is not offered here.
  * - **Unchecked** — "Redraw the box", and it stays optional: unchecked with no redraw is a
  *   complete answer that records a localisation error on its own.
- * - **Unchecked, box replaced** — redraw and remove, and the checkbox is disabled, because the
- *   answer is latched until the replacement is removed.
+ * - **Unchecked, box replaced** — the affordance is gone (drawing over a drawn box belongs to
+ *   the Sample Data Screen) and the checkbox is disabled, because the answer is latched.
  */
 @Composable
 private fun BoxQuestionChain(
@@ -546,37 +520,25 @@ private fun BoxQuestionChain(
         onToggle = { actions.onQ2Selected(answers.isBoxCorrect != true) },
     )
 
-    // Offered whenever Q2 is unticked, and never while it is ticked - there is nothing to correct
-    // while the model's box is agreed to be right. Optional: answering "No" without redrawing is
-    // a complete answer that records a localisation error on its own.
+    // Offered once the medtech says the box is misplaced, and never before - there is nothing to
+    // correct while the model's box is agreed to be right. Optional: answering "No" without
+    // redrawing is a complete answer that records a localisation error on its own.
     //
-    // Keyed on "not ticked" rather than on `== false`. A checkbox draws null and false the same,
-    // so keying on false alone left an unticked Q2 with no redraw under it whenever the answer
-    // was merely unset - the medtech had to tick and untick it to get the action back.
-    //
-    // A replaced box keeps the redraw and gains a remove, the same pair an added egg's box has.
-    // A box drawn in the wrong place used to be final here, while the same mistake on an added
-    // egg could be undone. Removing takes back the medtech's box only: the model's comes back
-    // into view, still marked misplaced, because a model box is never removed (C8).
+    // It disappears once a box has been replaced, because Q2 is latched at "No" from then on and
+    // re-drawing over a drawn box is a different operation (the Sample Data Screen owns that).
     if (answers.isBoxCorrect != true) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            DrawBoxAction(
-                icon = BoxIcons.redraw,
-                label = stringResource(R.string.verify_redraw_box),
-                tag = VerifyTestTags.REDRAW_BOX,
-                onClick = { actions.onBeginDraw(detectionIndex, null) },
-            )
-            if (answers.boxReplaced) {
-                DrawBoxAction(
-                    icon = BoxIcons.remove,
-                    label = stringResource(R.string.verify_remove_box),
-                    tag = VerifyTestTags.REMOVE_REPLACEMENT_BOX,
-                    onClick = { actions.onRemoveReplacementBox(detectionIndex) },
-                )
-            }
-        }
+        DrawBoxAction(
+            label = stringResource(R.string.verify_redraw_box),
+            tag = VerifyTestTags.REDRAW_BOX,
+            onClick = { actions.onBeginDraw(detectionIndex, null) },
+        )
     }
     if (answers.boxReplaced) {
+        DrawBoxAction(
+            label = stringResource(R.string.verify_remove_box),
+            tag = VerifyTestTags.REMOVE_REPLACEMENT_BOX,
+            onClick = { actions.onRemoveReplacementBox(detectionIndex) },
+        )
         Text(
             text = stringResource(R.string.verify_box_replaced),
             color = AgarthaTheme.colors.textTertiary,
@@ -586,12 +548,6 @@ private fun BoxQuestionChain(
                 .padding(start = 4.dp, bottom = 12.dp),
         )
     }
-    // No early return on Q2, whatever it holds. A box in the wrong place still contains a real
-    // egg, and that egg still has to be named and counted - short-circuiting on a no dropped
-    // it from the low-power-field count, and left the frame permanently unsubmittable, because
-    // `Finding.isComplete` asks for a species on a BOX_INCORRECT row too. The verdict still
-    // records BOX_INCORRECT; see computeVerdict. Stopping on an unset Q2 hid Q3 behind a box
-    // that already looked unticked, so every question under a ticked Q1 is always shown.
 
     if (suggestedSpecies != null) {
         CheckQuestion(
@@ -601,8 +557,6 @@ private fun BoxQuestionChain(
             onToggle = { actions.onSpeciesConfirmed(answers.speciesConfirmed != true) },
         )
     }
-    // "Not ticked", for the same reason as the redraw above: an unset confirmation draws as an
-    // unticked Q3 and has to carry the picker an unticked Q3 always carries.
     if (suggestedSpecies == null || answers.speciesConfirmed != true) {
         SpeciesDropdown(
             selected = answers.species,
@@ -623,8 +577,6 @@ private fun BoxQuestionChain(
             selectedSpecies = selectedSpecies,
             selectedStage = answers.stage,
             onStageSelected = actions.onStageSelected,
-            otherStageText = answers.otherStageText,
-            onOtherStageTextChanged = actions.onOtherStageChanged,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.STAGE_DROPDOWN)
@@ -701,60 +653,23 @@ internal fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = M
 }
 
 /**
- * An icon and a one-word label that draw, redraw or remove a box: [BoxIcons] names which.
+ * A text affordance that starts a drawing gesture on the frame above.
  *
- * The icon makes the action findable at a glance, the label makes it unambiguous — a pencil and
- * a bin side by side under a question read as decoration until they say what they do. The label
- * is kept to a word so an egg row still fits its name beside two of these on a small phone.
- * Still low-key on purpose: drawing is always optional, and a filled button would read as
- * something the medtech has to do.
- *
- * The whole pair is one target, at least 48dp tall. The icon carries no description of its own:
- * the label beside it is what TalkBack reads, so the action is announced once, not twice.
+ * Text rather than a button, and low-key on purpose: drawing is always optional, on both call
+ * sites, and a prominent control would read as something the medtech has to do.
  */
 @Composable
-internal fun DrawBoxAction(
-    icon: ImageVector,
-    label: String,
-    tag: String,
-    onClick: () -> Unit,
-) {
-    val accent = AgarthaTheme.colors.accent
-    Row(
+internal fun DrawBoxAction(label: String, tag: String, onClick: () -> Unit) {
+    Text(
+        text = label,
+        color = AgarthaTheme.colors.accent,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.SemiBold,
         modifier = Modifier
             .testTag(tag)
-            .heightIn(min = 48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = accent,
-            modifier = Modifier.size(18.dp),
-        )
-        Text(
-            text = label,
-            color = accent,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 6.dp),
-        )
-    }
-}
-
-/** One glyph per box action, so the same action looks the same on every row that offers it. */
-internal object BoxIcons {
-    /** Draw a box where there is none yet. */
-    val draw: ImageVector = Icons.Outlined.CropFree
-
-    /** Draw a box again, over one already there. */
-    val redraw: ImageVector = Icons.Outlined.Edit
-
-    /** Discard a box the medtech drew. Never offered on the model's own. */
-    val remove: ImageVector = Icons.Outlined.Delete
+            .clickable(onClick = onClick)
+            .padding(start = 4.dp, top = 2.dp, bottom = 14.dp),
+    )
 }
 
 /**

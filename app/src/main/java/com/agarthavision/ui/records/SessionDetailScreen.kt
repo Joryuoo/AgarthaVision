@@ -97,6 +97,7 @@ internal data class SampleUi(
     val filePath: String?,
     val storagePath: String?,
     val timeLabel: String,
+    val isEdited: Boolean = false,
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -283,6 +284,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             filePath = item.sample.filePath,
             storagePath = item.sample.storagePath,
             timeLabel = sampleTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
+            isEdited = item.sample.isEdited,
         )
     }
 

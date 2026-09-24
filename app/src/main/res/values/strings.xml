@@ -69,7 +69,13 @@
     <string name="verify_model_no_eggs">No eggs detected.</string>
     <string name="verify_model_total">TOTAL</string>
     <string name="verify_sample_indicator">Sample %1$d of %2$d</string>
-    <string name="verify_sample_out_of_queue">Not in queue</string>
+    <string name="verify_sample_out_of_queue">Verified sample · Editable</string>
+    <string name="verify_manual_title">Label sample</string>
+    <string name="verify_editing_title">Editing sample</string>
+    <string name="verify_discard_changes_title">Discard changes?</string>
+    <string name="verify_discard_changes_body">You have unsaved changes that will be lost if you leave without saving.</string>
+    <string name="verify_discard_changes_confirm">Discard changes</string>
+    <string name="verify_discard_changes_keep">Continue editing</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
@@ -122,6 +128,11 @@
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
     <string name="badge_ai_suggested">AI-suggested</string>
     <string name="badge_manual">Manual</string>
+    <string name="badge_edited">Edited</string>
+    <string name="queue_filter_all">All</string>
+    <string name="queue_filter_ai">AI Assisted</string>
+    <string name="queue_filter_manual">Manual</string>
+    <string name="sample_detail_edit">Edit</string>
 
     <string name="queue_sheet_title">Flagged Frames · %1$d</string>
     <string name="queue_sheet_empty_state">No flagged frames yet. Start recording to populate the queue.</string>

@@ -50,6 +50,10 @@ internal object VerifyTestTags {
     const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
     const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
+    /** Discard-changes confirmation dialog when leaving/discarding unsaved edits. */
+    const val DISCARD_CHANGES_CONFIRM = "discard_changes_confirm"
+    const val DISCARD_CHANGES_DISMISS = "discard_changes_dismiss"
+
     /** Custom-species dialog opened by [SPECIES_CHIP_OTHER]. */
     const val CUSTOM_SPECIES_FIELD = "custom_species_field"
     const val CUSTOM_SPECIES_SAVE = "custom_species_save"

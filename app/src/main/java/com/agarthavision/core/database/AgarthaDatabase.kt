@@ -121,7 +121,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 20,
+    version = 21,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

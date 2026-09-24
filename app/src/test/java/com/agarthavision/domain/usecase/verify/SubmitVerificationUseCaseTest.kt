@@ -116,6 +116,7 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
+                isEdited = any(),
             )
             verify(detectionDao).insertDetections(any())
         }
@@ -136,6 +137,7 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
+                isEdited = any(),
             )
         }
 
@@ -163,6 +165,7 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(true),
                 userNote = isNull(),
+                isEdited = any(),
             )
         }
 
@@ -293,6 +296,7 @@ class SubmitVerificationUseCaseTest {
                 verifiedAt = any(),
                 needsReannotation = eq(false),
                 userNote = isNull(),
+                isEdited = any(),
             )
         }
 
@@ -308,6 +312,35 @@ class SubmitVerificationUseCaseTest {
 
             // A rejected box counts nothing, so the sample ends with no findings rows at all.
             verify(findingDao).replaceFindingsForSample(eq("sample-1"), eq(emptyList()))
+        }
+
+    @Test
+    fun `re-submitting a previously verified sample marks isEdited as true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
+            whenever(sampleDao.getSampleById("sample-1")).thenReturn(
+                com.agarthavision.data.local.entity.SampleEntity(
+                    sampleId = "sample-1",
+                    sessionId = "session-1",
+                    userId = "user-1",
+                    deviceId = "device-1",
+                    timestamp = 1000L,
+                    imagePath = "/tmp/sample-1.jpg",
+                    status = SampleStatus.VERIFIED.value,
+                ),
+            )
+
+            useCase(frame, listOf(Finding(prediction, VerificationAnswers(isEgg = false))), missedEgg = null)
+            advanceUntilIdle()
+
+            verify(sampleDao).updateSampleOnVerify(
+                sampleId = eq("sample-1"),
+                status = eq(SampleStatus.VERIFIED.value),
+                verifiedAt = any(),
+                needsReannotation = eq(false),
+                userNote = isNull(),
+                isEdited = eq(true),
+            )
         }
 
 }

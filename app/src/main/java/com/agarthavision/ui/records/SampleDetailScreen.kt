@@ -151,7 +151,12 @@ private fun SampleDetailContent(
     var hidden by remember(item.sample.id) { mutableStateOf(emptySet<Int>()) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        SampleDetailNavBar(title = capturedAt, onBack = onBack)
+        SampleDetailNavBar(
+            title = capturedAt,
+            isEdited = item.sample.isEdited,
+            onBack = onBack,
+            onEditClick = onViewDetection,
+        )
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -491,7 +496,12 @@ private fun SampleDetailUnavailableScreen(
  * An id fragment is metadata, and it is also not something a medtech can recognise.
  */
 @Composable
-fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
+fun SampleDetailNavBar(
+    title: String,
+    isEdited: Boolean = false,
+    onBack: () -> Unit,
+    onEditClick: (() -> Unit)? = null,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -507,6 +517,35 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
             style = AppTypography.titleLarge,
             color = AgarthaTheme.colors.textPrimary,
         )
+        if (isEdited) {
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .background(AgarthaTheme.colors.warningTint, RoundedCornerShape(4.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.badge_edited),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AgarthaTheme.colors.warningText,
+                )
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (onEditClick != null) {
+            androidx.compose.material3.TextButton(
+                onClick = onEditClick,
+                modifier = Modifier.testTag(SampleDetailTestTags.EDIT_BUTTON),
+            ) {
+                Text(
+                    text = stringResource(R.string.sample_detail_edit),
+                    style = AppTypography.titleMedium,
+                    color = AgarthaTheme.colors.accent,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+        }
     }
 }
 
@@ -516,6 +555,7 @@ internal object SampleDetailTestTags {
 
     /** Opens the Verification Screen in edit mode. */
     const val VIEW_DETECTION = "sample_view_detection"
+    const val EDIT_BUTTON = "sample_edit_button"
 
     fun detectionRow(index: Int): String = "sample_detection_row_$index"
 }

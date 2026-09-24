@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Inbox
 import com.agarthavision.ui.icons.AgarthaIcons
@@ -190,9 +189,11 @@ fun VerificationQueueScreen(
                 }
             }
 
-            // No filter chips. The queue is one flat list of work still to do, so there is
-            // nothing to filter between - and a single chip that is always selected is a
-            // control that cannot do anything.
+            // Filter chips: All / AI Assisted / Manual
+            QueueFilterBar(
+                selectedFilter = state.filter,
+                onFilterSelected = viewModel::onFilterSelected,
+            )
 
             // Frame list, or why it is empty
             if (state.samples.isEmpty()) {
@@ -210,7 +211,7 @@ fun VerificationQueueScreen(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(
-                        items = state.samples,
+                        items = state.filteredSamples,
                         // Keyed by primary key, never by capturedAt: two frames captured in the
                         // same millisecond once threw a duplicate-key exception.
                         key = { sample -> sample.sampleId }
@@ -298,12 +299,6 @@ internal fun QueueEmptyState(
                     contentColor = colors.onAccent,
                 ),
             ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     stringResource(R.string.verify_queue_view_records),
                     fontSize = 15.sp,
@@ -312,6 +307,65 @@ internal fun QueueEmptyState(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun QueueFilterBar(
+    selectedFilter: QueueFilter,
+    onFilterSelected: (QueueFilter) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        QueueFilterChip(
+            label = stringResource(R.string.queue_filter_all),
+            selected = selectedFilter == QueueFilter.ALL,
+            onClick = { onFilterSelected(QueueFilter.ALL) },
+        )
+        QueueFilterChip(
+            label = stringResource(R.string.queue_filter_ai),
+            selected = selectedFilter == QueueFilter.AI,
+            onClick = { onFilterSelected(QueueFilter.AI) },
+        )
+        QueueFilterChip(
+            label = stringResource(R.string.queue_filter_manual),
+            selected = selectedFilter == QueueFilter.MANUAL,
+            onClick = { onFilterSelected(QueueFilter.MANUAL) },
+        )
+    }
+}
+
+@Composable
+private fun QueueFilterChip(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(if (selected) colors.accent else colors.surface)
+            .border(
+                1.dp,
+                if (selected) colors.accent else colors.border,
+                CircleShape,
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = if (selected) colors.onAccent else colors.textSecondary,
+            style = InterBaseStyle,
+        )
     }
 }
 

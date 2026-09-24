@@ -70,6 +70,26 @@ class VerificationQueueViewModelTest {
             assertEquals("session-1", vm.state.value.sessionId)
         }
 
+    @Test
+    fun `filtering by source filters samples correctly`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            queue.value = VerificationQueue(
+                samples = listOf(sample("a", FrameSource.MODEL), sample("b", FrameSource.MANUAL)),
+                sessionId = "session-1",
+            )
+            advanceUntilIdle()
+
+            assertEquals(QueueFilter.ALL, vm.state.value.filter)
+            assertEquals(listOf("a", "b"), vm.state.value.filteredSamples.map { it.sampleId })
+
+            vm.onFilterSelected(QueueFilter.AI)
+            assertEquals(listOf("a"), vm.state.value.filteredSamples.map { it.sampleId })
+
+            vm.onFilterSelected(QueueFilter.MANUAL)
+            assertEquals(listOf("b"), vm.state.value.filteredSamples.map { it.sampleId })
+        }
+
     /**
      * Verifying a sample is now the ordinary way a row leaves the queue, so a selection that
      * outlives it would leave a phantom in the contextual bar's count — and a delete confirmed

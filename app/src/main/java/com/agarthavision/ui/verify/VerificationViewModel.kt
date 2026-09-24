@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+enum class LeaveIntent { EXIT, PREVIOUS_SAMPLE, NEXT_SAMPLE }
+
 /**
  * Immutable UI state surface for the verification flow.
  *
@@ -76,52 +78,26 @@ data class VerificationUiState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    /**
-     * Species already recorded on this device that match what is being typed into a free-text
-     * "Other species" field, with the field they were fetched for and the text they answer.
-     *
-     * All three, because the screen has **two** free-text fields — Current Detection and every
-     * added species — and only one is ever being typed into. Carrying the target and the query
-     * alongside the names lets [suggestionsFor] *derive* whether a list still belongs where it
-     * is about to render, instead of the view model having to remember to clear it on every
-     * path that moves the medtech elsewhere. A suggestion list rendered under the wrong row
-     * would be worse than no suggestions at all: it invites a tap that writes one row's species
-     * into another.
-     */
+    val pendingLeave: LeaveIntent? = null,
+    val initialFindings: List<Finding>? = null,
+    val initialUserNote: String = "",
     val speciesSuggestions: List<String> = emptyList(),
     val speciesSuggestionTarget: SuggestionTarget? = null,
     val speciesSuggestionQuery: String = "",
-    /**
-     * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
-     * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
-     */
-    val openedFindings: List<Finding> = emptyList(),
-    val openedNote: String = "",
-    /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
-    val pendingLeave: LeaveIntent? = null,
 ) {
-    /**
-     * True when leaving now would throw away something the medtech entered.
-     *
-     * Compared by value against what the sample opened with, so an answer changed and changed
-     * back reads as untouched: there is nothing to lose. The Boxes toggle and which detection is
-     * on screen are not inputs, and moving them costs nothing.
-     */
-    val hasUnsavedChanges: Boolean
-        get() = frame != null && (findings != openedFindings || userNote != openedNote)
-
-    /**
-     * The suggestions to show under [target]'s free-text field, given what it currently holds.
-     *
-     * Empty unless the last lookup was for this field *and* for this exact text, so a stale list
-     * cannot outlive the keystroke that produced it.
-     */
     fun suggestionsFor(target: SuggestionTarget, query: String): List<String> =
         if (target == speciesSuggestionTarget && query == speciesSuggestionQuery) {
             speciesSuggestions
         } else {
             emptyList()
         }
+
+    /** True if the user has modified findings or notes since opening the frame. */
+    val hasUnsavedChanges: Boolean
+        get() = initialFindings != null && (findings != initialFindings || userNote != initialUserNote)
+
+    val isDirty: Boolean
+        get() = hasUnsavedChanges
 
     /**
      * Q4 — "did the model miss any eggs in this frame?" — **derived, never asked.**
@@ -225,13 +201,6 @@ sealed interface SuggestionTarget {
     data class AddedFinding(val index: Int) : SuggestionTarget
 }
 
-/**
- * A way off the sample that drops whatever has not been submitted.
- *
- * Submit and Discard are not here: one saves the edits and the other already asks first.
- */
-enum class LeaveIntent { PREVIOUS_SAMPLE, NEXT_SAMPLE, EXIT }
-
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
@@ -333,23 +302,25 @@ class VerificationViewModel @Inject constructor(
      */
     fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
-        val findings = prior?.findings?.takeIf { it.isNotEmpty() } ?: frame.initialFindings()
-        val note = prior?.userNote.orEmpty()
+        val cycle = cycleFrames()
+        val initFindings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
+            ?: frame.initialFindings()
+        val initNote = prior?.userNote.orEmpty()
         _state.update {
             it.copy(
                 isVisible = true,
                 frame = frame,
                 imageSource = prior?.imageSource,
-                frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
+                queueSize = cycle.size,
+                frameIndexInQueue = positionOf(frame, cycle, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = findings,
+                findings = initFindings,
+                initialFindings = initFindings,
+                initialUserNote = initNote,
                 drawTarget = null,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = note,
-                openedFindings = findings,
-                openedNote = note,
-                pendingLeave = null,
+                userNote = initNote,
             )
         }
     }
@@ -370,19 +341,22 @@ class VerificationViewModel @Inject constructor(
      * pre-filled species underneath it and hand the medtech back the work the pre-fill saved
      * them. A tap that asserts what is already asserted has changed nothing, so nothing
      * downstream of it has gone stale.
-     *
-     * **Ticking Q1 back on answers Q2 and Q3 "No", not "unanswered".** A checkbox has no third
-     * state to show for null: an unanswered Q2 rendered unticked, but without the redraw action
-     * an unticked Q2 carries, and hid Q3 entirely — so the medtech had to tick and untick both
-     * just to reach the controls. The model's claims were already disowned by unticking Q1, so
-     * the questions come back unticked for real, each with its correction under it.
      */
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            when {
-                it.isEgg == isEgg -> it
-                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
-                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+            if (it.isEgg == isEgg) {
+                it
+            } else if (isEgg) {
+                it.copy(
+                    isEgg = true,
+                    isBoxCorrect = false,
+                    speciesConfirmed = false,
+                    species = null,
+                    otherSpeciesText = "",
+                    speciesTouched = false,
+                )
+            } else {
+                it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
             }
         }
     }
@@ -396,14 +370,14 @@ class VerificationViewModel @Inject constructor(
      * carrying the human's geometry, which is exactly the label the drawing feature exists to
      * produce. Refused silently, because the screen does not offer the affordance on a replaced
      * row; this is the backstop.
-     *
-     * **The species answer survives a change here.** Q2 is about where the box sits, and a box in
-     * the wrong place still holds the same egg — so whatever Q3 held, the model's species
-     * confirmed or one picked from the dropdown, it still holds.
      */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            if (it.boxReplaced && isBoxCorrect) it else it.copy(isBoxCorrect = isBoxCorrect)
+            when {
+                it.boxReplaced && isBoxCorrect -> it
+                it.isBoxCorrect == isBoxCorrect -> it
+                else -> it.copy(isBoxCorrect = isBoxCorrect)
+            }
         }
     }
 
@@ -472,27 +446,11 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onStageSelected(stage: EggStage) {
-        updateCurrentAnswer {
-            if (stage != EggStage.OTHER) {
-                it.copy(stage = stage, otherStageText = "")
-            } else {
-                it.copy(stage = stage)
-            }
-        }
+        updateCurrentAnswer { it.copy(stage = stage) }
     }
 
     fun onAddedStageSelected(index: Int, stage: EggStage) {
-        updateAnswerAt(index) {
-            if (stage != EggStage.OTHER) {
-                it.copy(stage = stage, otherStageText = "")
-            } else {
-                it.copy(stage = stage)
-            }
-        }
-    }
-
-    fun onOtherStageChanged(text: String) {
-        updateCurrentAnswer { it.copy(otherStageText = text) }
+        updateAnswerAt(index) { it.copy(stage = stage) }
     }
 
     fun onOtherSpeciesChanged(text: String) {
@@ -636,10 +594,6 @@ class VerificationViewModel @Inject constructor(
         searchSuggestions(SuggestionTarget.AddedFinding(index), text)
     }
 
-    fun onAddedOtherStageChanged(index: Int, text: String) {
-        updateAnswerAt(index) { it.copy(otherStageText = text) }
-    }
-
     /**
      * Looks up species already on this device for whichever free-text field is being typed into.
      *
@@ -696,59 +650,38 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onFramePrev() = requestLeave(LeaveIntent.PREVIOUS_SAMPLE)
-
-    fun onFrameNext() = requestLeave(LeaveIntent.NEXT_SAMPLE)
-
-    /**
-     * Leaves the sample, or asks first when that would drop unsubmitted edits.
-     *
-     * Nothing on this screen is saved until Submit — paging to another sample or backing out
-     * re-seeds from scratch — and the cycle buttons sit right beside the frame, where a stray
-     * thumb lands. So a way off a sample with edits on it is held until the medtech confirms,
-     * and one with nothing to lose goes straight through, as it always did.
-     *
-     * A cycle button at the end of the queue does nothing and asks nothing: there is nowhere to
-     * go, so there is nothing to confirm.
-     */
-    private fun requestLeave(intent: LeaveIntent) {
-        if (intent != LeaveIntent.EXIT && neighbourFor(intent) == null) return
+    fun onFramePrev() {
+        if (!state.value.canGoPrev) return
         if (_state.value.hasUnsavedChanges) {
-            _state.update { it.copy(pendingLeave = intent) }
+            _state.update { it.copy(pendingLeave = LeaveIntent.PREVIOUS_SAMPLE) }
         } else {
-            leave(intent)
+            performFramePrev()
         }
     }
 
-    /** The medtech chose to leave and lose the edits. */
-    fun onConfirmLeave() {
-        val intent = _state.value.pendingLeave ?: return
-        _state.update { it.copy(pendingLeave = null) }
-        leave(intent)
-    }
-
-    /** The medtech chose to stay. Everything they entered is still there. */
-    fun onDismissLeave() {
-        _state.update { it.copy(pendingLeave = null) }
-    }
-
-    private fun leave(intent: LeaveIntent) {
-        when (intent) {
-            LeaveIntent.EXIT -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
-            else -> neighbourFor(intent)?.let { setFrame(it) }
-        }
-    }
-
-    /** The sample a cycle button would open, or null at either end or off the queue. */
-    private fun neighbourFor(intent: LeaveIntent): FlaggedFrame? {
+    private fun performFramePrev() {
         val frames = cycleFrames()
-        val idx = currentFrame?.let { frames.indexOfSample(it) } ?: -1
-        val step = when (intent) {
-            LeaveIntent.PREVIOUS_SAMPLE -> -1
-            LeaveIntent.NEXT_SAMPLE -> 1
-            LeaveIntent.EXIT -> 0
+        val current = currentFrame ?: return
+        val idx = frames.indexOfSample(current)
+        if (idx <= 0) return
+        setFrame(frames[idx - 1])
+    }
+
+    fun onFrameNext() {
+        if (!state.value.canGoNext) return
+        if (_state.value.hasUnsavedChanges) {
+            _state.update { it.copy(pendingLeave = LeaveIntent.NEXT_SAMPLE) }
+        } else {
+            performFrameNext()
         }
-        return if (idx < 0 || step == 0) null else frames.getOrNull(idx + step)
+    }
+
+    private fun performFrameNext() {
+        val frames = cycleFrames()
+        val current = currentFrame ?: return
+        val idx = frames.indexOfSample(current)
+        if (idx < 0 || idx >= frames.size - 1) return
+        setFrame(frames[idx + 1])
     }
 
     fun onDeleteFrame() {
@@ -834,64 +767,6 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Discards a box the medtech drew on an added egg, without touching the count.
-     *
-     * The gap this closes: accepting a box committed it with no way back. Lowering the species'
-     * total is not a way back either — `totalsAreConsistent` floors it at the drawn boxes, so a
-     * badly placed box made the count it belongs to unlowerable too, and the only escape was to
-     * remove the species card and retype everything.
-     *
-     * Removing shifts the later boxes down a slot, which is what keeps drawn boxes packed at the
-     * front — the invariant that makes "lowering the count drops undrawn eggs first" true. The
-     * species still claims the same number of eggs; one of them simply goes back to unlocated,
-     * which is a complete answer.
-     *
-     * Refused on a prediction-backed row: there is no slot there, and a model box is never
-     * removed, only replaced or marked wrong (C8).
-     */
-    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
-        _state.update { current ->
-            val finding = current.findings.getOrNull(findingIndex)
-            if (finding == null || finding.prediction != null ||
-                slot !in finding.answers.drawnBoxes.indices
-            ) {
-                return@update current
-            }
-            val boxes = finding.answers.drawnBoxes.toMutableList().apply { removeAt(slot) }
-            val updated = current.findings.toMutableList()
-            updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
-            // A draw aimed at a slot that just moved would land on the wrong egg.
-            val target = current.drawTarget
-            val keepTarget = target == null ||
-                target.findingIndex != findingIndex ||
-                (target.slot ?: 0) < slot
-            current.copy(
-                findings = updated,
-                drawTarget = if (keepTarget) target else null,
-            )
-        }
-    }
-
-    /**
-     * Takes back a box the medtech drew over one of the model's, leaving the row answering
-     * "the model misplaced this box" with no replacement — a complete answer on its own.
-     *
-     * The same undo an added egg's box has had since 86d4by5n5. Without it a replacement drawn in
-     * the wrong place was final: redrawing could move it, but nothing could say "I have no better
-     * box than the model's after all".
-     *
-     * [VerificationAnswers.boxReplaced] clears with the box. It latches Q2 because a human box
-     * sits on the row, and once none does there is nothing to protect: the medtech may now decide
-     * the model's box was right after all. Q2 itself stays unticked until they say so. The model's
-     * box is untouched either way — it is never removed, only replaced or marked wrong (C8).
-     */
-    fun onRemoveReplacementBox(findingIndex: Int) {
-        updateAnswerAt(findingIndex) {
-            if (it.boxReplaced) it.copy(drawnBox = null, boxReplaced = false) else it
-        }
-    }
-
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }
@@ -922,8 +797,62 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    /** The top bar's back and the hardware back gesture. Asks first when edits would be lost. */
-    fun onCancel() = requestLeave(LeaveIntent.EXIT)
+    fun onCancel() {
+        if (_state.value.hasUnsavedChanges) {
+            _state.update { it.copy(pendingLeave = LeaveIntent.EXIT) }
+        } else {
+            viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+        }
+    }
+
+    fun onConfirmLeave() {
+        val intent = _state.value.pendingLeave
+        _state.update { it.copy(pendingLeave = null) }
+        when (intent) {
+            LeaveIntent.PREVIOUS_SAMPLE -> performFramePrev()
+            LeaveIntent.NEXT_SAMPLE -> performFrameNext()
+            LeaveIntent.EXIT, null -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+        }
+    }
+
+    fun onDismissLeave() {
+        _state.update { it.copy(pendingLeave = null) }
+    }
+
+    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            val finding = updated.getOrNull(findingIndex) ?: return@update current
+            val boxes = finding.answers.drawnBoxes.toMutableList()
+            if (slot in boxes.indices) {
+                boxes.removeAt(slot)
+                updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+            }
+            val draw = current.drawTarget
+            val nextDraw = if (draw?.findingIndex == findingIndex && draw.slot != null && draw.slot >= slot) {
+                null
+            } else {
+                draw
+            }
+            current.copy(findings = updated, drawTarget = nextDraw)
+        }
+    }
+
+    fun onRemoveReplacementBox(findingIndex: Int) {
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            val finding = updated.getOrNull(findingIndex) ?: return@update current
+            updated[findingIndex] = finding.copy(
+                answers = finding.answers.copy(
+                    drawnBox = null,
+                    boxReplaced = false,
+                ),
+            )
+            val draw = current.drawTarget
+            val nextDraw = if (draw?.findingIndex == findingIndex) null else draw
+            current.copy(findings = updated, drawTarget = nextDraw)
+        }
+    }
 
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
