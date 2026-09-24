@@ -8,6 +8,7 @@ import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.SampleStatus
@@ -104,8 +105,12 @@ class OpenVerificationTargetUseCaseTest {
         speciesTouched = speciesTouched,
     )
 
-    private suspend fun stub(detections: List<DetectionEntity>) {
-        whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+    private suspend fun stub(
+        detections: List<DetectionEntity>,
+        predictionsJson: String? = null,
+    ) {
+        whenever(sampleDao.getSampleById(sampleId))
+            .thenReturn(syncedSample().copy(predictionsJson = predictionsJson))
         whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(detections)
         whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(emptyList())
         whenever(resolveImageSource(any())).thenReturn(
@@ -248,11 +253,9 @@ class OpenVerificationTargetUseCaseTest {
         }
 
     /**
-     * The model's original geometry does not survive the sync — the remote `samples` table has no
-     * predictions_json column — so a geometry comparison cannot see that a box was replaced. A
-     * BOX_INCORRECT verdict is the durable statement that the model localised it wrong, and it
-     * locks Q2 on its own. Stricter than the comparison, never looser, and the training label
-     * survives the trip.
+     * A BOX_INCORRECT row that carries a box carries the medtech's redraw — the mapper no longer
+     * keeps the rejected one — so it reopens locked at "No" wherever the predictions came from,
+     * here rebuilt from the rows themselves.
      */
     @Test
     fun `a box the model got wrong stays locked on a device that cannot compare geometry`() =
@@ -420,5 +423,85 @@ class OpenVerificationTargetUseCaseTest {
             val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
 
             assertNull(added.answers.speciesConfirmed)
+        }
+
+    // ── Box provenance (14zcqnthrx6 / 14zcqnthrx8) ───────────────────────────
+
+    /** The model's output as the capturing device, or a pull from `predictions`, stores it. */
+    private fun predictionsJson(vararg xs: Float): String = Gson().toJson(
+        xs.map { x ->
+            PredictionDto(classLabel = "Ascaris", confidence = 0.87f, x = x, y = 240f, width = 40f, height = 30f)
+        },
+    )
+
+    private fun rejectedUnredrawn(ordinal: Int) = boxDetection(ordinal, verdict = DetectionVerdict.BOX_INCORRECT)
+        .copy(bboxX = null, bboxY = null, bboxW = null, bboxH = null)
+
+    /**
+     * A box the medtech said is misplaced and did not redraw is stored with no geometry. It
+     * reopens as exactly that: Q2 "No", nothing drawn, and Q2 free — nobody replaced anything.
+     */
+    @Test
+    fun `a rejected box nobody redrew reopens with Q2 No and nothing drawn`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(rejectedUnredrawn(0)), predictionsJson = predictionsJson(320f))
+
+            val finding = useCase(sampleId).getOrThrow().findings.single()
+
+            assertEquals(320f, finding.prediction?.x)
+            assertEquals(false, finding.answers.isBoxCorrect)
+            assertNull(finding.answers.drawnBox)
+            assertFalse(finding.answers.boxReplaced)
+        }
+
+    /**
+     * On BOX_INCORRECT a stored box *is* the redraw, read off the row. The old comparison
+     * against the model's geometry is gone, so this holds however close the redraw sits to it.
+     */
+    @Test
+    fun `a stored box on a BOX_INCORRECT row is the redraw`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(
+                listOf(boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT, x = 320.2f)),
+                predictionsJson = predictionsJson(320f),
+            )
+
+            val answers = useCase(sampleId).getOrThrow().findings.single().answers
+
+            assertTrue(answers.boxReplaced)
+            assertEquals(320.2f, answers.drawnBox?.x)
+        }
+
+    /**
+     * **The regression the rebuild would otherwise introduce.** A rejected box with no geometry
+     * in the middle of the frame must not be skipped: that would slide ordinal 2 into slot 1,
+     * reopen it against ordinal 1's detection, and write its ruling onto the wrong row on
+     * re-submit. The rebuild stops instead, and every prediction it does return sits on its own
+     * ordinal.
+     */
+    @Test
+    fun `rebuilding predictions stops at a row with no box rather than shifting later ones`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(boxDetection(0, x = 100f), rejectedUnredrawn(1), boxDetection(2, x = 300f)))
+
+            val target = useCase(sampleId).getOrThrow()
+
+            assertEquals(listOf(100f), target.frame.predictions.map { it.x })
+            assertEquals(100f, target.findings.single { it.prediction != null }.prediction?.x)
+        }
+
+    /** With the model's output on the device, nothing is rebuilt and every box is present. */
+    @Test
+    fun `stored predictions are used whole even when a row has no box`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(
+                listOf(boxDetection(0, x = 100f), rejectedUnredrawn(1), boxDetection(2, x = 300f)),
+                predictionsJson = predictionsJson(100f, 200f, 300f),
+            )
+
+            val findings = useCase(sampleId).getOrThrow().findings
+
+            assertEquals(listOf(100f, 200f, 300f), findings.map { it.prediction?.x })
+            assertEquals(listOf(true, false, true), findings.map { it.answers.isBoxCorrect })
         }
 }

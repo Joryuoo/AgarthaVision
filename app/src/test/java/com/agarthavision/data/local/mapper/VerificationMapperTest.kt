@@ -266,4 +266,60 @@ class VerificationMapperTest {
 
         assertEquals(1, findings.toDetectionEntities("sample-1").size)
     }
+
+    // ── Box provenance (14zcqnthrx6) ─────────────────────────────────────────
+
+    /**
+     * **The fix.** A box the medtech called misplaced and did not redraw is not written as where
+     * the egg is. Falling back to the model's geometry made the row pass the exhaustiveness rule
+     * and sent a frame carrying rejected geometry into background sampling. The model's box is
+     * not lost — it is the `predictions` row this detection links to.
+     */
+    @Test
+    fun `a rejected box nobody redrew writes no geometry`() {
+        val finding = Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(isEgg = true, isBoxCorrect = false, species = EggSpecies.ASCARIS),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.BOX_INCORRECT.value, entity.verdict)
+        assertNull(entity.bboxX)
+        assertNull(entity.bboxY)
+        assertNull(entity.bboxW)
+        assertNull(entity.bboxH)
+        // The rest of the model's claim is untouched: still the corpus's "sure, and wrong".
+        assertEquals(0.9f, entity.confidence)
+        assertEquals("Ascaris lumbricoides", entity.classLabel)
+    }
+
+    /**
+     * A false positive keeps the model's box. It is the region the model wrongly called an egg,
+     * which is exactly what hard-negative mining needs — the nulling is for BOX_INCORRECT only.
+     */
+    @Test
+    fun `a false positive keeps the model's box`() {
+        val finding = Finding(prediction = prediction, answers = VerificationAnswers(isEgg = false))
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.FALSE_POSITIVE.value, entity.verdict)
+        assertEquals(prediction.x, entity.bboxX)
+        assertEquals(prediction.height, entity.bboxH)
+    }
+
+    /** A wrong species on a well-placed box is still a well-placed box. */
+    @Test
+    fun `a wrong class keeps the model's box`() {
+        val finding = Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.HOOKWORM),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
+        assertEquals(prediction.x, entity.bboxX)
+    }
 }
