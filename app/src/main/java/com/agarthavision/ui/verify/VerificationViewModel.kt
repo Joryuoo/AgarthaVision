@@ -149,9 +149,7 @@ data class VerificationUiState(
      * boxes and quietly lose hand-placed geometry, so it is refused rather than clamped as they
      * type. See `List<Finding>.totalsAreConsistent`.
      *
-     * C7 is unaffected: nothing reaches `samples` except through `SubmitVerificationUseCase`,
-     * and a row nobody touched carries `species_touched = false` into the corpus, so an
-     * unopposed model answer stays distinguishable from a confirmed one.
+     * C7 is unaffected: nothing reaches `samples` except through `SubmitVerificationUseCase`.
      */
     val canSubmit: Boolean
         get() = when {
@@ -353,7 +351,6 @@ class VerificationViewModel @Inject constructor(
                     speciesConfirmed = false,
                     species = null,
                     otherSpeciesText = "",
-                    speciesTouched = false,
                 )
             } else {
                 it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
@@ -399,9 +396,6 @@ class VerificationViewModel @Inject constructor(
                     speciesConfirmed = confirmed,
                     species = if (confirmed) suggested else null,
                     otherSpeciesText = "",
-                    // A yes is a deliberate assertion, not a silent pass-through: the medtech
-                    // read the model's answer and agreed with it.
-                    speciesTouched = confirmed,
                 ),
             )
         }
@@ -416,8 +410,8 @@ class VerificationViewModel @Inject constructor(
      * "is this egg <species>?", and re-seeding here would answer that question on the
      * medtech's behalf - the one thing the confirm step exists to stop.
      *
-     * [VerificationAnswers.speciesConfirmed] and [VerificationAnswers.speciesTouched] go with
-     * it: whatever was asserted no longer applies to the question now being asked.
+     * [VerificationAnswers.speciesConfirmed] goes with it: whatever was asserted no longer
+     * applies to the question now being asked.
      */
     private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
         fieldTotal = fieldTotal,
@@ -433,15 +427,12 @@ class VerificationViewModel @Inject constructor(
     /**
      * Records a deliberate species choice.
      *
-     * [VerificationAnswers.speciesTouched] is set unconditionally. Under the confirm-first flow
-     * this is reached only after the medtech has said the model was wrong (or there was nothing
-     * to confirm), so it is a human judgement by construction — and the flag stays because
-     * `detections` doubles as the retraining corpus, where a species with no human behind it
-     * must never be indistinguishable from one with.
+     * Under the confirm-first flow this is reached only after the medtech has said the model was
+     * wrong (or there was nothing to confirm), so it is a human judgement by construction.
      */
     fun onSpeciesSelected(species: EggSpecies) {
         updateCurrentAnswer {
-            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+            it.copy(species = species, otherSpeciesText = "")
         }
     }
 
@@ -467,12 +458,6 @@ class VerificationViewModel @Inject constructor(
      * required where the model was wrong. That is the whole economics of the screen: ten fields
      * a smear, most of them the model gets right.
      *
-     * **[VerificationAnswers.speciesTouched] stays false on every seeded row**, and that is the
-     * safeguard rather than an oversight. A seeded species is the model's own answer sitting in
-     * the slot a human answer is read from; the flag is what keeps "a human did not object"
-     * distinguishable from "a human confirmed this" in a table that doubles as the retraining
-     * corpus. The moment the medtech confirms or changes it, it flips.
-     *
      * A model class this app cannot map to an [EggSpecies] seeds **nothing** for the species
      * question — guessing OTHER would be wrong, because OTHER carries a free-text box only a
      * human can fill, so the row would look answered while being incomplete. The chain offers
@@ -491,7 +476,6 @@ class VerificationViewModel @Inject constructor(
                 isBoxCorrect = true,
                 speciesConfirmed = if (suggested != null) true else null,
                 species = suggested,
-                speciesTouched = false,
             ),
         )
     }
@@ -560,7 +544,7 @@ class VerificationViewModel @Inject constructor(
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
         _state.update { current ->
             val named = current.findings.getOrNull(index)?.answers
-                ?.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+                ?.copy(species = species, otherSpeciesText = "")
                 ?: return@update current
             val twinIndex = current.findings.indexOfFirst { other ->
                 other.prediction == null && other.answers.speciesLabel == named.speciesLabel
@@ -576,7 +560,6 @@ class VerificationViewModel @Inject constructor(
                 val merged = twin.copy(
                     fieldTotal = (twin.fieldTotal ?: 0) + (named.fieldTotal ?: 0),
                     drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
-                    speciesTouched = true,
                 )
                 current.copy(
                     findings = current.findings

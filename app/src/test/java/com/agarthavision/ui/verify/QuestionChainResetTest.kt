@@ -117,6 +117,5 @@ class QuestionChainResetTest {
             assertEquals(true, answers.isBoxCorrect)
             assertEquals(false, answers.speciesConfirmed)
             assertEquals(EggSpecies.TRICHURIS, answers.species)
-            assertEquals(true, answers.speciesTouched)
         }
 }

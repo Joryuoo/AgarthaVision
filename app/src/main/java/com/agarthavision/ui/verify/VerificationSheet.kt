@@ -681,9 +681,8 @@ internal fun DrawBoxAction(label: String, tag: String, onClick: () -> Unit) {
  *
  * **A checkbox has two states where the buttons had three**, and that is only safe because the
  * screen pre-fills every answer from model output (86d4bk51w): nothing prediction-backed reaches
- * here unanswered, so there is no third state left to draw. What keeps it honest in the corpus
- * is `detections.species_touched`, false on a row nobody touched — the cheap control is paid for
- * by the provenance flag, not by the tap.
+ * here unanswered, so there is no third state left to draw. Submitting a pre-filled row is the
+ * medtech's confirmation of it; a row they disagree with is one they untick.
  *
  * The whole row is the target, not the 24dp box (Fitts), and [enabled] is for an answer that is
  * latched rather than merely set — a disabled box says the tap will not take, where one that

@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 21,
-    "identityHash": "f5d3e79ad25167cf191f63c9e47c6b4a",
+    "version": 22,
+    "identityHash": "724efcdde8a22c24b51ce7d14b25e808",
     "entities": [
       {
         "tableName": "samples",
@@ -398,7 +398,7 @@
       },
       {
         "tableName": "detections",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `verified_by_user` INTEGER NOT NULL, `species_touched` INTEGER NOT NULL DEFAULT 0, `stage` TEXT, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`detection_id` TEXT NOT NULL, `sample_id` TEXT NOT NULL, `class_label` TEXT NOT NULL, `confidence` REAL NOT NULL, `bbox_x` REAL, `bbox_y` REAL, `bbox_w` REAL, `bbox_h` REAL, `verdict` TEXT NOT NULL DEFAULT 'confirmed', `expert_class` TEXT, `stage` TEXT, PRIMARY KEY(`detection_id`), FOREIGN KEY(`sample_id`) REFERENCES `samples`(`sample_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "detectionId",
@@ -455,19 +455,6 @@
             "fieldPath": "expertClass",
             "columnName": "expert_class",
             "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "verifiedByUser",
-            "columnName": "verified_by_user",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "speciesTouched",
-            "columnName": "species_touched",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           },
           {
             "fieldPath": "stage",
@@ -843,7 +830,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f5d3e79ad25167cf191f63c9e47c6b4a')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '724efcdde8a22c24b51ce7d14b25e808')"
     ]
   }
 }

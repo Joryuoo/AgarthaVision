@@ -113,7 +113,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = false,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
                 drawnBox = drawn,
                 boxReplaced = true,
             ),
@@ -143,7 +142,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = false,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
                 drawnBox = ImageBox(1f, 2f, 3f, 4f),
                 boxReplaced = true,
             ),
@@ -161,7 +159,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = true,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
             ),
         )
 
@@ -174,8 +171,8 @@ class VerificationMapperTest {
     }
 
     /**
-     * An added egg the medtech drew a box for is still a human assertion: confidence 1.0 and
-     * species_touched true, which is what distinguishes it in the corpus from a model box.
+     * An added egg the medtech drew a box for is still a human assertion: confidence 1.0, and no
+     * prediction behind it, which is what distinguishes it in the corpus from a model box.
      */
     @Test
     fun `an added egg with a drawn box is written as a human assertion`() {
@@ -185,7 +182,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
                 fieldTotal = 1,
-                speciesTouched = true,
                 drawnBoxes = listOf(drawn),
             ),
         )
@@ -193,7 +189,6 @@ class VerificationMapperTest {
         val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertEquals(1.0f, entity.confidence)
-        assertTrue(entity.speciesTouched)
         assertEquals(90f, entity.bboxX)
     }
 
@@ -205,7 +200,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
                 fieldTotal = 1,
-                speciesTouched = true,
             ),
         )
 
@@ -231,7 +225,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.ASCARIS,
                 fieldTotal = 2,
-                speciesTouched = true,
                 drawnBoxes = listOf(first, second),
             ),
         )
@@ -250,7 +243,6 @@ class VerificationMapperTest {
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
-            speciesTouched = true,
         )
         val findings = listOf(
             Finding(prediction, ascaris),
@@ -271,7 +263,6 @@ class VerificationMapperTest {
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
-            speciesTouched = true,
         )
         val findings = listOf(
             Finding(prediction, ascaris),
@@ -279,5 +270,82 @@ class VerificationMapperTest {
         )
 
         assertEquals(1, findings.toDetectionEntities("sample-1").size)
+    }
+
+    // ── Box provenance (14zcqnthrx6) ─────────────────────────────────────────
+
+    /**
+     * **The fix.** A box the medtech called misplaced and did not redraw is not written as where
+     * the egg is. Falling back to the model's geometry made the row pass the exhaustiveness rule
+     * and sent a frame carrying rejected geometry into background sampling. The model's box is
+     * not lost — it is the `predictions` row this detection links to.
+     */
+    @Test
+    fun `a rejected box nobody redrew writes no geometry`() {
+        val finding = Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(isEgg = true, isBoxCorrect = false, species = EggSpecies.ASCARIS),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.BOX_INCORRECT.value, entity.verdict)
+        assertNull(entity.bboxX)
+        assertNull(entity.bboxY)
+        assertNull(entity.bboxW)
+        assertNull(entity.bboxH)
+        // The rest of the model's claim is untouched: still the corpus's "sure, and wrong".
+        assertEquals(0.9f, entity.confidence)
+        assertEquals("Ascaris lumbricoides", entity.classLabel)
+    }
+
+    /**
+     * A false positive keeps the model's box. It is the region the model wrongly called an egg,
+     * which is exactly what hard-negative mining needs — the nulling is for BOX_INCORRECT only.
+     */
+    @Test
+    fun `a false positive keeps the model's box`() {
+        val finding = Finding(prediction = prediction, answers = VerificationAnswers(isEgg = false))
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.FALSE_POSITIVE.value, entity.verdict)
+        assertEquals(prediction.x, entity.bboxX)
+        assertEquals(prediction.height, entity.bboxH)
+    }
+
+    /** A wrong species on a well-placed box is still a well-placed box. */
+    @Test
+    fun `a wrong class keeps the model's box`() {
+        val finding = Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.HOOKWORM),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
+        assertEquals(prediction.x, entity.bboxX)
+    }
+
+    /**
+     * Pins both derivations to ids that exist on the live server. `0004_predictions.sql`
+     * recomputes these in SQL for its backfill; the detection id below was found there by that
+     * SQL, so this is the check that the two implementations agree. Change a key string and
+     * this fails before every backfilled link silently stops matching.
+     */
+    @Test
+    fun `derived ids match the SQL derivation in 0004`() {
+        val sampleId = "f14f3504-0d9f-433e-a0c2-c960a4e5801b"
+
+        assertEquals("fb7c1fae-2937-34cf-8865-fd335255184a", detectionIdFor(sampleId, 0))
+        assertEquals("0e614a6e-1045-3bb1-8302-b0a16a9a92a2", detectionIdFor(sampleId, 1))
+    }
+
+    @Test
+    fun `a prediction and its detection derive different ids from one ordinal`() {
+        assertTrue(predictionIdFor("sample-1", 0) != detectionIdFor("sample-1", 0))
+        assertEquals(predictionIdFor("sample-1", 3), predictionIdFor("sample-1", 3))
+        assertTrue(predictionIdFor("sample-1", 0) != predictionIdFor("sample-1", 1))
     }
 }

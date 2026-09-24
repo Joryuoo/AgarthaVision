@@ -213,7 +213,6 @@ class SubmitVerificationUseCaseTest {
                 isEgg = true,
                 isBoxCorrect = true,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
             )
             val stale = listOf(
                 addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 1),
@@ -231,7 +230,6 @@ class SubmitVerificationUseCaseTest {
                         bboxW = null,
                         bboxH = null,
                         verdict = DetectionVerdict.CONFIRMED.value,
-                        verifiedByUser = true,
                     )
                 },
             )
@@ -268,7 +266,6 @@ class SubmitVerificationUseCaseTest {
                         bboxW = 3f,
                         bboxH = 4f,
                         verdict = DetectionVerdict.CONFIRMED.value,
-                        verifiedByUser = true,
                     ),
                 ),
             )

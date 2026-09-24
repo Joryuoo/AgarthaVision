@@ -167,7 +167,6 @@ private fun confirmedDetection(id: String, sampleId: String) = DetectionEntity(
     bboxH = 0.4f,
     verdict = "confirmed",
     expertClass = null,
-    verifiedByUser = true,
 )
 
 private const val PATIENT_ID = "patient-1"

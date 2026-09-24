@@ -935,7 +935,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 3,
-                            speciesTouched = true,
                         ),
                     ),
                 ),
@@ -956,7 +955,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 1,
-                            speciesTouched = true,
                         ),
                     ),
                 ),
@@ -975,7 +973,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 1,
-                            speciesTouched = true,
                             drawnBoxes = listOf(ImageBox(x = 10f, y = 10f, width = 4f, height = 4f)),
                         ),
                     ),
@@ -1192,7 +1189,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 1,
-                            speciesTouched = true,
                         ),
                     ),
                 ),
@@ -1216,7 +1212,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 3,
-                            speciesTouched = true,
                             drawnBoxes = listOf(ImageBox(x = 1f, y = 1f, width = 2f, height = 2f)),
                         ),
                     ),
@@ -1239,7 +1234,6 @@ class VerificationSheetContentTest {
                         answers = VerificationAnswers(
                             species = EggSpecies.ASCARIS,
                             fieldTotal = 2,
-                            speciesTouched = true,
                         ),
                     ),
                 ),
@@ -1265,7 +1259,6 @@ class VerificationSheetContentTest {
                     VerificationAnswers(
                         species = EggSpecies.ASCARIS,
                         fieldTotal = 1,
-                        speciesTouched = true,
                     ),
                 ),
             ),

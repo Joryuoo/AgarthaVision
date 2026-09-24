@@ -5,6 +5,7 @@ import android.util.Log
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.inference.encodePredictions
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -15,6 +16,7 @@ import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.data.local.mapper.toFramePredictionsOrNull
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
@@ -25,6 +27,7 @@ import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
+import com.google.gson.Gson
 import javax.inject.Inject
 
 /**
@@ -113,6 +116,7 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val speciesSuggestionSeeder: SpeciesSuggestionSeeder,
     private val cacheSampleImages: CacheSampleImagesUseCase,
     private val sampleImageStore: SampleImageStore,
+    private val gson: Gson,
 ) {
     /**
      * Runs one fetch pass.
@@ -330,7 +334,7 @@ class FetchRemoteDataUseCase @Inject constructor(
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
                 val local = sampleDao.getSampleByIdIncludingDeleted(remote.sampleId)
                 if (local == null || local.status == SampleStatus.SYNCED.value) {
-                    sampleDao.upsertSample(remote.withLocalImagePath(userId))
+                    sampleDao.upsertSample(remote.withLocalImagePath(userId).withLocalPredictions(local))
                     fetched++
                     writtenSampleIds.add(remote.sampleId)
                 }
@@ -364,7 +368,25 @@ class FetchRemoteDataUseCase @Inject constructor(
     }
 
     /**
-     * Fetch the detections and findings of the samples whose parent row was actually written,
+     * Keeps the model output this device already holds attached to its row.
+     *
+     * The same fault [withLocalImagePath] fixes, on the column beside it. The server's sample row
+     * has no `predictions_json`, so every pulled sample maps it to null, and the upsert wrote that
+     * null over the capturing device's own copy the first pass after its push went through.
+     * The frame's model output then survived only as whatever the detection rows could
+     * reconstruct. The `predictions` rows pulled in [pullChildRowsFor] replace it when the server
+     * holds a whole set; until then, the device's copy is the better one and is kept.
+     */
+    private fun SampleEntity.withLocalPredictions(local: SampleEntity?): SampleEntity =
+        if (predictionsJson == null && local?.predictionsJson != null) {
+            copy(predictionsJson = local.predictionsJson)
+        } else {
+            this
+        }
+
+    /**
+     * Fetch the predictions, detections and findings of the samples whose parent row was
+     * actually written,
      * and reconcile them against what is already on the device.
      *
      * Chunked to stay well under server/proxy URL-length limits (E5), and the same chunks are
@@ -376,6 +398,8 @@ class FetchRemoteDataUseCase @Inject constructor(
      * against an empty slate and "merge" and "replace" were the same thing. Under `@Upsert`
      * they are not, so each table gets the rule its own writer already uses:
      *
+     * - **Predictions fill `predictions_json`.** Room has no table for them; they are folded
+     *   back into the column capture writes, so every reader of it is unchanged.
      * - **Detections merge.** They are the retraining corpus C8 protects, and the push side
      *   (`SampleRemoteDataSource.syncSample`) upserts them and never deletes, so the server's
      *   set is a superset of anything this device pushed — a merge keyed on the derived
@@ -396,6 +420,21 @@ class FetchRemoteDataUseCase @Inject constructor(
     private suspend fun pullChildRowsFor(writtenSampleIds: List<String>) {
         if (writtenSampleIds.isEmpty()) return
         val chunks = writtenSampleIds.chunked(CHILD_BATCH_SIZE)
+
+        // Predictions first, so a failure here stops the pass before any detection lands. A
+        // sample with detections but no model output reopens by rebuilding predictions from the
+        // detection rows, and a BOX_INCORRECT row with no box is a gap that rebuild cannot fill;
+        // a sample with neither simply waits for the next pass.
+        //
+        // Written only when the server holds a whole set - see toFramePredictionsOrNull for why a
+        // partial one is worse than none - and otherwise the device's own copy is left alone.
+        val predictions = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchPredictions(chunk) }
+        predictions.groupBy { it.sampleId }.forEach { (sampleId, rows) ->
+            val json = rows.toFramePredictionsOrNull()?.let { gson.encodePredictions(it) }
+            if (json != null) {
+                sampleDao.updatePredictionsJson(sampleId, json)
+            }
+        }
 
         val detections = chunks.flatMap { chunk -> sampleRemoteDataSource.fetchDetections(chunk) }
         if (detections.isNotEmpty()) {

@@ -2,6 +2,7 @@ package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
@@ -31,10 +32,6 @@ import java.util.UUID
  * counted. `0002_verification_fields.sql` describes the narrower original rule; it is applied
  * and is not edited (C6), so `schema.ts` and `docs/map/objects/Detection.md` carry the current
  * one.
- *
- * `species_touched` is orthogonal to all of this and never alters a verdict. It is deliberately
- * not a new [DetectionVerdict] member — that would mean touching the Supabase CHECK constraint
- * and every raw query naming a verdict, for a training-weight signal a boolean carries.
  */
 fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionVerdict = when {
     answers.isEgg != true -> DetectionVerdict.FALSE_POSITIVE
@@ -84,6 +81,17 @@ fun addedDetectionIdFor(sampleId: String, species: String, slot: Int): String =
  */
 fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#box#$ordinal")
 
+/**
+ * The id the model's own prediction at [ordinal] gets in `predictions`.
+ *
+ * Same derivation as [detectionIdFor] on a different key, so the prediction and the detection
+ * that rules on it are both stable under a re-push. `0004_predictions.sql` recomputes this in
+ * SQL for its backfill, so the key string is part of the schema contract: change it and every
+ * link the migration made stops matching what the app pushes.
+ */
+fun predictionIdFor(sampleId: String, ordinal: Int): String =
+    derive("$sampleId#prediction#$ordinal")
+
 private fun derive(key: String): String =
     UUID.nameUUIDFromBytes(key.toByteArray()).toString()
 
@@ -108,10 +116,12 @@ private fun findingId(sampleId: String, row: FindingRow): String {
  * is worth depends on how many boxes its siblings kept, and one such row therefore produces
  * however many rows that leaves.
  *
- * Both shapes land in the same table. A prediction-backed finding carries the model's box and
- * confidence; an added egg carries a box only if the medtech drew one, and otherwise all four
- * bbox columns are null at confidence 1.0 — the shape a manual capture has always been written
- * with, and why `bbox_*` was made nullable in `0007_detection_bbox_nullable.sql`.
+ * Both shapes land in the same table. A prediction-backed finding carries the model's
+ * confidence and the box a human stands behind — the model's, the medtech's redraw, or none at
+ * all on a `BOX_INCORRECT` row that was not redrawn. An added egg carries a box only if the
+ * medtech drew one, and otherwise all four bbox columns are null at confidence 1.0 — the shape a
+ * manual capture has always been written with, and why `bbox_*` was made nullable in
+ * `0007_detection_bbox_nullable.sql`.
  *
  * **The null-bbox rows are load-bearing for the corpus, and so is being able to spot them.** A
  * frame whose eggs are counted but not located cannot be used for detection training as it
@@ -172,7 +182,17 @@ private fun Finding.toDetectionEntity(
         else -> label
     }
     // An added egg takes its own slot's box; a model box takes the replacement, if there was one.
-    val box = if (slot == null) answers.drawnBox else answers.drawnBoxes.getOrNull(slot)
+    val drawn = if (slot == null) answers.drawnBox else answers.drawnBoxes.getOrNull(slot)
+    // The model's box is written only where a human stood behind it. On a BOX_INCORRECT row
+    // the medtech did not redraw, the box is the one they said is in the wrong place, and
+    // storing it here would record rejected geometry as where the egg is — the frame would
+    // then pass the exhaustiveness rule below and go into background sampling (14zcqnthrx6).
+    // The model's own geometry is not lost: it is the `predictions` row this detection links to.
+    val box = when {
+        drawn != null -> drawn
+        prediction == null || verdict == DetectionVerdict.BOX_INCORRECT -> null
+        else -> ImageBox(prediction.x, prediction.y, prediction.width, prediction.height)
+    }
     return DetectionEntity(
         detectionId = if (slot == null) {
             detectionIdFor(sampleId, ordinal)
@@ -189,14 +209,12 @@ private fun Finding.toDetectionEntity(
         // take a confidence from and so is written at 1.0 anyway, which is the shape a manual
         // finding has always had.
         confidence = prediction?.confidence ?: 1.0f,
-        bboxX = box?.x ?: prediction?.x,
-        bboxY = box?.y ?: prediction?.y,
-        bboxW = box?.width ?: prediction?.width,
-        bboxH = box?.height ?: prediction?.height,
+        bboxX = box?.x,
+        bboxY = box?.y,
+        bboxW = box?.width,
+        bboxH = box?.height,
         verdict = verdict.value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = answers.speciesTouched,
         stage = answers.stageLabel,
     )
 }

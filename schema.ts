@@ -385,7 +385,9 @@ export interface Sample {
   // Room/domain-only sync state machine.
 
   predictions_json: string | null;
-  // Room-only raw inference payload/cache for display and recovery.
+  // Room-only form of the model's output: a JSON list of PredictionDto in ordinal order.
+  // Kept through verification. Its content syncs as `predictions` rows (0004), and the pull
+  // restores it from them; a pull never overwrites it with null.
 
   image_width: number | null;
   // Room-only pixel width.
@@ -401,11 +403,50 @@ export interface Sample {
 }
 
 /**
+ * One box the model returned for a verified frame, as the model said it. Immutable.
+ *
+ * Supabase migrations:
+ * - `0004_predictions.sql`: creates `predictions`; insert and select policies only.
+ *
+ * Room mirror: none. `samples.predictions_json` holds the same list on the device.
+ */
+export interface Prediction {
+  id: UUID;
+  // Supabase PK, client-derived from (sample_id, ordinal) — `predictionIdFor`.
+
+  sample_id: UUID;
+  // NOT NULL FK -> samples(id). DELETE CASCADE. Samples exist remotely only once verified.
+
+  ordinal: number;
+  // NOT NULL, >= 0. Index into the frame's prediction list. UNIQUE with sample_id.
+
+  class_label: string;
+  // NOT NULL. The inference server's raw label.
+
+  confidence: number;
+  // NOT NULL, between 0 and 1.
+
+  bbox_x: number;
+  // NOT NULL. Centre-x in source-image pixels, same space as detections.bbox_x.
+
+  bbox_y: number;
+  // NOT NULL.
+
+  bbox_w: number;
+  // NOT NULL.
+
+  bbox_h: number;
+  // NOT NULL.
+}
+
+/**
  * A model- or user-created parasite egg detection attached to a sample.
  *
  * Supabase migrations:
  * - `0001_init.sql` (consolidated): creates `detections` with class, confidence,
  *   nullable bboxes, verdict, expert_class, and `species_touched`.
+ * - `0004_predictions.sql`: adds `prediction_id`.
+ * - `0006_drop_species_touched.sql`: drops `species_touched`.
  * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
@@ -425,7 +466,9 @@ export interface Detection {
   // NOT NULL model confidence as a floating-point value.
 
   bbox_x: number | null;
-  // Nullable; manual detections may not have a bounding box.
+  // Nullable. The box a human stands behind: the model's when kept, the medtech's when
+  // redrawn or added, and null on an added egg nobody located or on a BOX_INCORRECT row the
+  // medtech did not redraw (0004 / 14zcqnthrx6).
 
   bbox_y: number | null;
   // Nullable.
@@ -444,17 +487,13 @@ export interface Detection {
   // Nullable corrected class. Used when verdict is `WRONG_CLASS` or `BOX_INCORRECT`
   // and the medtech corrected the species.
 
-  species_touched: boolean;
-  // NOT NULL default `false`. True when the medtech made a deliberate species selection,
-  // including re-picking the pre-filled value. False means pre-fill was untouched.
-  // Critical for retraining corpus provenance.
+  prediction_id: UUID | null;
+  // Supabase-only (0004). FK (prediction_id, sample_id) -> predictions(id, sample_id), unique
+  // where set. Null on an egg the medtech added, or on a pre-0004 row of unknown provenance.
+  // Room has no column; the push derives it from the detection's ordinal.
 
   created_at: TimestampTZ;
   // Supabase NOT NULL default `now()`.
-
-  // ── Room-only column ───────────────────────────────────────────────────────
-  verified_by_user: boolean;
-  // Room-only. Dropped from Supabase in legacy-dev migration 0002.
 }
 
 /**
@@ -754,8 +793,8 @@ export type RelationshipMatrix = [
  * - Remote `samples.captured_at` (timestamptz) is mirrored as `timestamp` (epoch millis) in Room.
  * - Remote `samples` has no `image_path` or `created_at` column; `image_path` is Room-only.
  * - Remote `reports.lpf_per_species` (jsonb) stores the min–max LPF density range, replacing Kato-Katz EPG.
- * - Remote `detections.verified_by_user` was dropped in migration `0002`; Room
- *   still keeps it locally.
+ * - `detections.verified_by_user` was dropped remotely in migration `0002` and from Room
+ *   at version 22.
  * - Remote detection verdict values are uppercase. Room/domain values are
  *   lowercase and are mapped before sync.
  * - Remote detection bounding boxes are nullable after migration `0007`.

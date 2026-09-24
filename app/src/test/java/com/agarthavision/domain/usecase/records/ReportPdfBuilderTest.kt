@@ -72,7 +72,6 @@ class ReportPdfBuilderTest {
                     bboxH = SAMPLE_BBOX_H,
                     verdict = DetectionVerdict.CONFIRMED,
                     expertClass = "Ascaris lumbricoides",
-                    verifiedByUser = true,
                 ),
             ),
         )

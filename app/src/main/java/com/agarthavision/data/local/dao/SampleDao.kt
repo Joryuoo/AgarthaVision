@@ -72,6 +72,17 @@ interface SampleDao {
     suspend fun updateImagePath(sampleId: String, imagePath: String)
 
     /**
+     * Writes a frame's model output back onto its row, as `predictions_json` holds it.
+     *
+     * The pull's counterpart to capture writing the column: a sample verified on another device
+     * arrives with no model output, and this is where the `predictions` rows that came down with
+     * it land, so reopening it draws the model's real boxes rather than rebuilding them from the
+     * detection rows.
+     */
+    @Query("UPDATE samples SET predictions_json = :predictionsJson WHERE sample_id = :sampleId")
+    suspend fun updatePredictionsJson(sampleId: String, predictionsJson: String)
+
+    /**
      * Live samples whose frame exists in Storage, newest verification first.
      *
      * The ordering **is** the retention policy: the prefetch fills from the top and the

@@ -11,8 +11,10 @@ package com.agarthavision.domain.inference
  * Deliberately **not** a [Prediction]. A drawn box has no class the model named and no
  * confidence the model assigned, and synthesising either would put invented values into
  * `detections.class_label` and `detections.confidence`, which feed the retraining corpus. What
- * distinguishes a human box there is `confidence = 1.0` together with `species_touched = true`,
- * written at the point of persistence — not a fake prediction carried around in the UI.
+ * distinguishes a human box there is the row itself: a box on a `BOX_INCORRECT` row is always
+ * a redraw, and a box on a row with no `prediction_id` is always an added egg — see
+ * `docs/map/objects/Detection.md`, *Box provenance*. Not a fake prediction carried around in
+ * the UI.
  */
 data class ImageBox(
     val x: Float,
