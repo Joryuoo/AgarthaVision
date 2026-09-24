@@ -334,6 +334,54 @@ class VerificationMapperTest {
      * SQL, so this is the check that the two implementations agree. Change a key string and
      * this fails before every backfilled link silently stops matching.
      */
+    // ── species+stage identity (14zcqnthz6e) ─────────────────────────────────
+
+    /** Two added cards of one species at different stages write distinct, correctly-staged rows. */
+    @Test
+    fun `two added cards of different stages write distinct rows with their own stage`() {
+        val cf = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 2,
+            ),
+        )
+        val df = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.DECORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+
+        val entities = listOf(cf, df).toDetectionEntities("sample-1")
+
+        assertEquals(3, entities.size)
+        assertEquals(3, entities.map { it.detectionId }.distinct().size)
+        assertEquals(2, entities.count { it.stage == EggStage.CORTICATED_FERTILIZED.name })
+        assertEquals(1, entities.count { it.stage == EggStage.DECORTICATED_FERTILIZED.name })
+    }
+
+    /**
+     * Compatibility check: an unstaged added card must still land on the id a build before
+     * stage-aware ids existed already wrote, or a re-submit from an old queue starts duplicating
+     * rows instead of replacing them.
+     */
+    @Test
+    fun `an unstaged added card keeps the old species-only detection id`() {
+        val finding = Finding(
+            prediction = null,
+            answers = VerificationAnswers(species = EggSpecies.HOOKWORM, fieldTotal = 1),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(addedDetectionIdFor("sample-1", "Hookworm", 0), entity.detectionId)
+        assertEquals(addedDetectionIdFor("sample-1", "Hookworm", 0, stageKey = null), entity.detectionId)
+    }
+
     @Test
     fun `derived ids match the SQL derivation in 0004`() {
         val sampleId = "f14f3504-0d9f-433e-a0c2-c960a4e5801b"

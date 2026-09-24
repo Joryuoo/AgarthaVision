@@ -7,6 +7,8 @@ import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.FindingRow
+import com.agarthavision.domain.usecase.verify.SpeciesStageKey
+import com.agarthavision.domain.usecase.verify.speciesStageKey
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import java.util.UUID
@@ -57,7 +59,8 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * the same species lands on the same row rather than duplicating it.
  */
 /**
- * The id an added egg's detection row gets: its species and its slot within that species.
+ * The id an added egg's detection row gets: its species, stage, and its slot within that
+ * species+stage.
  *
  * **The slot is what this change added, and it was a data-loss bug without it.** The key used to
  * be the species alone, so two eggs of one species derived the same id and
@@ -65,12 +68,22 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * geometry; the moment they could (86d4bk534), two hand-drawn boxes on two Ascaris eggs became
  * one box on submit, with no error anywhere.
  *
+ * **[stageKey] is what a later change added, for the same reason.** Two added cards of one
+ * species at different stages used to derive the same id too, so the second stage silently
+ * overwrote the first (14zcqnthz6e). A null [stageKey] — an unstaged card, or a species the stage
+ * question does not apply to — keeps the *old* key with no stage segment, so rows a build before
+ * this change already wrote keep resolving to the same id and are not silently duplicated.
+ *
  * Exposed so the reopen path can find the rows an added species produced without re-deriving the
  * rule in a second place — two derivations of one key is how an edit starts appending instead of
  * replacing.
  */
-fun addedDetectionIdFor(sampleId: String, species: String, slot: Int): String =
-    derive("$sampleId#finding#$species#$slot")
+fun addedDetectionIdFor(sampleId: String, species: String, slot: Int, stageKey: String? = null): String =
+    if (stageKey == null) {
+        derive("$sampleId#finding#$species#$slot")
+    } else {
+        derive("$sampleId#finding#$species#$stageKey#$slot")
+    }
 
 /**
  * The id a prediction-backed detection gets, by its ordinal within the frame.
@@ -98,9 +111,9 @@ private fun derive(key: String): String =
 /**
  * Stable finding-row id, keyed to match the table's uniqueness rule.
  *
- * `sample_species_findings` is unique on `(sample_id, species)` while `stage` is null, which it
- * always is — nothing writes a stage since 86d4a6jwy was reverted. If the stage work returns,
- * this key and `sample_species_findings_unique_staged` have to move together.
+ * `sample_species_findings` is unique on `(sample_id, species, stage)` (`stage` nullable), and
+ * [row]'s own stage is written into the key here so two stages of one species land on distinct
+ * rows instead of one REPLACE-ing the other.
  */
 private fun findingId(sampleId: String, row: FindingRow): String {
     val stageKey = row.stageDisplayName ?: row.stage?.name.orEmpty()
@@ -138,20 +151,19 @@ private fun findingId(sampleId: String, row: FindingRow): String {
  * and a frame that fails it belongs in classification crops and hard-negative mining, never in
  * background sampling.
  *
- * Added rows are emitted for distinct species only. The UI merges two cards that land on one
- * species, and this is the backstop: emitting both would derive the same slot ids twice and
- * REPLACE would keep whichever came last.
+ * Added rows are emitted for distinct species+stage only. The UI merges two cards that land on
+ * one species+stage, and this is the backstop: emitting both would derive the same slot ids
+ * twice and REPLACE would keep whichever came last.
  */
 fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
-    val emitted = mutableSetOf<String>()
+    val emitted = mutableSetOf<SpeciesStageKey>()
     return flatMapIndexed { ordinal, finding ->
-        val label = finding.answers.speciesLabel
+        val key = finding.answers.speciesStageKey
         when {
             finding.prediction != null -> listOf(finding.toDetectionEntity(sampleId, ordinal))
-            label == null || !emitted.add(label) -> emptyList()
-            else -> (0 until unboxedCountOf(label)).map { slot ->
-                finding.toDetectionEntity(sampleId, ordinal, slot)
-            }
+            key == null || !emitted.add(key) -> emptyList()
+            else -> (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
+                .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot) }
         }
     }
 }
@@ -197,7 +209,7 @@ private fun Finding.toDetectionEntity(
         detectionId = if (slot == null) {
             detectionIdFor(sampleId, ordinal)
         } else {
-            addedDetectionIdFor(sampleId, label.orEmpty(), slot)
+            addedDetectionIdFor(sampleId, label.orEmpty(), slot, answers.stageLabel)
         },
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }

@@ -86,27 +86,43 @@ class OpenVerificationTargetUseCase @Inject constructor(
         }
 
         // Everything the medtech added on top of the model's boxes. `sample_species_findings`
-        // stores the field total per species — which is exactly what the added row now holds,
-        // so it is carried across rather than subtracted down to a remainder. A species whose
-        // total the boxes already account for needs no added row at all.
+        // stores the field total per species+stage — which is exactly what the added row now
+        // holds, so it is carried across rather than subtracted down to a remainder. A
+        // species+stage whose total the boxes already account for needs no added row at all.
         val boxedCounts = boxFindings
             .filter { it.countsAsEgg }
-            .groupingBy { it.answers.speciesLabel }
+            .mapNotNull { it.answers.speciesStageKey }
+            .groupingBy { it }
             .eachCount()
-        val addedFindings = findingDao.getFindingsForSample(sampleId).mapNotNull { row ->
-            if (row.eggCount <= (boxedCounts[row.species] ?: 0)) return@mapNotNull null
+        val findingRows = findingDao.getFindingsForSample(sampleId)
+        val rowCountBySpecies = findingRows.groupingBy { it.species }.eachCount()
+        val addedFindings = findingRows.mapNotNull { row ->
             val (parsedStage, otherStage) = parseStage(row.stage)
+            val key = SpeciesStageKey(row.species, parsedStage, otherStage.trim())
+            if (row.eggCount <= (boxedCounts[key] ?: 0)) return@mapNotNull null
+            val answers = VerificationAnswers(
+                species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
+                otherSpeciesText = row.species.takeIf {
+                    EggSpecies.fromClassLabel(it) == null
+                }.orEmpty(),
+                stage = parsedStage,
+                otherStageText = otherStage,
+                fieldTotal = row.eggCount,
+            )
+            // The old species-only id is only a safe fallback when this species has exactly one
+            // added row: with two stages of one species, an old-format id cannot say which of
+            // them its boxes belong to, so guessing would risk handing them to the wrong stage.
+            val allowLegacyFallback = rowCountBySpecies[row.species] == 1
             Finding(
                 prediction = null,
-                answers = VerificationAnswers(
-                    species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
-                    otherSpeciesText = row.species.takeIf {
-                        EggSpecies.fromClassLabel(it) == null
-                    }.orEmpty(),
-                    stage = parsedStage,
-                    otherStageText = otherStage,
-                    fieldTotal = row.eggCount,
-                    drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
+                answers = answers.copy(
+                    drawnBoxes = recoverDrawnBoxes(
+                        sampleId,
+                        row.species,
+                        answers.stageLabel,
+                        allowLegacyFallback,
+                        storedById,
+                    ),
                 ),
             )
         }
@@ -258,24 +274,41 @@ class OpenVerificationTargetUseCase @Inject constructor(
     }
 
     /**
-     * The boxes the medtech drew for an added species, in slot order.
+     * The boxes the medtech drew for an added species+stage, in slot order.
      *
-     * Added eggs are one detection row each, keyed `#finding#<species>#<slot>`, and the drawn
-     * ones occupy the front slots — so this walks up from zero and stops at the first row with
-     * no geometry, which is where the drawn ones end. Stopping there rather than scanning the
-     * whole species is what keeps the round trip stable: the list that comes back is the list
-     * that went out, and re-submitting writes the same slots to the same ids.
+     * Added eggs are one detection row each, keyed `#finding#<species>#<stage>#<slot>`, and the
+     * drawn ones occupy the front slots — so this walks up from zero and stops at the first row
+     * with no geometry, which is where the drawn ones end. Stopping there rather than scanning
+     * the whole species is what keeps the round trip stable: the list that comes back is the
+     * list that went out, and re-submitting writes the same slots to the same ids.
+     *
+     * **Falls back to the old species-only id when the stage-aware lookup finds nothing and
+     * [allowLegacyFallback] says it is safe.** Rows written before this change (or by an earlier
+     * build of this feature) derived their id with no stage segment at all; without the
+     * fallback, a card reopened after that would show its total but silently lose the boxes
+     * already drawn on it. [allowLegacyFallback] is false when this species has more than one
+     * added row — an old-format id cannot say which stage's boxes it holds, so guessing would
+     * risk handing them to the wrong card.
      */
     private fun recoverDrawnBoxes(
         sampleId: String,
         species: String,
+        stageKey: String?,
+        allowLegacyFallback: Boolean,
         storedById: Map<String, DetectionEntity>,
-    ): List<ImageBox> = generateSequence(0) { it + 1 }
-        .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot)]?.storedBox() }
-        .takeWhile { it != null }
-        .filterNotNull()
-        .toList()
-
+    ): List<ImageBox> {
+        val staged = generateSequence(0) { it + 1 }
+            .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot, stageKey)]?.storedBox() }
+            .takeWhile { it != null }
+            .filterNotNull()
+            .toList()
+        if (staged.isNotEmpty() || stageKey == null || !allowLegacyFallback) return staged
+        return generateSequence(0) { it + 1 }
+            .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot)]?.storedBox() }
+            .takeWhile { it != null }
+            .filterNotNull()
+            .toList()
+    }
 }
 
 /** A frame plus whatever the medtech has already said about it. */

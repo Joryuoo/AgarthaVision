@@ -251,6 +251,38 @@ class FindingTest {
         assertTrue(emptyList<Finding>().toFindingRows().isEmpty())
     }
 
+    /**
+     * The regression a species-only key would reintroduce: an unstaged box and a staged added
+     * card of the same species are different findings now, not one double-counted row.
+     */
+    @Test
+    fun `an unstaged box and a staged added card of one species are separate rows, not one`() {
+        val unstagedBox = Finding(
+            prediction(),
+            VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+        )
+        val stagedAdded = Finding(
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 3,
+            ),
+        )
+        val findings = listOf(unstagedBox, stagedAdded)
+
+        val rows = findings.toFindingRows()
+        assertEquals(2, rows.size)
+        val noStageRow = rows.first { it.stage == null }
+        val cfRow = rows.first { it.stage == EggStage.CORTICATED_FERTILIZED }
+        assertEquals("The boxed egg, uncounted by the CF card.", 1, noStageRow.eggCount)
+        assertEquals("The CF card's own total, unaffected by the unstaged box.", 3, cfRow.eggCount)
+
+        assertEquals(1, findings.floorFor("Ascaris lumbricoides"))
+        assertEquals(0, findings.floorFor("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+        assertEquals(0, findings.unboxedCountOf("Ascaris lumbricoides"))
+        assertEquals(3, findings.unboxedCountOf("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+    }
+
     @Test
     fun `free-text species groups under its typed label`() {
         val other = VerificationAnswers(

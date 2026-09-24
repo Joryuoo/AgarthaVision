@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.domain.inference.Prediction
@@ -65,11 +67,9 @@ data class Finding(
  * counting the unnamed ones together would put a floor under a freshly added card drawn from
  * boxes that have nothing to do with it.
  */
-private fun Finding.matchesStage(stage: EggStage?, otherStageText: String): Boolean = when {
-    stage == null -> true
-    answers.stage != stage -> false
-    else -> stage != EggStage.OTHER || answers.otherStageText == otherStageText
-}
+private fun Finding.matchesStage(stage: EggStage?, otherStageText: String): Boolean =
+    answers.stage == stage &&
+        (stage != EggStage.OTHER || answers.otherStageText.trim() == otherStageText.trim())
 
 fun List<Finding>.boxedCountOf(
     species: String?,
@@ -105,8 +105,13 @@ fun List<Finding>.fieldTotalOf(
  * contradiction [totalsAreConsistent] holds submit on rather than clamping away, so it does
  * reach here, and it must produce no slots instead of a negative count.
  */
-fun List<Finding>.unboxedCountOf(species: String?): Int =
-    (fieldTotalOf(species) - boxedCountOf(species)).coerceAtLeast(0)
+fun List<Finding>.unboxedCountOf(
+    species: String?,
+    stage: EggStage? = null,
+    otherStageText: String = "",
+): Int =
+    (fieldTotalOf(species, stage, otherStageText) - boxedCountOf(species, stage, otherStageText))
+        .coerceAtLeast(0)
 
 /**
  * The lowest total the medtech can claim for [species] without contradicting what is already on
@@ -117,9 +122,15 @@ fun List<Finding>.unboxedCountOf(species: String?): Int =
  * slots than there are boxes — a stray digit silently deleting work. Submit refuses instead; see
  * [totalsAreConsistent].
  */
-fun List<Finding>.floorFor(species: String?): Int {
-    val added = firstOrNull { it.prediction == null && it.answers.speciesLabel == species }
-    return boxedCountOf(species) + (added?.answers?.drawnBoxes?.size ?: 0)
+fun List<Finding>.floorFor(
+    species: String?,
+    stage: EggStage? = null,
+    otherStageText: String = "",
+): Int {
+    val added = firstOrNull {
+        it.prediction == null && it.answers.speciesLabel == species && it.matchesStage(stage, otherStageText)
+    }
+    return boxedCountOf(species, stage, otherStageText) + (added?.answers?.drawnBoxes?.size ?: 0)
 }
 
 /**
@@ -132,7 +143,8 @@ fun List<Finding>.floorFor(species: String?): Int {
 fun List<Finding>.totalsAreConsistent(): Boolean =
     none { finding ->
         finding.prediction == null &&
-            (finding.answers.fieldTotal ?: 0) < floorFor(finding.answers.speciesLabel)
+            (finding.answers.fieldTotal ?: 0) <
+            floorFor(finding.answers.speciesLabel, finding.answers.stage, finding.answers.otherStageText)
     }
 
 /** Every species this frame has something to say about, in a stable order. */
@@ -154,6 +166,84 @@ fun List<Finding>.speciesStageKeysPresent(): List<SpeciesStageKey> =
             SpeciesStageKey(species, finding.answers.stage, finding.answers.otherStageText)
         } else null
     }.distinct()
+
+/** Identity an added card is persisted under. Null until a species label exists. */
+val VerificationAnswers.speciesStageKey: SpeciesStageKey?
+    get() = speciesLabel?.let {
+        SpeciesStageKey(it, stage, if (stage == EggStage.OTHER) otherStageText.trim() else "")
+    }
+
+/**
+ * True once [speciesStageKey] can no longer change by the medtech finishing the card.
+ *
+ * A card merges with its twin at this point, not before: a stage still waiting to be chosen (or
+ * an Other stage still waiting for its text) means the key is not final yet, and merging early
+ * would fold a card into the wrong twin the moment a still-blank stage happened to match another
+ * still-blank one.
+ */
+val VerificationAnswers.speciesStageKeyIsSettled: Boolean
+    get() = when {
+        speciesLabel == null -> false
+        EggStage.forSpecies(species).isEmpty() -> true // stage not applicable to this species
+        stage == null -> false // stage not chosen yet
+        stage == EggStage.OTHER -> otherStageText.isNotBlank()
+        else -> true
+    }
+
+/** Result of folding added card [removedIndex] into its twin, now at [survivorIndex]. */
+data class AddedCardMerge(val findings: List<Finding>, val removedIndex: Int, val survivorIndex: Int)
+
+/**
+ * Folds added card [index] into another added card sharing its [SpeciesStageKey], if one exists.
+ *
+ * Null when [index] is out of range, unnamed, or has no twin — nothing to fold. The twin's own
+ * species/stage/other-text survive; only the totals and drawn boxes are combined, so renaming a
+ * card into a collision never loses geometry a human placed.
+ */
+fun List<Finding>.mergeAddedCardIntoTwin(index: Int): AddedCardMerge? {
+    val key = getOrNull(index)?.answers?.speciesStageKey
+    val twinIndex = key?.let { k ->
+        indices.firstOrNull { i -> i != index && this[i].prediction == null && this[i].answers.speciesStageKey == k }
+    }
+    return twinIndex?.let { ti ->
+        val named = this[index].answers
+        val twin = this[ti].answers
+        val merged = twin.copy(
+            fieldTotal = (twin.fieldTotal ?: 0) + (named.fieldTotal ?: 0),
+            drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
+        )
+        val survivorIndex = if (ti < index) ti else ti - 1
+        val newFindings = mapIndexed { i, finding -> if (i == ti) finding.copy(answers = merged) else finding }
+            .filterIndexed { i, _ -> i != index }
+        AddedCardMerge(newFindings, index, survivorIndex)
+    }
+}
+
+/**
+ * Folds every added card into the first added card sharing its [SpeciesStageKey] — the settle-
+ * point backstop that guarantees at most one added card per key survives to be persisted.
+ */
+fun List<Finding>.consolidateAddedTwins(): List<Finding> {
+    val result = mutableListOf<Finding>()
+    val firstIndexOfKey = mutableMapOf<SpeciesStageKey, Int>()
+    forEach { finding ->
+        val key = if (finding.prediction == null) finding.answers.speciesStageKey else null
+        val firstIndex = key?.let { firstIndexOfKey[it] }
+        if (key != null && firstIndex != null) {
+            val existing = result[firstIndex].answers
+            result[firstIndex] = result[firstIndex].copy(
+                answers = existing.copy(
+                    fieldTotal = (existing.fieldTotal ?: 0) + (finding.answers.fieldTotal ?: 0),
+                    drawnBoxes = existing.drawnBoxes + finding.answers.drawnBoxes,
+                ),
+            )
+        } else {
+            if (key != null) firstIndexOfKey[key] = result.size
+            result.add(finding)
+        }
+    }
+    return result
+}
 
 /**
  * One species, stage, and its egg count for this field — the shape that reaches

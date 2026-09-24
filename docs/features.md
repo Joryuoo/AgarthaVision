@@ -90,8 +90,10 @@ as working.
   while preserving its detections in the retraining corpus (C8). The legacy `is_repeat` flag is
   completely removed.
 - **Per-sample free-text note** (`SampleEntity.kt:97-98`, `data/local/dao/SampleDao.kt`).
-- **No developmental stage question.** `sample_species_findings.stage` remains nullable and
-  dormant.
+- **Developmental stage question.** Added and model-box species/stage prompts ask for STH
+  developmental stage (`domain/model/EggStage.kt`); `sample_species_findings.stage` and
+  `detections.stage` are written and are part of each row's identity, so two cards naming one
+  species at different stages persist as distinct rows instead of overwriting each other.
 
 ### Sync
 - **Verify-time sync**: Resizes JPEG to 640×640, uploads to Storage, upserts sample and detection

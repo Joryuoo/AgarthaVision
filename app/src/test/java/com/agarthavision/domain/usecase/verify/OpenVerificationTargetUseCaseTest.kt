@@ -11,6 +11,7 @@ import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -115,18 +116,19 @@ class OpenVerificationTargetUseCaseTest {
         )
     }
 
-    private fun addedDetection(species: String, slot: Int, x: Float? = null) = DetectionEntity(
-        detectionId = addedDetectionIdFor(sampleId, species, slot),
-        sampleId = sampleId,
-        classLabel = species,
-        confidence = 1.0f,
-        bboxX = x,
-        bboxY = x,
-        bboxW = x?.let { 12f },
-        bboxH = x?.let { 12f },
-        verdict = DetectionVerdict.CONFIRMED.value,
-        expertClass = species,
-    )
+    private fun addedDetection(species: String, slot: Int, x: Float? = null, stageKey: String? = null) =
+        DetectionEntity(
+            detectionId = addedDetectionIdFor(sampleId, species, slot, stageKey),
+            sampleId = sampleId,
+            classLabel = species,
+            confidence = 1.0f,
+            bboxX = x,
+            bboxY = x,
+            bboxW = x?.let { 12f },
+            bboxH = x?.let { 12f },
+            verdict = DetectionVerdict.CONFIRMED.value,
+            expertClass = species,
+        )
 
     /**
      * An added species comes back as **one card carrying the field total**, not as the remainder
@@ -302,6 +304,90 @@ class OpenVerificationTargetUseCaseTest {
             val target = useCase(sampleId).getOrThrow()
 
             assertEquals(1, target.frame.predictions.size)
+        }
+
+    // ── species+stage identity (14zcqnthz6e) ─────────────────────────────────
+
+    /** Two added cards of one species at different stages reopen as two cards, boxes kept apart. */
+    @Test
+    fun `two added cards of different stages reopen as two cards with only their own boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 1, x = 20f, stageKey = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = "DECORTICATED_FERTILIZED"),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 2,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.filter { it.prediction == null }
+
+            assertEquals(2, added.size)
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val df = added.first { it.answers.stage == EggStage.DECORTICATED_FERTILIZED }
+            assertEquals(2, cf.answers.fieldTotal)
+            assertEquals(listOf(10f, 20f), cf.answers.drawnBoxes.map { it.x })
+            assertEquals(1, df.answers.fieldTotal)
+            assertEquals(listOf(30f), df.answers.drawnBoxes.map { it.x })
+        }
+
+    /**
+     * A card written before stage-aware ids existed used the species-only id. Reopening it must
+     * still recover its drawn boxes rather than showing the right total with the geometry
+     * silently missing.
+     */
+    @Test
+    fun `a card written with the old species-only id still recovers its drawn boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(1, added.answers.fieldTotal)
+            assertEquals(
+                "The legacy id is the only place this box can be, and the fallback finds it.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
         }
 
     // ── Q3 on read-back ──────────────────────────────────────────────────────

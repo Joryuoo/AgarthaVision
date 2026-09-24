@@ -228,16 +228,17 @@ internal fun AddedFindings(
         }
 
         addedIndices.forEach { index ->
-            val floor = findings.floorFor(findings[index].answers.speciesLabel)
+            val answers = findings[index].answers
+            val floor = findings.floorFor(answers.speciesLabel, answers.stage, answers.otherStageText)
             if (index == expandedIndex) {
                 AddedFindingCard(
                     index = index,
                     finding = findings[index],
-                    // The eggs of this species the frame already accounts for: boxes the medtech
-                    // kept, plus boxes they drew themselves. Shown under the field as context, and
-                    // it is the floor the typed total may not go below.
+                    // The eggs of this species+stage the frame already accounts for: boxes the
+                    // medtech kept, plus boxes they drew themselves. Shown under the field as
+                    // context, and it is the floor the typed total may not go below.
                     floor = floor,
-                    boxed = findings.boxedCountOf(findings[index].answers.speciesLabel),
+                    boxed = findings.boxedCountOf(answers.speciesLabel, answers.stage, answers.otherStageText),
                     actions = actions,
                     suggestions = suggestionsFor(index),
                     onExpandedCardPositioned = onExpandedCardPositioned,
@@ -648,14 +649,16 @@ private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
     indices.filter { it >= boxCount }.flatMap { index ->
         val answers = this[index].answers
         val species = answers.speciesLabel ?: return@flatMap emptyList<LocatableSlot>()
-        val boxed = boxedCountOf(species)
-        (0 until unboxedCountOf(species)).map { slot ->
+        val stage = answers.stage
+        val otherStageText = answers.otherStageText
+        val boxed = boxedCountOf(species, stage, otherStageText)
+        (0 until unboxedCountOf(species, stage, otherStageText)).map { slot ->
             LocatableSlot(
                 findingIndex = index,
                 slot = slot,
                 species = species,
                 ordinalInField = boxed + slot + 1,
-                fieldTotal = fieldTotalOf(species),
+                fieldTotal = fieldTotalOf(species, stage, otherStageText),
                 box = answers.drawnBoxes.getOrNull(slot),
             )
         }
