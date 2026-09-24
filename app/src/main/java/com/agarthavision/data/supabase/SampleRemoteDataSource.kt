@@ -3,6 +3,8 @@ package com.agarthavision.data.supabase
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.mapper.SamplePrediction
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.SampleStatus
 import io.github.jan.supabase.SupabaseClient
@@ -25,7 +27,15 @@ class SampleRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
 ) {
     /**
-     * Uploads the sample image and inserts matching `samples` and `detections` rows.
+     * Uploads the sample image and writes its `samples`, `predictions` and `detections` rows.
+     *
+     * **The predictions travel with the sample, in the same call, and only here.** This is the
+     * one path that writes a sample, and it runs only for verified ones, so a prediction row
+     * cannot exist for a frame nobody reviewed. Order is the FK chain: the sample first, because
+     * a prediction references it; the predictions next, because a detection references its
+     * prediction; the detections last. A failure part-way throws, the sample is marked
+     * `sync_failed`, and the next pass repeats the whole call — every write here is idempotent,
+     * so a retry converges on the same rows rather than duplicating any.
      *
      * @return Supabase Storage object path for the uploaded JPEG.
      * @throws IllegalStateException when no Supabase user session is available.
@@ -34,6 +44,7 @@ class SampleRemoteDataSource @Inject constructor(
         sample: SampleEntity,
         detections: List<DetectionEntity>,
         findings: List<SampleSpeciesFindingEntity>,
+        predictions: List<SamplePrediction>,
         imageBytes: ByteArray,
     ): String {
         val userId = supabase.auth.currentUserOrNull()?.id
@@ -53,8 +64,32 @@ class SampleRemoteDataSource @Inject constructor(
         // detections select and insert only, so a conflicting upsert is rejected by RLS
         // without them.
         supabase.postgrest[SAMPLES_TABLE].upsert(sample.toInsertRow(userId, storagePath))
+
+        // Insert-if-absent, not upsert. A model's output never changes, so a re-sync of an
+        // edited sample has nothing to write here — and 0004 grants no UPDATE policy on the
+        // table, which an ON CONFLICT DO UPDATE would need.
+        if (predictions.isNotEmpty()) {
+            supabase.postgrest[PREDICTIONS_TABLE].upsert(predictions.map { it.toInsertRow() }) {
+                onConflict = "id"
+                ignoreDuplicates = true
+            }
+        }
+
         if (detections.isNotEmpty()) {
-            supabase.postgrest[DETECTIONS_TABLE].upsert(detections.map { it.toInsertRow() })
+            if (predictions.isEmpty()) {
+                // This device does not hold the frame's model output — a manual capture, or a
+                // sample whose predictions never reached it. The link is left out of the payload
+                // entirely rather than sent as null, so PostgREST leaves the column alone and a
+                // link the server already has (0004's backfill, another device's push) survives.
+                supabase.postgrest[DETECTIONS_TABLE].upsert(detections.map { it.toInsertRow() })
+            } else {
+                // A detection links to the prediction at its own ordinal. One absent from the map
+                // is an egg the medtech added: it rules on no model claim, and null says so.
+                val predictionIdByDetection = predictions.associate { it.detectionId to it.id }
+                supabase.postgrest[DETECTIONS_TABLE].upsert(
+                    detections.map { it.toLinkedInsertRow(predictionIdByDetection[it.detectionId]) },
+                )
+            }
         }
 
         // Findings are replaced wholesale rather than upserted: a species the medtech removed
@@ -92,6 +127,15 @@ class SampleRemoteDataSource @Inject constructor(
         supabase.postgrest[DETECTIONS_TABLE].select {
             filter { isIn("sample_id", sampleIds) }
         }.decodeList<DetectionRow>().map { it.toEntity() }
+
+    /**
+     * Fetches the model's own output for the given [sampleIds].
+     * Callers must guard against an empty list.
+     */
+    suspend fun fetchPredictions(sampleIds: List<String>): List<SamplePrediction> =
+        supabase.postgrest[PREDICTIONS_TABLE].select {
+            filter { isIn("sample_id", sampleIds) }
+        }.decodeList<PredictionRow>().map { it.toSamplePrediction() }
 
     /**
      * Fetches all findings for the given [sampleIds].
@@ -142,6 +186,36 @@ class SampleRemoteDataSource @Inject constructor(
             userNote = userNote?.takeIf { it.isNotBlank() },
         )
     }
+
+    private fun SamplePrediction.toInsertRow(): PredictionInsertRow = PredictionInsertRow(
+        id = id,
+        sampleId = sampleId,
+        ordinal = ordinal,
+        classLabel = prediction.classLabel,
+        confidence = prediction.confidence,
+        bboxX = prediction.x,
+        bboxY = prediction.y,
+        bboxW = prediction.width,
+        bboxH = prediction.height,
+    )
+
+    private fun DetectionEntity.toLinkedInsertRow(predictionId: String?): LinkedDetectionInsertRow =
+        toInsertRow().let { row ->
+            LinkedDetectionInsertRow(
+                id = row.id,
+                sampleId = row.sampleId,
+                classLabel = row.classLabel,
+                confidence = row.confidence,
+                bboxX = row.bboxX,
+                bboxY = row.bboxY,
+                bboxW = row.bboxW,
+                bboxH = row.bboxH,
+                verdict = row.verdict,
+                expertClass = row.expertClass,
+                speciesTouched = row.speciesTouched,
+                predictionId = predictionId,
+            )
+        }
 
     private fun DetectionEntity.toInsertRow(): DetectionInsertRow {
         val resolvedVerdict = when {
@@ -215,6 +289,64 @@ class SampleRemoteDataSource @Inject constructor(
         val speciesTouched: Boolean,
     )
 
+    /**
+     * [DetectionInsertRow] plus the link to the prediction it rules on.
+     *
+     * A second class rather than a nullable field on the first, because the two have to differ
+     * in whether the key is *present*, not only in its value: PostgREST updates exactly the
+     * columns a payload names, and only a payload without `prediction_id` leaves an existing
+     * link alone. Every row of one push uses one class, so the column list stays uniform.
+     */
+    @Serializable
+    private data class LinkedDetectionInsertRow(
+        @SerialName("id")
+        val id: String,
+        @SerialName("sample_id")
+        val sampleId: String,
+        @SerialName("class_label")
+        val classLabel: String,
+        @SerialName("confidence")
+        val confidence: Float,
+        @SerialName("bbox_x")
+        val bboxX: Float?,
+        @SerialName("bbox_y")
+        val bboxY: Float?,
+        @SerialName("bbox_w")
+        val bboxW: Float?,
+        @SerialName("bbox_h")
+        val bboxH: Float?,
+        @SerialName("verdict")
+        val verdict: String,
+        @SerialName("expert_class")
+        val expertClass: String?,
+        @SerialName("species_touched")
+        val speciesTouched: Boolean,
+        @SerialName("prediction_id")
+        val predictionId: String?,
+    )
+
+    @Serializable
+    private data class PredictionInsertRow(
+        @SerialName("id")
+        val id: String,
+        @SerialName("sample_id")
+        val sampleId: String,
+        @SerialName("ordinal")
+        val ordinal: Int,
+        @SerialName("class_label")
+        val classLabel: String,
+        @SerialName("confidence")
+        val confidence: Float,
+        @SerialName("bbox_x")
+        val bboxX: Float,
+        @SerialName("bbox_y")
+        val bboxY: Float,
+        @SerialName("bbox_w")
+        val bboxW: Float,
+        @SerialName("bbox_h")
+        val bboxH: Float,
+    )
+
     @Serializable
     private data class FindingInsertRow(
         @SerialName("id")
@@ -272,6 +404,18 @@ class SampleRemoteDataSource @Inject constructor(
     )
 
     @Serializable
+    private data class PredictionRow(
+        @SerialName("sample_id") val sampleId: String,
+        @SerialName("ordinal") val ordinal: Int,
+        @SerialName("class_label") val classLabel: String,
+        @SerialName("confidence") val confidence: Float,
+        @SerialName("bbox_x") val bboxX: Float,
+        @SerialName("bbox_y") val bboxY: Float,
+        @SerialName("bbox_w") val bboxW: Float,
+        @SerialName("bbox_h") val bboxH: Float,
+    )
+
+    @Serializable
     private data class FindingRow(
         @SerialName("id") val id: String,
         @SerialName("sample_id") val sampleId: String,
@@ -317,6 +461,19 @@ class SampleRemoteDataSource @Inject constructor(
         speciesTouched = speciesTouched,
     )
 
+    private fun PredictionRow.toSamplePrediction(): SamplePrediction = SamplePrediction(
+        sampleId = sampleId,
+        ordinal = ordinal,
+        prediction = Prediction(
+            classLabel = classLabel,
+            confidence = confidence,
+            x = bboxX,
+            y = bboxY,
+            width = bboxW,
+            height = bboxH,
+        ),
+    )
+
     private fun FindingRow.toEntity(): SampleSpeciesFindingEntity = SampleSpeciesFindingEntity(
         findingId = id,
         sampleId = sampleId,
@@ -329,6 +486,7 @@ class SampleRemoteDataSource @Inject constructor(
         private const val SAMPLES_BUCKET = "samples"
         private const val SAMPLES_TABLE = "samples"
         private const val DETECTIONS_TABLE = "detections"
+        private const val PREDICTIONS_TABLE = "predictions"
         private const val FINDINGS_TABLE = "sample_species_findings"
         private const val UNKNOWN_MODEL_VERSION = "unknown"
         private val SIGNED_URL_EXPIRY = 15.minutes

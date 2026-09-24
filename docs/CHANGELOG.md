@@ -9,6 +9,35 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24
+
+`14zcqnthrx6` with `14zcqnthrx8`.
+
+**A rejected box is no longer stored as where the egg is.** A `BOX_INCORRECT` row the medtech did
+not redraw used to fall back to the model's geometry, so it passed the exhaustiveness rule
+(`bbox_x is null`) and a frame carrying a box a human called misplaced qualified for background
+sampling. It is now written with no box; a redraw still writes the medtech's.
+
+**New `predictions` table** (`0004_predictions.sql`) — the model's raw output, one immutable row
+per box, pushed in the same sync call as its sample and only for verified samples.
+`detections.prediction_id` links each ruling to its claim; null means an egg the medtech added.
+With the fix above, every linked row answers who drew its box by itself, so the reopen path's
+half-pixel geometry comparison is gone. No Room change and no version bump: the device keeps
+`predictions_json`, rows are built from it on push and folded back into it on pull.
+
+**Found on the way:** every pull overwrote the capturing device's own `predictions_json` with
+null, because the server's sample row has none. A pull now keeps the device's copy, and restores
+it from `predictions` on a device that never had one — so a sample reopened elsewhere draws the
+model's real boxes. The fallback that rebuilds predictions from detection rows now stops at a
+row with no box instead of skipping it, which would have shifted every later ordinal.
+
+**Deploy order:** apply `0004` before this build syncs. The backfill recomputes the derived ids in SQL and
+finds 8 legacy prediction-backed detections across 4 samples; it links the 5 on the 3 samples
+with no `BOX_INCORRECT` row. The fourth sample is left unlinked, because whether its box was
+redrawn cannot be recovered from the server.
+
+---
+
 ## refactor/never-ending-sessions — sessions stay open, the queue holds everything · 2026-09-14
 
 `86d4ab4vm` with `86d4ab4tq` and `86d4ad75y`. The session

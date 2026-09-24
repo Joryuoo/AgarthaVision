@@ -1,8 +1,8 @@
 # docs/map/objects/ — object cards (contract)
 
-One card per core domain noun. Nine exist: `Patient`, `Profile`, `Session`, `Sample`, `Detection`,
-`Finding`, `Report`, `StorageObject`, `PsgcBarangay`. `PsgcBarangay` is the only one with no
-Supabase table — it earns a card because it is a real Room entity with a pinned external
+One card per core domain noun. Ten exist: `Patient`, `Profile`, `Session`, `Sample`,
+`Prediction`, `Detection`, `Finding`, `Report`, `StorageObject`, `PsgcBarangay`. `PsgcBarangay`
+is the only one with no Supabase table — it earns a card because it is a real Room entity with a pinned external
 vintage and a privacy rule attached.
 
 ## Card shape — these sections, in this order

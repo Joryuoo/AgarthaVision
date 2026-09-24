@@ -322,4 +322,25 @@ class VerificationMapperTest {
         assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
         assertEquals(prediction.x, entity.bboxX)
     }
+
+    /**
+     * Pins both derivations to ids that exist on the live server. `0004_predictions.sql`
+     * recomputes these in SQL for its backfill; the detection id below was found there by that
+     * SQL, so this is the check that the two implementations agree. Change a key string and
+     * this fails before every backfilled link silently stops matching.
+     */
+    @Test
+    fun `derived ids match the SQL derivation in 0004`() {
+        val sampleId = "f14f3504-0d9f-433e-a0c2-c960a4e5801b"
+
+        assertEquals("fb7c1fae-2937-34cf-8865-fd335255184a", detectionIdFor(sampleId, 0))
+        assertEquals("0e614a6e-1045-3bb1-8302-b0a16a9a92a2", detectionIdFor(sampleId, 1))
+    }
+
+    @Test
+    fun `a prediction and its detection derive different ids from one ordinal`() {
+        assertTrue(predictionIdFor("sample-1", 0) != detectionIdFor("sample-1", 0))
+        assertEquals(predictionIdFor("sample-1", 3), predictionIdFor("sample-1", 3))
+        assertTrue(predictionIdFor("sample-1", 0) != predictionIdFor("sample-1", 1))
+    }
 }

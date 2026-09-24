@@ -85,6 +85,17 @@ fun addedDetectionIdFor(sampleId: String, species: String, slot: Int): String =
  */
 fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#box#$ordinal")
 
+/**
+ * The id the model's own prediction at [ordinal] gets in `predictions`.
+ *
+ * Same derivation as [detectionIdFor] on a different key, so the prediction and the detection
+ * that rules on it are both stable under a re-push. `0004_predictions.sql` recomputes this in
+ * SQL for its backfill, so the key string is part of the schema contract: change it and every
+ * link the migration made stops matching what the app pushes.
+ */
+fun predictionIdFor(sampleId: String, ordinal: Int): String =
+    derive("$sampleId#prediction#$ordinal")
+
 private fun derive(key: String): String =
     UUID.nameUUIDFromBytes(key.toByteArray()).toString()
 

@@ -18,6 +18,9 @@ import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.data.local.mapper.SamplePrediction
+import com.agarthavision.data.inference.decodePredictions
+import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.PatientRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
@@ -27,6 +30,7 @@ import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
+import com.google.gson.Gson
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -37,6 +41,7 @@ import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -64,7 +69,11 @@ class FetchRemoteDataUseCaseTest {
     private val authRepository: AuthRepository = mock()
     private val connectivityObserver: ConnectivityObserver = mock()
     private val patientRemoteDataSource: PatientRemoteDataSource = mock()
-    private val sampleRemoteDataSource: SampleRemoteDataSource = mock()
+    // Answers "the server holds no model output" by default, so the suites that predate the
+    // predictions table keep asserting what they were written to assert.
+    private val sampleRemoteDataSource: SampleRemoteDataSource = mock {
+        onBlocking { fetchPredictions(any()) } doReturn emptyList()
+    }
     private val sessionRemoteDataSource: SessionRemoteDataSource = mock()
     private val reportRemoteDataSource: ReportRemoteDataSource = mock()
     private val patientDao: PatientDao = mock()
@@ -102,6 +111,7 @@ class FetchRemoteDataUseCaseTest {
         speciesSuggestionSeeder = speciesSuggestionSeeder,
         cacheSampleImages = cacheSampleImages,
         sampleImageStore = sampleImageStore,
+        gson = Gson(),
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -632,6 +642,107 @@ class FetchRemoteDataUseCaseTest {
         useCase.invoke()
 
         verify(detectionDao).insertDetections(listOf(detection))
+    }
+
+    // ── Model output (predictions) ───────────────────────────────────────────
+
+    private fun remotePrediction(sampleId: String, ordinal: Int, x: Float) = SamplePrediction(
+        sampleId = sampleId,
+        ordinal = ordinal,
+        prediction = Prediction(
+            classLabel = "Ascaris",
+            confidence = 0.8f,
+            x = x,
+            y = 1f,
+            width = 2f,
+            height = 3f,
+        ),
+    )
+
+    /**
+     * **The bug this closes.** The server's sample row has no predictions_json, so every pulled
+     * row mapped it to null, and the upsert wrote that null over the capturing device's own
+     * model output on the first pass after its push landed.
+     */
+    @Test
+    fun `a pull keeps the model output the device already holds`() = runTest {
+        setupOnlineSignedIn()
+        val remote = fakeSample("smp-1", "sess-1")
+        setupMinimalFetch(samples = listOf(remote))
+        val local = fakeSample("smp-1", "sess-1").copy(predictionsJson = "[local]")
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(local)
+
+        useCase.invoke()
+
+        verify(sampleDao).upsertSample(remote.copy(predictionsJson = "[local]"))
+        verify(sampleDao, never()).updatePredictionsJson(any(), any())
+    }
+
+    /** A sample verified elsewhere arrives with the model's real output, not a rebuild of it. */
+    @Test
+    fun `a whole set of predictions is folded into the pulled sample`() = runTest {
+        setupOnlineSignedIn()
+        setupMinimalFetch(samples = listOf(fakeSample("smp-1", "sess-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleRemoteDataSource.fetchPredictions(listOf("smp-1"))).thenReturn(
+            listOf(remotePrediction("smp-1", 1, 20f), remotePrediction("smp-1", 0, 10f)),
+        )
+
+        useCase.invoke()
+
+        val json = argumentCaptor<String>()
+        verify(sampleDao).updatePredictionsJson(eq("smp-1"), json.capture())
+        val restored = Gson().decodePredictions(json.firstValue)
+        assertEquals(listOf(10f, 20f), restored?.map { it.x })
+        assertEquals("Ascaris", restored?.first()?.classLabel)
+    }
+
+    /** A partial set would shift ordinals; the device's copy (here, none) is left alone. */
+    @Test
+    fun `a set with a missing ordinal is not written`() = runTest {
+        setupOnlineSignedIn()
+        setupMinimalFetch(samples = listOf(fakeSample("smp-1", "sess-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleRemoteDataSource.fetchPredictions(listOf("smp-1"))).thenReturn(
+            listOf(remotePrediction("smp-1", 0, 10f), remotePrediction("smp-1", 2, 30f)),
+        )
+
+        useCase.invoke()
+
+        verify(sampleDao, never()).updatePredictionsJson(any(), any())
+    }
+
+    /** Skipped parents skip their predictions too — the E4 guard covers every child table. */
+    @Test
+    fun `a VERIFIED local sample does not fetch predictions`() = runTest {
+        setupOnlineSignedIn()
+        setupMinimalFetch(samples = listOf(fakeSample("smp-1", "sess-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1"))
+            .thenReturn(fakeSample("smp-1", "sess-1", status = SampleStatus.VERIFIED.value))
+
+        useCase.invoke()
+
+        verify(sampleRemoteDataSource, never()).fetchPredictions(any())
+    }
+
+    /**
+     * Predictions are fetched before detections, so a failure stops the pass before a detection
+     * lands. A sample with detections and no model output would reopen by rebuilding from the
+     * rows, and a rejected box with no geometry is a gap that rebuild cannot fill.
+     */
+    @Test
+    fun `a failed predictions fetch writes no detections and fails the samples pull`() = runTest {
+        setupOnlineSignedIn()
+        setupMinimalFetch(samples = listOf(fakeSample("smp-1", "sess-1")))
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(sampleRemoteDataSource.fetchPredictions(any())).thenThrow(RuntimeException("relation does not exist"))
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(sampleRemoteDataSource, never()).fetchDetections(any())
+        verify(detectionDao, never()).insertDetections(any())
+        assertTrue(FetchType.SAMPLES in summary.failed)
+        verify(initialFetchStateStore, never()).markCompleted(any())
     }
 
     // ── Child-fetch chunking (isIn URL-length guard) ─────────────────────────

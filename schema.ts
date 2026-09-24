@@ -385,7 +385,9 @@ export interface Sample {
   // Room/domain-only sync state machine.
 
   predictions_json: string | null;
-  // Room-only raw inference payload/cache for display and recovery.
+  // Room-only form of the model's output: a JSON list of PredictionDto in ordinal order.
+  // Kept through verification. Its content syncs as `predictions` rows (0004), and the pull
+  // restores it from them; a pull never overwrites it with null.
 
   image_width: number | null;
   // Room-only pixel width.
@@ -398,6 +400,43 @@ export interface Sample {
   // taken at the microscope, so it recorded where the smear was read, not where
   // the infection came from; plotted, it mapped laboratories. Geospatial
   // mapping keys on `patients.psgc_barangay_code` instead.
+}
+
+/**
+ * One box the model returned for a verified frame, as the model said it. Immutable.
+ *
+ * Supabase migrations:
+ * - `0004_predictions.sql`: creates `predictions`; insert and select policies only.
+ *
+ * Room mirror: none. `samples.predictions_json` holds the same list on the device.
+ */
+export interface Prediction {
+  id: UUID;
+  // Supabase PK, client-derived from (sample_id, ordinal) — `predictionIdFor`.
+
+  sample_id: UUID;
+  // NOT NULL FK -> samples(id). DELETE CASCADE. Samples exist remotely only once verified.
+
+  ordinal: number;
+  // NOT NULL, >= 0. Index into the frame's prediction list. UNIQUE with sample_id.
+
+  class_label: string;
+  // NOT NULL. The inference server's raw label.
+
+  confidence: number;
+  // NOT NULL, between 0 and 1.
+
+  bbox_x: number;
+  // NOT NULL. Centre-x in source-image pixels, same space as detections.bbox_x.
+
+  bbox_y: number;
+  // NOT NULL.
+
+  bbox_w: number;
+  // NOT NULL.
+
+  bbox_h: number;
+  // NOT NULL.
 }
 
 /**
@@ -425,7 +464,9 @@ export interface Detection {
   // NOT NULL model confidence as a floating-point value.
 
   bbox_x: number | null;
-  // Nullable; manual detections may not have a bounding box.
+  // Nullable. The box a human stands behind: the model's when kept, the medtech's when
+  // redrawn or added, and null on an added egg nobody located or on a BOX_INCORRECT row the
+  // medtech did not redraw (0004 / 14zcqnthrx6).
 
   bbox_y: number | null;
   // Nullable.
@@ -448,6 +489,11 @@ export interface Detection {
   // NOT NULL default `false`. True when the medtech made a deliberate species selection,
   // including re-picking the pre-filled value. False means pre-fill was untouched.
   // Critical for retraining corpus provenance.
+
+  prediction_id: UUID | null;
+  // Supabase-only (0004). FK (prediction_id, sample_id) -> predictions(id, sample_id), unique
+  // where set. Null on an egg the medtech added, or on a pre-0004 row of unknown provenance.
+  // Room has no column; the push derives it from the detection's ordinal.
 
   created_at: TimestampTZ;
   // Supabase NOT NULL default `now()`.
