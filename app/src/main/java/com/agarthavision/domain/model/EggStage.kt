@@ -12,6 +12,7 @@ enum class EggStage(
     CORTICATED_UNFERTILIZED("Corticated Unfertilized"),
     DECORTICATED_FERTILIZED("Decorticated Fertilized"),
     DECORTICATED_UNFERTILIZED("Decorticated Unfertilized"),
+    OTHER("Other"),
     ;
 
     @Suppress("UNUSED_PARAMETER")

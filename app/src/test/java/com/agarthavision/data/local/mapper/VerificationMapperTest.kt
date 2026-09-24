@@ -4,6 +4,7 @@ import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import org.junit.Assert.assertEquals
@@ -67,6 +68,19 @@ class VerificationMapperTest {
         val entity = listOf(Finding(prediction, answers)).toDetectionEntities("sample-1").single()
         assertEquals(DetectionVerdict.WRONG_CLASS.value, entity.verdict)
         assertEquals("Enterobius", entity.expertClass)
+    }
+
+    @Test
+    fun `OTHER stage sets stage column to otherStageText`() {
+        val answers = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            stage = EggStage.OTHER,
+            otherStageText = "Larvated",
+        )
+        val entity = listOf(Finding(prediction, answers)).toDetectionEntities("sample-1").single()
+        assertEquals("Larvated", entity.stage)
     }
 
     @Test

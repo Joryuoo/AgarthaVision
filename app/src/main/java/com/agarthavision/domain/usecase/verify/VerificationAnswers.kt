@@ -116,6 +116,7 @@ data class VerificationAnswers(
     val boxReplaced: Boolean = false,
     /** Developmental stage chosen by the medtech for STH species. */
     val stage: EggStage? = null,
+    val otherStageText: String = "",
 ) {
     /**
      * True when the species and stage questions are answered.
@@ -124,7 +125,7 @@ data class VerificationAnswers(
         get() = when (species) {
             null -> false
             EggSpecies.OTHER -> otherSpeciesText.isNotBlank()
-            else -> true
+            else -> stage != EggStage.OTHER || otherStageText.isNotBlank()
         }
 
     /**
@@ -138,5 +139,19 @@ data class VerificationAnswers(
             // OTHER carries no canonical class; the typed text is the label.
             EggSpecies.OTHER -> otherSpeciesText.trim().takeIf { it.isNotBlank() }
             else -> species.canonicalClass
+        }
+
+    val stageLabel: String?
+        get() = when (stage) {
+            null -> null
+            EggStage.OTHER -> otherStageText.trim().ifBlank { EggStage.OTHER.displayName }
+            else -> stage.name
+        }
+
+    val stageDisplayName: String?
+        get() = when (stage) {
+            null -> null
+            EggStage.OTHER -> otherStageText.trim().ifBlank { EggStage.OTHER.displayName }
+            else -> stage.displayName
         }
 }

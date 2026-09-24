@@ -17,6 +17,7 @@ data class VerificationSheetActions(
     val onSpeciesConfirmed: (Boolean) -> Unit = {},
     val onSpeciesSelected: (EggSpecies) -> Unit = {},
     val onStageSelected: (EggStage) -> Unit = {},
+    val onOtherStageChanged: (String) -> Unit = {},
     val onOtherSpeciesChanged: (String) -> Unit = {},
     val onDetectionPrev: () -> Unit = {},
     val onDetectionNext: () -> Unit = {},
@@ -36,6 +37,7 @@ data class VerificationSheetActions(
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit = { _, _ -> },
     val onAddedStageSelected: (Int, EggStage) -> Unit = { _, _ -> },
     val onAddedOtherSpeciesChanged: (Int, String) -> Unit = { _, _ -> },
+    val onAddedOtherStageChanged: (Int, String) -> Unit = { _, _ -> },
     /**
      * Starts drawing a box: a redraw on the model box at this finding (`slot` null), or a
      * location for egg `slot` of an added species. Both optional — a box the medtech says is

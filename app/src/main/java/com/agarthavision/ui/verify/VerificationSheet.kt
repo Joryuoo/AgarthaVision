@@ -121,6 +121,7 @@ fun VerificationSheet(
                 onSpeciesConfirmed = viewModel::onSpeciesConfirmed,
                 onSpeciesSelected = viewModel::onSpeciesSelected,
                 onStageSelected = viewModel::onStageSelected,
+                onOtherStageChanged = viewModel::onOtherStageChanged,
                 onOtherSpeciesChanged = viewModel::onOtherSpeciesChanged,
                 onDetectionPrev = viewModel::onDetectionPrev,
                 onDetectionNext = viewModel::onDetectionNext,
@@ -137,6 +138,7 @@ fun VerificationSheet(
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedStageSelected = viewModel::onAddedStageSelected,
                 onAddedOtherSpeciesChanged = viewModel::onAddedOtherSpeciesChanged,
+                onAddedOtherStageChanged = viewModel::onAddedOtherStageChanged,
                 onBeginDraw = viewModel::onBeginDraw,
                 onBoxDrawn = viewModel::onBoxDrawn,
                 onCancelDraw = viewModel::onCancelDraw,
@@ -621,6 +623,8 @@ private fun BoxQuestionChain(
             selectedSpecies = selectedSpecies,
             selectedStage = answers.stage,
             onStageSelected = actions.onStageSelected,
+            otherStageText = answers.otherStageText,
+            onOtherStageTextChanged = actions.onOtherStageChanged,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.STAGE_DROPDOWN)

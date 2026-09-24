@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.verify
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -60,6 +61,32 @@ class FindingTest {
         )
         assertFalse(Finding(prediction(), blank).isComplete)
         assertTrue(Finding(prediction(), blank.copy(otherSpeciesText = "Enterobius")).isComplete)
+    }
+
+    @Test
+    fun `OTHER stage needs its free text`() {
+        val blankStage = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            stage = EggStage.OTHER,
+        )
+        assertFalse(Finding(prediction(), blankStage).isComplete)
+        assertTrue(Finding(prediction(), blankStage.copy(otherStageText = "Larvated")).isComplete)
+    }
+
+    @Test
+    fun `OTHER stage display name uses typed free text`() {
+        val otherStage = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            stage = EggStage.OTHER,
+            otherStageText = "Larvated",
+        )
+        val rows = listOf(Finding(prediction(), otherStage)).toFindingRows()
+        assertEquals(1, rows.size)
+        assertEquals("Larvated", rows[0].stageDisplayName)
     }
 
     @Test
