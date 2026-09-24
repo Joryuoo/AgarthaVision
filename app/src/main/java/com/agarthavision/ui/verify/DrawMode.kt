@@ -38,13 +38,13 @@ import com.agarthavision.ui.theme.AgarthaTheme
  * then scroll back down to learn whether it worked from a button changing its own label. Three
  * costs, all of them landing on someone holding a phone over a microscope.
  *
- * Pinning the frame as a sticky header was the alternative. It was rejected: a pinned square eats
- * half the viewport for the whole session to pay for one moment, and pinning it only while
- * drawing moves the layout under the medtech's finger at the exact instant they are aiming. It
- * also has to shrink the frame to fit, which costs drawing precision — the opposite of the ask.
+ * This mode is about drawing only. Where the frame sits while the medtech reads and answers is a
+ * separate question (14zcqnthuab), and this mode works under any answer to it, because it
+ * replaces the sheet rather than rearranging it. What it guarantees whatever the sheet becomes:
+ * the frame at full width, so the drag is as precise as the screen allows, and nothing moving
+ * under the medtech's finger while they aim.
  *
- * What this keeps from that alternative is context: [caption] names the egg being located, so
- * leaving the sheet never costs the medtech their place.
+ * Leaving the sheet costs the medtech nothing: [drawTargetCaption] names the egg being located.
  *
  * The result is visible where they already are, because the frame they return to now draws the
  * box — see [frameBoxes]. That is 86d4by5n4, and without it this mode would return the medtech
@@ -133,19 +133,23 @@ internal fun DrawModeScreen(
  */
 @Composable
 private fun VerificationUiState.drawTargetCaption(): String {
-    val target = drawTarget ?: return ""
-    val finding = findings.getOrNull(target.findingIndex) ?: return ""
-    val slot = target.slot
-        ?: return stringResource(
+    val target = drawTarget
+    val finding = target?.let { findings.getOrNull(it.findingIndex) }
+    return when {
+        target == null || finding == null -> ""
+        target.slot == null -> stringResource(
             R.string.verify_draw_target_box,
             target.findingIndex + 1,
             frame?.predictions?.size ?: 0,
         )
-    val species = finding.answers.speciesLabel.orEmpty()
-    return stringResource(
-        R.string.verify_locate_egg_row,
-        species,
-        findings.boxedCountOf(species) + slot + 1,
-        findings.fieldTotalOf(species),
-    )
+        else -> {
+            val species = finding.answers.speciesLabel.orEmpty()
+            stringResource(
+                R.string.verify_locate_egg_row,
+                species,
+                findings.boxedCountOf(species) + target.slot + 1,
+                findings.fieldTotalOf(species),
+            )
+        }
+    }
 }
