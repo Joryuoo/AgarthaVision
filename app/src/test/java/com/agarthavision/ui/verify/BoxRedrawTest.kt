@@ -190,6 +190,94 @@ class BoxRedrawTest {
             assertEquals(listOf(drawn, second), vm.state.value.findings[1].answers.drawnBoxes)
         }
 
+    /**
+     * The gap 86d4by5n5 closes. Accepting a box used to be final: `totalsAreConsistent` floors a
+     * species' total at the boxes drawn on it, so a box in the wrong place made its own count
+     * unlowerable, and the only escape was to remove the species card and retype everything.
+     */
+    @Test
+    fun `a drawn box can be discarded without touching the count`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(1, "2")
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(drawn)
+            advanceUntilIdle()
+
+            vm.onRemoveDrawnBox(1, 0)
+            advanceUntilIdle()
+
+            val added = vm.state.value.findings[1].answers
+            assertEquals(emptyList<ImageBox>(), added.drawnBoxes)
+            // The egg is still there, it is just unlocated again.
+            assertEquals(2, added.fieldTotal)
+        }
+
+    /**
+     * Removal has to close the gap it makes, or the boxes stop being packed at the front — the
+     * invariant that makes "lowering the count drops undrawn eggs first" true without a second
+     * rule to enforce it.
+     */
+    @Test
+    fun `removing a box shifts the later ones down a slot`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val second = ImageBox(x = 40f, y = 40f, width = 10f, height = 10f)
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(1, "3")
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(drawn)
+            vm.onBeginDraw(1, 1)
+            vm.onBoxDrawn(second)
+            advanceUntilIdle()
+
+            vm.onRemoveDrawnBox(1, 0)
+            advanceUntilIdle()
+
+            assertEquals(listOf(second), vm.state.value.findings[1].answers.drawnBoxes)
+        }
+
+    /** A draw aimed at a slot that just shifted would land the next box on the wrong egg. */
+    @Test
+    fun `removing a box cancels a draw aimed at or past it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(1, "3")
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(drawn)
+            vm.onBeginDraw(1, 1)
+            advanceUntilIdle()
+
+            vm.onRemoveDrawnBox(1, 0)
+            advanceUntilIdle()
+
+            assertFalse(vm.state.value.isDrawing)
+        }
+
+    /** A model box is never removed, only replaced or marked wrong (C8). */
+    @Test
+    fun `a model box cannot be removed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(frame())
+            vm.onBeginDraw(0, null)
+            vm.onBoxDrawn(drawn)
+            advanceUntilIdle()
+
+            vm.onRemoveDrawnBox(0, 0)
+            advanceUntilIdle()
+
+            assertEquals(drawn, vm.state.value.findings[0].answers.drawnBox)
+        }
+
     @Test
     fun `a slot beyond the eggs that species claims cannot be drawn for`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
@@ -281,5 +369,75 @@ class BoxRedrawTest {
             advanceUntilIdle()
 
             assertNull(vm.state.value.findings[0].answers.drawnBox)
+        }
+
+    // ── Taking back a replacement ────────────────────────────────────────
+
+    private fun replaced() = viewModel().also {
+        it.setFrame(frame())
+        it.onQ2Selected(false)
+        it.onBeginDraw(0, null)
+        it.onBoxDrawn(drawn)
+    }
+
+    /**
+     * Removing a replacement takes back the medtech's box and nothing else. The row still says
+     * the model misplaced its box, which is a complete answer, and the model's box is untouched.
+     */
+    @Test
+    fun `removing a replacement leaves the model's box marked misplaced`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+
+            vm.onRemoveReplacementBox(0)
+            advanceUntilIdle()
+
+            val finding = vm.state.value.findings[0]
+            assertNull(finding.answers.drawnBox)
+            assertFalse(finding.answers.boxReplaced)
+            assertEquals(false, finding.answers.isBoxCorrect)
+            assertEquals(frame().predictions[0], finding.prediction)
+        }
+
+    /** With no human box on the row, the latch has nothing left to protect. */
+    @Test
+    fun `once the replacement is gone Q2 can be ticked again`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+            vm.onRemoveReplacementBox(0)
+
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.findings[0].answers.isBoxCorrect)
+        }
+
+    @Test
+    fun `redrawing a replacement moves it and keeps Q2 latched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+            val moved = ImageBox(x = 120f, y = 90f, width = 40f, height = 30f)
+
+            vm.onBeginDraw(0, null)
+            vm.onBoxDrawn(moved)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(moved, answers.drawnBox)
+            assertTrue(answers.boxReplaced)
+            assertEquals(false, answers.isBoxCorrect)
+        }
+
+    @Test
+    fun `removing a replacement from a row with none changes nothing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(frame())
+            val before = vm.state.value.findings
+
+            vm.onRemoveReplacementBox(0)
+            advanceUntilIdle()
+
+            assertEquals(before, vm.state.value.findings)
         }
 }

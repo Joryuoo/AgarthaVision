@@ -255,17 +255,18 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `changing an earlier answer resets the species confirmation`() =
+    fun `a misplaced box keeps the species confirmation`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             vm.onSpeciesConfirmed(true)
 
-            // A genuine change: the box is in the wrong place after all.
+            // The box is in the wrong place after all - but it holds the same egg, so what Q3
+            // said about that egg still stands. See QuestionChainResetTest.
             vm.onQ2Selected(false)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
-            assertEquals(null, vm.state.value.findings[0].answers.species)
+            assertEquals(true, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, vm.state.value.findings[0].answers.species)
         }
 
     /**

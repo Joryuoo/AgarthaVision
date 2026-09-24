@@ -46,4 +46,18 @@ data class VerificationSheetActions(
     /** The medtech accepted a drawn box, already in the model's centre-based image space. */
     val onBoxDrawn: (ImageBox) -> Unit = {},
     val onCancelDraw: () -> Unit = {},
+    /**
+     * Discards the box on egg `slot` of the added species at this finding, leaving the count
+     * alone. Only reachable where a box exists, and never on a model box.
+     */
+    val onRemoveDrawnBox: (Int, Int) -> Unit = { _, _ -> },
+    /**
+     * Discards the medtech's replacement for the model box at this finding. The model's box comes
+     * back, still marked misplaced; the model's own box is never removed.
+     */
+    val onRemoveReplacementBox: (Int) -> Unit = {},
+    /** Leave the sample after all, dropping the unsubmitted edits the dialog warned about. */
+    val onConfirmLeave: () -> Unit = {},
+    /** Stay on the sample, edits intact. */
+    val onDismissLeave: () -> Unit = {},
 )

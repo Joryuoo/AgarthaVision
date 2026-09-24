@@ -47,6 +47,8 @@ internal object VerifyTestTags {
      */
     const val DISCARD_DIALOG_CONFIRM = "discard_dialog_confirm"
     const val DISCARD_DIALOG_DISMISS = "discard_dialog_dismiss"
+    const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
+    const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
     /** Custom-species dialog opened by [SPECIES_CHIP_OTHER]. */
     const val CUSTOM_SPECIES_FIELD = "custom_species_field"
@@ -87,8 +89,15 @@ internal object VerifyTestTags {
     const val DRAW_ACCEPT = "draw_accept"
     const val DRAW_CANCEL = "draw_cancel"
 
-    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    /** The full-screen surface a box is drawn on, and the line naming what it is for. */
+    const val DRAW_MODE = "draw_mode"
+    const val DRAW_MODE_TARGET = "draw_mode_target"
+
+    /** Redraw the box, offered whenever Q2 is unticked, replaced or not. */
     const val REDRAW_BOX = "redraw_box"
+
+    /** Discards a replaced box, offered beside the redraw once one has been drawn. */
+    const val REMOVE_REPLACEMENT_BOX = "remove_replacement_box"
 
     /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
     const val BOX_REPLACED_NOTE = "box_replaced_note"
@@ -163,6 +172,10 @@ internal object VerifyTestTags {
      * naming only the row would collide across every egg under it.
      */
     fun drawBox(findingIndex: Int, slot: Int): String = "draw_box_" + findingIndex + "_" + slot
+
+    /** Discards the box already drawn on egg [slot] of the added species at [findingIndex]. */
+    fun removeDrawnBox(findingIndex: Int, slot: Int): String =
+        "remove_drawn_box_" + findingIndex + "_" + slot
 
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.
