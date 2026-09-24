@@ -8,6 +8,7 @@ import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.SampleStatus
@@ -88,7 +89,6 @@ class OpenVerificationTargetUseCaseTest {
         y: Float = 240f,
         classLabel: String = "Ascaris",
         expertClass: String? = null,
-        speciesTouched: Boolean = true,
     ) = DetectionEntity(
         detectionId = detectionIdFor(sampleId, ordinal),
         sampleId = sampleId,
@@ -100,12 +100,14 @@ class OpenVerificationTargetUseCaseTest {
         bboxH = 30f,
         verdict = verdict.value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = speciesTouched,
     )
 
-    private suspend fun stub(detections: List<DetectionEntity>) {
-        whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+    private suspend fun stub(
+        detections: List<DetectionEntity>,
+        predictionsJson: String? = null,
+    ) {
+        whenever(sampleDao.getSampleById(sampleId))
+            .thenReturn(syncedSample().copy(predictionsJson = predictionsJson))
         whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(detections)
         whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(emptyList())
         whenever(resolveImageSource(any())).thenReturn(
@@ -124,8 +126,6 @@ class OpenVerificationTargetUseCaseTest {
         bboxH = x?.let { 12f },
         verdict = DetectionVerdict.CONFIRMED.value,
         expertClass = species,
-        verifiedByUser = true,
-        speciesTouched = true,
     )
 
     /**
@@ -248,11 +248,9 @@ class OpenVerificationTargetUseCaseTest {
         }
 
     /**
-     * The model's original geometry does not survive the sync — the remote `samples` table has no
-     * predictions_json column — so a geometry comparison cannot see that a box was replaced. A
-     * BOX_INCORRECT verdict is the durable statement that the model localised it wrong, and it
-     * locks Q2 on its own. Stricter than the comparison, never looser, and the training label
-     * survives the trip.
+     * A BOX_INCORRECT row that carries a box carries the medtech's redraw — the mapper no longer
+     * keeps the rejected one — so it reopens locked at "No" wherever the predictions came from,
+     * here rebuilt from the rows themselves.
      */
     @Test
     fun `a box the model got wrong stays locked on a device that cannot compare geometry`() =
@@ -298,8 +296,6 @@ class OpenVerificationTargetUseCaseTest {
                 bboxH = null,
                 verdict = DetectionVerdict.CONFIRMED.value,
                 expertClass = null,
-                verifiedByUser = true,
-                speciesTouched = true,
             )
             stub(listOf(boxDetection(0), added))
 
@@ -312,27 +308,19 @@ class OpenVerificationTargetUseCaseTest {
     //
     // `speciesConfirmed` is not a column. It has to be derived on reopen, and leaving it at its
     // null default drew every reopened row as "this is NOT an Ascaris egg" with no picker under
-    // it to say otherwise. The trap is the correction: tapping the checkbox sets
-    // `speciesTouched`, so the natural fix writes `species_touched = 1` on a row no human ever
-    // adjudicated - a C7 violation reachable by doing the obvious thing. Hence the pair of
-    // assertions in the first test: the flag must come back true, and `speciesTouched` must not
-    // move with it.
+    // it to say otherwise.
 
     @Test
-    fun `a species the medtech kept reopens confirmed, and still untouched`() =
+    fun `a species the medtech kept reopens confirmed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // expert_class null and species_touched false: the model said Ascaris, the medtech
-            // submitted without objecting. Exactly the row the field test found broken.
-            stub(listOf(boxDetection(0, speciesTouched = false)))
+            // expert_class null: the model said Ascaris, the medtech submitted without objecting.
+            // Exactly the row the field test found broken.
+            stub(listOf(boxDetection(0)))
 
             val answers = useCase(sampleId).getOrThrow().findings[0].answers
 
             assertEquals(true, answers.speciesConfirmed)
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertFalse(
-                "Reopening must not turn 'did not object' into 'a human confirmed this'.",
-                answers.speciesTouched,
-            )
         }
 
     @Test
@@ -345,7 +333,6 @@ class OpenVerificationTargetUseCaseTest {
             // False, not null: false is what opens SpeciesDropdown, with their own choice in it.
             assertEquals(false, answers.speciesConfirmed)
             assertEquals(EggSpecies.HOOKWORM, answers.species)
-            assertTrue("The override was a deliberate assertion.", answers.speciesTouched)
         }
 
     @Test
@@ -379,17 +366,12 @@ class OpenVerificationTargetUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Q2 "No" does not short-circuit Q3 - a box in the wrong place still holds a real
             // egg that has to be named - so the BOX_INCORRECT branch needs the flag too.
-            stub(
-                listOf(
-                    boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT, speciesTouched = false),
-                ),
-            )
+            stub(listOf(boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT)))
 
             val answers = useCase(sampleId).getOrThrow().findings[0].answers
 
             assertEquals(false, answers.isBoxCorrect)
             assertEquals(true, answers.speciesConfirmed)
-            assertFalse(answers.speciesTouched)
         }
 
     @Test
@@ -420,5 +402,85 @@ class OpenVerificationTargetUseCaseTest {
             val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
 
             assertNull(added.answers.speciesConfirmed)
+        }
+
+    // ── Box provenance (14zcqnthrx6 / 14zcqnthrx8) ───────────────────────────
+
+    /** The model's output as the capturing device, or a pull from `predictions`, stores it. */
+    private fun predictionsJson(vararg xs: Float): String = Gson().toJson(
+        xs.map { x ->
+            PredictionDto(classLabel = "Ascaris", confidence = 0.87f, x = x, y = 240f, width = 40f, height = 30f)
+        },
+    )
+
+    private fun rejectedUnredrawn(ordinal: Int) = boxDetection(ordinal, verdict = DetectionVerdict.BOX_INCORRECT)
+        .copy(bboxX = null, bboxY = null, bboxW = null, bboxH = null)
+
+    /**
+     * A box the medtech said is misplaced and did not redraw is stored with no geometry. It
+     * reopens as exactly that: Q2 "No", nothing drawn, and Q2 free — nobody replaced anything.
+     */
+    @Test
+    fun `a rejected box nobody redrew reopens with Q2 No and nothing drawn`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(rejectedUnredrawn(0)), predictionsJson = predictionsJson(320f))
+
+            val finding = useCase(sampleId).getOrThrow().findings.single()
+
+            assertEquals(320f, finding.prediction?.x)
+            assertEquals(false, finding.answers.isBoxCorrect)
+            assertNull(finding.answers.drawnBox)
+            assertFalse(finding.answers.boxReplaced)
+        }
+
+    /**
+     * On BOX_INCORRECT a stored box *is* the redraw, read off the row. The old comparison
+     * against the model's geometry is gone, so this holds however close the redraw sits to it.
+     */
+    @Test
+    fun `a stored box on a BOX_INCORRECT row is the redraw`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(
+                listOf(boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT, x = 320.2f)),
+                predictionsJson = predictionsJson(320f),
+            )
+
+            val answers = useCase(sampleId).getOrThrow().findings.single().answers
+
+            assertTrue(answers.boxReplaced)
+            assertEquals(320.2f, answers.drawnBox?.x)
+        }
+
+    /**
+     * **The regression the rebuild would otherwise introduce.** A rejected box with no geometry
+     * in the middle of the frame must not be skipped: that would slide ordinal 2 into slot 1,
+     * reopen it against ordinal 1's detection, and write its ruling onto the wrong row on
+     * re-submit. The rebuild stops instead, and every prediction it does return sits on its own
+     * ordinal.
+     */
+    @Test
+    fun `rebuilding predictions stops at a row with no box rather than shifting later ones`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(listOf(boxDetection(0, x = 100f), rejectedUnredrawn(1), boxDetection(2, x = 300f)))
+
+            val target = useCase(sampleId).getOrThrow()
+
+            assertEquals(listOf(100f), target.frame.predictions.map { it.x })
+            assertEquals(100f, target.findings.single { it.prediction != null }.prediction?.x)
+        }
+
+    /** With the model's output on the device, nothing is rebuilt and every box is present. */
+    @Test
+    fun `stored predictions are used whole even when a row has no box`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            stub(
+                listOf(boxDetection(0, x = 100f), rejectedUnredrawn(1), boxDetection(2, x = 300f)),
+                predictionsJson = predictionsJson(100f, 200f, 300f),
+            )
+
+            val findings = useCase(sampleId).getOrThrow().findings
+
+            assertEquals(listOf(100f, 200f, 300f), findings.map { it.prediction?.x })
+            assertEquals(listOf(true, false, true), findings.map { it.answers.isBoxCorrect })
         }
 }

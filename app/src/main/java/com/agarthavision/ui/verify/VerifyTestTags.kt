@@ -8,6 +8,7 @@ package com.agarthavision.ui.verify
  * reason. Anything here is a contract with `src/test/java/.../ui/verify/` — renaming
  * a tag means updating the tests in the same change.
  */
+@Suppress("TooManyFunctions")
 internal object VerifyTestTags {
     /** [SheetActionRow]'s confirm button — "Submit" at both sheet call sites. */
     const val SHEET_PRIMARY_ACTION = "sheet_primary_action"
@@ -47,6 +48,8 @@ internal object VerifyTestTags {
      */
     const val DISCARD_DIALOG_CONFIRM = "discard_dialog_confirm"
     const val DISCARD_DIALOG_DISMISS = "discard_dialog_dismiss"
+    const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
+    const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
     /** Custom-species dialog opened by [SPECIES_CHIP_OTHER]. */
     const val CUSTOM_SPECIES_FIELD = "custom_species_field"
@@ -73,6 +76,11 @@ internal object VerifyTestTags {
      */
     const val SPECIES_DROPDOWN = "species_dropdown"
 
+    /** Developmental stage picker, shown when selected species has stages. */
+    const val STAGE_DROPDOWN = "stage_dropdown"
+
+    const val OTHER_STAGE_FIELD = "other_stage_field"
+
 
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
@@ -84,8 +92,15 @@ internal object VerifyTestTags {
     const val DRAW_ACCEPT = "draw_accept"
     const val DRAW_CANCEL = "draw_cancel"
 
-    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    /** The full-screen surface a box is drawn on, and the line naming what it is for. */
+    const val DRAW_MODE = "draw_mode"
+    const val DRAW_MODE_TARGET = "draw_mode_target"
+
+    /** Redraw the box, offered whenever Q2 is unticked, replaced or not. */
     const val REDRAW_BOX = "redraw_box"
+
+    /** Discards a replaced box, offered beside the redraw once one has been drawn. */
+    const val REMOVE_REPLACEMENT_BOX = "remove_replacement_box"
 
     /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
     const val BOX_REPLACED_NOTE = "box_replaced_note"
@@ -151,6 +166,23 @@ internal object VerifyTestTags {
     fun addedSpeciesSummary(index: Int): String = "added_species_summary_" + index
     fun addedSpeciesForm(index: Int): String = "added_species_form_" + index
 
+    /** Wraps the left-side name/stage/warning column on the summary card at [index]. */
+    fun addedSpeciesSummaryText(index: Int): String = "added_species_summary_text_" + index
+
+    /** The species name line on the summary card at [index]. */
+    fun addedSpeciesSummaryName(index: Int): String = "added_species_summary_name_" + index
+
+    /** The stage line on the summary card at [index], present only when a stage is shown. */
+    fun addedSpeciesSummaryStage(index: Int): String = "added_species_summary_stage_" + index
+
+    /** The egg-count text on the summary card at [index]. */
+    fun addedSpeciesSummaryCount(index: Int): String = "added_species_summary_count_" + index
+
+    /** Stage picker on the added finding at [index]. */
+    fun addedStageDropdown(index: Int): String = "added_stage_dropdown_" + index
+
+    fun addedOtherStageField(index: Int): String = "added_other_stage_field_" + index
+
     /**
      * Draw / redraw affordance for egg [slot] of the added species at [findingIndex].
      *
@@ -158,6 +190,10 @@ internal object VerifyTestTags {
      * naming only the row would collide across every egg under it.
      */
     fun drawBox(findingIndex: Int, slot: Int): String = "draw_box_" + findingIndex + "_" + slot
+
+    /** Discards the box already drawn on egg [slot] of the added species at [findingIndex]. */
+    fun removeDrawnBox(findingIndex: Int, slot: Int): String =
+        "remove_drawn_box_" + findingIndex + "_" + slot
 
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.

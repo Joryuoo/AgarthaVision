@@ -50,7 +50,7 @@ Room-only or Room-different:
 | `image_path` | Room-only. The on-device file. Postgres has no such column | `SampleEntity.kt:72` |
 | `storage_path` | **nullable** in Room until upload succeeds; NOT NULL remotely | `SampleEntity.kt:75` |
 | `status` | **Room/domain only.** `flagged`/`verified`/`synced`/`sync_failed`. No Postgres column exists | `SampleEntity.kt:89`, `domain/model/SampleStatus.kt:13-18` |
-| `predictions_json` | Room-only cache of the raw inference payload; **nulled on verify** | `SampleEntity.kt:110`, `data/local/dao/SampleDao.kt:104` |
+| `predictions_json` | Room-only form of the model's output — the local store of [`Prediction`](Prediction.md). Kept through verification; pushed as `predictions` rows and restored from them on pull. A pull never overwrites it with null | `SampleEntity.kt:110`, `data/local/dao/SampleDao.kt:83` |
 | `image_width` / `image_height` | Room-only, from the inference response | `SampleEntity.kt:113-116` |
 | `deleted_at` | Epoch millis, **synced**. Null means live | `SampleEntity.kt:134`, `supabase/migrations/0001_init.sql:202` |
 
@@ -78,6 +78,8 @@ prediction cache are all absent from it.
 ## Connected to
 
 - **Owned by** [`Session`](Session.md) and, remotely, [`Profile`](Profile.md).
+- **Owns** [`Prediction`](Prediction.md), 1 → many, CASCADE
+  (`supabase/migrations/0004_predictions.sql`). Only a model frame has any.
 - **Owns** [`Detection`](Detection.md), 1 → many, CASCADE
   (`supabase/migrations/0001_init.sql:226`). Zero detections is legal.
 - **Owns** [`Finding`](Finding.md), 1 → many, CASCADE

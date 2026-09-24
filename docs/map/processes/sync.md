@@ -6,7 +6,8 @@ Pushing local rows to Supabase. Foreground, trigger-based, best-effort.
 **Output** — remote rows, a Storage object per sample, and updated local sync state.
 
 **consumes** [`Patient`](../objects/Patient.md), [`Session`](../objects/Session.md),
-[`Sample`](../objects/Sample.md), [`Detection`](../objects/Detection.md), [`Report`](../objects/Report.md)
+[`Sample`](../objects/Sample.md), [`Prediction`](../objects/Prediction.md),
+[`Detection`](../objects/Detection.md), [`Report`](../objects/Report.md)
 **produces** [`StorageObject`](../objects/StorageObject.md)
 
 ## Movement — one sample
@@ -22,9 +23,14 @@ Runs inline at the end of [`validate`](validate.md).
 4. **Upload** to `samples/{auth-user-id}/{sample_id}.jpg` with `upsert = true`. The user id
    comes from the live session, not from the Room row, which is what keeps the object key
    inside the RLS-permitted folder (`data/supabase/SampleRemoteDataSource.kt:35-39`).
-5. **Insert the sample row**, then the detection rows if any
-   (`data/supabase/SampleRemoteDataSource.kt:40-43`). Verdicts are uppercased on the way out
-   (`data/supabase/SampleRemoteDataSource.kt:94`).
+5. **Upsert the sample row, then its predictions, then its detections** — the FK chain, in one
+   call (`data/supabase/SampleRemoteDataSource.kt:43`). Predictions are built from
+   `predictions_json` and written insert-if-absent, because a model's output never changes and
+   `predictions` grants no UPDATE policy. Each detection carries `prediction_id` for the
+   prediction at its own ordinal, null for an egg the medtech added. When the device holds no
+   model output for the sample, `prediction_id` is **left out of the payload** rather than sent
+   as null, so a link the server already has survives. Verdicts are uppercased on the way out.
+   Every write is idempotent, so a pass that fails part-way converges on retry.
 6. **Record the outcome.** Success writes `status = synced` and the returned storage path;
    failure writes `sync_failed` (`data/supabase/SyncSampleUseCase.kt:41-48`). Nothing is
    rolled back and nothing is retried here.
@@ -84,6 +90,15 @@ and is repaired from the disk rather than trusted.
 
 ## Hits
 
+- **The pull restores `predictions_json`.** The server's sample row has no such column, so a
+  pulled row keeps the device's own copy, and `pullChildRowsFor` then folds a whole set of
+  `predictions` rows back into it — fetched before detections, so a failure writes no detection
+  without its model output. A set with a missing ordinal is ignored
+  (`domain/usecase/sync/FetchRemoteDataUseCase.kt:379`, `:430`).
+- **Deploy order.** `0004_predictions.sql` must be applied before a build carrying this change
+  syncs: until it is, every sample push and pull fails on the missing table. Older builds are
+  unaffected by the migration — they never name the new column, and supabase-kt ignores
+  unknown keys on read.
 - **The insert row is the contract.** A new column that is not added to `PatientInsertRow`,
   `SessionInsertRow`, `SampleInsertRow`, or `ReportInsertRow` never reaches Postgres, with no error
   (`data/supabase/PatientRemoteDataSource.kt`,

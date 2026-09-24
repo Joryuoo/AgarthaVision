@@ -34,12 +34,15 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.boxedCountOf
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
@@ -294,6 +297,21 @@ private fun AddedFindingCard(
                 .padding(bottom = 10.dp),
         )
 
+        val addedSpecies = finding.answers.species
+        if (addedSpecies != null && EggStage.forSpecies(addedSpecies).isNotEmpty()) {
+            StageDropdown(
+                selectedSpecies = addedSpecies,
+                selectedStage = finding.answers.stage,
+                otherStageText = finding.answers.otherStageText,
+                onStageSelected = { actions.onAddedStageSelected(index, it) },
+                onOtherStageTextChanged = { actions.onAddedOtherStageChanged(index, it) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(VerifyTestTags.addedStageDropdown(index))
+                    .padding(bottom = 10.dp),
+            )
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
@@ -333,6 +351,16 @@ private fun AddedFindingCard(
     }
 }
 
+/**
+ * The egg/parasite stage shown on the compact summary card, or `null` when the card should
+ * stay a single-line card.
+ *
+ * Only shown for species that actually have stages (`EggStage.forSpecies` non-empty) — a stale
+ * stage value left over from an earlier species selection never surfaces here.
+ */
+private fun VerificationAnswers.summaryStageText(): String? =
+    stageDisplayName?.takeIf { species != null && EggStage.forSpecies(species).isNotEmpty() }
+
 @Composable
 private fun AddedFindingSummary(
     index: Int,
@@ -352,6 +380,7 @@ private fun AddedFindingSummary(
         null -> stringResource(R.string.verify_added_species_not_chosen)
         else -> species.displayName
     }
+    val stageText = finding.answers.summaryStageText()
     val cardModifier = if (isUnfinished) {
         modifier
             .fillMaxWidth()
@@ -370,6 +399,7 @@ private fun AddedFindingSummary(
         species == null -> colors.textTertiary
         else -> colors.textPrimary
     }
+    val stageColor = if (isUnfinished) colors.textSecondary else colors.onAccent
     val countColor = if (isUnfinished) colors.textPrimary else colors.onAccent
 
     Row(
@@ -386,13 +416,32 @@ private fun AddedFindingSummary(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(end = 8.dp),
+                .padding(end = 8.dp)
+                .testTag(VerifyTestTags.addedSpeciesSummaryText(index)),
         ) {
             Text(
                 text = speciesName,
                 color = speciesColor,
-                fontSize = 13.sp,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.testTag(VerifyTestTags.addedSpeciesSummaryName(index)),
             )
+            if (stageText != null) {
+                Text(
+                    text = stageText,
+                    color = stageColor,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .testTag(VerifyTestTags.addedSpeciesSummaryStage(index)),
+                )
+            }
             if (isUnfinished) {
                 Text(
                     text = stringResource(R.string.verify_added_species_unfinished),
@@ -404,8 +453,9 @@ private fun AddedFindingSummary(
         Text(
             text = pluralStringResource(R.plurals.verify_added_species_eggs, total, total),
             color = countColor,
-            fontSize = 13.sp,
+            fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
+            modifier = Modifier.testTag(VerifyTestTags.addedSpeciesSummaryCount(index)),
         )
     }
 }
@@ -493,12 +543,26 @@ private fun LocateEggsSection(
                         modifier = Modifier.weight(1f),
                     )
                     DrawBoxAction(
+                        icon = if (slot.box == null) BoxIcons.draw else BoxIcons.redraw,
                         label = stringResource(
                             if (slot.box == null) R.string.verify_draw_box else R.string.verify_redraw_box,
                         ),
                         tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
                         onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
                     )
+                    // Offered only where there is a box to discard. Accepting one used to be
+                    // final: the species' total is floored at the boxes drawn on it, so a box in
+                    // the wrong place made its own count unlowerable and the only way out was to
+                    // remove the species and retype it. Removing leaves the count alone — the egg
+                    // is still there, it simply goes back to unlocated.
+                    if (slot.box != null) {
+                        DrawBoxAction(
+                            icon = BoxIcons.remove,
+                            label = stringResource(R.string.verify_remove_box),
+                            tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
+                            onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },
+                        )
+                    }
                 }
             }
         }

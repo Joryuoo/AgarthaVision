@@ -255,17 +255,18 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `changing an earlier answer resets the species confirmation`() =
+    fun `a misplaced box keeps the species confirmation`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             vm.onSpeciesConfirmed(true)
 
-            // A genuine change: the box is in the wrong place after all.
+            // The box is in the wrong place after all - but it holds the same egg, so what Q3
+            // said about that egg still stands. See QuestionChainResetTest.
             vm.onQ2Selected(false)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
-            assertEquals(null, vm.state.value.findings[0].answers.species)
+            assertEquals(true, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, vm.state.value.findings[0].answers.species)
         }
 
     /**
@@ -636,7 +637,6 @@ class VerificationViewModelTest {
             val added = vm.state.value.findings[1].answers
             assertEquals(EggSpecies.HOOKWORM, added.species)
             assertEquals(4, added.fieldTotal)
-            assertEquals(true, added.speciesTouched)
         }
 
     @Test
@@ -701,36 +701,12 @@ class VerificationViewModelTest {
             assertEquals(0, vm.state.value.expandedFindingIndex)
         }
 
+
+    // Where the species comes from (86d4ab4tq / 86d4auj84)
+
+    /** A box opens fully pre-filled, which is what lets a correct model cost zero taps. */
     @Test
-    fun `re-picking the species already showing still counts as touched`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Once the field is pre-filled from the model, this re-pick is the only signal
-            // separating "I agree" from "I never looked" - and detections is the corpus.
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
-
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
-            advanceUntilIdle()
-
-            assertEquals(true, vm.state.value.findings[0].answers.speciesTouched)
-        }
-
-
-    // Where the species comes from, and the provenance it needs (86d4ab4tq / 86d4auj84)
-
-    /**
-     * A box opens fully pre-filled, and **untouched**.
-     *
-     * Both halves matter. The pre-fill is what lets a correct model cost zero taps; the untouched
-     * flag is what keeps that from entering the retraining corpus as a human judgement. A seeded
-     * species is the model's own answer sitting in the slot a human answer is read from, and
-     * `species_touched` is the only thing that tells the two apart.
-     */
-    @Test
-    fun `a box opens pre-filled from the model, and untouched`() =
+    fun `a box opens pre-filled from the model`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
@@ -741,20 +717,6 @@ class VerificationViewModelTest {
             assertEquals(true, answers.isBoxCorrect)
             assertEquals(true, answers.speciesConfirmed)
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertFalse("Nobody has agreed with this yet.", answers.speciesTouched)
-        }
-
-    @Test
-    fun `confirming a pre-filled species is what marks it touched`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            assertFalse(vm.state.value.findings[0].answers.speciesTouched)
-
-            vm.onSpeciesConfirmed(true)
-            advanceUntilIdle()
-
-            assertTrue(vm.state.value.findings[0].answers.speciesTouched)
         }
 
     @Test
@@ -770,12 +732,6 @@ class VerificationViewModelTest {
 
             val answers = vm.state.value.findings[0].answers
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertTrue(
-                "A yes is a deliberate assertion: the medtech read the suggestion and agreed " +
-                    "with it. detections doubles as the retraining corpus, so a species with " +
-                    "no human behind it must never look like one with.",
-                answers.speciesTouched,
-            )
         }
 
     @Test
@@ -793,22 +749,6 @@ class VerificationViewModelTest {
             val answers = vm.state.value.findings[0].answers
             assertEquals(null, answers.species)
             assertEquals(null, answers.speciesConfirmed)
-            assertFalse(answers.speciesTouched)
-        }
-
-    @Test
-    fun `changing the species away and back still reads as touched`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-
-            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
-            advanceUntilIdle()
-
-            val answers = vm.state.value.findings[0].answers
-            assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertTrue("Landing back on the model's answer deliberately is still a choice.", answers.speciesTouched)
         }
 
     @Test

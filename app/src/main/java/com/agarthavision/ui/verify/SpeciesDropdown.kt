@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongParameterList")
 @file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.agarthavision.ui.verify
@@ -16,17 +16,20 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.ui.theme.AgarthaTheme
 
 // Selection state, the two callbacks it raises, the modifier and the suggestion list.
@@ -166,4 +169,104 @@ private fun OtherSpeciesSuggestions(
 
 /** Matches shown at once. See [OtherSpeciesSuggestions]. */
 private const val DISPLAY_LIMIT = 5
+
+@Suppress("LongParameterList")
+@Composable
+fun StageDropdown(
+    selectedSpecies: EggSpecies?,
+    selectedStage: EggStage?,
+    onStageSelected: (EggStage) -> Unit,
+    modifier: Modifier = Modifier,
+    otherStageText: String = "",
+    onOtherStageTextChanged: (String) -> Unit = {},
+) {
+    val stages = remember(selectedSpecies) { EggStage.forSpecies(selectedSpecies) }
+    if (stages.isEmpty()) return
+
+    var expanded by remember { mutableStateOf(false) }
+    var query by remember(selectedStage, selectedSpecies) {
+        mutableStateOf(selectedStage?.getDisplayName(selectedSpecies) ?: "")
+    }
+
+    LaunchedEffect(selectedStage, selectedSpecies) {
+        query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
+    }
+
+    val colors = AgarthaTheme.colors
+    val fieldColors = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = colors.accent,
+        unfocusedBorderColor = colors.borderStrong,
+        focusedContainerColor = colors.surface,
+        unfocusedContainerColor = colors.surface,
+        focusedTextColor = colors.textPrimary,
+        unfocusedTextColor = colors.textPrimary,
+        focusedLabelColor = colors.textSecondary,
+        unfocusedLabelColor = colors.textSecondary,
+    )
+
+    val committedName = selectedStage?.getDisplayName(selectedSpecies) ?: ""
+    val filteredStages = stages.filter { stage ->
+        val displayName = stage.getDisplayName(selectedSpecies)
+        query.isBlank() || query == committedName || displayName.contains(query, ignoreCase = true)
+    }
+
+    Column(modifier = modifier) {
+        ExposedDropdownMenuBox(
+            expanded = expanded,
+            onExpandedChange = { expanded = it },
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = {
+                    query = it
+                    expanded = true
+                },
+                readOnly = false,
+                label = { Text(stringResource(R.string.verify_stage_picker_label)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                colors = fieldColors,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .onFocusChanged { focusState ->
+                        if (!focusState.isFocused) {
+                            expanded = false
+                            query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
+                        }
+                    },
+            )
+            ExposedDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = {
+                    expanded = false
+                    query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
+                },
+            ) {
+                filteredStages.forEach { stage ->
+                    DropdownMenuItem(
+                        text = { Text(stage.getDisplayName(selectedSpecies)) },
+                        onClick = {
+                            query = stage.getDisplayName(selectedSpecies)
+                            onStageSelected(stage)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+        if (selectedStage == EggStage.OTHER) {
+            OutlinedTextField(
+                value = otherStageText,
+                onValueChange = onOtherStageTextChanged,
+                label = { Text(stringResource(R.string.verify_other_stage_label)) },
+                placeholder = { Text(stringResource(R.string.verify_other_stage_hint)) },
+                colors = fieldColors,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(VerifyTestTags.OTHER_STAGE_FIELD),
+            )
+        }
+    }
+}
 

@@ -79,26 +79,21 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the species provenance flag is present and is not verified_by_user`() {
+    fun `detections carry neither species_touched nor verified_by_user`() {
+        // Both dropped at version 22 (14zcqnthrx8). `species_touched` recorded taps rather than
+        // judgements, and `verified_by_user` had been gone from Postgres since legacy 0002.
         val columns = columnsOf("detections")
-        assertTrue(
-            "detections.species_touched is missing — an untouched model pre-fill would be " +
-                "indistinguishable from a deliberate human confirmation in the training corpus.",
-            columns.contains("species_touched"),
-        )
-        // Deliberately a new column rather than reusing the dead one. If verified_by_user has
-        // gone, ticket 86d4akgmf landed and this assertion is the one to delete.
-        assertTrue(columns.contains("verified_by_user"))
+        assertFalse(columns.contains("species_touched"))
+        assertFalse(columns.contains("verified_by_user"))
     }
 
     @Test
-    fun `detections carry no stage column`() {
-        // Not an omission. Staging reverted 86d4a6jwy (9dcfd5d) because the four stages shipped
-        // there were never checked against literature — Ascaris could only be tagged
-        // UNFERTILIZED, the one stage that is never infective. This branch cherry-picked that
-        // commit before the revert existed, so this merge is the exact place it could come back
-        // by accident. It must not.
-        assertFalse(columnsOf("detections").contains("stage"))
+    fun `detections carry a stage column`() {
+        assertTrue(
+            "detections.stage is missing from v$EXPECTED_VERSION — ticket 86d4a6jwy stage classification.",
+            columnsOf("detections").contains("stage"),
+        )
+        assertFalse(isNotNull("detections", "stage"))
     }
 
     @Test
@@ -327,6 +322,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 19
+        private const val EXPECTED_VERSION = 22
     }
 }
