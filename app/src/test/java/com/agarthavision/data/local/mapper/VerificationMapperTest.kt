@@ -411,11 +411,18 @@ class VerificationMapperTest {
 
     /**
      * Two different stages of one species is the case the stage segment exists for at all
-     * (14zcqnthz6e), and it must keep getting distinct, stage-aware ids even with the fix above
-     * that spares a lone staged card from an unnecessary id change.
+     * (14zcqnthz6e), and they must keep getting distinct ids even with the fix above that spares
+     * a lone staged card from an unnecessary id change.
+     *
+     * **Only one of them is stage-aware.** Neither card is pinned via
+     * [VerificationAnswers.isPrimaryAdded] here - both are brand new, as a fresh session's cards
+     * are before anything is persisted for their species - so [Finding.primaryAddedIndexBySpecies]
+     * falls back to its deterministic list-order rule and elects the first, `cf`, primary: it
+     * keeps the plain, stage-less id. `df` gets the stage-aware id, which is what disambiguates
+     * it from `cf` in the first place.
      */
     @Test
-    fun `two cards of the same species at different stages still get distinct stage-aware ids`() {
+    fun `two cards of the same species at different stages get one primary and one stage-aware id`() {
         val cf = Finding(
             prediction = null,
             answers = VerificationAnswers(
@@ -438,7 +445,7 @@ class VerificationMapperTest {
         val dfEntity = entities.single { it.stage == EggStage.DECORTICATED_FERTILIZED.name }
 
         assertEquals(
-            addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = "CORTICATED_FERTILIZED"),
+            addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = null),
             cfEntity.detectionId,
         )
         assertEquals(

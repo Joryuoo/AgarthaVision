@@ -8,9 +8,14 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.data.local.mapper.addedDetectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
+import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +34,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
@@ -1437,5 +1443,175 @@ class VerificationViewModelTest {
             val sent = captor.firstValue
             assertEquals(1, sent.size)
             assertEquals(5, sent[0].answers.fieldTotal)
+        }
+
+    // ── primary-pin regressions (14zcqnthz6e, pass 4) ─────────────────────────
+
+    /**
+     * Bug 1. A card pinned non-primary (`false`) for its old species must not carry that pin
+     * into a species it is renamed to — a stale `false` would make `primaryAddedIndexBySpecies`
+     * treat the new species as "already decided, no primary here" even though this is now its
+     * only card, permanently blocking it from ever becoming primary.
+     */
+    @Test
+    fun `renaming a pinned non-primary card resets its pin and it becomes primary for the new species`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val sampleId = "sample-1"
+            val frame = makeIdentifiedFrame(sampleId, predictions = 0)
+            val vm = viewModel()
+
+            // Reopen-style prior: two Ascaris rows, one already pinned non-primary (`false`),
+            // as OpenVerificationTargetUseCase would set for one of two-or-more added rows.
+            val pinnedNonPrimary = Finding(
+                prediction = null,
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.DECORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                    isPrimaryAdded = false,
+                ),
+            )
+            vm.setFrame(
+                frame,
+                prior = VerificationTarget(
+                    frame = frame,
+                    imageSource = SampleImageSource.RemoteSignedUrl(url = "u", cacheKey = "k"),
+                    findings = listOf(pinnedNonPrimary),
+                    missedEgg = null,
+                    userNote = "",
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(false, vm.state.value.findings[0].answers.isPrimaryAdded)
+
+            // Rename to Hookworm - a species with no prior history or pins at all.
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertNull(
+                "The stale non-primary pin from Ascaris must not survive the rename.",
+                vm.state.value.findings[0].answers.isPrimaryAdded,
+            )
+
+            val entity = vm.state.value.findings.toDetectionEntities(sampleId).single()
+            assertEquals(
+                "The lone Hookworm card must resolve to the plain, stage-less id.",
+                addedDetectionIdFor(sampleId, "Hookworm", 0, stageKey = null),
+                entity.detectionId,
+            )
+        }
+
+    /**
+     * Bug 2, the important one. Two fresh same-species cards submitted together in one session
+     * pin their election on success. Removing the primary card afterwards - still the same
+     * session, no DB reopen - and resubmitting must not re-elect the stage-aware survivor as
+     * primary: its id must not flip, or the row already synced under it gets orphaned remotely.
+     */
+    @Test
+    fun `removing a primary card after an in-session submit does not flip its sibling's id on resubmit`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.success("sample-1"))
+            val sampleId = "sample-1"
+            val frame = makeIdentifiedFrame(sampleId, predictions = 0)
+            val vm = viewModel()
+            vm.setFrame(frame)
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.DECORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.findings.size)
+
+            val captor = argumentCaptor<List<Finding>>()
+            vm.onSubmit()
+            advanceUntilIdle()
+            verify(submitVerificationUseCase, times(1)).invoke(any(), captor.capture(), anyOrNull(), anyOrNull())
+            val firstEntities = captor.firstValue.toDetectionEntities(sampleId)
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val bId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            assertEquals(setOf(plainId, bId), firstEntities.map { it.detectionId }.toSet())
+
+            // The write-back onSuccess pinned the election onto state - carried forward here as
+            // what a still-open session already holds in memory, never re-derived from disk.
+            vm.setFrame(
+                frame,
+                prior = VerificationTarget(
+                    frame = frame,
+                    imageSource = SampleImageSource.RemoteSignedUrl(url = "u", cacheKey = "k"),
+                    findings = vm.state.value.findings,
+                    missedEgg = null,
+                    userNote = "",
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.findings.size)
+
+            // Remove the card that resolved to the plain id (the CF card, index 0).
+            vm.onRemoveFinding(0)
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.findings.size)
+
+            vm.onSubmit()
+            advanceUntilIdle()
+            verify(submitVerificationUseCase, times(2)).invoke(any(), captor.capture(), anyOrNull(), anyOrNull())
+            val secondEntity = captor.lastValue.toDetectionEntities(sampleId).single()
+
+            assertEquals(
+                "The surviving sibling's id must stay stage-aware, not flip to the plain id " +
+                    "it never held.",
+                bId,
+                secondEntity.detectionId,
+            )
+        }
+
+    /**
+     * A failed submit must not lock in the primary election it computed - `_state` keeps
+     * whatever pin state it had going in, so a retry re-derives cleanly instead of acting on an
+     * election nothing actually persisted.
+     */
+    @Test
+    fun `a failed submit does not write resolved primary pins back to state`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.failure(RuntimeException("DB error")))
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.DECORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+
+            assertTrue(
+                "Nothing pinned yet - a fresh session's cards start undecided.",
+                vm.state.value.findings.all { it.answers.isPrimaryAdded == null },
+            )
+
+            vm.onSubmit()
+            advanceUntilIdle()
+
+            assertTrue(
+                "A failed submit must leave the pins undecided, not lock in the election it " +
+                    "computed for a write that never happened.",
+                vm.state.value.findings.all { it.answers.isPrimaryAdded == null },
+            )
         }
 }

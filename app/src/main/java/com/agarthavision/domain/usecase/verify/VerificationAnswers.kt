@@ -94,6 +94,27 @@ data class VerificationAnswers(
     /** Developmental stage chosen by the medtech for STH species. */
     val stage: EggStage? = null,
     val otherStageText: String = "",
+    /**
+     * Whether this added card permanently owns its species' plain, stage-less detection id.
+     *
+     * Tri-state and deliberately not a plain `Boolean`. `null` is "undecided" — a card added
+     * fresh this session with no persisted history yet to consult. `true` and `false` are pins
+     * set once by [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] from
+     * what is already on disk when a verified sample is reopened: `true` when this card came
+     * back as the *only* added row of its species (so it already holds, or will keep, the plain
+     * id), `false` when it came back as one of two-or-more (so it already holds a stage-aware
+     * id).
+     *
+     * **A `false` pin must never flip to `true` later in the same session**, even if every
+     * sibling of that species is subsequently removed and this card ends up alone. Re-electing it
+     * as primary would move the plain id onto a row that is not the one currently holding it
+     * remotely — the same orphan-row double-count `14zcqnthz6e` exists to prevent, just triggered
+     * by an in-session removal instead of a later reopen. See
+     * `VerificationMapper.toDetectionEntities` for where this is read, and
+     * `Finding.primaryAddedIndexBySpecies` for how a still-undecided (`null`) species falls back
+     * to a stable, list-order rule.
+     */
+    val isPrimaryAdded: Boolean? = null,
 ) {
     /**
      * True when the species and stage questions are answered.

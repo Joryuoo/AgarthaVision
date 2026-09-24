@@ -21,6 +21,7 @@ import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.withResolvedPrimaryPins
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -505,11 +506,17 @@ class VerificationViewModel @Inject constructor(
      */
     private fun VerificationAnswers.withSpecies(species: EggSpecies): VerificationAnswers {
         val keepsStage = stage != null && stage in EggStage.forSpecies(species)
+        val speciesChanged = species != this.species
         return copy(
             species = species,
             otherSpeciesText = "",
             stage = stage.takeIf { keepsStage },
             otherStageText = if (keepsStage) otherStageText else "",
+            // A pin was derived for the OLD species (from persisted DB state or a prior submit).
+            // Once the species actually changes, that pin is meaningless for the new species and
+            // must be re-derived from scratch, or a stale `false` pin can block the list-order
+            // fallback from electing any primary for the new species.
+            isPrimaryAdded = if (speciesChanged) null else isPrimaryAdded,
         )
     }
 
@@ -1027,17 +1034,28 @@ class VerificationViewModel @Inject constructor(
         val snapshot = _state.value
         if (!snapshot.canSubmit) return
 
+        // Which added card is primary for each species is decided right here, the same election
+        // toDetectionEntities is about to make from this very list. Writing it back onto state
+        // now — not just using it transiently for this submit — is what stops a later in-session
+        // removal (no reopen involved) from re-electing a different card as primary on the next
+        // submit; see `Finding.withResolvedPrimaryPins`.
+        val findingsToSubmit = snapshot.findings.consolidateAddedTwins().withResolvedPrimaryPins()
+
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                findings = snapshot.findings.consolidateAddedTwins(),
+                findings = findingsToSubmit,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
             ).fold(
                 onSuccess = {
                     currentFrame = null
-                    _state.update { it.copy(isSubmitting = false) }
+                    // Only now, once the pins this submit acted on are actually durable, does the
+                    // election they encode become the pin future in-session edits must respect.
+                    // Writing it earlier (or on failure, below) would lock in a decision nothing
+                    // was ever persisted for.
+                    _state.update { it.copy(isSubmitting = false, findings = findingsToSubmit) }
                     _events.emit(VerificationEvent.Dismiss)
                 },
                 onFailure = { throwable ->

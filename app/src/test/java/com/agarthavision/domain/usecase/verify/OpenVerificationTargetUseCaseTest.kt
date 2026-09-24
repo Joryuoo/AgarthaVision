@@ -355,6 +355,76 @@ class OpenVerificationTargetUseCaseTest {
         }
 
     /**
+     * Compose check (14zcqnthz6e, pass 4): reopen-derived pins must agree with what a prior
+     * in-session submit's [withResolvedPrimaryPins] would have written back. Two rows survive
+     * for one species - the lone-row rule that pins reopen elections is `rowCountBySpecies == 1`,
+     * so with two rows neither can be trusted alone; the plain-id row is still the one that must
+     * come back pinned primary, and the stage-aware row pinned non-primary, matching exactly
+     * what [primaryAddedIndexBySpecies] would have elected for this same pair the moment they
+     * were first submitted together.
+     */
+    @Test
+    fun `reopen pins match what an earlier in-session submit's election would have produced`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    // The primary card's row kept the plain, stage-less id (stageKey = null);
+                    // the non-primary sibling's row is stage-aware - exactly what toDetectionEntities
+                    // derives once primaryAddedIndexBySpecies has elected the CF card primary.
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = null),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = "DECORTICATED_FERTILIZED"),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.filter { it.prediction == null }
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val df = added.first { it.answers.stage == EggStage.DECORTICATED_FERTILIZED }
+
+            assertEquals(true, cf.answers.isPrimaryAdded)
+            assertEquals(false, df.answers.isPrimaryAdded)
+
+            // Round-trip: resubmitting these two rows completely unedited must reproduce the
+            // exact ids already on disk - the plain id for the row that already has it, the
+            // stage-aware one for the other - or an unedited resubmit silently relocates a
+            // synced row and orphans it remotely (the class of bug 14zcqnthz6e exists to close).
+            val resubmitted = added.toDetectionEntities(sampleId)
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val stageAwareId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            assertEquals(
+                "An unedited resubmit of a two-row reopen must not move the plain-id row.",
+                setOf(plainId, stageAwareId),
+                resubmitted.map { it.detectionId }.toSet(),
+            )
+        }
+
+    /**
      * A card written before stage-aware ids existed used the species-only id. Reopening it must
      * still recover its drawn boxes rather than showing the right total with the geometry
      * silently missing.

@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.FindingRow
 import com.agarthavision.domain.usecase.verify.SpeciesStageKey
+import com.agarthavision.domain.usecase.verify.primaryAddedIndexBySpecies
 import com.agarthavision.domain.usecase.verify.speciesStageKey
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
@@ -155,30 +156,39 @@ private fun findingId(sampleId: String, row: FindingRow): String {
  * one species+stage, and this is the backstop: emitting both would derive the same slot ids
  * twice and REPLACE would keep whichever came last.
  *
- * **The stage segment is only derived when a species genuinely has more than one added card.**
- * Old data was saved under species-only ids, before stage-aware ids existed. Deriving a
- * stage-aware id unconditionally for every staged card meant resubmitting an *unchanged* old
- * card wrote it under a brand-new id and deleted the old one — locally harmless, but the sync
- * pipeline only ever upserts remotely and never deletes, so Supabase ends up holding both the
- * old and new rows and double-counts the species on the next pull. A single added card per
- * species keeps resolving to the old, stage-less id it always has, so an unedited resubmit
- * writes nothing new. The stage segment only switches on once a second card of the same species
- * exists to disambiguate — which is the case the id had to be made stage-aware for in the first
- * place (14zcqnthz6e).
+ * **The stage segment is only derived for a species' non-primary added cards.** Old data was
+ * saved under species-only ids, before stage-aware ids existed. Deriving a stage-aware id
+ * unconditionally for every staged card meant resubmitting an *unchanged* old card wrote it
+ * under a brand-new id and deleted the old one — locally harmless, but the sync pipeline only
+ * ever upserts remotely and never deletes, so Supabase ends up holding both the old and new rows
+ * and double-counts the species on the next pull.
+ *
+ * One added card per species — its **primary**, from [Finding.primaryAddedIndexBySpecies] — keeps
+ * resolving to the old, stage-less id it always has, so an unedited resubmit writes nothing new.
+ * The stage segment switches on for every *other* added card of that species, to disambiguate —
+ * which is the case the id had to be made stage-aware for in the first place (14zcqnthz6e).
+ *
+ * **Which card is primary is decided once, on reopen, and then pinned — not re-derived from the
+ * card count on every call.** Re-deriving it from "is this species' card count currently 1"
+ * reintroduced the same orphan-row bug one step removed: a species resubmitted alone today under
+ * the plain id, then joined by a same-species sibling in a *later* reopen session, would flip
+ * that already-synced card's id from plain to stage-aware on the very next submit — deleting the
+ * synced row locally while the upsert-only server keeps it forever. See
+ * [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] for where the pin is
+ * set from what is already on disk, and [VerificationAnswers.isPrimaryAdded] for why a card
+ * pinned non-primary is never re-elected primary later, even once every sibling of its species is
+ * removed.
  */
 fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
     val emitted = mutableSetOf<SpeciesStageKey>()
-    val stagedCardCountBySpecies = mapNotNull { it.answers.speciesStageKey }
-        .distinct()
-        .groupingBy { it.species }
-        .eachCount()
+    val primaryIndexBySpecies = primaryAddedIndexBySpecies()
     return flatMapIndexed { ordinal, finding ->
         val key = finding.answers.speciesStageKey
         when {
             finding.prediction != null -> listOf(finding.toDetectionEntity(sampleId, ordinal))
             key == null || !emitted.add(key) -> emptyList()
             else -> {
-                val useStageSegment = (stagedCardCountBySpecies[key.species] ?: 0) > 1
+                val useStageSegment = primaryIndexBySpecies[key.species] != ordinal
                 (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
                     .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot, useStageSegment) }
             }

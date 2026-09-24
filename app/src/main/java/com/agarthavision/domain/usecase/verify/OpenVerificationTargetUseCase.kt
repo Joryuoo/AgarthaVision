@@ -5,6 +5,7 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDomain
@@ -106,32 +107,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
         }
         val rowCountBySpecies = survivingRows.groupingBy { (row, _) -> row.species }.eachCount()
         val addedFindings = survivingRows.map { (row, _) ->
-            val (parsedStage, otherStage) = parseStage(row.stage)
-            val answers = VerificationAnswers(
-                species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
-                otherSpeciesText = row.species.takeIf {
-                    EggSpecies.fromClassLabel(it) == null
-                }.orEmpty(),
-                stage = parsedStage,
-                otherStageText = otherStage,
-                fieldTotal = row.eggCount,
-            )
-            // The old species-only id is only a safe fallback when this species has exactly one
-            // added row: with two stages of one species, an old-format id cannot say which of
-            // them its boxes belong to, so guessing would risk handing them to the wrong stage.
-            val allowLegacyFallback = rowCountBySpecies[row.species] == 1
-            Finding(
-                prediction = null,
-                answers = answers.copy(
-                    drawnBoxes = recoverDrawnBoxes(
-                        sampleId,
-                        row.species,
-                        answers.stageLabel,
-                        allowLegacyFallback,
-                        storedById,
-                    ),
-                ),
-            )
+            recoverAddedFinding(sampleId, row, rowCountBySpecies, storedById)
         }
 
         VerificationTarget(
@@ -147,6 +123,63 @@ class OpenVerificationTargetUseCase @Inject constructor(
             // must not have one invented on the medtech's behalf.
             missedEgg = entity.needsReannotation.takeIf { detections.isNotEmpty() },
             userNote = entity.userNote.orEmpty(),
+        )
+    }
+
+    /**
+     * Rebuilds one added finding from its `sample_species_findings` row.
+     *
+     * A lone row of a species (`rowCountBySpecies == 1`) is always pinned primary going
+     * forward, regardless of what id its own boxes currently happen to be stored under: being
+     * alone is what makes primary correct, so even a lone row that somehow already carries a
+     * stage-aware id (an inconsistent earlier state) resolves to the plain id from here on.
+     *
+     * With two-or-more rows of a species, `rowCountBySpecies == 1` is false for *every* row of
+     * that species - it cannot be used to find the one row that already holds the plain id.
+     * Instead, each row's own on-disk id is checked directly: a row whose stage-aware slot-0 id
+     * is already present in `storedById` already carries a stage segment and is pinned
+     * non-primary. The remaining row - the one with no stage-aware id of its own - is the one
+     * whose boxes (if any) are still filed under the old, stage-less id, so it is pinned primary
+     * and keeps that id. A pinned-non-primary row is never re-elected primary later just because
+     * siblings are removed - see [VerificationAnswers.isPrimaryAdded].
+     */
+    private fun recoverAddedFinding(
+        sampleId: String,
+        row: SampleSpeciesFindingEntity,
+        rowCountBySpecies: Map<String, Int>,
+        storedById: Map<String, DetectionEntity>,
+    ): Finding {
+        val (parsedStage, otherStage) = parseStage(row.stage)
+        val answers = VerificationAnswers(
+            species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
+            otherSpeciesText = row.species.takeIf {
+                EggSpecies.fromClassLabel(it) == null
+            }.orEmpty(),
+            stage = parsedStage,
+            otherStageText = otherStage,
+            fieldTotal = row.eggCount,
+        )
+        val isLoneRow = rowCountBySpecies[row.species] == 1
+        val ownsStageAwareId = answers.stageLabel?.let { stageKey ->
+            storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey))
+        } ?: false
+        val isPrimaryAdded = when {
+            isLoneRow -> true
+            ownsStageAwareId -> false
+            else -> storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey = null))
+        }
+        return Finding(
+            prediction = null,
+            answers = answers.copy(
+                isPrimaryAdded = isPrimaryAdded,
+                drawnBoxes = recoverDrawnBoxes(
+                    sampleId,
+                    row.species,
+                    answers.stageLabel,
+                    isPrimaryAdded,
+                    storedById,
+                ),
+            ),
         )
     }
 
@@ -293,9 +326,11 @@ class OpenVerificationTargetUseCase @Inject constructor(
      * [allowLegacyFallback] says it is safe.** Rows written before this change (or by an earlier
      * build of this feature) derived their id with no stage segment at all; without the
      * fallback, a card reopened after that would show its total but silently lose the boxes
-     * already drawn on it. [allowLegacyFallback] is false when this species has more than one
-     * added row — an old-format id cannot say which stage's boxes it holds, so guessing would
-     * risk handing them to the wrong card.
+     * already drawn on it. [allowLegacyFallback] is the row's own primary pin
+     * (`recoverAddedFinding`'s `isPrimaryAdded`) — the plain id can only ever belong to the one
+     * row of a species that owns it, so only that row is allowed to go looking for boxes under
+     * it; a non-primary sibling's own id is already stage-aware, and guessing at the plain id on
+     * its behalf would risk handing it boxes that belong to a different card.
      */
     private fun recoverDrawnBoxes(
         sampleId: String,
