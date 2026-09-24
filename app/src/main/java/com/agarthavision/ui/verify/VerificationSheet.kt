@@ -72,6 +72,8 @@ import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -465,16 +467,18 @@ private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.verify_leave_title)) },
         text = { Text(stringResource(R.string.verify_leave_body)) },
         confirmButton = {
-            TextButton(
+            AgarthaButton(
                 onClick = onConfirm,
+                variant = AgarthaButtonVariant.Destructive,
                 modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
             ) {
-                Text(stringResource(R.string.verify_leave_confirm), color = AgarthaTheme.colors.danger)
+                Text(stringResource(R.string.verify_leave_confirm))
             }
         },
         dismissButton = {
-            TextButton(
+            AgarthaButton(
                 onClick = onDismiss,
+                variant = AgarthaButtonVariant.Secondary,
                 modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
             ) {
                 Text(stringResource(R.string.verify_leave_dismiss))
