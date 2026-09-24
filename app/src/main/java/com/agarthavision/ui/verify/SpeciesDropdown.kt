@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming")
+@file:Suppress("FunctionNaming", "LongParameterList")
 @file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.agarthavision.ui.verify
@@ -196,12 +196,15 @@ private fun OtherSpeciesSuggestions(
 /** Matches shown at once. See [OtherSpeciesSuggestions]. */
 private const val DISPLAY_LIMIT = 5
 
+@Suppress("LongParameterList")
 @Composable
 fun StageDropdown(
     selectedSpecies: EggSpecies?,
     selectedStage: EggStage?,
     onStageSelected: (EggStage) -> Unit,
     modifier: Modifier = Modifier,
+    otherStageText: String = "",
+    onOtherStageTextChanged: (String) -> Unit = {},
 ) {
     val stages = remember(selectedSpecies) { EggStage.forSpecies(selectedSpecies) }
     if (stages.isEmpty()) return
@@ -276,6 +279,19 @@ fun StageDropdown(
                     )
                 }
             }
+        }
+        if (selectedStage == EggStage.OTHER) {
+            OutlinedTextField(
+                value = otherStageText,
+                onValueChange = onOtherStageTextChanged,
+                label = { Text(stringResource(R.string.verify_other_stage_label)) },
+                placeholder = { Text(stringResource(R.string.verify_other_stage_hint)) },
+                colors = fieldColors,
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(VerifyTestTags.OTHER_STAGE_FIELD),
+            )
         }
     }
 }

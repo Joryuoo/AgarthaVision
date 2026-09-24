@@ -94,8 +94,10 @@ private fun derive(key: String): String =
  * always is — nothing writes a stage since 86d4a6jwy was reverted. If the stage work returns,
  * this key and `sample_species_findings_unique_staged` have to move together.
  */
-private fun findingId(sampleId: String, row: FindingRow): String =
-    UUID.nameUUIDFromBytes("$sampleId#row#${row.species}#${row.stage?.name.orEmpty()}".toByteArray()).toString()
+private fun findingId(sampleId: String, row: FindingRow): String {
+    val stageKey = row.stageDisplayName ?: row.stage?.name.orEmpty()
+    return UUID.nameUUIDFromBytes("$sampleId#row#${row.species}#$stageKey".toByteArray()).toString()
+}
 
 /**
  * Every detection row a reviewed frame writes — **one row per egg**, which is what the table
@@ -195,7 +197,7 @@ private fun Finding.toDetectionEntity(
         expertClass = expertClass,
         verifiedByUser = true,
         speciesTouched = answers.speciesTouched,
-        stage = answers.stage?.name,
+        stage = answers.stageLabel,
     )
 }
 
@@ -205,6 +207,6 @@ fun FindingRow.toFindingEntity(sampleId: String): SampleSpeciesFindingEntity =
         findingId = findingId(sampleId, this),
         sampleId = sampleId,
         species = species,
-        stage = stage?.name,
+        stage = stageDisplayName ?: stage?.name,
         eggCount = eggCount,
     )

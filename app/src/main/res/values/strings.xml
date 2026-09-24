@@ -40,6 +40,8 @@
     <string name="verify_q3">This egg is %1$s</string>
     <string name="verify_species_picker_label">Which species is it?</string>
     <string name="verify_stage_picker_label">Developmental stage</string>
+    <string name="verify_other_stage_label">Other stage</string>
+    <string name="verify_other_stage_hint">Type the developmental stage</string>
     <string name="verify_yes">Yes</string>
     <string name="verify_no">No</string>
     <string name="verify_other_label">Other species</string>
