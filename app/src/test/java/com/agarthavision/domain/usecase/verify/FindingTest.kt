@@ -297,7 +297,7 @@ class FindingTest {
         assertEquals("Enterobius", rows[0].species)
     }
 
-    // ── primary-pin resolution (14zcqnthz6e, pass 4) ──────────────────────────
+    // ── primary-pin resolution (14zcqnthz6e) ──────────────────────────
 
     /**
      * Running the resolution twice on an already-resolved list must be a no-op: `onSubmit` reads

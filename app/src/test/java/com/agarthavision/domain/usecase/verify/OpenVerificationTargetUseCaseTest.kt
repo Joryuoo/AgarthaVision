@@ -355,7 +355,7 @@ class OpenVerificationTargetUseCaseTest {
         }
 
     /**
-     * Compose check (14zcqnthz6e, pass 4): reopen-derived pins must agree with what a prior
+     * Compose check (14zcqnthz6e): reopen-derived pins must agree with what a prior
      * in-session submit's [withResolvedPrimaryPins] would have written back. Two rows survive
      * for one species - the lone-row rule that pins reopen elections is `rowCountBySpecies == 1`,
      * so with two rows neither can be trusted alone; the plain-id row is still the one that must
@@ -499,6 +499,69 @@ class OpenVerificationTargetUseCaseTest {
                     "writing a new stage-aware id here is exactly what leaves the old id behind " +
                     "on the server for the next pull to double-count.",
                 oldId,
+                resubmitted.single().detectionId,
+            )
+        }
+
+    /**
+     * **Regression guard (14zcqnthz6e).** A species can be down to a single surviving row whose
+     * boxes are already filed under a stage-aware id - not just via a fresh brand-new card, but
+     * because it used to have a sibling that pinned it non-primary, and that sibling was later
+     * removed (see `withResolvedPrimaryPins`/`SubmitVerificationUseCase` for how a sibling
+     * removal alone, with no edit to this row, reaches this exact state). `isLoneRow` must not
+     * override that: the row must come back pinned non-primary and keep its stage-aware id, or
+     * an unedited resubmit moves it to the plain id, leaving the stage-aware rows stranded
+     * remotely for the next pull to double-count.
+     */
+    @Test
+    fun `a lone row that already owns a stage-aware id stays pinned non-primary on reopen`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val stageAwareId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection(
+                        "Ascaris lumbricoides",
+                        0,
+                        x = 30f,
+                        stageKey = "DECORTICATED_FERTILIZED",
+                    ),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val added = reopened.findings.single { it.prediction == null }
+
+            assertEquals(
+                "The lone row already owns a stage-aware id, so it must not be re-pinned primary.",
+                false,
+                added.answers.isPrimaryAdded,
+            )
+
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+            assertEquals(1, resubmitted.size)
+            assertEquals(
+                "An unedited resubmit must keep the same stage-aware id, not flip to the plain one.",
+                stageAwareId,
                 resubmitted.single().detectionId,
             )
         }

@@ -1445,7 +1445,7 @@ class VerificationViewModelTest {
             assertEquals(5, sent[0].answers.fieldTotal)
         }
 
-    // ── primary-pin regressions (14zcqnthz6e, pass 4) ─────────────────────────
+    // ── primary-pin regressions (14zcqnthz6e) ─────────────────────────
 
     /**
      * Bug 1. A card pinned non-primary (`false`) for its old species must not carry that pin

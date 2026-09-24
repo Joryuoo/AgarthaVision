@@ -53,7 +53,6 @@ import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
-import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**

@@ -129,19 +129,23 @@ class OpenVerificationTargetUseCase @Inject constructor(
     /**
      * Rebuilds one added finding from its `sample_species_findings` row.
      *
-     * A lone row of a species (`rowCountBySpecies == 1`) is always pinned primary going
-     * forward, regardless of what id its own boxes currently happen to be stored under: being
-     * alone is what makes primary correct, so even a lone row that somehow already carries a
-     * stage-aware id (an inconsistent earlier state) resolves to the plain id from here on.
+     * A row's own on-disk id is checked first: a row whose stage-aware slot-0 id is already
+     * present in `storedById` already carries a stage segment and is pinned non-primary,
+     * regardless of how many rows of that species currently survive. This matters because a
+     * species can genuinely end up with exactly one surviving row that already owns a
+     * stage-aware id - e.g. a sibling that used to pin it non-primary was later removed - and
+     * that row must stay pinned non-primary so its id does not flip back to plain on the next
+     * unedited resubmit (which would leave its old stage-aware rows stranded remotely while a
+     * duplicate set gets written under the plain id).
      *
-     * With two-or-more rows of a species, `rowCountBySpecies == 1` is false for *every* row of
-     * that species - it cannot be used to find the one row that already holds the plain id.
-     * Instead, each row's own on-disk id is checked directly: a row whose stage-aware slot-0 id
-     * is already present in `storedById` already carries a stage segment and is pinned
-     * non-primary. The remaining row - the one with no stage-aware id of its own - is the one
-     * whose boxes (if any) are still filed under the old, stage-less id, so it is pinned primary
-     * and keeps that id. A pinned-non-primary row is never re-elected primary later just because
-     * siblings are removed - see [VerificationAnswers.isPrimaryAdded].
+     * Only once a row does not already own a stage-aware id does row count decide the pin: a
+     * lone row (`rowCountBySpecies == 1`) with no stage-aware id of its own is pinned primary -
+     * being alone with no stage segment already on disk is what makes primary correct, whether
+     * it is a brand-new species or a legacy plain-id row. With two-or-more such rows, each row's
+     * own on-disk id is checked directly: the one row with no stage-aware id of its own is the
+     * one whose boxes (if any) are still filed under the old, stage-less id, so it is pinned
+     * primary and keeps that id. A pinned-non-primary row is never re-elected primary later just
+     * because siblings are removed - see [VerificationAnswers.isPrimaryAdded].
      */
     private fun recoverAddedFinding(
         sampleId: String,
@@ -164,8 +168,8 @@ class OpenVerificationTargetUseCase @Inject constructor(
             storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey))
         } ?: false
         val isPrimaryAdded = when {
-            isLoneRow -> true
             ownsStageAwareId -> false
+            isLoneRow -> true
             else -> storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey = null))
         }
         return Finding(
