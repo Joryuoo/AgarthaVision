@@ -1,5 +1,7 @@
 package com.agarthavision.ui.verify
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
@@ -7,6 +9,8 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -14,9 +18,12 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
@@ -26,6 +33,7 @@ import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -853,13 +861,14 @@ class VerificationSheetContentTest {
      * find the egg they had just decided to aim at.
      */
     @Test
-    fun `drawing replaces the sheet with a surface holding the frame and nothing else`() {
+    fun `drawing covers the sheet with a screen holding the frame and nothing else`() {
         setContent(state().copy(drawTarget = DrawTarget(findingIndex = 0)))
 
         composeRule.onNodeWithTag(VerifyTestTags.DRAW_MODE).assertExists()
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).assertExists()
         composeRule.onNodeWithTag(VerifyTestTags.DRAW_ACCEPT).assertExists()
-        // The sheet itself is gone, so nothing to scroll past and nothing to lose your place in.
+        // The sheet is still composed underneath, so its scroll survives, but none of it is
+        // reachable while the draw screen covers it.
         composeRule.onNodeWithTag(VerifyTestTags.QUESTION_Q1).assertDoesNotExist()
         composeRule.onNodeWithTag(VerifyTestTags.ADD_SPECIES).assertDoesNotExist()
     }
@@ -926,6 +935,110 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.removeDrawnBox(0, 0)).performClick()
 
         assertEquals(listOf(0 to 0), r.removedBoxes)
+    }
+
+    /**
+     * Save box and Cancel sit under the frame. Laid over the bottom of the image, they covered the
+     * pixels being drawn on, so an egg near the lower edge could not be boxed.
+     */
+    @Test
+    fun `the draw buttons sit below the frame, not on it`() {
+        setContent(state().copy(drawTarget = DrawTarget(findingIndex = 0)))
+
+        for (tag in listOf(VerifyTestTags.DRAW_ACCEPT, VerifyTestTags.DRAW_CANCEL)) {
+            composeRule.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag(VerifyTestTags.FRAME_PREVIEW)))
+                .assertDoesNotExist()
+            val button = composeRule.onNodeWithTag(tag).getBoundsInRoot()
+            val frame = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+            assertTrue("$tag must be under the frame", button.top >= frame.bottom)
+        }
+    }
+
+    @Test
+    fun `save box waits for a box to be dragged out`() {
+        setContent(state().copy(drawTarget = DrawTarget(findingIndex = 0)))
+
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_ACCEPT).assertIsNotEnabled()
+    }
+
+    /**
+     * The draw screen is its own screen, not a see-through layer. A tap on its empty space used
+     * to land on whatever was underneath it.
+     */
+    @Test
+    fun `a tap on the draw screen never reaches the sheet under it`() {
+        val recorder = Recorder()
+        val holder = mutableStateOf(state())
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(state = holder.value, actions = actionsFor(recorder))
+            }
+        }
+        val back = composeRule.onNodeWithContentDescription("Back").fetchSemanticsNode().boundsInRoot
+
+        holder.value = holder.value.copy(drawTarget = DrawTarget(findingIndex = 0))
+        composeRule.waitForIdle()
+        composeRule.onRoot().performTouchInput { click(back.center) }
+
+        assertEquals("The sheet's back control took a tap aimed at the draw screen.", 0, recorder.cancels)
+    }
+
+    /**
+     * A sheet whose draw actions really open and close the draw screen, so a test can follow the
+     * medtech out to it and back.
+     */
+    private fun setDrawableContent(initial: VerificationUiState): Recorder {
+        val recorder = Recorder()
+        val holder = mutableStateOf(initial)
+        val base = actionsFor(recorder)
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(
+                    state = holder.value,
+                    actions = base.copy(
+                        onBeginDraw = { index, slot ->
+                            holder.value = holder.value.copy(drawTarget = DrawTarget(index, slot))
+                        },
+                        onCancelDraw = { holder.value = holder.value.copy(drawTarget = null) },
+                        onBoxDrawn = { box ->
+                            recorder.drawnBoxes += box
+                            holder.value = holder.value.copy(drawTarget = null)
+                        },
+                    ),
+                )
+            }
+        }
+        return recorder
+    }
+
+    private val misplacedBox = listOf(answered(isEgg = true, isBoxCorrect = false, speciesConfirmed = true))
+
+    @Test
+    fun `cancelling a draw returns to the exact scroll the medtech left`() {
+        setDrawableContent(state(answers = misplacedBox))
+        val redraw = sheetNode(VerifyTestTags.REDRAW_BOX)
+        val before = redraw.getBoundsInRoot()
+
+        redraw.performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_CANCEL).performClick()
+
+        assertEquals(before, composeRule.onNodeWithTag(VerifyTestTags.REDRAW_BOX).getBoundsInRoot())
+    }
+
+    @Test
+    fun `saving a box returns to the top, where the frame and its new box are`() {
+        val r = setDrawableContent(state(answers = misplacedBox))
+        val frameAtTop = composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot()
+
+        sheetNode(VerifyTestTags.NOTE_FIELD)
+        sheetNode(VerifyTestTags.REDRAW_BOX).performClick()
+        composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).performTouchInput {
+            swipe(start = Offset(width * 0.3f, height * 0.3f), end = Offset(width * 0.6f, height * 0.6f))
+        }
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_ACCEPT).assertIsEnabled().performClick()
+
+        assertEquals(1, r.drawnBoxes.size)
+        assertEquals(frameAtTop, composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW).getBoundsInRoot())
     }
 
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(

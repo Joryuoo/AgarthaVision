@@ -12,25 +12,16 @@
 package com.agarthavision.ui.verify
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -41,13 +32,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import kotlin.math.abs
-import com.agarthavision.R
 import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -94,9 +80,11 @@ private const val VOID_DASH_OFF = 8f
 /**
  * The frame, its detection boxes, and — when [isDrawing] — a box the medtech is drawing on it.
  *
- * Drawing is the primitive only: drag to define a rect, then accept or cancel. What the accepted
- * box *means* is the caller's business (PB-14b wires it to a Q2 redraw and to Add Egg), which is
- * why this emits geometry and nothing else.
+ * Drawing is the primitive only: drag to define a rect, and the rect is reported as it changes.
+ * Accepting or cancelling it is the caller's business, and so is what the box *means* (PB-14b wires
+ * it to a Q2 redraw and to Add Egg), which is why this emits geometry and nothing else. The accept
+ * and cancel controls used to sit over the bottom of the frame, on top of the very pixels being
+ * drawn on; [DrawModeScreen] now puts them below it.
  *
  * @param boxes every rectangle to draw, already decided. **Not `frame.predictions`** — that is
  *   what made every hand-drawn box invisible, because a replacement and a located egg both live
@@ -118,10 +106,9 @@ private const val VOID_DASH_OFF = 8f
  *   `SampleRemoteDataSource.toEntity()`, not papering over it here.
  * @param isDrawing true while the caller wants a new box drawn. Turning it off abandons any
  *   draft in progress.
- * @param onBoxDrawn fired when the medtech accepts a draft, carrying the box in **image
- *   coordinates, centre-based** — the same space `Prediction` uses, so the two are
- *   interchangeable downstream.
- * @param onDrawCancelled fired when the medtech backs out instead.
+ * @param onDraftChanged fired as the draft changes, carrying the box in **image coordinates,
+ *   centre-based** — the same space `Prediction` uses, so the two are interchangeable
+ *   downstream. Null when there is no draft to accept.
  */
 @Suppress("CyclomaticComplexMethod", "ComplexCondition")
 @Composable
@@ -133,8 +120,7 @@ internal fun FrameWithBoxes(
     inferenceImageHeight: Int?,
     modifier: Modifier = Modifier,
     isDrawing: Boolean = false,
-    onBoxDrawn: (ImageBox) -> Unit = {},
-    onDrawCancelled: () -> Unit = {},
+    onDraftChanged: (ImageBox?) -> Unit = {},
 ) {
     val sourceW = (inferenceImageWidth ?: CAPTURE_FRAME_SIZE_PX).toFloat().takeIf { it > 0f }
     val sourceH = (inferenceImageHeight ?: CAPTURE_FRAME_SIZE_PX).toFloat().takeIf { it > 0f }
@@ -150,15 +136,34 @@ internal fun FrameWithBoxes(
     }
 
     // The drag, in canvas pixels. Held here rather than hoisted because it is transient
-    // interaction state with no meaning outside the gesture: only the accepted box leaves.
+    // interaction state with no meaning outside the gesture: only the converted box leaves.
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
 
-    // The size the drag was measured in, read back from layout rather than from the draw pass.
-    // The frame can be re-laid-out between the drag and the accept tap - a keyboard opening, the
-    // scroll container settling - and a box converted against a stale size lands somewhere the
-    // medtech did not draw it.
+    // The size the drag was measured in, read back from layout rather than from the draw pass,
+    // so the box is converted against the frame the finger was actually on.
     var frameSize by remember { mutableStateOf(Size.Zero) }
+
+    // Converted as the drag moves rather than on accept, so the caller holds a box it can commit
+    // from a button that sits outside this composable. Read through updated state because the
+    // gesture detector below is attached once and would otherwise keep the first callback.
+    val currentOnDraftChanged by rememberUpdatedState(onDraftChanged)
+    fun reportDraft() {
+        val start = dragStart
+        val end = dragEnd
+        val transform = if (start != null && end != null && sourceW != null && sourceH != null) {
+            frameTransform(frameSize.width, frameSize.height, sourceW, sourceH)
+        } else {
+            null
+        }
+        currentOnDraftChanged(
+            if (start != null && end != null && transform != null) {
+                transform.imageBoxBetween(start.x, start.y, end.x, end.y)
+            } else {
+                null
+            },
+        )
+    }
 
     // Leaving draw mode abandons whatever was half-drawn. Without this, re-entering would
     // resume someone else's drag on a different detection.
@@ -195,10 +200,12 @@ internal fun FrameWithBoxes(
                                     onDragStart = { start ->
                                         dragStart = start
                                         dragEnd = start
+                                        reportDraft()
                                     },
                                     onDrag = { change, _ ->
                                         change.consume()
                                         dragEnd = change.position
+                                        reportDraft()
                                     },
                                 )
                             }
@@ -237,94 +244,5 @@ internal fun FrameWithBoxes(
                 }
             }
         }
-
-        if (isDrawing) {
-            DrawControls(
-                canAccept = dragStart != null && dragEnd != null && sourceW != null && sourceH != null,
-                onAccept = accept@{
-                    val start = dragStart ?: return@accept
-                    val end = dragEnd ?: return@accept
-                    val transform = frameTransform(
-                        frameSize.width,
-                        frameSize.height,
-                        sourceW ?: return@accept,
-                        sourceH ?: return@accept,
-                    ) ?: return@accept
-                    onBoxDrawn(transform.imageBoxBetween(start.x, start.y, end.x, end.y))
-                },
-                onCancel = {
-                    dragStart = null
-                    dragEnd = null
-                    onDrawCancelled()
-                },
-            )
-        }
-    }
-}
-
-/** Accept and cancel, laid over the bottom of the frame while a box is being drawn. */
-@Composable
-private fun BoxScope.DrawControls(
-    canAccept: Boolean,
-    onAccept: () -> Unit,
-    onCancel: () -> Unit,
-) {
-    val colors = AgarthaTheme.colors
-
-    Row(
-        modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .fillMaxWidth()
-            .padding(10.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        DrawControlButton(
-            label = stringResource(R.string.verify_draw_cancel),
-            tag = VerifyTestTags.DRAW_CANCEL,
-            enabled = true,
-            background = colors.surface,
-            foreground = colors.textPrimary,
-            onClick = onCancel,
-            modifier = Modifier.weight(1f),
-        )
-        DrawControlButton(
-            label = stringResource(R.string.verify_draw_accept),
-            tag = VerifyTestTags.DRAW_ACCEPT,
-            enabled = canAccept,
-            background = colors.accent,
-            foreground = colors.onAccent,
-            onClick = onAccept,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
-private fun DrawControlButton(
-    label: String,
-    tag: String,
-    enabled: Boolean,
-    background: Color,
-    foreground: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier
-            .background(
-                if (enabled) background else background.copy(alpha = 0.4f),
-                RoundedCornerShape(12.dp),
-            )
-            .clickable(enabled = enabled, onClick = onClick)
-            .testTag(tag)
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            color = foreground,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
     }
 }
