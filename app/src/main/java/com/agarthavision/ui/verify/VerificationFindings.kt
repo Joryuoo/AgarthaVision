@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -49,7 +50,6 @@ import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.Delete
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -319,6 +319,7 @@ private fun AddedFindingCard(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // The field asks for the **total** for this species, not the eggs beyond the
             // model's boxes. A medtech counting 23 Ascaris against nine boxed ones would
@@ -340,21 +341,19 @@ private fun AddedFindingCard(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier
-                    .weight(1f)
+                    .width(120.dp)
                     .testTag(VerifyTestTags.countField(index)),
             )
 
-            IconButton(
-                onClick = { actions.onRemoveFinding(index) },
-                modifier = Modifier.testTag(VerifyTestTags.removeFinding(index)),
-            ) {
-                Icon(
-                    imageVector = AgarthaIcons.Delete,
-                    contentDescription = stringResource(R.string.verify_remove_species_desc),
-                    tint = AgarthaTheme.colors.danger,
-                    modifier = Modifier.size(22.dp),
-                )
-            }
+            Text(
+                text = stringResource(R.string.verify_remove_species),
+                color = AgarthaTheme.colors.danger,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clickable { actions.onRemoveFinding(index) }
+                    .testTag(VerifyTestTags.removeFinding(index))
+                    .padding(vertical = 10.dp),
+            )
         }
     }
 }

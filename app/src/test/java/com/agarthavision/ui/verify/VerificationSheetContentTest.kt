@@ -1275,15 +1275,15 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `remove control is a trash icon with a content description, not a Remove text link`() {
+    fun `remove control is a Discard text link, not a trash icon`() {
         setContent(
             noModelOutputState(
                 findings = listOf(Finding(answers = VerificationAnswers(fieldTotal = 1))),
             ).copy(expandedFindingIndex = 0),
         )
 
-        composeRule.onNodeWithContentDescription("Remove this species").assertIsDisplayed()
-        composeRule.onNodeWithText("Remove").assertDoesNotExist()
+        sheetNode(VerifyTestTags.removeFinding(0)).assertTextContains("Discard")
+        composeRule.onNodeWithContentDescription("Remove this species").assertDoesNotExist()
     }
 
     /**
