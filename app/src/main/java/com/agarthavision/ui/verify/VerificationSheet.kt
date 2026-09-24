@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
@@ -20,7 +21,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CropFree
 import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -42,8 +46,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -132,6 +138,7 @@ fun VerificationSheet(
                 onBoxDrawn = viewModel::onBoxDrawn,
                 onCancelDraw = viewModel::onCancelDraw,
                 onRemoveDrawnBox = viewModel::onRemoveDrawnBox,
+                onRemoveReplacementBox = viewModel::onRemoveReplacementBox,
                 onConfirmLeave = viewModel::onConfirmLeave,
                 onDismissLeave = viewModel::onDismissLeave,
             ),
@@ -503,8 +510,8 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
  *   right, which is why redrawing is not offered here.
  * - **Unchecked** — "Redraw the box", and it stays optional: unchecked with no redraw is a
  *   complete answer that records a localisation error on its own.
- * - **Unchecked, box replaced** — the affordance is gone (drawing over a drawn box belongs to
- *   the Sample Data Screen) and the checkbox is disabled, because the answer is latched.
+ * - **Unchecked, box replaced** — redraw and remove, and the checkbox is disabled, because the
+ *   answer is latched until the replacement is removed.
  */
 @Composable
 private fun BoxQuestionChain(
@@ -542,14 +549,27 @@ private fun BoxQuestionChain(
     // so keying on false alone left an unticked Q2 with no redraw under it whenever the answer
     // was merely unset - the medtech had to tick and untick it to get the action back.
     //
-    // It disappears once a box has been replaced, because Q2 is latched at "No" from then on and
-    // re-drawing over a drawn box is a different operation (the Sample Data Screen owns that).
-    if (answers.isBoxCorrect != true && !answers.boxReplaced) {
-        DrawBoxAction(
-            label = stringResource(R.string.verify_redraw_box),
-            tag = VerifyTestTags.REDRAW_BOX,
-            onClick = { actions.onBeginDraw(detectionIndex, null) },
-        )
+    // A replaced box keeps the redraw and gains a remove, the same pair an added egg's box has.
+    // A box drawn in the wrong place used to be final here, while the same mistake on an added
+    // egg could be undone. Removing takes back the medtech's box only: the model's comes back
+    // into view, still marked misplaced, because a model box is never removed (C8).
+    if (answers.isBoxCorrect != true) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            DrawBoxAction(
+                icon = BoxIcons.redraw,
+                label = stringResource(R.string.verify_redraw_box),
+                tag = VerifyTestTags.REDRAW_BOX,
+                onClick = { actions.onBeginDraw(detectionIndex, null) },
+            )
+            if (answers.boxReplaced) {
+                DrawBoxAction(
+                    icon = BoxIcons.remove,
+                    label = stringResource(R.string.verify_remove_box),
+                    tag = VerifyTestTags.REMOVE_REPLACEMENT_BOX,
+                    onClick = { actions.onRemoveReplacementBox(detectionIndex) },
+                )
+            }
+        }
     }
     if (answers.boxReplaced) {
         Text(
@@ -661,23 +681,60 @@ internal fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = M
 }
 
 /**
- * A text affordance that starts a drawing gesture on the frame above.
+ * An icon and a one-word label that draw, redraw or remove a box: [BoxIcons] names which.
  *
- * Text rather than a button, and low-key on purpose: drawing is always optional, on both call
- * sites, and a prominent control would read as something the medtech has to do.
+ * The icon makes the action findable at a glance, the label makes it unambiguous — a pencil and
+ * a bin side by side under a question read as decoration until they say what they do. The label
+ * is kept to a word so an egg row still fits its name beside two of these on a small phone.
+ * Still low-key on purpose: drawing is always optional, and a filled button would read as
+ * something the medtech has to do.
+ *
+ * The whole pair is one target, at least 48dp tall. The icon carries no description of its own:
+ * the label beside it is what TalkBack reads, so the action is announced once, not twice.
  */
 @Composable
-internal fun DrawBoxAction(label: String, tag: String, onClick: () -> Unit) {
-    Text(
-        text = label,
-        color = AgarthaTheme.colors.accent,
-        fontSize = 13.sp,
-        fontWeight = FontWeight.SemiBold,
+internal fun DrawBoxAction(
+    icon: ImageVector,
+    label: String,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    val accent = AgarthaTheme.colors.accent
+    Row(
         modifier = Modifier
             .testTag(tag)
-            .clickable(onClick = onClick)
-            .padding(start = 4.dp, top = 2.dp, bottom = 14.dp),
-    )
+            .heightIn(min = 48.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = label,
+            color = accent,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 6.dp),
+        )
+    }
+}
+
+/** One glyph per box action, so the same action looks the same on every row that offers it. */
+internal object BoxIcons {
+    /** Draw a box where there is none yet. */
+    val draw: ImageVector = Icons.Outlined.CropFree
+
+    /** Draw a box again, over one already there. */
+    val redraw: ImageVector = Icons.Outlined.Edit
+
+    /** Discard a box the medtech drew. Never offered on the model's own. */
+    val remove: ImageVector = Icons.Outlined.Delete
 }
 
 /**

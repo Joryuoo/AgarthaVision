@@ -377,6 +377,7 @@ private fun LocateEggsSection(
                         modifier = Modifier.weight(1f),
                     )
                     DrawBoxAction(
+                        icon = if (slot.box == null) BoxIcons.draw else BoxIcons.redraw,
                         label = stringResource(
                             if (slot.box == null) R.string.verify_draw_box else R.string.verify_redraw_box,
                         ),
@@ -390,6 +391,7 @@ private fun LocateEggsSection(
                     // is still there, it simply goes back to unlocated.
                     if (slot.box != null) {
                         DrawBoxAction(
+                            icon = BoxIcons.remove,
                             label = stringResource(R.string.verify_remove_box),
                             tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
                             onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },

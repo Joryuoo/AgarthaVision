@@ -844,6 +844,25 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Takes back a box the medtech drew over one of the model's, leaving the row answering
+     * "the model misplaced this box" with no replacement — a complete answer on its own.
+     *
+     * The same undo an added egg's box has had since 86d4by5n5. Without it a replacement drawn in
+     * the wrong place was final: redrawing could move it, but nothing could say "I have no better
+     * box than the model's after all".
+     *
+     * [VerificationAnswers.boxReplaced] clears with the box. It latches Q2 because a human box
+     * sits on the row, and once none does there is nothing to protect: the medtech may now decide
+     * the model's box was right after all. Q2 itself stays unticked until they say so. The model's
+     * box is untouched either way — it is never removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveReplacementBox(findingIndex: Int) {
+        updateAnswerAt(findingIndex) {
+            if (it.boxReplaced) it.copy(drawnBox = null, boxReplaced = false) else it
+        }
+    }
+
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }

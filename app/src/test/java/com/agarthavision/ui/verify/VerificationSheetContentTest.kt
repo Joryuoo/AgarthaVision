@@ -102,6 +102,7 @@ class VerificationSheetContentTest {
         val drawnBoxes = mutableListOf<ImageBox>()
         var cancelledDraws = 0
         val removedBoxes = mutableListOf<Pair<Int, Int>>()
+        val removedReplacements = mutableListOf<Int>()
         var confirmedLeaves = 0
         var dismissedLeaves = 0
     }
@@ -130,6 +131,7 @@ class VerificationSheetContentTest {
         onBoxDrawn = { r.drawnBoxes += it },
         onCancelDraw = { r.cancelledDraws++ },
         onRemoveDrawnBox = { index, slot -> r.removedBoxes += index to slot },
+        onRemoveReplacementBox = { r.removedReplacements += it },
         onConfirmLeave = { r.confirmedLeaves++ },
         onDismissLeave = { r.dismissedLeaves++ },
     )
@@ -561,6 +563,52 @@ class VerificationSheetContentTest {
         sheetNode(VerifyTestTags.QUESTION_Q2).assertIsNotEnabled()
         sheetNode(VerifyTestTags.BOX_REPLACED_NOTE).assertIsDisplayed()
         assertEquals(emptyList<Boolean>(), r.q2)
+    }
+
+    /** A replaced box is not final: the same redraw-or-remove pair an added egg's box has. */
+    @Test
+    fun `a replaced box offers both redraw and remove`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = false, speciesConfirmed = true).copy(
+                        drawnBox = ImageBox(x = 1f, y = 2f, width = 3f, height = 4f),
+                        boxReplaced = true,
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.REDRAW_BOX).performClick()
+        sheetNode(VerifyTestTags.REMOVE_REPLACEMENT_BOX).performClick()
+
+        assertEquals(listOf(0 to null), r.beganDraw)
+        assertEquals(listOf(0), r.removedReplacements)
+    }
+
+    @Test
+    fun `nothing to remove until a box has been replaced`() {
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = false, speciesConfirmed = true))))
+
+        composeRule.onNodeWithTag(VerifyTestTags.REMOVE_REPLACEMENT_BOX).assertDoesNotExist()
+    }
+
+    /** Each box action is an icon with its word beside it, and that word is what TalkBack reads. */
+    @Test
+    fun `the box actions say what they do beside their icons`() {
+        setContent(
+            state(
+                answers = listOf(
+                    answered(isEgg = true, isBoxCorrect = false, speciesConfirmed = true).copy(
+                        drawnBox = ImageBox(x = 1f, y = 2f, width = 3f, height = 4f),
+                        boxReplaced = true,
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.REDRAW_BOX).assertTextContains("Redraw")
+        sheetNode(VerifyTestTags.REMOVE_REPLACEMENT_BOX).assertTextContains("Remove")
     }
 
     /**

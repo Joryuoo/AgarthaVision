@@ -48,6 +48,11 @@ data class VerificationSheetActions(
      * alone. Only reachable where a box exists, and never on a model box.
      */
     val onRemoveDrawnBox: (Int, Int) -> Unit,
+    /**
+     * Discards the medtech's replacement for the model box at this finding. The model's box comes
+     * back, still marked misplaced; the model's own box is never removed.
+     */
+    val onRemoveReplacementBox: (Int) -> Unit,
     /** Leave the sample after all, dropping the unsubmitted edits the dialog warned about. */
     val onConfirmLeave: () -> Unit,
     /** Stay on the sample, edits intact. */

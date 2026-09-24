@@ -114,6 +114,7 @@ class VerificationPreviewScreenshotTest {
         onBoxDrawn = {},
         onCancelDraw = {},
         onRemoveDrawnBox = { _, _ -> },
+        onRemoveReplacementBox = {},
         onConfirmLeave = {},
         onDismissLeave = {},
     )

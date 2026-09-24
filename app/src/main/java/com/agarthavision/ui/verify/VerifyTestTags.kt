@@ -90,8 +90,11 @@ internal object VerifyTestTags {
     const val DRAW_MODE = "draw_mode"
     const val DRAW_MODE_TARGET = "draw_mode_target"
 
-    /** "Redraw the box", offered once Q2 is answered "No" and before a box has been replaced. */
+    /** Redraw the box, offered whenever Q2 is unticked, replaced or not. */
     const val REDRAW_BOX = "redraw_box"
+
+    /** Discards a replaced box, offered beside the redraw once one has been drawn. */
+    const val REMOVE_REPLACEMENT_BOX = "remove_replacement_box"
 
     /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
     const val BOX_REPLACED_NOTE = "box_replaced_note"

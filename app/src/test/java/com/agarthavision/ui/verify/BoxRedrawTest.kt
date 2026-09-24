@@ -370,4 +370,74 @@ class BoxRedrawTest {
 
             assertNull(vm.state.value.findings[0].answers.drawnBox)
         }
+
+    // ── Taking back a replacement ────────────────────────────────────────
+
+    private fun replaced() = viewModel().also {
+        it.setFrame(frame())
+        it.onQ2Selected(false)
+        it.onBeginDraw(0, null)
+        it.onBoxDrawn(drawn)
+    }
+
+    /**
+     * Removing a replacement takes back the medtech's box and nothing else. The row still says
+     * the model misplaced its box, which is a complete answer, and the model's box is untouched.
+     */
+    @Test
+    fun `removing a replacement leaves the model's box marked misplaced`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+
+            vm.onRemoveReplacementBox(0)
+            advanceUntilIdle()
+
+            val finding = vm.state.value.findings[0]
+            assertNull(finding.answers.drawnBox)
+            assertFalse(finding.answers.boxReplaced)
+            assertEquals(false, finding.answers.isBoxCorrect)
+            assertEquals(frame().predictions[0], finding.prediction)
+        }
+
+    /** With no human box on the row, the latch has nothing left to protect. */
+    @Test
+    fun `once the replacement is gone Q2 can be ticked again`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+            vm.onRemoveReplacementBox(0)
+
+            vm.onQ2Selected(true)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.findings[0].answers.isBoxCorrect)
+        }
+
+    @Test
+    fun `redrawing a replacement moves it and keeps Q2 latched`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = replaced()
+            val moved = ImageBox(x = 120f, y = 90f, width = 40f, height = 30f)
+
+            vm.onBeginDraw(0, null)
+            vm.onBoxDrawn(moved)
+            advanceUntilIdle()
+
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(moved, answers.drawnBox)
+            assertTrue(answers.boxReplaced)
+            assertEquals(false, answers.isBoxCorrect)
+        }
+
+    @Test
+    fun `removing a replacement from a row with none changes nothing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(frame())
+            val before = vm.state.value.findings
+
+            vm.onRemoveReplacementBox(0)
+            advanceUntilIdle()
+
+            assertEquals(before, vm.state.value.findings)
+        }
 }
