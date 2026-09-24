@@ -165,6 +165,7 @@ internal object VerifyTestTags {
 
     fun addedSpeciesSummary(index: Int): String = "added_species_summary_" + index
     fun addedSpeciesForm(index: Int): String = "added_species_form_" + index
+    fun saveFinding(index: Int): String = "save_finding_" + index
 
     /** Wraps the left-side name/stage/warning column on the summary card at [index]. */
     fun addedSpeciesSummaryText(index: Int): String = "added_species_summary_text_" + index

@@ -1215,7 +1215,6 @@ class VerificationSheetContentTest {
 
         sheetNode(VerifyTestTags.LOCATE_TOGGLE).assertIsDisplayed()
         composeRule.onNodeWithText("Locate eggs · 1 of 3 located").assertIsDisplayed()
-        // Closed to start with: the drawing affordances are optional work, kept out of the way.
         composeRule.onNodeWithTag(VerifyTestTags.drawBox(0, 0)).assertDoesNotExist()
     }
 

@@ -231,22 +231,9 @@ fun StageDropdown(
     if (stages.isEmpty()) return
 
     var expanded by remember { mutableStateOf(false) }
-    var query by remember(selectedStage, selectedSpecies) {
-        mutableStateOf(selectedStage?.getDisplayName(selectedSpecies) ?: "")
-    }
-
-    LaunchedEffect(selectedStage, selectedSpecies) {
-        query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-    }
 
     val colors = AgarthaTheme.colors
     val colorScheme = fieldColors(colors)
-
-    val committedName = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-    val filteredStages = stages.filter { stage ->
-        val displayName = stage.getDisplayName(selectedSpecies)
-        query.isBlank() || query == committedName || displayName.contains(query, ignoreCase = true)
-    }
 
     Column(modifier = modifier) {
         FieldLabel(stringResource(R.string.verify_stage_picker_label))
@@ -255,38 +242,26 @@ fun StageDropdown(
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = query,
-                onValueChange = {
-                    query = it
-                    expanded = true
-                },
-                readOnly = false,
+                value = selectedStage?.getDisplayName(selectedSpecies).orEmpty(),
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
                 textStyle = FieldTextStyle,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                 colors = colorScheme,
                 shape = FieldShape,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            expanded = false
-                            query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-                        }
-                    },
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = {
-                    expanded = false
-                    query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-                },
+                onDismissRequest = { expanded = false },
             ) {
-                filteredStages.forEach { stage ->
+                stages.forEach { stage ->
                     DropdownMenuItem(
                         text = { Text(stage.getDisplayName(selectedSpecies)) },
                         onClick = {
-                            query = stage.getDisplayName(selectedSpecies)
                             onStageSelected(stage)
                             expanded = false
                         },

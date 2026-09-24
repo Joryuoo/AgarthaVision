@@ -23,6 +23,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonSize
+import com.agarthavision.ui.components.AgarthaButtonVariant
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -318,8 +321,8 @@ private fun AddedFindingCard(
         FieldLabel(stringResource(R.string.verify_field_total_label))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             // The field asks for the **total** for this species, not the eggs beyond the
             // model's boxes. A medtech counting 23 Ascaris against nine boxed ones would
@@ -341,19 +344,35 @@ private fun AddedFindingCard(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier
-                    .width(120.dp)
+                    .width(100.dp)
                     .testTag(VerifyTestTags.countField(index)),
             )
 
-            Text(
-                text = stringResource(R.string.verify_remove_species),
-                color = AgarthaTheme.colors.danger,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .clickable { actions.onRemoveFinding(index) }
-                    .testTag(VerifyTestTags.removeFinding(index))
-                    .padding(vertical = 10.dp),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                AgarthaButton(
+                    onClick = { actions.onRemoveFinding(index) },
+                    variant = AgarthaButtonVariant.Secondary,
+                    size = AgarthaButtonSize.Default,
+                    modifier = Modifier.testTag(VerifyTestTags.removeFinding(index)),
+                ) {
+                    Text(
+                        text = stringResource(R.string.verify_remove_species),
+                        color = AgarthaTheme.colors.textPrimary,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+                AgarthaButton(
+                    onClick = { actions.onCollapseFinding(index) },
+                    enabled = !belowFloor,
+                    size = AgarthaButtonSize.Default,
+                    modifier = Modifier.testTag(VerifyTestTags.saveFinding(index)),
+                ) {
+                    Text(stringResource(R.string.verify_save_species))
+                }
+            }
         }
     }
 }
@@ -494,26 +513,22 @@ private fun LocateEggsSection(
     val located = slots.count { it.box != null }
     val colors = AgarthaTheme.colors
 
-    Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 10.dp),
+    ) {
+        SectionLabel(stringResource(R.string.verify_locate_eggs_section))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag(VerifyTestTags.LOCATE_TOGGLE)
                 .clickable { expanded.value = !expanded.value }
-                .padding(vertical = 8.dp),
+                .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Icon(
-                imageVector = if (expanded.value) {
-                    Icons.Outlined.ExpandLess
-                } else {
-                    Icons.Outlined.ExpandMore
-                },
-                contentDescription = null,
-                tint = colors.accent,
-                modifier = Modifier.size(20.dp),
-            )
-            Column(modifier = Modifier.padding(start = 6.dp)) {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.verify_locate_eggs, located, slots.size),
                     color = colors.accent,
@@ -527,48 +542,85 @@ private fun LocateEggsSection(
                     lineHeight = 14.sp,
                 )
             }
+            Icon(
+                imageVector = if (expanded.value) {
+                    Icons.Outlined.ExpandLess
+                } else {
+                    Icons.Outlined.ExpandMore
+                },
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier
+                    .size(24.dp)
+                    .padding(start = 4.dp),
+            )
         }
 
         if (expanded.value) {
-            slots.forEach { slot ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 26.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = stringResource(
-                            R.string.verify_locate_egg_row,
-                            slot.species,
-                            slot.ordinalInField,
-                            slot.fieldTotal,
-                        ),
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
-                        modifier = Modifier.weight(1f),
-                    )
-                    DrawBoxAction(
-                        icon = if (slot.box == null) BoxIcons.draw else BoxIcons.redraw,
-                        label = stringResource(
-                            if (slot.box == null) R.string.verify_draw_box else R.string.verify_redraw_box,
-                        ),
-                        tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
-                        onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
-                    )
-                    // Offered only where there is a box to discard. Accepting one used to be
-                    // final: the species' total is floored at the boxes drawn on it, so a box in
-                    // the wrong place made its own count unlowerable and the only way out was to
-                    // remove the species and retype it. Removing leaves the count alone — the egg
-                    // is still there, it simply goes back to unlocated.
-                    if (slot.box != null) {
-                        DrawBoxAction(
-                            icon = BoxIcons.remove,
-                            label = stringResource(R.string.verify_remove_box),
-                            tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
-                            onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            ) {
+                slots.forEach { slot ->
+                    val isDrawn = slot.box != null
+                    val cardModifier = if (isDrawn) {
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.gold)
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    } else {
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(colors.surfaceMuted)
+                            .border(1.dp, colors.borderStrong, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 14.dp, vertical = 6.dp)
+                    }
+
+                    Row(
+                        modifier = cardModifier,
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = stringResource(
+                                R.string.verify_locate_egg_row,
+                                slot.species,
+                                slot.ordinalInField,
+                                slot.fieldTotal,
+                            ),
+                            color = if (isDrawn) colors.onGold else colors.textPrimary,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.weight(1f),
                         )
+                        if (isDrawn) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                DrawBoxAction(
+                                    icon = BoxIcons.redraw,
+                                    contentDescription = stringResource(R.string.verify_redraw_box),
+                                    tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
+                                    onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
+                                )
+                                DrawBoxAction(
+                                    icon = BoxIcons.remove,
+                                    contentDescription = stringResource(R.string.verify_remove_box),
+                                    tag = VerifyTestTags.removeDrawnBox(slot.findingIndex, slot.slot),
+                                    onClick = { actions.onRemoveDrawnBox(slot.findingIndex, slot.slot) },
+                                )
+                            }
+                        } else {
+                            DrawBoxAction(
+                                icon = BoxIcons.draw,
+                                label = stringResource(R.string.verify_draw_box),
+                                tag = VerifyTestTags.drawBox(slot.findingIndex, slot.slot),
+                                onClick = { actions.onBeginDraw(slot.findingIndex, slot.slot) },
+                            )
+                        }
                     }
                 }
             }

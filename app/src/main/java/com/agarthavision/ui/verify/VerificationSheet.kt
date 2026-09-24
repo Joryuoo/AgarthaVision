@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -464,6 +465,9 @@ private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surface,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        textContentColor = AgarthaTheme.colors.textPrimary,
         title = { Text(stringResource(R.string.verify_leave_title)) },
         text = { Text(stringResource(R.string.verify_leave_body)) },
         confirmButton = {
@@ -752,11 +756,12 @@ internal fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = M
 @Composable
 internal fun DrawBoxAction(
     icon: ImageVector,
-    label: String,
+    label: String? = null,
+    contentDescription: String? = label,
     tag: String,
+    tint: Color = AgarthaTheme.colors.accent,
     onClick: () -> Unit,
 ) {
-    val accent = AgarthaTheme.colors.accent
     Row(
         modifier = Modifier
             .testTag(tag)
@@ -768,17 +773,19 @@ internal fun DrawBoxAction(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
-            tint = accent,
+            contentDescription = if (label == null) contentDescription else null,
+            tint = tint,
             modifier = Modifier.size(18.dp),
         )
-        Text(
-            text = label,
-            color = accent,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 6.dp),
-        )
+        if (label != null) {
+            Text(
+                text = label,
+                color = tint,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
     }
 }
 
