@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
@@ -971,6 +972,32 @@ class VerificationViewModelTest {
             vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
             vm.onFieldTotalChanged(0, "2")
 
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `a blank custom stage blocks adding another species, filling it in unblocks`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+            vm.onAddedStageSelected(0, EggStage.OTHER)
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onAddedOtherStageChanged(0, "Embryonated")
             vm.onAddSpecies()
             advanceUntilIdle()
 
