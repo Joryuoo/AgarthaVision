@@ -125,7 +125,7 @@ private const val VOID_DASH_OFF = 8f
  */
 @Suppress("CyclomaticComplexMethod", "ComplexCondition")
 @Composable
-fun FrameWithBoxes(
+internal fun FrameWithBoxes(
     imageModel: Any,
     boxes: List<FrameBox>,
     showBoxes: Boolean,
