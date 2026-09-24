@@ -25,7 +25,7 @@ With the fix above, every linked row answers who drew its box by itself, so the 
 half-pixel geometry comparison is gone. The table needs no Room mirror: the device keeps
 `predictions_json`, rows are built from it on push and folded back into it on pull.
 
-**`detections.species_touched` and `detections.verified_by_user` are dropped** (`0005`, Room
+**`detections.species_touched` and `detections.verified_by_user` are dropped** (`0006`, Room
 version 22). `species_touched` recorded taps, not judgements — a medtech who read a pre-filled
 row and agreed submitted it untouched — and every row it marked for a real reason was already
 marked by its verdict or a null `prediction_id`. `verified_by_user` had been gone from Postgres
@@ -42,7 +42,7 @@ row with no box instead of skipping it, which would have shifted every later ord
 **Deploy order:** apply `0004` before this build syncs. The backfill recomputes the derived ids in SQL and
 finds 8 legacy prediction-backed detections across 4 samples; it links the 5 on the 3 samples
 with no `BOX_INCORRECT` row. The fourth sample is left unlinked, because whether its box was
-redrawn cannot be recovered from the server. Apply `0005` only once no device runs an older build:
+redrawn cannot be recovered from the server. Apply `0006` only once no device runs an older build:
 those still send `species_touched`, and PostgREST rejects a payload naming a dropped column.
 
 ---

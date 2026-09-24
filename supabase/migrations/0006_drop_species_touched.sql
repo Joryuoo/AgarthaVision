@@ -1,8 +1,8 @@
--- 0005 · Drop detections.species_touched
+-- 0006 · Drop detections.species_touched
 --
 -- Run via: Supabase dashboard → SQL Editor → paste → Run. By hand, once, per C6.
 -- Target: project `agarthavision` (zxojfpfarhhoxjjicphi).
--- Requires: 0004_predictions.sql.
+-- Requires: 0004_predictions.sql, 0005_verification_stage.sql.
 --
 -- ── Why ──────────────────────────────────────────────────────────────────────
 -- The column was meant to keep "a human did not object" apart from "a human confirmed this"

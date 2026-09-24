@@ -446,7 +446,7 @@ export interface Prediction {
  * - `0001_init.sql` (consolidated): creates `detections` with class, confidence,
  *   nullable bboxes, verdict, expert_class, and `species_touched`.
  * - `0004_predictions.sql`: adds `prediction_id`.
- * - `0005_drop_species_touched.sql`: drops `species_touched`.
+ * - `0006_drop_species_touched.sql`: drops `species_touched`.
  * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:

@@ -61,7 +61,7 @@ counted, so the species question is now asked whenever the medtech says the box 
 not only when they also say the box is correctly placed. The verdict precedence is unchanged
 (`BOX_INCORRECT` still outranks `WRONG_CLASS`); only the column's population rule widened.
 
-**`species_touched` was dropped** (`0005_drop_species_touched.sql`, Room version 22). It was
+**`species_touched` was dropped** (`0006_drop_species_touched.sql`, Room version 22). It was
 meant to separate "a human confirmed this" from "a human did not object" on a pre-filled row,
 but it recorded taps: a medtech who read a row and agreed submitted it untouched. Everything it
 marked for a real reason is carried elsewhere — `WRONG_CLASS` for a picked species, a null
