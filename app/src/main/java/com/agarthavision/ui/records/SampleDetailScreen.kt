@@ -22,7 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -147,8 +147,13 @@ private fun SampleDetailContent(
 
     // Which boxes are drawn, by detection index. Held here rather than in the ViewModel because
     // it is a way of looking at the frame, not a fact about the sample: it has no business
-    // surviving the screen, and nothing else in the app can read it.
-    var hidden by remember(item.sample.id) { mutableStateOf(emptySet<Int>()) }
+    // surviving the screen, and nothing else in the app can read it. Rejected boxes start
+    // hidden: the frame opens on what the reading counts, and a rejected box is one tap away.
+    var hidden by remember(item.sample.id, item.detections) {
+        mutableStateOf(item.detections.hiddenByDefault())
+    }
+    val groups = remember(item.detections) { item.detections.indicesByGroup() }
+    val toggle = { index: Int -> hidden = if (index in hidden) hidden - index else hidden + index }
 
     Column(modifier = Modifier.fillMaxSize()) {
         SampleDetailNavBar(title = capturedAt, onBack = onBack)
@@ -188,25 +193,68 @@ private fun SampleDetailContent(
                     )
                 }
             } else {
-                item {
-                    Text(
-                        text = stringResource(R.string.sample_detail_detections_heading),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textSecondary,
-                        letterSpacing = 0.5.sp,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
+                item { GroupHeading(title = stringResource(R.string.sample_detail_detections_heading)) }
+                val confirmed = groups[DetectionGroup.CONFIRMED].orEmpty()
+                if (confirmed.isEmpty()) {
+                    item {
+                        Text(
+                            text = stringResource(R.string.sample_detail_no_confirmed),
+                            color = colors.textSecondary,
+                            fontSize = 15.sp,
+                            modifier = Modifier.padding(start = 4.dp),
+                        )
+                    }
                 }
-                itemsIndexed(item.detections) { index, detection ->
+                items(confirmed, key = { it }) { index ->
                     DetectionRow(
                         index = index,
-                        detection = detection,
+                        detection = item.detections[index],
                         visible = index !in hidden,
-                        onToggle = {
-                            hidden = if (index in hidden) hidden - index else hidden + index
-                        },
+                        onToggle = { toggle(index) },
                     )
+                }
+
+                // Counted, but with no box to draw, so the row has no swatch and no toggle.
+                val misplaced = groups[DetectionGroup.MISPLACED].orEmpty()
+                if (misplaced.isNotEmpty()) {
+                    item {
+                        GroupHeading(
+                            title = stringResource(R.string.sample_detail_misplaced_heading),
+                            caption = stringResource(R.string.sample_detail_misplaced_caption),
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .testTag(SampleDetailTestTags.MISPLACED_HEADING),
+                        )
+                    }
+                    items(misplaced, key = { it }) { index ->
+                        DetectionRow(
+                            index = index,
+                            detection = item.detections[index],
+                            visible = false,
+                            onToggle = null,
+                        )
+                    }
+                }
+
+                val rejected = groups[DetectionGroup.REJECTED].orEmpty()
+                if (rejected.isNotEmpty()) {
+                    item {
+                        GroupHeading(
+                            title = stringResource(R.string.sample_detail_rejected_heading),
+                            caption = stringResource(R.string.sample_detail_rejected_caption),
+                            modifier = Modifier
+                                .padding(top = 8.dp)
+                                .testTag(SampleDetailTestTags.REJECTED_HEADING),
+                        )
+                    }
+                    items(rejected, key = { it }) { index ->
+                        DetectionRow(
+                            index = index,
+                            detection = item.detections[index],
+                            visible = index !in hidden,
+                            onToggle = { toggle(index) },
+                        )
+                    }
                 }
             }
 
@@ -357,19 +405,24 @@ private fun DetectionOverlay(
  * One detection: its colour, what it was called, and whether its box is drawn.
  *
  * The swatch is what ties the row to the rectangle on the frame, which is the whole reason no
- * two boxes share a colour. There is no verdict, no confidence and no coordinates here — those
- * are the admin's concern, and for the clinical read a box is a box.
+ * two boxes share a colour. There is no confidence and no coordinates here - those are the
+ * admin's concern. The verdict is not printed either: the group a row sits under says it.
+ *
+ * [onToggle] is null for a row with no box to show. Its swatch is left hollow, because a filled
+ * one would point at a rectangle that is not on the frame.
  */
 @Composable
 private fun DetectionRow(
     index: Int,
     detection: Detection,
     visible: Boolean,
-    onToggle: () -> Unit,
+    onToggle: (() -> Unit)?,
 ) {
     val colors = AgarthaTheme.colors
     val label = detection.expertClass ?: detection.classLabel
     val isBinomial = label.contains(' ') || label.contains('.')
+    // Anything below the confirmed eggs is quieter, so the eye lands on what the reading counts.
+    val counted = detection.group == DetectionGroup.CONFIRMED
 
     Row(
         modifier = Modifier
@@ -377,7 +430,7 @@ private fun DetectionRow(
             .clip(RoundedCornerShape(12.dp))
             .background(colors.surface)
             .border(0.5.dp, colors.border, RoundedCornerShape(12.dp))
-            .clickable(onClick = onToggle)
+            .then(if (onToggle != null) Modifier.clickable(onClick = onToggle) else Modifier)
             .testTag(SampleDetailTestTags.detectionRow(index))
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -386,27 +439,65 @@ private fun DetectionRow(
             modifier = Modifier
                 .size(14.dp)
                 .clip(CircleShape)
-                .background(detectionBoxColor(index))
-                .border(0.5.dp, colors.border, CircleShape),
+                .then(
+                    if (onToggle != null) {
+                        Modifier.background(detectionBoxColor(index))
+                    } else {
+                        Modifier
+                    },
+                )
+                .border(if (onToggle != null) 0.5.dp else 1.dp, colors.border, CircleShape),
         )
         Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = label,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold,
-            color = colors.textPrimary,
+            color = if (counted) colors.textPrimary else colors.textSecondary,
             fontStyle = if (isBinomial) FontStyle.Italic else FontStyle.Normal,
             modifier = Modifier.weight(1f),
         )
-        Icon(
-            imageVector = if (visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
-            contentDescription = stringResource(
-                if (visible) R.string.sample_detail_hide_box else R.string.sample_detail_show_box,
-                label,
-            ),
-            tint = if (visible) colors.accent else colors.textTertiary,
-            modifier = Modifier.size(22.dp),
+        if (onToggle != null) {
+            Icon(
+                imageVector = if (visible) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff,
+                contentDescription = stringResource(
+                    if (visible) R.string.sample_detail_hide_box else R.string.sample_detail_show_box,
+                    label,
+                ),
+                tint = if (visible) colors.accent else colors.textTertiary,
+                modifier = Modifier.size(22.dp),
+            )
+        }
+    }
+}
+
+/**
+ * A section title in the detection list, with an optional line under it. The misplaced and
+ * rejected groups carry one because their titles alone do not say the thing a reader most needs:
+ * whether those rows are in the egg count.
+ */
+@Composable
+private fun GroupHeading(
+    title: String,
+    modifier: Modifier = Modifier,
+    caption: String? = null,
+) {
+    val colors = AgarthaTheme.colors
+    Column(modifier = modifier.padding(start = 4.dp)) {
+        Text(
+            text = title,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+            letterSpacing = 0.5.sp,
         )
+        if (caption != null) {
+            Text(
+                text = caption,
+                fontSize = 12.sp,
+                color = colors.textTertiary,
+            )
+        }
     }
 }
 
@@ -513,6 +604,12 @@ fun SampleDetailNavBar(title: String, onBack: () -> Unit) {
 /** Stable handles for this screen's UI tests. */
 internal object SampleDetailTestTags {
     const val DETECTION_OVERLAY = "sample_detection_overlay"
+
+    /** Heads the counted eggs whose box was called misplaced and never redrawn. */
+    const val MISPLACED_HEADING = "sample_misplaced_heading"
+
+    /** Heads the detections the medtech ruled are not eggs. */
+    const val REJECTED_HEADING = "sample_rejected_heading"
 
     /** Opens the Verification Screen in edit mode. */
     const val VIEW_DETECTION = "sample_view_detection"

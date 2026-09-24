@@ -92,7 +92,8 @@ internal data class SessionDetailUi(
 internal data class SampleUi(
     val id: String,
     val source: SampleSource,
-    val species: String,
+    /** Null for a model-captured sample whose every detection the medtech rejected: no eggs. */
+    val species: String?,
     val confidence: Int?,
     val filePath: String?,
     val storagePath: String?,
@@ -278,7 +279,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         SampleUi(
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
-            species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
+            species = primary?.let { it.expertClass ?: it.classLabel } ?: if (hasAi) null else "Manual",
             confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
             storagePath = item.sample.storagePath,
