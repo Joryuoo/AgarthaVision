@@ -92,13 +92,12 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `detections carry no stage column`() {
-        // Not an omission. Staging reverted 86d4a6jwy (9dcfd5d) because the four stages shipped
-        // there were never checked against literature — Ascaris could only be tagged
-        // UNFERTILIZED, the one stage that is never infective. This branch cherry-picked that
-        // commit before the revert existed, so this merge is the exact place it could come back
-        // by accident. It must not.
-        assertFalse(columnsOf("detections").contains("stage"))
+    fun `detections carry a stage column`() {
+        assertTrue(
+            "detections.stage is missing from v$EXPECTED_VERSION — ticket 86d4a6jwy stage classification.",
+            columnsOf("detections").contains("stage"),
+        )
+        assertFalse(isNotNull("detections", "stage"))
     }
 
     @Test
@@ -327,6 +326,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 19
+        private const val EXPECTED_VERSION = 20
     }
 }

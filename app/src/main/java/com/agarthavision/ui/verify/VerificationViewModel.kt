@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.verify.Finding
@@ -429,6 +430,14 @@ class VerificationViewModel @Inject constructor(
         updateCurrentAnswer {
             it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
         }
+    }
+
+    fun onStageSelected(stage: EggStage) {
+        updateCurrentAnswer { it.copy(stage = stage) }
+    }
+
+    fun onAddedStageSelected(index: Int, stage: EggStage) {
+        updateAnswerAt(index) { it.copy(stage = stage) }
     }
 
     fun onOtherSpeciesChanged(text: String) {

@@ -2,6 +2,7 @@ package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 
 /**
  * The medtech's answers about a single [Finding], in the order the sheet asks them.
@@ -113,14 +114,11 @@ data class VerificationAnswers(
      * a version collision (`core/database/AgarthaDatabase.kt` records it).
      */
     val boxReplaced: Boolean = false,
+    /** Developmental stage chosen by the medtech for STH species. */
+    val stage: EggStage? = null,
 ) {
     /**
-     * True when the species question is answered.
-     *
-     * No developmental-stage gate. The dropdown 86d4a6jwy added was reverted on staging
-     * (`9dcfd5d`) — the four stages it shipped were never checked against literature — and the
-     * ticket is deprioritised. The stage is not the reading the surveillance output turns on;
-     * the infectivity level is, and that is tracked separately (86d3fzd28).
+     * True when the species and stage questions are answered.
      */
     val speciesIsComplete: Boolean
         get() = when (species) {

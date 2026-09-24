@@ -95,7 +95,7 @@ private fun derive(key: String): String =
  * this key and `sample_species_findings_unique_staged` have to move together.
  */
 private fun findingId(sampleId: String, row: FindingRow): String =
-    UUID.nameUUIDFromBytes("$sampleId#row#${row.species}".toByteArray()).toString()
+    UUID.nameUUIDFromBytes("$sampleId#row#${row.species}#${row.stage?.name.orEmpty()}".toByteArray()).toString()
 
 /**
  * Every detection row a reviewed frame writes — **one row per egg**, which is what the table
@@ -195,6 +195,7 @@ private fun Finding.toDetectionEntity(
         expertClass = expertClass,
         verifiedByUser = true,
         speciesTouched = answers.speciesTouched,
+        stage = answers.stage?.name,
     )
 }
 
@@ -204,8 +205,6 @@ fun FindingRow.toFindingEntity(sampleId: String): SampleSpeciesFindingEntity =
         findingId = findingId(sampleId, this),
         sampleId = sampleId,
         species = species,
-        // Always null: the column exists because `0012_polyparasitism_findings.sql` is applied
-        // and frozen (C6), but 86d4a6jwy was reverted on staging, so nothing produces a stage.
-        stage = null,
+        stage = stage?.name,
         eggCount = eggCount,
     )
