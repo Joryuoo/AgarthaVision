@@ -1274,6 +1274,18 @@ class VerificationSheetContentTest {
         assertEquals(listOf(0), r.removedFindings)
     }
 
+    @Test
+    fun `remove control is a trash icon with a content description, not a Remove text link`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(Finding(answers = VerificationAnswers(fieldTotal = 1))),
+            ).copy(expandedFindingIndex = 0),
+        )
+
+        composeRule.onNodeWithContentDescription("Remove this species").assertIsDisplayed()
+        composeRule.onNodeWithText("Remove").assertDoesNotExist()
+    }
+
     /**
      * The top bar carries the sample's label, which is the time it was captured — the same label
      * the queue row leads with, so the row the medtech tapped names the screen they land on. It

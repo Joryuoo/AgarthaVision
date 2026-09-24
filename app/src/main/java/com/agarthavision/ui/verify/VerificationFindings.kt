@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -47,6 +48,8 @@ import com.agarthavision.domain.usecase.verify.boxedCountOf
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Delete
 import com.agarthavision.ui.theme.AgarthaTheme
 
 /**
@@ -312,18 +315,22 @@ private fun AddedFindingCard(
             )
         }
 
+        FieldLabel(stringResource(R.string.verify_field_total_label))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Top,
         ) {
-            // The field asks for the **total** for this species, not the eggs beyond the model's
-            // boxes. A medtech counting 23 Ascaris against nine boxed ones would otherwise have to
-            // work out 14 in their head, under time pressure, with nothing anywhere to catch a slip
-            // - and the wrong number reaches the low-power-field count in silence.
+            // The field asks for the **total** for this species, not the eggs beyond the
+            // model's boxes. A medtech counting 23 Ascaris against nine boxed ones would
+            // otherwise have to work out 14 in their head, under time pressure, with nothing
+            // anywhere to catch a slip - and the wrong number reaches the low-power-field
+            // count in silence.
             OutlinedTextField(
                 value = total?.toString().orEmpty(),
                 onValueChange = { actions.onFieldTotalChanged(index, it) },
-                label = { Text(stringResource(R.string.verify_field_total_label)) },
+                textStyle = FieldTextStyle,
+                colors = fieldColors(AgarthaTheme.colors),
+                shape = FieldShape,
                 isError = belowFloor,
                 supportingText = when {
                     belowFloor -> { { Text(stringResource(R.string.verify_field_total_floor, floor)) } }
@@ -337,16 +344,17 @@ private fun AddedFindingCard(
                     .testTag(VerifyTestTags.countField(index)),
             )
 
-            Text(
-                text = stringResource(R.string.verify_remove_species),
-                color = AgarthaTheme.colors.danger,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .testTag(VerifyTestTags.removeFinding(index))
-                    .clickable { actions.onRemoveFinding(index) }
-                    .padding(start = 12.dp, top = 20.dp, bottom = 20.dp, end = 4.dp),
-            )
+            IconButton(
+                onClick = { actions.onRemoveFinding(index) },
+                modifier = Modifier.testTag(VerifyTestTags.removeFinding(index)),
+            ) {
+                Icon(
+                    imageVector = AgarthaIcons.Delete,
+                    contentDescription = stringResource(R.string.verify_remove_species_desc),
+                    tint = AgarthaTheme.colors.danger,
+                    modifier = Modifier.size(22.dp),
+                )
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -25,12 +26,63 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AgarthaColors
+
+/** Corner radius shared by every field in the manual-verify species form. */
+internal val FieldShape = RoundedCornerShape(12.dp)
+
+/** Value text style shared by every field in the manual-verify species form. */
+internal val FieldTextStyle: TextStyle
+    @Composable
+    get() = TextStyle(
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AgarthaTheme.colors.textPrimary,
+    )
+
+/**
+ * Label-above text matching [com.agarthavision.ui.components.SheetInput] and
+ * `SearchableDropdown`'s `FieldLabel` — 13sp Medium, no rule line, a 6dp gap to the field below.
+ */
+@Composable
+internal fun FieldLabel(label: String) {
+    Text(
+        text = label,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        color = AgarthaTheme.colors.textSecondary,
+        modifier = Modifier.padding(bottom = 6.dp),
+    )
+}
+
+/**
+ * The single [OutlinedTextFieldDefaults.colors] used by every field in this file, replacing the
+ * two near-duplicate `fieldColors` helpers that used to live separately on [SpeciesDropdown] and
+ * [StageDropdown]. Border and background follow the same state logic as `SheetInput` and
+ * `SearchField`: danger on error, accent while focused, `borderStrong` otherwise.
+ */
+@Composable
+internal fun fieldColors(colors: AgarthaColors) = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = colors.accent,
+    unfocusedBorderColor = colors.borderStrong,
+    errorBorderColor = colors.danger,
+    focusedContainerColor = colors.surface,
+    unfocusedContainerColor = colors.surface,
+    errorContainerColor = colors.dangerTint.copy(alpha = 0.5f),
+    focusedTextColor = colors.textPrimary,
+    unfocusedTextColor = colors.textPrimary,
+    errorTextColor = colors.textPrimary,
+    cursorColor = colors.accent,
+    errorCursorColor = colors.danger,
+)
 
 // Selection state, the two callbacks it raises, the modifier and the suggestion list.
 // Bundling them would add a type that exists only to satisfy the threshold.
@@ -54,18 +106,10 @@ fun SpeciesDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val colors = AgarthaTheme.colors
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = colors.accent,
-        unfocusedBorderColor = colors.borderStrong,
-        focusedContainerColor = colors.surface,
-        unfocusedContainerColor = colors.surface,
-        focusedTextColor = colors.textPrimary,
-        unfocusedTextColor = colors.textPrimary,
-        focusedLabelColor = colors.textSecondary,
-        unfocusedLabelColor = colors.textSecondary,
-    )
+    val colorScheme = fieldColors(colors)
 
     Column(modifier = modifier) {
+        FieldLabel(stringResource(R.string.verify_species_picker_label))
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = it },
@@ -75,9 +119,10 @@ fun SpeciesDropdown(
                 onValueChange = {},
                 readOnly = true,
                 singleLine = true,
-                label = { Text(stringResource(R.string.verify_species_picker_label)) },
+                textStyle = FieldTextStyle,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = fieldColors,
+                colors = colorScheme,
+                shape = FieldShape,
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(MenuAnchorType.PrimaryNotEditable),
@@ -98,12 +143,14 @@ fun SpeciesDropdown(
             }
         }
         if (selected == EggSpecies.OTHER) {
+            FieldLabel(stringResource(R.string.verify_other_label))
             OutlinedTextField(
                 value = otherText,
                 onValueChange = onOtherTextChanged,
-                label = { Text(stringResource(R.string.verify_other_label)) },
                 placeholder = { Text(stringResource(R.string.verify_other_hint)) },
-                colors = fieldColors,
+                textStyle = FieldTextStyle,
+                colors = colorScheme,
+                shape = FieldShape,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -193,16 +240,7 @@ fun StageDropdown(
     }
 
     val colors = AgarthaTheme.colors
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = colors.accent,
-        unfocusedBorderColor = colors.borderStrong,
-        focusedContainerColor = colors.surface,
-        unfocusedContainerColor = colors.surface,
-        focusedTextColor = colors.textPrimary,
-        unfocusedTextColor = colors.textPrimary,
-        focusedLabelColor = colors.textSecondary,
-        unfocusedLabelColor = colors.textSecondary,
-    )
+    val colorScheme = fieldColors(colors)
 
     val committedName = selectedStage?.getDisplayName(selectedSpecies) ?: ""
     val filteredStages = stages.filter { stage ->
@@ -211,6 +249,7 @@ fun StageDropdown(
     }
 
     Column(modifier = modifier) {
+        FieldLabel(stringResource(R.string.verify_stage_picker_label))
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = it },
@@ -222,9 +261,10 @@ fun StageDropdown(
                     expanded = true
                 },
                 readOnly = false,
-                label = { Text(stringResource(R.string.verify_stage_picker_label)) },
+                textStyle = FieldTextStyle,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = fieldColors,
+                colors = colorScheme,
+                shape = FieldShape,
                 modifier = Modifier
                     .fillMaxWidth()
                     .menuAnchor(MenuAnchorType.PrimaryEditable)
@@ -255,12 +295,14 @@ fun StageDropdown(
             }
         }
         if (selectedStage == EggStage.OTHER) {
+            FieldLabel(stringResource(R.string.verify_other_stage_label))
             OutlinedTextField(
                 value = otherStageText,
                 onValueChange = onOtherStageTextChanged,
-                label = { Text(stringResource(R.string.verify_other_stage_label)) },
                 placeholder = { Text(stringResource(R.string.verify_other_stage_hint)) },
-                colors = fieldColors,
+                textStyle = FieldTextStyle,
+                colors = colorScheme,
+                shape = FieldShape,
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -269,4 +311,3 @@ fun StageDropdown(
         }
     }
 }
-
