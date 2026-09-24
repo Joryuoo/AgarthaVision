@@ -85,6 +85,43 @@ class SyncReportUseCaseTest {
     }
 
     @Test
+    fun `a second sync of the same report succeeds against a row the server already holds`() = runTest {
+        val dao = FakeReportDao(seeded = listOf(entity("report-5")))
+        val remote = InsertIfAbsentRemoteDataSource()
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
+
+        val first = useCase("report-5")
+        val second = useCase("report-5")
+
+        // The case that never ran before 14zcqnthrx9: a retry used to conflict on the
+        // primary key and park the report in sync_failed for good.
+        assertTrue(first.isSuccess)
+        assertTrue(second.isSuccess)
+        assertEquals(ReportSyncStatus.SYNCED.value, dao.statusOf("report-5"))
+        assertEquals(listOf("report-5"), remote.serverRowIds)
+    }
+
+    @Test
+    fun `a report parked in sync_failed recovers on the next pass`() = runTest {
+        // The row reached the server, but the report was marked failed locally: the state
+        // the old insert left behind after any retry.
+        val dao = FakeReportDao(
+            seeded = listOf(entity("report-6", status = ReportSyncStatus.SYNC_FAILED.value)),
+        )
+        val remote = InsertIfAbsentRemoteDataSource(serverRowIds = listOf("report-6"))
+        val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
+
+        val pending = dao.getReportsPendingSync("user-1").map { it.reportId }
+        val result = useCase("report-6")
+
+        assertEquals(listOf("report-6"), pending)
+        assertTrue(result.isSuccess)
+        assertEquals(ReportSyncStatus.SYNCED.value, dao.statusOf("report-6"))
+        assertTrue(dao.getReportsPendingSync("user-1").isEmpty())
+        assertEquals(listOf("report-6"), remote.serverRowIds)
+    }
+
+    @Test
     fun `returns failure when report is not found`() = runTest {
         val dao = FakeReportDao(seeded = emptyList())
         val remote = StubRemoteDataSource(shouldThrow = false)
@@ -242,6 +279,27 @@ private class StubRemoteDataSource(
     override suspend fun uploadReportFile(objectPath: String, bytes: ByteArray) {
         uploadedPaths += objectPath
     }
+}
+
+/**
+ * Models `public.reports` under `ON CONFLICT (id) DO NOTHING`: a new id adds a row, and an id
+ * the server already holds is a successful no-op rather than a primary-key conflict.
+ */
+private class InsertIfAbsentRemoteDataSource(
+    serverRowIds: List<String> = emptyList(),
+) : ReportRemoteDataSource(
+    supabase = mock(),
+    gson = com.google.gson.Gson(),
+) {
+    private val rows = serverRowIds.toMutableList()
+
+    val serverRowIds: List<String> get() = rows.toList()
+
+    override suspend fun upsertReport(report: ReportEntity) {
+        if (report.reportId !in rows) rows += report.reportId
+    }
+
+    override suspend fun uploadReportFile(objectPath: String, bytes: ByteArray) = Unit
 }
 
 /** Holds bytes for the two paths [entity] uses, and nothing else. */

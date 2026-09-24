@@ -48,10 +48,11 @@ class PatientRemoteDataSource @Inject constructor(
      * `patients_update_linked` passes. A patient is editable, so the update path is not
      * optional - an insert-only version works until the first correction.
      *
-     * `sessions`, `samples` and `reports` need none of this: their update policies are
+     * `sessions` and `samples` need none of this: their update policies are
      * `auth.uid() = user_id`, the same condition as their inserts, so an upsert satisfies
-     * both at once. This table is the only one whose UPDATE policy depends on a row a
-     * trigger writes.
+     * both at once. `reports` has no UPDATE policy at all and writes insert-if-absent
+     * instead (see `ReportRemoteDataSource.upsertReport`). This table is the only one whose
+     * UPDATE policy depends on a row a trigger writes.
      *
      * The `patient_users` row is **not** written from here. The `on_patient_created`
      * trigger is `security definer` and writes it server-side; a client insert races the
