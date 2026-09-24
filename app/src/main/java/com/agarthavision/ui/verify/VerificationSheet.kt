@@ -423,10 +423,12 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
 }
 
 /**
- * The per-box statements, each revealed by the one above it: there is an egg → the box is placed
- * right → it is the species the model named. All three arrive pre-filled from model output, so a
- * frame the model got right is submitted without a tap, and unchecking is how the medtech
- * disagrees.
+ * The per-box statements: there is an egg → the box is placed right → it is the species the model
+ * named. All three arrive pre-filled from model output, so a frame the model got right is
+ * submitted without a tap, and unchecking is how the medtech disagrees. A ticked Q1 shows Q2 and
+ * Q3 together; an unticked one hides both, since neither means anything without an egg.
+ *
+ * **Unticked always carries its correction**: the redraw action under Q2, the picker under Q3.
  *
  * The species step is a confirmation before a picker: the common answer is agreement, and
  * agreeing should not cost a pick from a list the medtech has just agreed with. Only unchecking
@@ -471,13 +473,17 @@ private fun BoxQuestionChain(
         onToggle = { actions.onQ2Selected(answers.isBoxCorrect != true) },
     )
 
-    // Offered once the medtech says the box is misplaced, and never before - there is nothing to
-    // correct while the model's box is agreed to be right. Optional: answering "No" without
-    // redrawing is a complete answer that records a localisation error on its own.
+    // Offered whenever Q2 is unticked, and never while it is ticked - there is nothing to correct
+    // while the model's box is agreed to be right. Optional: answering "No" without redrawing is
+    // a complete answer that records a localisation error on its own.
+    //
+    // Keyed on "not ticked" rather than on `== false`. A checkbox draws null and false the same,
+    // so keying on false alone left an unticked Q2 with no redraw under it whenever the answer
+    // was merely unset - the medtech had to tick and untick it to get the action back.
     //
     // It disappears once a box has been replaced, because Q2 is latched at "No" from then on and
     // re-drawing over a drawn box is a different operation (the Sample Data Screen owns that).
-    if (answers.isBoxCorrect == false && !answers.boxReplaced) {
+    if (answers.isBoxCorrect != true && !answers.boxReplaced) {
         DrawBoxAction(
             label = stringResource(R.string.verify_redraw_box),
             tag = VerifyTestTags.REDRAW_BOX,
@@ -494,12 +500,12 @@ private fun BoxQuestionChain(
                 .padding(start = 4.dp, bottom = 12.dp),
         )
     }
-    // Deliberately `== null`, not `!= true`. A box in the wrong place still contains a real
+    // No early return on Q2, whatever it holds. A box in the wrong place still contains a real
     // egg, and that egg still has to be named and counted - short-circuiting on a no dropped
     // it from the low-power-field count, and left the frame permanently unsubmittable, because
     // `Finding.isComplete` asks for a species on a BOX_INCORRECT row too. The verdict still
-    // records BOX_INCORRECT; see computeVerdict.
-    if (answers.isBoxCorrect == null) return
+    // records BOX_INCORRECT; see computeVerdict. Stopping on an unset Q2 hid Q3 behind a box
+    // that already looked unticked, so every question under a ticked Q1 is always shown.
 
     if (suggestedSpecies != null) {
         CheckQuestion(
@@ -509,7 +515,9 @@ private fun BoxQuestionChain(
             onToggle = { actions.onSpeciesConfirmed(answers.speciesConfirmed != true) },
         )
     }
-    if (suggestedSpecies == null || answers.speciesConfirmed == false) {
+    // "Not ticked", for the same reason as the redraw above: an unset confirmation draws as an
+    // unticked Q3 and has to carry the picker an unticked Q3 always carries.
+    if (suggestedSpecies == null || answers.speciesConfirmed != true) {
         SpeciesDropdown(
             selected = answers.species,
             otherText = answers.otherSpeciesText,

@@ -340,10 +340,20 @@ class VerificationViewModel @Inject constructor(
      * pre-filled species underneath it and hand the medtech back the work the pre-fill saved
      * them. A tap that asserts what is already asserted has changed nothing, so nothing
      * downstream of it has gone stale.
+     *
+     * **Ticking Q1 back on answers Q2 and Q3 "No", not "unanswered".** A checkbox has no third
+     * state to show for null: an unanswered Q2 rendered unticked, but without the redraw action
+     * an unticked Q2 carries, and hid Q3 entirely — so the medtech had to tick and untick both
+     * just to reach the controls. The model's claims were already disowned by unticking Q1, so
+     * the questions come back unticked for real, each with its correction under it.
      */
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            if (it.isEgg == isEgg) it else it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
+            when {
+                it.isEgg == isEgg -> it
+                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
+                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+            }
         }
     }
 
@@ -356,14 +366,14 @@ class VerificationViewModel @Inject constructor(
      * carrying the human's geometry, which is exactly the label the drawing feature exists to
      * produce. Refused silently, because the screen does not offer the affordance on a replaced
      * row; this is the backstop.
+     *
+     * **The species answer survives a change here.** Q2 is about where the box sits, and a box in
+     * the wrong place still holds the same egg — so whatever Q3 held, the model's species
+     * confirmed or one picked from the dropdown, it still holds.
      */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            when {
-                it.boxReplaced && isBoxCorrect -> it
-                it.isBoxCorrect == isBoxCorrect -> it
-                else -> it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
-            }
+            if (it.boxReplaced && isBoxCorrect) it else it.copy(isBoxCorrect = isBoxCorrect)
         }
     }
 

@@ -216,12 +216,44 @@ class VerificationSheetContentTest {
         composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
+    /**
+     * A ticked Q1 shows both questions under it at once, and an unset answer draws as what it
+     * looks like: unticked, with its correction. The chain used to stop at an unset Q2, which
+     * hid Q3 behind a box that already read as unticked.
+     */
     @Test
-    fun `answering the first question yes reveals the second`() {
+    fun `a ticked Q1 shows Q2 and Q3, each unset one carrying its correction`() {
         setContent(state(answers = listOf(answered(isEgg = true))))
 
         question(VerifyTestTags.QUESTION_Q2).assertIsDisplayed()
-        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
+        sheetNode(VerifyTestTags.REDRAW_BOX).assertIsDisplayed()
+        question(VerifyTestTags.QUESTION_Q3).assertIsDisplayed()
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+    }
+
+    @Test
+    fun `an unticked Q2 always carries the redraw`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = false, speciesConfirmed = true))),
+        )
+
+        sheetNode(VerifyTestTags.REDRAW_BOX).assertIsDisplayed()
+    }
+
+    @Test
+    fun `a ticked Q2 offers no redraw`() {
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true))),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.REDRAW_BOX).assertDoesNotExist()
+    }
+
+    @Test
+    fun `an unticked Q3 always carries the picker, even when never answered`() {
+        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
     }
 
     @Test
@@ -243,7 +275,9 @@ class VerificationSheetContentTest {
      */
     @Test
     fun `a correct box asks whether the suggested species is right, not for a pick`() {
-        setContent(state(answers = listOf(answered(isEgg = true, isBoxCorrect = true))))
+        setContent(
+            state(answers = listOf(answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true))),
+        )
 
         composeRule.onNodeWithText("This egg is ${EggSpecies.ASCARIS.displayName}")
             .performScrollTo()
@@ -265,16 +299,6 @@ class VerificationSheetContentTest {
         question(VerifyTestTags.QUESTION_Q3).performClick()
 
         assertEquals(listOf(false), r.speciesConfirmed)
-    }
-
-    @Test
-    fun `an unanswered box question stops the chain before the species question`() {
-        setContent(state(answers = listOf(answered(isEgg = true))))
-
-        composeRule.onNodeWithTag(
-            VerifyTestTags.QUESTION_Q3,
-        ).assertDoesNotExist()
-        composeRule.onNodeWithTag(VerifyTestTags.SPECIES_DROPDOWN).assertDoesNotExist()
     }
 
     @Test
