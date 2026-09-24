@@ -154,16 +154,34 @@ private fun findingId(sampleId: String, row: FindingRow): String {
  * Added rows are emitted for distinct species+stage only. The UI merges two cards that land on
  * one species+stage, and this is the backstop: emitting both would derive the same slot ids
  * twice and REPLACE would keep whichever came last.
+ *
+ * **The stage segment is only derived when a species genuinely has more than one added card.**
+ * Old data was saved under species-only ids, before stage-aware ids existed. Deriving a
+ * stage-aware id unconditionally for every staged card meant resubmitting an *unchanged* old
+ * card wrote it under a brand-new id and deleted the old one — locally harmless, but the sync
+ * pipeline only ever upserts remotely and never deletes, so Supabase ends up holding both the
+ * old and new rows and double-counts the species on the next pull. A single added card per
+ * species keeps resolving to the old, stage-less id it always has, so an unedited resubmit
+ * writes nothing new. The stage segment only switches on once a second card of the same species
+ * exists to disambiguate — which is the case the id had to be made stage-aware for in the first
+ * place (14zcqnthz6e).
  */
 fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
     val emitted = mutableSetOf<SpeciesStageKey>()
+    val stagedCardCountBySpecies = mapNotNull { it.answers.speciesStageKey }
+        .distinct()
+        .groupingBy { it.species }
+        .eachCount()
     return flatMapIndexed { ordinal, finding ->
         val key = finding.answers.speciesStageKey
         when {
             finding.prediction != null -> listOf(finding.toDetectionEntity(sampleId, ordinal))
             key == null || !emitted.add(key) -> emptyList()
-            else -> (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
-                .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot) }
+            else -> {
+                val useStageSegment = (stagedCardCountBySpecies[key.species] ?: 0) > 1
+                (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
+                    .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot, useStageSegment) }
+            }
         }
     }
 }
@@ -177,6 +195,7 @@ private fun Finding.toDetectionEntity(
     sampleId: String,
     ordinal: Int,
     slot: Int? = null,
+    useStageSegment: Boolean = true,
 ): DetectionEntity {
     val label = answers.speciesLabel
     val modelClass = prediction?.classLabel
@@ -209,7 +228,7 @@ private fun Finding.toDetectionEntity(
         detectionId = if (slot == null) {
             detectionIdFor(sampleId, ordinal)
         } else {
-            addedDetectionIdFor(sampleId, label.orEmpty(), slot, answers.stageLabel)
+            addedDetectionIdFor(sampleId, label.orEmpty(), slot, answers.stageLabel.takeIf { useStageSegment })
         },
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }

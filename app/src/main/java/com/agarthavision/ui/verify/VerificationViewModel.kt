@@ -252,11 +252,15 @@ sealed interface VerificationEvent {
 
 private fun VerificationUiState.firstUnfinishedAddedIndex(): Int? {
     val boxCount = frame?.predictions?.size ?: 0
+    // See the matching comment in VerificationFindings.AddedFindings: two not-yet-settled cards
+    // of one species share a SpeciesStageKey, so the floor has to come from the consolidated
+    // list or it can be read off the wrong sibling's drawn boxes.
+    val findingsForFloor = findings.consolidateAddedTwins()
     return findings.indices.firstOrNull { i ->
         i >= boxCount && findings[i].let { f ->
             !f.isComplete ||
                 (f.answers.fieldTotal ?: 0) <
-                findings.floorFor(f.answers.speciesLabel, f.answers.stage, f.answers.otherStageText)
+                findingsForFloor.floorFor(f.answers.speciesLabel, f.answers.stage, f.answers.otherStageText)
         }
     }
 }

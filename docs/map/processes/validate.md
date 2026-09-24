@@ -87,14 +87,14 @@ all.
   `session_label` header (`ReportCsvBuilder.kt:47`) and the PDF header
   (`domain/usecase/records/ReportPdfBuilder.kt:31`).
 - **Dropdown-gated fallback (legitimate, but a *species* field, not remarks).** The "Other
-  species" text field in `ui/verify/SpeciesDropdown.kt:100-108`, rendered only when
+  species" text field in `ui/verify/SpeciesDropdown.kt:143-154`, rendered only when
   `EggSpecies.OTHER` is selected. Its value becomes `expert_class`
   (`data/local/mapper/VerificationMapper.kt:24-39`), not a note — it names the organism, it
   doesn't annotate it.
 - **Not actually free text.** The species dropdown
-  (`ui/verify/SpeciesDropdown.kt:71-98`) is a read-only `ExposedDropdownMenu` with no search
+  (`ui/verify/SpeciesDropdown.kt:111-142`) is a read-only `ExposedDropdownMenu` with no search
   query; the committed value only ever comes from a `DropdownMenuItem` tap
-  (`SpeciesDropdown.kt:88-96`), never from typed text.
+  (`SpeciesDropdown.kt:133-139`), never from typed text.
 - **No editable/free-text fields** exist on `ui/records/SampleDetailScreen.kt` or
   `ui/records/SessionDetailScreen.kt` — both are read-only presentations of already-committed
   data.

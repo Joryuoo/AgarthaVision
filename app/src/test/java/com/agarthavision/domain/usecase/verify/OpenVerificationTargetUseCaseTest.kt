@@ -8,6 +8,7 @@ import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
@@ -385,6 +386,100 @@ class OpenVerificationTargetUseCaseTest {
             assertEquals(1, added.answers.fieldTotal)
             assertEquals(
                 "The legacy id is the only place this box can be, and the fallback finds it.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
+        }
+
+    /**
+     * **Round-trip regression guard for the remote double-count bug.** A card saved under the
+     * old species-only id, reopened and resubmitted with no edits, must write back under that
+     * SAME id - not a new stage-aware one - or the remote push (upsert-only, never delete) ends
+     * up holding both ids and double-counts the species on the next pull.
+     */
+    @Test
+    fun `reopening and resubmitting an unedited legacy card writes back the same old id`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val oldId = addedDetectionIdFor(sampleId, "Hookworm", 0)
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+
+            assertEquals(1, resubmitted.size)
+            assertEquals(
+                "No edits were made, so the resubmit must resolve to the same id it read - " +
+                    "writing a new stage-aware id here is exactly what leaves the old id behind " +
+                    "on the server for the next pull to double-count.",
+                oldId,
+                resubmitted.single().detectionId,
+            )
+        }
+
+    /**
+     * **Regression guard.** A model box already accounts for one stage of a species; a separate
+     * added card at a *different* stage of the same species was saved under the old species-only
+     * id. `rowCountBySpecies` must be computed from the rows that survive the boxedCounts filter
+     * (the genuine added-card rows), not from every raw `sample_species_findings` row - counting
+     * the model-covered row too made this species look like it had two added rows and switched
+     * the legacy-id fallback off, so the added card's boxes came back missing.
+     */
+    @Test
+    fun `a legacy added card at a different stage from a model box still recovers its boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    boxDetection(0).copy(stage = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 0, x = 15f),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(1, added.answers.fieldTotal)
+            assertEquals(
+                "The CF row is already covered by the model's box, so only the DF row is a " +
+                    "genuine added card - and being the only one, the legacy fallback must find " +
+                    "its boxes under the old species-only id.",
                 listOf(15f),
                 added.answers.drawnBoxes.map { it.x },
             )

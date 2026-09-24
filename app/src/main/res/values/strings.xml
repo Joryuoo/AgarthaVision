@@ -53,7 +53,6 @@
     <string name="verify_species_you_added">SPECIES YOU ADDED</string>
     <string name="verify_add_species">+ Add species</string>
     <string name="verify_remove_species">Discard</string>
-    <string name="verify_remove_species_desc">Remove this species</string>
     <string name="verify_save_species">Save</string>
     <string name="verify_field_total_label">Egg count</string>
     <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>

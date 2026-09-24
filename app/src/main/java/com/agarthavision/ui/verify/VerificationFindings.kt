@@ -49,6 +49,7 @@ import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.boxedCountOf
+import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
@@ -221,6 +222,12 @@ internal fun AddedFindings(
     suggestionsFor: (Int) -> List<String> = { emptyList() },
 ) {
     val addedIndices = findings.indices.filter { it >= boxCount }
+    // Two added cards of one species that have not settled yet (e.g. still both unstaged) share
+    // a SpeciesStageKey, so floorFor's lookup on the raw, pre-merge list can find the WRONG
+    // card's drawn boxes and hand that card's floor to its sibling. Consolidating first folds
+    // any such cards' boxes together before the floor is computed, which is at least never
+    // wrong in the direction that silently disables a card's Save button on someone else's boxes.
+    val findingsForFloor = findings.consolidateAddedTwins()
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (addedIndices.isNotEmpty()) {
@@ -229,7 +236,7 @@ internal fun AddedFindings(
 
         addedIndices.forEach { index ->
             val answers = findings[index].answers
-            val floor = findings.floorFor(answers.speciesLabel, answers.stage, answers.otherStageText)
+            val floor = findingsForFloor.floorFor(answers.speciesLabel, answers.stage, answers.otherStageText)
             if (index == expandedIndex) {
                 AddedFindingCard(
                     index = index,

@@ -382,6 +382,72 @@ class VerificationMapperTest {
         assertEquals(addedDetectionIdFor("sample-1", "Hookworm", 0, stageKey = null), entity.detectionId)
     }
 
+    /**
+     * **Regression guard for the remote double-count bug.** Old data was saved under a
+     * species-only id. Deriving a stage-aware id unconditionally for a single staged card meant
+     * resubmitting it with no edits wrote a brand-new id and deleted the old one locally - and
+     * since the remote push only ever upserts, never deletes, Supabase ended up holding both and
+     * double-counted the species. A lone staged card must keep resolving to the old, stage-less
+     * id so an unedited resubmit writes nothing new.
+     */
+    @Test
+    fun `a single staged card keeps the old species-only id, not a stage-aware one`() {
+        val finding = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+
+        val entity = listOf(finding).toDetectionEntities("sample-1").single()
+
+        assertEquals(
+            addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = null),
+            entity.detectionId,
+        )
+    }
+
+    /**
+     * Two different stages of one species is the case the stage segment exists for at all
+     * (14zcqnthz6e), and it must keep getting distinct, stage-aware ids even with the fix above
+     * that spares a lone staged card from an unnecessary id change.
+     */
+    @Test
+    fun `two cards of the same species at different stages still get distinct stage-aware ids`() {
+        val cf = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+        val df = Finding(
+            prediction = null,
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.DECORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+
+        val entities = listOf(cf, df).toDetectionEntities("sample-1")
+        val cfEntity = entities.single { it.stage == EggStage.CORTICATED_FERTILIZED.name }
+        val dfEntity = entities.single { it.stage == EggStage.DECORTICATED_FERTILIZED.name }
+
+        assertEquals(
+            addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = "CORTICATED_FERTILIZED"),
+            cfEntity.detectionId,
+        )
+        assertEquals(
+            addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = "DECORTICATED_FERTILIZED"),
+            dfEntity.detectionId,
+        )
+        assertTrue(cfEntity.detectionId != dfEntity.detectionId)
+    }
+
     @Test
     fun `derived ids match the SQL derivation in 0004`() {
         val sampleId = "f14f3504-0d9f-433e-a0c2-c960a4e5801b"

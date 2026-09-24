@@ -95,11 +95,18 @@ class OpenVerificationTargetUseCase @Inject constructor(
             .groupingBy { it }
             .eachCount()
         val findingRows = findingDao.getFindingsForSample(sampleId)
-        val rowCountBySpecies = findingRows.groupingBy { it.species }.eachCount()
-        val addedFindings = findingRows.mapNotNull { row ->
+        // Only the rows that survive the boxedCounts filter below are genuine added-card rows -
+        // a species+stage the boxes already fully account for produces no added row at all, so
+        // counting every raw row (including those) would overcount how many added cards a
+        // species really has and switch the legacy-id fallback off when it is still safe.
+        val survivingRows = findingRows.mapNotNull { row ->
             val (parsedStage, otherStage) = parseStage(row.stage)
             val key = SpeciesStageKey(row.species, parsedStage, otherStage.trim())
-            if (row.eggCount <= (boxedCounts[key] ?: 0)) return@mapNotNull null
+            row.takeIf { row.eggCount > (boxedCounts[key] ?: 0) }?.let { it to key }
+        }
+        val rowCountBySpecies = survivingRows.groupingBy { (row, _) -> row.species }.eachCount()
+        val addedFindings = survivingRows.map { (row, _) ->
+            val (parsedStage, otherStage) = parseStage(row.stage)
             val answers = VerificationAnswers(
                 species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
                 otherSpeciesText = row.species.takeIf {
