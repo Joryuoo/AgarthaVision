@@ -47,29 +47,6 @@ data class VerificationAnswers(
      */
     val fieldTotal: Int? = null,
     /**
-     * True once the medtech deliberately asserts a species — by confirming the model's
-     * suggestion, or by picking one themselves.
-     *
-     * Persisted to `detections.species_touched`
-     * (`supabase/migrations/0012_polyparasitism_findings.sql`). It exists to keep **"a human did
-     * not object"** distinguishable from **"a human confirmed this"** in a table that doubles as
-     * the retraining corpus, where a species with no human behind it must never be
-     * indistinguishable from one with.
-     *
-     * That distinction is load-bearing again. 86d4auj84 had removed the silent pre-fill and made
-     * the sheet ask, at which point every submitted species was a deliberate assertion and this
-     * was true on every row — a flag recording nothing. The screen now pre-fills every answer
-     * from model output, so that a medtech whose model was right submits without tapping
-     * anything, and the flag carries real information once more: false on a row nobody touched,
-     * true the moment they confirm or change it.
-     *
-     * **Invariant:** every path by which the *medtech* sets [species] sets this true. Seeding a
-     * row from the model's own class does not, and must not — a seeded species is the model's
-     * answer sitting in the slot a human answer is read from, which is precisely the thing this
-     * flag is here to tell apart.
-     */
-    val speciesTouched: Boolean = false,
-    /**
      * A box the medtech drew by hand, in the model's own coordinate space.
      *
      * On a prediction-backed row this **replaces** the model's box: the model boxed a real egg

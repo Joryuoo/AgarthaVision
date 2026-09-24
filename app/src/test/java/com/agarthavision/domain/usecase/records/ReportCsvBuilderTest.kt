@@ -62,7 +62,6 @@ class ReportCsvBuilderTest {
                     bboxH = 0.4f,
                     verdict = DetectionVerdict.CONFIRMED,
                     expertClass = "Ascaris lumbricoides",
-                    verifiedByUser = true,
                 ),
             ),
         )

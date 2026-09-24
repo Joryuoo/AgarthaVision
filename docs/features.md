@@ -73,7 +73,7 @@ as working.
 ### Validation (human-in-the-loop)
 - **Model output pre-filling.** A detected box opens with Q1 (is egg: yes), Q2 (box correct: yes),
   and Q3 (species: model class) pre-filled. Answering is only required when correcting the model.
-  Untouched pre-fills submit with `species_touched = false`; touching/confirming sets it to `true`.
+  Submitting a pre-filled row is the medtech's confirmation of it.
 - **Derived Q4.** The "missed eggs" flag (`needs_reannotation`) is derived automatically when
   eggs are added that the model never boxed, rather than asking a separate question.
 - **Always-available Add Egg.** An "Add Egg" button on every frame replaces the old separate manual

@@ -113,7 +113,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = false,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
                 drawnBox = drawn,
                 boxReplaced = true,
             ),
@@ -143,7 +142,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = false,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
                 drawnBox = ImageBox(1f, 2f, 3f, 4f),
                 boxReplaced = true,
             ),
@@ -161,7 +159,6 @@ class VerificationMapperTest {
                 isEgg = true,
                 isBoxCorrect = true,
                 species = EggSpecies.ASCARIS,
-                speciesTouched = true,
             ),
         )
 
@@ -174,8 +171,8 @@ class VerificationMapperTest {
     }
 
     /**
-     * An added egg the medtech drew a box for is still a human assertion: confidence 1.0 and
-     * species_touched true, which is what distinguishes it in the corpus from a model box.
+     * An added egg the medtech drew a box for is still a human assertion: confidence 1.0, and no
+     * prediction behind it, which is what distinguishes it in the corpus from a model box.
      */
     @Test
     fun `an added egg with a drawn box is written as a human assertion`() {
@@ -185,7 +182,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
                 fieldTotal = 1,
-                speciesTouched = true,
                 drawnBoxes = listOf(drawn),
             ),
         )
@@ -193,7 +189,6 @@ class VerificationMapperTest {
         val entity = listOf(finding).toDetectionEntities("sample-1").single()
 
         assertEquals(1.0f, entity.confidence)
-        assertTrue(entity.speciesTouched)
         assertEquals(90f, entity.bboxX)
     }
 
@@ -205,7 +200,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.HOOKWORM,
                 fieldTotal = 1,
-                speciesTouched = true,
             ),
         )
 
@@ -231,7 +225,6 @@ class VerificationMapperTest {
             answers = VerificationAnswers(
                 species = EggSpecies.ASCARIS,
                 fieldTotal = 2,
-                speciesTouched = true,
                 drawnBoxes = listOf(first, second),
             ),
         )
@@ -250,7 +243,6 @@ class VerificationMapperTest {
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
-            speciesTouched = true,
         )
         val findings = listOf(
             Finding(prediction, ascaris),
@@ -271,7 +263,6 @@ class VerificationMapperTest {
             isEgg = true,
             isBoxCorrect = true,
             species = EggSpecies.ASCARIS,
-            speciesTouched = true,
         )
         val findings = listOf(
             Finding(prediction, ascaris),

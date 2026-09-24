@@ -50,6 +50,7 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 - Version 14 added `species_suggestions`, the offline autocomplete index.
 - Version 15 added `reports.lpf_per_species_json` (LPF density metrics).
 - Version 16 declared the samples-to-sessions foreign key with `NO_ACTION` (`SampleEntity.kt:35-42`).
+- Version 22 dropped `detections.species_touched` and `detections.verified_by_user`. **Version 21 is left free**: `development` briefly carried a `21.json` of a different shape.
 
 `play-services-location` was removed along with the GPS columns (`gradle/libs.versions.toml`).
 

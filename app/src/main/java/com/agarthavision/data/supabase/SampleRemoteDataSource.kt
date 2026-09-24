@@ -212,17 +212,13 @@ class SampleRemoteDataSource @Inject constructor(
                 bboxH = row.bboxH,
                 verdict = row.verdict,
                 expertClass = row.expertClass,
-                speciesTouched = row.speciesTouched,
                 predictionId = predictionId,
             )
         }
 
     private fun DetectionEntity.toInsertRow(): DetectionInsertRow {
-        val resolvedVerdict = when {
-            verdict.isNotBlank() -> DetectionVerdict.fromValue(verdict)
-            !verifiedByUser -> DetectionVerdict.FALSE_POSITIVE
-            else -> DetectionVerdict.CONFIRMED
-        }
+        val resolvedVerdict =
+            if (verdict.isNotBlank()) DetectionVerdict.fromValue(verdict) else DetectionVerdict.CONFIRMED
         return DetectionInsertRow(
             id = detectionId,
             sampleId = sampleId,
@@ -234,7 +230,6 @@ class SampleRemoteDataSource @Inject constructor(
             bboxH = bboxH,
             verdict = resolvedVerdict.remoteValue,
             expertClass = expertClass,
-            speciesTouched = speciesTouched,
         )
     }
 
@@ -285,8 +280,6 @@ class SampleRemoteDataSource @Inject constructor(
         val verdict: String,
         @SerialName("expert_class")
         val expertClass: String?,
-        @SerialName("species_touched")
-        val speciesTouched: Boolean,
     )
 
     /**
@@ -319,8 +312,6 @@ class SampleRemoteDataSource @Inject constructor(
         val verdict: String,
         @SerialName("expert_class")
         val expertClass: String?,
-        @SerialName("species_touched")
-        val speciesTouched: Boolean,
         @SerialName("prediction_id")
         val predictionId: String?,
     )
@@ -400,7 +391,6 @@ class SampleRemoteDataSource @Inject constructor(
         @SerialName("bbox_h") val bboxH: Float? = null,
         @SerialName("verdict") val verdict: String,
         @SerialName("expert_class") val expertClass: String? = null,
-        @SerialName("species_touched") val speciesTouched: Boolean = false,
     )
 
     @Serializable
@@ -457,8 +447,6 @@ class SampleRemoteDataSource @Inject constructor(
         bboxH = bboxH,
         verdict = DetectionVerdict.fromValue(verdict).value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = speciesTouched,
     )
 
     private fun PredictionRow.toSamplePrediction(): SamplePrediction = SamplePrediction(

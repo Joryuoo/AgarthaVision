@@ -89,7 +89,6 @@ class OpenVerificationTargetUseCaseTest {
         y: Float = 240f,
         classLabel: String = "Ascaris",
         expertClass: String? = null,
-        speciesTouched: Boolean = true,
     ) = DetectionEntity(
         detectionId = detectionIdFor(sampleId, ordinal),
         sampleId = sampleId,
@@ -101,8 +100,6 @@ class OpenVerificationTargetUseCaseTest {
         bboxH = 30f,
         verdict = verdict.value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = speciesTouched,
     )
 
     private suspend fun stub(
@@ -129,8 +126,6 @@ class OpenVerificationTargetUseCaseTest {
         bboxH = x?.let { 12f },
         verdict = DetectionVerdict.CONFIRMED.value,
         expertClass = species,
-        verifiedByUser = true,
-        speciesTouched = true,
     )
 
     /**
@@ -301,8 +296,6 @@ class OpenVerificationTargetUseCaseTest {
                 bboxH = null,
                 verdict = DetectionVerdict.CONFIRMED.value,
                 expertClass = null,
-                verifiedByUser = true,
-                speciesTouched = true,
             )
             stub(listOf(boxDetection(0), added))
 
@@ -315,27 +308,19 @@ class OpenVerificationTargetUseCaseTest {
     //
     // `speciesConfirmed` is not a column. It has to be derived on reopen, and leaving it at its
     // null default drew every reopened row as "this is NOT an Ascaris egg" with no picker under
-    // it to say otherwise. The trap is the correction: tapping the checkbox sets
-    // `speciesTouched`, so the natural fix writes `species_touched = 1` on a row no human ever
-    // adjudicated - a C7 violation reachable by doing the obvious thing. Hence the pair of
-    // assertions in the first test: the flag must come back true, and `speciesTouched` must not
-    // move with it.
+    // it to say otherwise.
 
     @Test
-    fun `a species the medtech kept reopens confirmed, and still untouched`() =
+    fun `a species the medtech kept reopens confirmed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // expert_class null and species_touched false: the model said Ascaris, the medtech
-            // submitted without objecting. Exactly the row the field test found broken.
-            stub(listOf(boxDetection(0, speciesTouched = false)))
+            // expert_class null: the model said Ascaris, the medtech submitted without objecting.
+            // Exactly the row the field test found broken.
+            stub(listOf(boxDetection(0)))
 
             val answers = useCase(sampleId).getOrThrow().findings[0].answers
 
             assertEquals(true, answers.speciesConfirmed)
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertFalse(
-                "Reopening must not turn 'did not object' into 'a human confirmed this'.",
-                answers.speciesTouched,
-            )
         }
 
     @Test
@@ -348,7 +333,6 @@ class OpenVerificationTargetUseCaseTest {
             // False, not null: false is what opens SpeciesDropdown, with their own choice in it.
             assertEquals(false, answers.speciesConfirmed)
             assertEquals(EggSpecies.HOOKWORM, answers.species)
-            assertTrue("The override was a deliberate assertion.", answers.speciesTouched)
         }
 
     @Test
@@ -382,17 +366,12 @@ class OpenVerificationTargetUseCaseTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Q2 "No" does not short-circuit Q3 - a box in the wrong place still holds a real
             // egg that has to be named - so the BOX_INCORRECT branch needs the flag too.
-            stub(
-                listOf(
-                    boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT, speciesTouched = false),
-                ),
-            )
+            stub(listOf(boxDetection(0, verdict = DetectionVerdict.BOX_INCORRECT)))
 
             val answers = useCase(sampleId).getOrThrow().findings[0].answers
 
             assertEquals(false, answers.isBoxCorrect)
             assertEquals(true, answers.speciesConfirmed)
-            assertFalse(answers.speciesTouched)
         }
 
     @Test

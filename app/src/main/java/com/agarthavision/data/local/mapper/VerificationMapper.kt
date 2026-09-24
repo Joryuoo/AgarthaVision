@@ -32,10 +32,6 @@ import java.util.UUID
  * counted. `0002_verification_fields.sql` describes the narrower original rule; it is applied
  * and is not edited (C6), so `schema.ts` and `docs/map/objects/Detection.md` carry the current
  * one.
- *
- * `species_touched` is orthogonal to all of this and never alters a verdict. It is deliberately
- * not a new [DetectionVerdict] member — that would mean touching the Supabase CHECK constraint
- * and every raw query naming a verdict, for a training-weight signal a boolean carries.
  */
 fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionVerdict = when {
     answers.isEgg != true -> DetectionVerdict.FALSE_POSITIVE
@@ -219,8 +215,6 @@ private fun Finding.toDetectionEntity(
         bboxH = box?.height,
         verdict = verdict.value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = answers.speciesTouched,
         stage = answers.stageLabel,
     )
 }

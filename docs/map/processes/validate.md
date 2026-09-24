@@ -21,7 +21,6 @@ The human-in-the-loop gate. Nothing counts until this runs.
    presents the model's prediction: is it an egg (Q1), is the bounding box placed correctly (Q2),
    and which species is it (Q3). These are pre-filled from model inference so the medtech confirms
    or overrides with minimal taps. Medtechs can also use "Add Egg" to draw/tag missed eggs on the frame.
-   When the medtech confirms or re-selects a species, `species_touched` is marked `true` for retraining provenance.
    A "no" to the egg question records `FALSE_POSITIVE`. A "no" to the box question records `BOX_INCORRECT`
    while still asking for species.
 3. **Derived / frame-level reannotation.** Missed eggs or misclassified detections feed

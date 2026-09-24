@@ -445,6 +445,8 @@ export interface Prediction {
  * Supabase migrations:
  * - `0001_init.sql` (consolidated): creates `detections` with class, confidence,
  *   nullable bboxes, verdict, expert_class, and `species_touched`.
+ * - `0004_predictions.sql`: adds `prediction_id`.
+ * - `0005_drop_species_touched.sql`: drops `species_touched`.
  * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
@@ -485,11 +487,6 @@ export interface Detection {
   // Nullable corrected class. Used when verdict is `WRONG_CLASS` or `BOX_INCORRECT`
   // and the medtech corrected the species.
 
-  species_touched: boolean;
-  // NOT NULL default `false`. True when the medtech made a deliberate species selection,
-  // including re-picking the pre-filled value. False means pre-fill was untouched.
-  // Critical for retraining corpus provenance.
-
   prediction_id: UUID | null;
   // Supabase-only (0004). FK (prediction_id, sample_id) -> predictions(id, sample_id), unique
   // where set. Null on an egg the medtech added, or on a pre-0004 row of unknown provenance.
@@ -497,10 +494,6 @@ export interface Detection {
 
   created_at: TimestampTZ;
   // Supabase NOT NULL default `now()`.
-
-  // ── Room-only column ───────────────────────────────────────────────────────
-  verified_by_user: boolean;
-  // Room-only. Dropped from Supabase in legacy-dev migration 0002.
 }
 
 /**
@@ -800,8 +793,8 @@ export type RelationshipMatrix = [
  * - Remote `samples.captured_at` (timestamptz) is mirrored as `timestamp` (epoch millis) in Room.
  * - Remote `samples` has no `image_path` or `created_at` column; `image_path` is Room-only.
  * - Remote `reports.lpf_per_species` (jsonb) stores the min–max LPF density range, replacing Kato-Katz EPG.
- * - Remote `detections.verified_by_user` was dropped in migration `0002`; Room
- *   still keeps it locally.
+ * - `detections.verified_by_user` was dropped remotely in migration `0002` and from Room
+ *   at version 22.
  * - Remote detection verdict values are uppercase. Room/domain values are
  *   lowercase and are mapped before sync.
  * - Remote detection bounding boxes are nullable after migration `0007`.

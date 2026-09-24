@@ -30,7 +30,6 @@ so a redraw no longer costs the corpus the box the model actually drew.
 | `bbox_x/y/w/h` | real, **nullable** (`0001_init.sql:231-234`). The box a human stands behind — see *Box provenance* below |
 | `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) (`0001_init.sql:237-238`) |
 | `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, or when the verdict is `BOX_INCORRECT` and the medtech corrected the species |
-| `species_touched` | NOT NULL boolean, default `false` (`0001_init.sql:242`) — see below |
 | `prediction_id` | nullable, FK `(prediction_id, sample_id)` → `predictions(id, sample_id)`, unique where set (`0004_predictions.sql`). Null on an egg the medtech added, and on a pre-0004 row whose provenance could not be established. **Room has no such column**; the push derives it from the ordinal |
 
 **Box provenance** (14zcqnthrx6, 14zcqnthrx8). `VerificationMapper` writes the model's box only
@@ -62,30 +61,26 @@ counted, so the species question is now asked whenever the medtech says the box 
 not only when they also say the box is correctly placed. The verdict precedence is unchanged
 (`BOX_INCORRECT` still outranks `WRONG_CLASS`); only the column's population rule widened.
 
-**`species_touched` is provenance, not a verdict.** Species fields are pre-filled from the model
-output so the medtech edits only what is wrong. That means an untouched submission yields
-`CONFIRMED` — "a human did not object" quietly stored as "a human confirmed this" — and since
-`detections` doubles as the retraining corpus, the difference matters. The flag is `true` only
-when the medtech made a deliberate selection, **including re-picking the pre-filled value**.
-Retraining should weight `false` rows lower. It is deliberately not a new `DetectionVerdict`
-member: that would mean touching the Supabase CHECK constraint and every query naming a
-verdict, for a signal a boolean carries. It is also deliberately **not** a reuse of
-`verified_by_user`, which is dead drift (ticket 86d4akgmf).
+**`species_touched` was dropped** (`0005_drop_species_touched.sql`, Room version 22). It was
+meant to separate "a human confirmed this" from "a human did not object" on a pre-filled row,
+but it recorded taps: a medtech who read a row and agreed submitted it untouched. Everything it
+marked for a real reason is carried elsewhere — `WRONG_CLASS` for a picked species, a null
+`prediction_id` for an added egg — and box provenance is the table above. Submitting a
+pre-filled row is the medtech's confirmation of it.
 
 Index on `verdict` for retraining queries (`0001_init.sql:250`).
-`verified_by_user` was **dropped** from Postgres in legacy-dev migration 0002.
+`verified_by_user` was **dropped** from Postgres in legacy-dev migration 0002, and from Room at
+version 22.
 
 **Room** (`app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt:28-68`)
 
-PK column is `detection_id`. Two things to know:
+PK column is `detection_id`. One thing to know:
 
 - **Case mismatch.** Room stores lowercase (`confirmed`, `false_positive`, …) and Postgres
   stores uppercase. `DetectionVerdict` carries both and maps at the boundary —
   `domain/model/DetectionVerdict.kt:9-27`,
   `data/supabase/SampleRemoteDataSource.kt:79-97`. Queries that hardcode a verdict string must
   pick the right case for the store they are querying.
-- `verified_by_user` **still exists in Room** (`DetectionEntity.kt:66-67`) even though Postgres
-  dropped it, and is not in the insert row.
 
 **Contradiction in the source, unresolved:** the entity's class KDoc says bounding boxes are
 "normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says

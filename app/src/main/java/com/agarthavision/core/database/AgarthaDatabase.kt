@@ -82,6 +82,15 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * changes together — reconciling divergent schemas always earns a new version, the same way
  * version 15 carried a merged change in rather than reshaping 14.**
  *
+ * Version 22 drops `detections.species_touched` and `detections.verified_by_user`
+ * (14zcqnthrx8). `species_touched` recorded taps rather than judgements: a pre-filled row the
+ * medtech read and agreed with submits untouched, so it could not tell attention from its
+ * absence, and every row it did mark was already marked by its verdict or by a null
+ * `prediction_id`. `verified_by_user` was dropped from Postgres long ago and was hardcoded
+ * `true` at every write site here (86d4akgmf). **Version 21 is left free:** `development`
+ * briefly carried a `21.json` for an `is_edited` column no entity ever declared, and a device
+ * that installed that build holds version 21 under a different hash.
+ *
  * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
  * already committed and on devices. Adding a table without changing the number is precisely
  * the equal-version-different-hash case described below: destructive fallback does not
@@ -121,7 +130,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 20,
+    version = 22,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

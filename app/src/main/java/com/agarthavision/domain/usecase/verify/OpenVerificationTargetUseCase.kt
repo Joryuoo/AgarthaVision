@@ -81,7 +81,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     speciesConfirmed = EggSpecies.fromClassLabel(prediction.classLabel)
                         ?.let { true },
                     species = EggSpecies.fromClassLabel(prediction.classLabel),
-                    speciesTouched = false,
                 ),
             )
         }
@@ -107,7 +106,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     stage = parsedStage,
                     otherStageText = otherStage,
                     fieldTotal = row.eggCount,
-                    speciesTouched = true,
                     drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
                 ),
             )
@@ -185,16 +183,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
      * a species the medtech had confirmed, and the picker stayed hidden (it opens on `false`,
      * not on null), leaving an answer that looked wrong and no control to correct it with.
      *
-     * The obvious correction — tap the checkbox — is the reason this is a C7 problem rather than
-     * a cosmetic one. `onSpeciesConfirmed(true)` sets [VerificationAnswers.speciesTouched], so
-     * re-saving flipped `detections.species_touched` to 1 on a row no human ever adjudicated,
-     * and the retraining corpus began recording "a human confirmed this" for an answer nobody
-     * gave. Which is exactly the distinction that flag exists to keep.
-     *
-     * So: `speciesTouched` keeps coming from its column and never from this comparison. Deriving
-     * it here would recreate the same corruption from the other direction — every reopened row
-     * that happened to match the model would start claiming a human had agreed with it.
-     *
      * **A replaced box is read off the row, not compared against the model's (14zcqnthrx8).**
      * `VerificationMapper` writes a `BOX_INCORRECT` row with a box only when the medtech drew
      * one — the one they rejected is not kept — so on that verdict a stored box *is* the redraw
@@ -228,7 +216,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 otherSpeciesText = if (species == null) label else "",
                 stage = parsedStage,
                 otherStageText = otherStage,
-                speciesTouched = speciesTouched,
                 drawnBox = if (replaced) storedBox() else null,
                 boxReplaced = replaced,
             )
@@ -240,7 +227,6 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 otherSpeciesText = if (species == null) label else "",
                 stage = parsedStage,
                 otherStageText = otherStage,
-                speciesTouched = speciesTouched,
             )
         }
     }
