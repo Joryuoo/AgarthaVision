@@ -472,11 +472,27 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onStageSelected(stage: EggStage) {
-        updateCurrentAnswer { it.copy(stage = stage) }
+        updateCurrentAnswer {
+            if (stage != EggStage.OTHER) {
+                it.copy(stage = stage, otherStageText = "")
+            } else {
+                it.copy(stage = stage)
+            }
+        }
     }
 
     fun onAddedStageSelected(index: Int, stage: EggStage) {
-        updateAnswerAt(index) { it.copy(stage = stage) }
+        updateAnswerAt(index) {
+            if (stage != EggStage.OTHER) {
+                it.copy(stage = stage, otherStageText = "")
+            } else {
+                it.copy(stage = stage)
+            }
+        }
+    }
+
+    fun onOtherStageChanged(text: String) {
+        updateCurrentAnswer { it.copy(otherStageText = text) }
     }
 
     fun onOtherSpeciesChanged(text: String) {
@@ -618,6 +634,10 @@ class VerificationViewModel @Inject constructor(
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
         searchSuggestions(SuggestionTarget.AddedFinding(index), text)
+    }
+
+    fun onAddedOtherStageChanged(index: Int, text: String) {
+        updateAnswerAt(index) { it.copy(otherStageText = text) }
     }
 
     /**

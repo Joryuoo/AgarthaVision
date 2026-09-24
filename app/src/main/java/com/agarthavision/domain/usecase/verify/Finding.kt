@@ -65,9 +65,14 @@ data class Finding(
  * counting the unnamed ones together would put a floor under a freshly added card drawn from
  * boxes that have nothing to do with it.
  */
-fun List<Finding>.boxedCountOf(species: String?, stage: EggStage? = null): Int =
+fun List<Finding>.boxedCountOf(
+    species: String?,
+    stage: EggStage? = null,
+    otherStageText: String = "",
+): Int =
     if (species == null) 0 else count {
-        it.countsAsEgg && it.answers.speciesLabel == species && (stage == null || it.answers.stage == stage)
+        it.countsAsEgg && it.answers.speciesLabel == species &&
+            (stage == null || (it.answers.stage == stage && (stage != EggStage.OTHER || it.answers.otherStageText == otherStageText)))
     }
 
 /**
@@ -77,10 +82,15 @@ fun List<Finding>.boxedCountOf(species: String?, stage: EggStage? = null): Int =
  * The two are not added. A total already includes the boxes — that is what makes it a total —
  * and summing them is the double-count the old per-row contribution walked into.
  */
-fun List<Finding>.fieldTotalOf(species: String?, stage: EggStage? = null): Int =
+fun List<Finding>.fieldTotalOf(
+    species: String?,
+    stage: EggStage? = null,
+    otherStageText: String = "",
+): Int =
     firstOrNull {
-        it.prediction == null && it.answers.speciesLabel == species && (stage == null || it.answers.stage == stage)
-    }?.answers?.fieldTotal ?: boxedCountOf(species, stage)
+        it.prediction == null && it.answers.speciesLabel == species &&
+            (stage == null || (it.answers.stage == stage && (stage != EggStage.OTHER || it.answers.otherStageText == otherStageText)))
+    }?.answers?.fieldTotal ?: boxedCountOf(species, stage, otherStageText)
 
 /**
  * Eggs of [species] with no box behind them.
@@ -129,13 +139,14 @@ fun List<Finding>.speciesPresent(): List<String> =
 data class SpeciesStageKey(
     val species: String,
     val stage: EggStage? = null,
+    val otherStageText: String = "",
 )
 
 fun List<Finding>.speciesStageKeysPresent(): List<SpeciesStageKey> =
     mapNotNull { finding ->
         val species = finding.answers.speciesLabel ?: return@mapNotNull null
         if (finding.countsAsEgg || finding.prediction == null) {
-            SpeciesStageKey(species, finding.answers.stage)
+            SpeciesStageKey(species, finding.answers.stage, finding.answers.otherStageText)
         } else null
     }.distinct()
 
@@ -146,8 +157,16 @@ fun List<Finding>.speciesStageKeysPresent(): List<SpeciesStageKey> =
 data class FindingRow(
     val species: String,
     val stage: EggStage? = null,
+    val otherStageText: String = "",
     val eggCount: Int,
-)
+) {
+    val stageDisplayName: String?
+        get() = when (stage) {
+            null -> null
+            EggStage.OTHER -> otherStageText.trim().ifBlank { EggStage.OTHER.displayName }
+            else -> stage.displayName
+        }
+}
 
 /**
  * Collapses a frame's findings into the rows that get persisted.
@@ -155,7 +174,7 @@ data class FindingRow(
 fun List<Finding>.toFindingRows(): List<FindingRow> =
     speciesStageKeysPresent()
         .mapNotNull { key ->
-            val count = fieldTotalOf(key.species, key.stage)
-            if (count > 0) FindingRow(key.species, key.stage, count) else null
+            val count = fieldTotalOf(key.species, key.stage, key.otherStageText)
+            if (count > 0) FindingRow(key.species, key.stage, key.otherStageText, count) else null
         }
-        .sortedWith(compareBy({ it.species }, { it.stage?.name }))
+        .sortedWith(compareBy({ it.species }, { it.stage?.name }, { it.otherStageText }))

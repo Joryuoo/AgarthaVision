@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.inference.ImageBox
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.boxedCountOf
@@ -278,7 +277,9 @@ private fun AddedFindingCard(
             StageDropdown(
                 selectedSpecies = addedSpecies,
                 selectedStage = finding.answers.stage,
+                otherStageText = finding.answers.otherStageText,
                 onStageSelected = { actions.onAddedStageSelected(index, it) },
+                onOtherStageTextChanged = { actions.onAddedOtherStageChanged(index, it) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag(VerifyTestTags.addedStageDropdown(index))
@@ -481,9 +482,9 @@ internal fun FindingsSummary(
                 .padding(12.dp),
         ) {
             rows.forEach { row ->
-                val labelText = if (row.stage != null) {
-                    val speciesEnum = EggSpecies.fromClassLabel(row.species)
-                    "${row.species} (${row.stage.getDisplayName(speciesEnum)})"
+                val stageDisplay = row.stageDisplayName
+                val labelText = if (stageDisplay != null) {
+                    "${row.species} ($stageDisplay)"
                 } else {
                     row.species
                 }

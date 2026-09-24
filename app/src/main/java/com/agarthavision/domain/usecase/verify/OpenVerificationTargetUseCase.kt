@@ -13,6 +13,7 @@ import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
@@ -101,6 +102,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
             .eachCount()
         val addedFindings = findingDao.getFindingsForSample(sampleId).mapNotNull { row ->
             if (row.eggCount <= (boxedCounts[row.species] ?: 0)) return@mapNotNull null
+            val (parsedStage, otherStage) = parseStage(row.stage)
             Finding(
                 prediction = null,
                 answers = VerificationAnswers(
@@ -108,6 +110,8 @@ class OpenVerificationTargetUseCase @Inject constructor(
                     otherSpeciesText = row.species.takeIf {
                         EggSpecies.fromClassLabel(it) == null
                     }.orEmpty(),
+                    stage = parsedStage,
+                    otherStageText = otherStage,
                     fieldTotal = row.eggCount,
                     speciesTouched = true,
                     drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
@@ -201,6 +205,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
     ): VerificationAnswers {
         val label = expertClass ?: classLabel
         val species = EggSpecies.fromClassLabel(label)
+        val (parsedStage, otherStage) = parseStage(stage)
         val replaced = reconstructed || replacesBoxOf(prediction)
         // Null when the model's class maps to no EggSpecies: there was never anything to
         // confirm, so the picker is offered directly and the checkbox never renders. Compared
@@ -216,6 +221,8 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 speciesConfirmed = confirmed,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
+                stage = parsedStage,
+                otherStageText = otherStage,
                 speciesTouched = speciesTouched,
                 drawnBox = if (replaced) storedBox() else null,
                 boxReplaced = replaced,
@@ -226,8 +233,20 @@ class OpenVerificationTargetUseCase @Inject constructor(
                 speciesConfirmed = confirmed,
                 species = species ?: EggSpecies.OTHER,
                 otherSpeciesText = if (species == null) label else "",
+                stage = parsedStage,
+                otherStageText = otherStage,
                 speciesTouched = speciesTouched,
             )
+        }
+    }
+
+    private fun parseStage(storedStage: String?): Pair<EggStage?, String> {
+        if (storedStage.isNullOrBlank()) return null to ""
+        val stageEnum = EggStage.fromName(storedStage)
+        return when {
+            stageEnum != null && stageEnum != EggStage.OTHER -> stageEnum to ""
+            stageEnum == EggStage.OTHER -> EggStage.OTHER to ""
+            else -> EggStage.OTHER to storedStage
         }
     }
 

@@ -78,6 +78,8 @@ internal object VerifyTestTags {
     /** Developmental stage picker, shown when selected species has stages. */
     const val STAGE_DROPDOWN = "stage_dropdown"
 
+    const val OTHER_STAGE_FIELD = "other_stage_field"
+
 
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
@@ -164,6 +166,8 @@ internal object VerifyTestTags {
 
     /** Stage picker on the added finding at [index]. */
     fun addedStageDropdown(index: Int): String = "added_stage_dropdown_" + index
+
+    fun addedOtherStageField(index: Int): String = "added_other_stage_field_" + index
 
     /**
      * Draw / redraw affordance for egg [slot] of the added species at [findingIndex].
