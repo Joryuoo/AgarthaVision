@@ -11,9 +11,19 @@ first, because the underlying samples can change between generations and a clini
 be reproducible. That is why the aggregates are denormalised into columns rather than computed
 on read.
 
-The split matters: **the numbers sync, the file does not.** Row-only sync keeps the CSV and PDF 
-on the device — a deliberate Phase 1 boundary that avoids uploading anything file-shaped to Storage
-besides sample images.
+The split matters: **the numbers and the file sync separately.** The row goes to Postgres; the
+CSV or PDF goes to the `reports` Storage bucket at `{user_id}/{report_id}.{ext}`, a path derived
+from the row rather than stored on it.
+
+They have to travel separately because `csv_file_path` and `pdf_file_path` are device-local — a
+MediaStore id or an absolute path — so on any device but the one that generated the report, the
+row names a file that was never there. That was the "No app available" bug: the row arrived, the
+document did not. `SyncReportUseCase` uploads the bytes; `RestoreReportFilesUseCase` pulls them
+back on first open and repoints the row at the local copy it writes, so the second open is a
+plain local read.
+
+A file the device no longer holds is skipped on upload rather than failing the row: losing the
+bytes must not cost the metadata too.
 
 ## Shape
 
@@ -30,7 +40,7 @@ besides sample images.
 | `total_eggs_confirmed` | integer NOT NULL, no default |
 | `positive_species` | `text[]` NOT NULL default `'{}'` |
 | `lpf_per_species` | `jsonb` NOT NULL default `'{}'` (Replaces Kato-Katz `epg_per_species`) |
-| `csv_file_path` | nullable text — a **device-local** path, meaningless to any other client |
+| `csv_file_path` | nullable text — a **device-local** path; other devices restore from Storage |
 | `pdf_file_path` | nullable text — mirrors `csv_file_path`; device-local path or URI |
 | `created_at` | NOT NULL, default `now()` |
 
@@ -53,8 +63,9 @@ PK column is `report_id`. Differences:
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
 - **Aggregates** findings from `sample_species_findings` table into LPF density.
-- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/` 
-  and are shared from `ui/records/ReportSharing.kt`.
+- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/`
+  and are shared from `ui/records/ReportSharing.kt`. Since 86d4bzm9g they are also mirrored to the
+  `reports` Storage bucket, which is what makes a report readable on a second device.
 
 ## If you change this
 

@@ -920,6 +920,49 @@ class FetchRemoteDataUseCaseTest {
         createdAt = 1_000L,
     )
 
+    // ── Report files (86d4bzm9g) ─────────────────────────────────────────────
+
+    @Test
+    fun `a pull does not undo a restored report file`() = runTest {
+        // Found on device: a restore repoints the row at the file it downloaded, and the next
+        // pull wrote the generating device's MediaStore id straight back. The report then opened
+        // to a file that is not here — and fetched it again, leaving another copy behind.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val remote = fakeReport("rep-1", "sess-1").copy(
+            pdfFilePath = "content://media/external_primary/file/1000929272",
+        )
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(remote))
+        whenever(reportDao.getReportById("rep-1")).thenReturn(
+            remote.copy(pdfFilePath = "content://media/external_primary/file/1000929275"),
+        )
+
+        useCase.invoke()
+
+        val written = argumentCaptor<ReportEntity>()
+        verify(reportDao).insertReport(written.capture())
+        assertEquals("content://media/external_primary/file/1000929275", written.firstValue.pdfFilePath)
+    }
+
+    @Test
+    fun `a report this device has never held takes the remote paths`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val remote = fakeReport("rep-1", "sess-1").copy(
+            pdfFilePath = "content://media/external_primary/file/1000929272",
+        )
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(remote))
+        whenever(reportDao.getReportById("rep-1")).thenReturn(null)
+
+        useCase.invoke()
+
+        // Stale here, but it is what lets the open fall through to a restore: a null path would
+        // read as "this report was never generated as a PDF".
+        val written = argumentCaptor<ReportEntity>()
+        verify(reportDao).insertReport(written.capture())
+        assertEquals("content://media/external_primary/file/1000929272", written.firstValue.pdfFilePath)
+    }
+
     // ── Sample frames (86d4by5n9) ────────────────────────────────────────────
 
     @Test
