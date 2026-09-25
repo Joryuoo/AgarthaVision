@@ -3,8 +3,10 @@ package com.agarthavision
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.psgc.PsgcSeeder
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.domain.repository.SampleImageRepository
@@ -13,6 +15,7 @@ import com.agarthavision.ui.image.SampleImageFetcher
 import com.agarthavision.ui.image.SampleImageKeyer
 import dagger.Lazy
 import dagger.hilt.android.HiltAndroidApp
+import io.github.jan.supabase.SupabaseClient
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -45,6 +48,20 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
     lateinit var sampleImageRepository: Lazy<SampleImageRepository>
 
     /**
+     * Lazy so restoring the active session runs off the main thread in [onCreate] rather
+     * than forcing the Supabase-backed session graph to construct synchronously.
+     */
+    @Inject
+    lateinit var sessionManager: Lazy<SessionManager>
+
+    /**
+     * Lazy so the client is warmed off the main thread in [onCreate] instead of being built
+     * on first use by whichever ViewModel or repository asks for it first.
+     */
+    @Inject
+    lateinit var supabaseClient: Lazy<SupabaseClient>
+
+    /**
      * Scope for work that outlives any screen. Seeding the PSGC reference data belongs
      * here rather than in a ViewModel: it is a data-layer concern, and routing it through
      * one would breach C1 for no benefit — nothing on screen waits for it.
@@ -68,6 +85,26 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // up onCreate, it has to outlive whatever screen the medtech lands on, and it no-ops
         // when the device is signed out. The network constraint decides when it actually runs.
         syncScheduler.requestSync()
+
+        // Sessions no longer end, so one can outlive the process that created it. Without
+        // this the app would come back idle with a smear still open: the dashboard card would
+        // be gone and the verification queue would render empty, because FlaggedFrameStore
+        // emits an empty list when there is no active session. Nothing lost, but it would look
+        // like everything was. Run as its own launch so a failure here never blocks the
+        // Supabase warm-up below.
+        applicationScope.launch {
+            runCatching { sessionManager.get().restoreActiveSession() }
+                .onFailure { Log.w(TAG, "Failed to restore active session", it) }
+        }
+
+        // Pre-creates the Supabase client off the main thread so the first real network call
+        // (e.g. tapping "start session") does not pay that construction cost synchronously on
+        // the UI thread. Under Robolectric this may throw, which is caught intentionally so it
+        // never breaks tests that instantiate the real Application.
+        applicationScope.launch {
+            runCatching { supabaseClient.get() }
+                .onFailure { Log.w(TAG, "Failed to warm up Supabase client", it) }
+        }
     }
 
     /**
@@ -86,4 +123,8 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
+
+    private companion object {
+        private const val TAG = "AgarthaVisionApp"
+    }
 }

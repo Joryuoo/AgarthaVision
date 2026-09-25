@@ -80,7 +80,9 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
 `core/di/SupabaseModule.kt:23-33`, and on the classes themselves
 (`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
-`data/repository/FlaggedFrameStore.kt:40`).
+`data/repository/FlaggedFrameStore.kt:40`). `SupabaseClient` is injected as
+`dagger.Lazy<SupabaseClient>` so resolving a ViewModel never constructs it on the main thread;
+the app warms it off-main in `AgarthaVisionApp.onCreate`.
 
 ## C6 — Migrations own the schema
 
