@@ -9,6 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -60,6 +61,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -456,29 +458,48 @@ internal fun VerificationSheetContent(
                 title = { Text(stringResource(R.string.verify_discard_changes_title)) },
                 text = { Text(stringResource(R.string.verify_discard_changes_body)) },
                 confirmButton = {
-                    AgarthaButton(
-                        onClick = {
-                            showDiscardChangesDialog.value = false
-                            actions.onConfirmLeave()
-                        },
-                        variant = AgarthaButtonVariant.Destructive,
-                        modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(stringResource(R.string.verify_discard_changes_confirm))
+                        AgarthaButton(
+                            onClick = {
+                                showDiscardChangesDialog.value = false
+                                actions.onDismissLeave()
+                            },
+                            variant = AgarthaButtonVariant.Secondary,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.verify_discard_changes_keep),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 13.sp,
+                            )
+                        }
+                        AgarthaButton(
+                            onClick = {
+                                showDiscardChangesDialog.value = false
+                                actions.onConfirmLeave()
+                            },
+                            variant = AgarthaButtonVariant.Destructive,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.verify_discard_changes_confirm),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontSize = 13.sp,
+                            )
+                        }
                     }
                 },
-                dismissButton = {
-                    AgarthaButton(
-                        onClick = {
-                            showDiscardChangesDialog.value = false
-                            actions.onDismissLeave()
-                        },
-                        variant = AgarthaButtonVariant.Secondary,
-                        modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
-                    ) {
-                        Text(stringResource(R.string.verify_discard_changes_keep))
-                    }
-                },
+                dismissButton = null,
             )
         }
 
