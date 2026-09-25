@@ -61,6 +61,7 @@
     <string name="verify_locate_eggs">Locate eggs · %1$d of %2$d located</string>
     <string name="verify_locate_eggs_note">Optional. Drawing where they are improves future results.</string>
     <string name="verify_locate_egg_row">%1$s · egg %2$d of %3$d</string>
+    <string name="verify_locate_egg_row_staged">%1$s (%2$s) · egg %3$d of %4$d</string>
     <string name="verify_add_species_blocked">Finish the species above first: choose a species and enter its egg count.</string>
     <string name="verify_added_species_not_chosen">Species not chosen</string>
     <string name="verify_added_species_unfinished">Not finished. Tap to complete.</string>
