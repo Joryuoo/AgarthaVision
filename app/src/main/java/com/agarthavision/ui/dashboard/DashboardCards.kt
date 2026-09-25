@@ -33,6 +33,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -201,10 +203,20 @@ private fun KpiTile(
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
+                .testTag("kpiTile_${data.label}")
+                .fillMaxWidth()
                 .background(if (data.isLoading) Color.Transparent else colors.bgColor, shape)
                 .border(1.dp, if (data.isLoading) Color.Transparent else colors.borderColor, shape)
                 .padding(14.dp)
-                .then(if (data.isLoading) Modifier.alpha(0f) else Modifier)
+                .then(
+                    if (data.isLoading) {
+                        Modifier
+                            .alpha(0f)
+                            .clearAndSetSemantics {}
+                    } else {
+                        Modifier
+                    }
+                )
         ) {
             Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
             Spacer(Modifier.height(6.dp))
