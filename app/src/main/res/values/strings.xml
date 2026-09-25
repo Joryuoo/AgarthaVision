@@ -83,8 +83,8 @@
     <string name="verify_editing_title">Editing sample</string>
     <string name="verify_discard_changes_title">Discard changes?</string>
     <string name="verify_discard_changes_body">You have unsaved changes that will be lost if you leave without saving.</string>
-    <string name="verify_discard_changes_confirm">Discard changes</string>
-    <string name="verify_discard_changes_keep">Continue editing</string>
+    <string name="verify_discard_changes_confirm">Discard</string>
+    <string name="verify_discard_changes_keep">Keep</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
