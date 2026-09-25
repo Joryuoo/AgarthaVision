@@ -593,13 +593,26 @@ private fun LocateEggsSection(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            text = locateEggRowText(slot.species, slot.stage, slot.ordinalInField, slot.fieldTotal),
-                            color = if (isDrawn) colors.onGold else colors.textPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                        ) {
+                            Text(
+                                text = locateEggTitleText(slot.species, slot.ordinalInField, slot.fieldTotal),
+                                color = if (isDrawn) colors.onGold else colors.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (slot.stage != null) {
+                                Text(
+                                    text = slot.stage,
+                                    color = if (isDrawn) colors.onGold.copy(alpha = 0.8f) else colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp,
+                                )
+                            }
+                        }
                         if (isDrawn) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 DrawBoxAction(
@@ -629,6 +642,13 @@ private fun LocateEggsSection(
         }
     }
 }
+
+/**
+ * Renders the locate-eggs row title: species and which egg of the field's total.
+ */
+@Composable
+internal fun locateEggTitleText(species: String, ordinal: Int, total: Int): String =
+    stringResource(R.string.verify_locate_egg_title, species, ordinal, total)
 
 /**
  * Renders the locate-eggs row/caption text: species, an optional developmental stage in
