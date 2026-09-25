@@ -6,11 +6,14 @@ import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.remote.dto.PredictionDto
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -38,6 +41,9 @@ import org.mockito.kotlin.whenever
  * `predictionsJson = null`, so there were no boxes either. A missing image was indistinguishable
  * from an empty one. This suite is what keeps the recovery path honest.
  */
+// One subject, one fixture. Splitting by concern would duplicate the use-case setup across
+// files and make the reopen/pin cases harder to read against the rest of the suite.
+@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
 class OpenVerificationTargetUseCaseTest {
 
@@ -115,18 +121,19 @@ class OpenVerificationTargetUseCaseTest {
         )
     }
 
-    private fun addedDetection(species: String, slot: Int, x: Float? = null) = DetectionEntity(
-        detectionId = addedDetectionIdFor(sampleId, species, slot),
-        sampleId = sampleId,
-        classLabel = species,
-        confidence = 1.0f,
-        bboxX = x,
-        bboxY = x,
-        bboxW = x?.let { 12f },
-        bboxH = x?.let { 12f },
-        verdict = DetectionVerdict.CONFIRMED.value,
-        expertClass = species,
-    )
+    private fun addedDetection(species: String, slot: Int, x: Float? = null, stageKey: String? = null) =
+        DetectionEntity(
+            detectionId = addedDetectionIdFor(sampleId, species, slot, stageKey),
+            sampleId = sampleId,
+            classLabel = species,
+            confidence = 1.0f,
+            bboxX = x,
+            bboxY = x,
+            bboxW = x?.let { 12f },
+            bboxH = x?.let { 12f },
+            verdict = DetectionVerdict.CONFIRMED.value,
+            expertClass = species,
+        )
 
     /**
      * An added species comes back as **one card carrying the field total**, not as the remainder
@@ -302,6 +309,420 @@ class OpenVerificationTargetUseCaseTest {
             val target = useCase(sampleId).getOrThrow()
 
             assertEquals(1, target.frame.predictions.size)
+        }
+
+    // ── species+stage identity (14zcqnthz6e) ─────────────────────────────────
+
+    /** Two added cards of one species at different stages reopen as two cards, boxes kept apart. */
+    @Test
+    fun `two added cards of different stages reopen as two cards with only their own boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 1, x = 20f, stageKey = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = "DECORTICATED_FERTILIZED"),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 2,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.filter { it.prediction == null }
+
+            assertEquals(2, added.size)
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val df = added.first { it.answers.stage == EggStage.DECORTICATED_FERTILIZED }
+            assertEquals(2, cf.answers.fieldTotal)
+            assertEquals(listOf(10f, 20f), cf.answers.drawnBoxes.map { it.x })
+            assertEquals(1, df.answers.fieldTotal)
+            assertEquals(listOf(30f), df.answers.drawnBoxes.map { it.x })
+        }
+
+    /**
+     * Compose check (14zcqnthz6e): reopen-derived pins must agree with what a prior
+     * in-session submit's [withResolvedPrimaryPins] would have written back. Two rows survive
+     * for one species - the lone-row rule that pins reopen elections is `rowCountBySpecies == 1`,
+     * so with two rows neither can be trusted alone; the plain-id row is still the one that must
+     * come back pinned primary, and the stage-aware row pinned non-primary, matching exactly
+     * what [primaryAddedIndexBySpecies] would have elected for this same pair the moment they
+     * were first submitted together.
+     */
+    @Test
+    fun `reopen pins match what an earlier in-session submit's election would have produced`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    // The primary card's row kept the plain, stage-less id (stageKey = null);
+                    // the non-primary sibling's row is stage-aware - exactly what toDetectionEntities
+                    // derives once primaryAddedIndexBySpecies has elected the CF card primary.
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = null),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = "DECORTICATED_FERTILIZED"),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.filter { it.prediction == null }
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val df = added.first { it.answers.stage == EggStage.DECORTICATED_FERTILIZED }
+
+            assertEquals(true, cf.answers.isPrimaryAdded)
+            assertEquals(false, df.answers.isPrimaryAdded)
+
+            // Round-trip: resubmitting these two rows completely unedited must reproduce the
+            // exact ids already on disk - the plain id for the row that already has it, the
+            // stage-aware one for the other - or an unedited resubmit silently relocates a
+            // synced row and orphans it remotely (the class of bug 14zcqnthz6e exists to close).
+            val resubmitted = added.toDetectionEntities(sampleId)
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val stageAwareId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            assertEquals(
+                "An unedited resubmit of a two-row reopen must not move the plain-id row.",
+                setOf(plainId, stageAwareId),
+                resubmitted.map { it.detectionId }.toSet(),
+            )
+        }
+
+    /**
+     * A card written before stage-aware ids existed used the species-only id. Reopening it must
+     * still recover its drawn boxes rather than showing the right total with the geometry
+     * silently missing.
+     */
+    @Test
+    fun `a card written with the old species-only id still recovers its drawn boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(1, added.answers.fieldTotal)
+            assertEquals(
+                "The legacy id is the only place this box can be, and the fallback finds it.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
+        }
+
+    /**
+     * **Round-trip regression guard for the remote double-count bug.** A card saved under the
+     * old species-only id, reopened and resubmitted with no edits, must write back under that
+     * SAME id - not a new stage-aware one - or the remote push (upsert-only, never delete) ends
+     * up holding both ids and double-counts the species on the next pull.
+     */
+    @Test
+    fun `reopening and resubmitting an unedited legacy card writes back the same old id`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val oldId = addedDetectionIdFor(sampleId, "Hookworm", 0)
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+
+            assertEquals(1, resubmitted.size)
+            assertEquals(
+                "No edits were made, so the resubmit must resolve to the same id it read - " +
+                    "writing a new stage-aware id here is exactly what leaves the old id behind " +
+                    "on the server for the next pull to double-count.",
+                oldId,
+                resubmitted.single().detectionId,
+            )
+        }
+
+    /**
+     * **Regression guard (14zcqnthz6e).** A species can be down to a single surviving row whose
+     * boxes are already filed under a stage-aware id - not just via a fresh brand-new card, but
+     * because it used to have a sibling that pinned it non-primary, and that sibling was later
+     * removed (see `withResolvedPrimaryPins`/`SubmitVerificationUseCase` for how a sibling
+     * removal alone, with no edit to this row, reaches this exact state). `isLoneRow` must not
+     * override that: the row must come back pinned non-primary and keep its stage-aware id, or
+     * an unedited resubmit moves it to the plain id, leaving the stage-aware rows stranded
+     * remotely for the next pull to double-count.
+     */
+    @Test
+    fun `a lone row that already owns a stage-aware id stays pinned non-primary on reopen`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val stageAwareId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection(
+                        "Ascaris lumbricoides",
+                        0,
+                        x = 30f,
+                        stageKey = "DECORTICATED_FERTILIZED",
+                    ),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val added = reopened.findings.single { it.prediction == null }
+
+            assertEquals(
+                "The lone row already owns a stage-aware id, so it must not be re-pinned primary.",
+                false,
+                added.answers.isPrimaryAdded,
+            )
+
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+            assertEquals(1, resubmitted.size)
+            assertEquals(
+                "An unedited resubmit must keep the same stage-aware id, not flip to the plain one.",
+                stageAwareId,
+                resubmitted.single().detectionId,
+            )
+        }
+
+    /**
+     * **Regression guard.** A model box already accounts for one stage of a species; a separate
+     * added card at a *different* stage of the same species was saved under the old species-only
+     * id. `rowCountBySpecies` must be computed from the rows that survive the boxedCounts filter
+     * (the genuine added-card rows), not from every raw `sample_species_findings` row - counting
+     * the model-covered row too made this species look like it had two added rows and switched
+     * the legacy-id fallback off, so the added card's boxes came back missing.
+     */
+    @Test
+    fun `a legacy added card at a different stage from a model box still recovers its boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    boxDetection(0).copy(stage = "CORTICATED_FERTILIZED"),
+                    addedDetection("Ascaris lumbricoides", 0, x = 15f),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "DECORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(1, added.answers.fieldTotal)
+            assertEquals(
+                "The CF row is already covered by the model's box, so only the DF row is a " +
+                    "genuine added card - and being the only one, the legacy fallback must find " +
+                    "its boxes under the old species-only id.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
+        }
+
+    /**
+     * **Round-trip regression guard (14zcqnthz6e follow-up).** A staged card and an unstaged
+     * card of one species, submitted, then reopened: the staged card must come back pinned
+     * primary (plain id) and the unstaged one pinned non-primary (sentinel id) - the same
+     * election `withResolvedPrimaryPins` would have made at submit time - and an unedited
+     * resubmit must not move either id.
+     */
+    @Test
+    fun `a staged primary and unstaged non-primary card round-trip through reopen with stable ids`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val sentinelId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = UNSTAGED_ADDED_STAGE_KEY,
+            )
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(
+                    addedDetection("Ascaris lumbricoides", 0, x = 10f, stageKey = null),
+                    addedDetection("Ascaris lumbricoides", 0, x = 30f, stageKey = UNSTAGED_ADDED_STAGE_KEY),
+                ),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = "CORTICATED_FERTILIZED",
+                        eggCount = 1,
+                    ),
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-2",
+                        sampleId = sampleId,
+                        species = "Ascaris lumbricoides",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val reopened = useCase(sampleId).getOrThrow()
+            val added = reopened.findings.filter { it.prediction == null }
+            val cf = added.first { it.answers.stage == EggStage.CORTICATED_FERTILIZED }
+            val unstaged = added.first { it.answers.stage == null }
+
+            assertEquals("The plain-id row must come back pinned primary.", true, cf.answers.isPrimaryAdded)
+            assertEquals(
+                "The sentinel-id row must come back pinned non-primary.",
+                false,
+                unstaged.answers.isPrimaryAdded,
+            )
+
+            val resubmitted = reopened.findings.toDetectionEntities(sampleId)
+            assertEquals(
+                "An unedited resubmit must not churn either id.",
+                setOf(plainId, sentinelId),
+                resubmitted.map { it.detectionId }.toSet(),
+            )
+        }
+
+    /**
+     * A lone unstaged row with no persisted history at all must still be electable primary - the
+     * `ownsNonPlainId` OR-check (stage-aware id OR the sentinel) must not spuriously flag a
+     * genuinely primary-eligible row just because it happens to have no stage.
+     */
+    @Test
+    fun `a lone unstaged row with no history becomes primary, not flagged as owning a non-plain id`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById(sampleId)).thenReturn(syncedSample())
+            whenever(detectionDao.getDetectionsForSample(sampleId)).thenReturn(
+                listOf(addedDetection("Hookworm", 0, x = 15f, stageKey = null)),
+            )
+            whenever(findingDao.getFindingsForSample(sampleId)).thenReturn(
+                listOf(
+                    SampleSpeciesFindingEntity(
+                        findingId = "row-1",
+                        sampleId = sampleId,
+                        species = "Hookworm",
+                        stage = null,
+                        eggCount = 1,
+                    ),
+                ),
+            )
+            whenever(resolveImageSource(any())).thenReturn(
+                SampleImageSource.RemoteSignedUrl(url = "https://signed", cacheKey = "k"),
+            )
+
+            val added = useCase(sampleId).getOrThrow().findings.single { it.prediction == null }
+
+            assertEquals(true, added.answers.isPrimaryAdded)
+            assertEquals(
+                "Its boxes are still under the plain id.",
+                listOf(15f),
+                added.answers.drawnBoxes.map { it.x },
+            )
         }
 
     // ── Q3 on read-back ──────────────────────────────────────────────────────

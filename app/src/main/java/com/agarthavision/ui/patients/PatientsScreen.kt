@@ -310,7 +310,7 @@ private fun PatientRow(
         ) {
             Text(
                 text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
-                color = colors.textPrimary,
+                color = colors.accent,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,

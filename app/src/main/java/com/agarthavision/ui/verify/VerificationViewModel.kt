@@ -8,7 +8,12 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.AddedCardMerge
+import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.floorFor
+import com.agarthavision.domain.usecase.verify.mergeAddedCardIntoTwin
+import com.agarthavision.domain.usecase.verify.speciesStageKeyIsSettled
 import com.agarthavision.domain.usecase.verify.totalsAreConsistent
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -16,6 +21,7 @@ import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.withResolvedPrimaryPins
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -92,6 +98,11 @@ data class VerificationUiState(
     val speciesSuggestionTarget: SuggestionTarget? = null,
     val speciesSuggestionQuery: String = "",
     /**
+     * Index into [findings] of the one added species card shown as an editable form, or null when
+     * all are compact. Always >= frame.predictions.size.
+     */
+    val expandedFindingIndex: Int? = null,
+    /**
      * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
      * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
      */
@@ -146,7 +157,8 @@ data class VerificationUiState(
             frame == null -> null
             frame.source == FrameSource.MANUAL -> null
             else -> findings.any {
-                it.prediction == null && findings.unboxedCountOf(it.answers.speciesLabel) > 0
+                it.prediction == null &&
+                    findings.unboxedCountOf(it.answers.speciesLabel, it.answers.stage, it.answers.otherStageText) > 0
             }
         }
 
@@ -179,7 +191,10 @@ data class VerificationUiState(
         get() = when {
             isSubmitting -> false
             frame == null -> false
-            else -> findings.all { it.isComplete } && findings.totalsAreConsistent()
+            else -> {
+                val consolidated = findings.consolidateAddedTwins()
+                findings.all { it.isComplete } && consolidated.totalsAreConsistent()
+            }
         }
 
     /** True while a box is being drawn, which is what dims every existing box on the frame. */
@@ -233,6 +248,22 @@ enum class LeaveIntent { PREVIOUS_SAMPLE, NEXT_SAMPLE, EXIT }
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
+    data object FinishCurrentSpeciesFirst : VerificationEvent
+}
+
+private fun VerificationUiState.firstUnfinishedAddedIndex(): Int? {
+    val boxCount = frame?.predictions?.size ?: 0
+    // See the matching comment in VerificationFindings.AddedFindings: two not-yet-settled cards
+    // of one species share a SpeciesStageKey, so the floor has to come from the consolidated
+    // list or it can be read off the wrong sibling's drawn boxes.
+    val findingsForFloor = findings.consolidateAddedTwins()
+    return findings.indices.firstOrNull { i ->
+        i >= boxCount && findings[i].let { f ->
+            !f.isComplete ||
+                (f.answers.fieldTotal ?: 0) <
+                findingsForFloor.floorFor(f.answers.speciesLabel, f.answers.stage, f.answers.otherStageText)
+        }
+    }
 }
 
 /**
@@ -244,6 +275,8 @@ sealed interface VerificationEvent {
  * - **Detection-level navigation** within the current frame
  *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
  *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
+ * - **Added-species card expansion and lifecycle**
+ *   ([onAddSpecies], [onRemoveFinding], [onExpandFinding], [onCollapseFinding]).
  * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
  *   the frame is removed from the store; the verdict model (per ADR-004)
  *   persists every detection regardless of mix (false positives, wrong
@@ -348,6 +381,7 @@ class VerificationViewModel @Inject constructor(
                 openedFindings = findings,
                 openedNote = note,
                 pendingLeave = null,
+                expandedFindingIndex = null,
             )
         }
     }
@@ -458,9 +492,32 @@ class VerificationViewModel @Inject constructor(
      * wrong (or there was nothing to confirm), so it is a human judgement by construction.
      */
     fun onSpeciesSelected(species: EggSpecies) {
-        updateCurrentAnswer {
-            it.copy(species = species, otherSpeciesText = "")
-        }
+        updateCurrentAnswer { it.withSpecies(species) }
+    }
+
+    /**
+     * Applies a species change, keeping the current stage only when it still applies.
+     *
+     * A stage picked for one species can be meaningless for another — CF only means something on
+     * Ascaris/Trichuris/Hookworm, and Other has no stage question at all. Left in place, a stale
+     * stage would either become an invisible mismatch once stage matching is exact (a box counted
+     * under a stage the medtech never saw for this species) or silently persist a stage the
+     * screen no longer shows a control for.
+     */
+    private fun VerificationAnswers.withSpecies(species: EggSpecies): VerificationAnswers {
+        val keepsStage = stage != null && stage in EggStage.forSpecies(species)
+        val speciesChanged = species != this.species
+        return copy(
+            species = species,
+            otherSpeciesText = "",
+            stage = stage.takeIf { keepsStage },
+            otherStageText = if (keepsStage) otherStageText else "",
+            // A pin was derived for the OLD species (from persisted DB state or a prior submit).
+            // Once the species actually changes, that pin is meaningless for the new species and
+            // must be re-derived from scratch, or a stale `false` pin can block the list-order
+            // fallback from electing any primary for the new species.
+            isPrimaryAdded = if (speciesChanged) null else isPrimaryAdded,
+        )
     }
 
     fun onStageSelected(stage: EggStage) {
@@ -473,12 +530,28 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Applies a stage choice to an added card.
+     *
+     * A non-Other stage settles the card's key immediately — there is no further text to wait
+     * for — so it merges into a twin right away. An Other stage waits for [onAddedOtherStageChanged]
+     * and one of the settle points, the same as a species that resolves to Other.
+     */
     fun onAddedStageSelected(index: Int, stage: EggStage) {
-        updateAnswerAt(index) {
+        _state.update { current ->
+            val updated = current.findings.mapIndexed { i, finding ->
+                if (i != index) {
+                    finding
+                } else if (stage != EggStage.OTHER) {
+                    finding.copy(answers = finding.answers.copy(stage = stage, otherStageText = ""))
+                } else {
+                    finding.copy(answers = finding.answers.copy(stage = stage))
+                }
+            }
             if (stage != EggStage.OTHER) {
-                it.copy(stage = stage, otherStageText = "")
+                current.applyMerge(updated.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = updated)
             } else {
-                it.copy(stage = stage)
+                current.copy(findings = updated)
             }
         }
     }
@@ -537,8 +610,51 @@ class VerificationViewModel @Inject constructor(
      * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
     fun onAddSpecies() {
-        _state.update {
-            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(fieldTotal = 1)))
+        val unfinished = _state.value.firstUnfinishedAddedIndex()
+        if (unfinished != null) {
+            _state.update { it.copy(expandedFindingIndex = unfinished) }
+            viewModelScope.launch { _events.emit(VerificationEvent.FinishCurrentSpeciesFirst) }
+        } else {
+            _state.update {
+                val consolidated = it.findings.consolidateAddedTwins()
+                val nextIndex = consolidated.size
+                it.copy(
+                    findings = consolidated + Finding(answers = VerificationAnswers(fieldTotal = 1)),
+                    expandedFindingIndex = nextIndex,
+                )
+            }
+        }
+    }
+
+    /**
+     * Expands an added finding at [index] into an editable card.
+     *
+     * Refused on a prediction-backed row (index < boxCount) or out-of-range index.
+     */
+    fun onExpandFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index >= boxCount && index in current.findings.indices) {
+                current.copy(expandedFindingIndex = index)
+            } else {
+                current
+            }
+        }
+    }
+
+    /**
+     * Collapses an added finding at [index] if it is currently expanded, and folds it into a
+     * twin card sharing its species+stage — the settle point for a card left without a stage, or
+     * left on an Other stage whose text now matches another card's.
+     */
+    fun onCollapseFinding(index: Int) {
+        _state.update { current ->
+            if (current.expandedFindingIndex != index) {
+                current
+            } else {
+                val collapsed = current.copy(expandedFindingIndex = null)
+                collapsed.applyMerge(collapsed.findings.mergeAddedCardIntoTwin(index)) ?: collapsed
+            }
         }
     }
 
@@ -556,7 +672,16 @@ class VerificationViewModel @Inject constructor(
             if (index < boxCount || index !in current.findings.indices) {
                 current
             } else {
-                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+                val newExpanded = when {
+                    current.expandedFindingIndex == index -> null
+                    current.expandedFindingIndex != null && current.expandedFindingIndex > index ->
+                        current.expandedFindingIndex - 1
+                    else -> current.expandedFindingIndex
+                }
+                current.copy(
+                    findings = current.findings.filterIndexed { i, _ -> i != index },
+                    expandedFindingIndex = newExpanded,
+                )
             }
         }
     }
@@ -575,42 +700,35 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * Names the species on an added card, merging it into an existing card for the same species.
+     * Names the species on an added card, keeping its stage only when it still applies (see
+     * [VerificationAnswers.withSpecies]), and merging it into an existing card of the same
+     * species+stage once that key is settled.
      *
-     * The merge is not tidiness. `sample_species_findings` is unique on `(sample_id, species)`,
-     * the detection ids derive from the species, and the reopen path rebuilds one card per
-     * species — two cards naming one species have nowhere to be stored separately and would come
-     * back as one anyway. The card that already held the species survives; the one just renamed
-     * into it adds its total and hands over its drawn boxes, so nothing the medtech placed is
-     * dropped by renaming a card into a collision.
+     * **Merging is deferred until [speciesStageKeyIsSettled].** Right after the species is
+     * picked the stage is often still unanswered, and an unstaged Ascaris card is not yet the
+     * same finding as another unstaged Ascaris card that never gets a stage — merging here on
+     * species alone is exactly the silent-merge this ticket exists to fix. [onAddedStageSelected]
+     * and the settle points ([onAddSpecies], [onCollapseFinding], [onSubmit]) are what actually
+     * fold twins together, once the key can no longer change under them.
+     *
+     * The merge itself is not tidiness. `sample_species_findings` is unique on
+     * `(sample_id, species, stage)`, the detection ids derive from species+stage, and the reopen
+     * path rebuilds one card per species+stage — two cards naming the same one have nowhere to be
+     * stored separately and would come back as one anyway. The card that already held the key
+     * survives; the one just renamed into it adds its total and hands over its drawn boxes, so
+     * nothing the medtech placed is dropped by renaming a card into a collision.
      */
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
         _state.update { current ->
-            val named = current.findings.getOrNull(index)?.answers
-                ?.copy(species = species, otherSpeciesText = "")
+            val named = current.findings.getOrNull(index)?.answers?.withSpecies(species)
                 ?: return@update current
-            val twinIndex = current.findings.indexOfFirst { other ->
-                other.prediction == null && other.answers.speciesLabel == named.speciesLabel
+            val renamed = current.findings.mapIndexed { i, finding ->
+                if (i == index) finding.copy(answers = named) else finding
             }
-            if (twinIndex == -1 || twinIndex == index) {
-                current.copy(
-                    findings = current.findings.mapIndexed { i, finding ->
-                        if (i == index) finding.copy(answers = named) else finding
-                    },
-                )
+            if (!named.speciesStageKeyIsSettled) {
+                current.copy(findings = renamed)
             } else {
-                val twin = current.findings[twinIndex].answers
-                val merged = twin.copy(
-                    fieldTotal = (twin.fieldTotal ?: 0) + (named.fieldTotal ?: 0),
-                    drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
-                )
-                current.copy(
-                    findings = current.findings
-                        .mapIndexed { i, finding ->
-                            if (i == twinIndex) finding.copy(answers = merged) else finding
-                        }
-                        .filterIndexed { i, _ -> i != index },
-                )
+                current.applyMerge(renamed.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = renamed)
             }
         }
     }
@@ -622,6 +740,32 @@ class VerificationViewModel @Inject constructor(
 
     fun onAddedOtherStageChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherStageText = text) }
+    }
+
+    /**
+     * Applies [merge], if any, remapping [VerificationUiState.expandedFindingIndex] and
+     * [VerificationUiState.drawTarget] so neither points at a card that just vanished or shifted.
+     *
+     * Null when [merge] is null — nothing to fold, caller keeps its own findings unchanged.
+     */
+    private fun VerificationUiState.applyMerge(merge: AddedCardMerge?): VerificationUiState? {
+        if (merge == null) return null
+        val removed = merge.removedIndex
+        val survivor = merge.survivorIndex
+        val remappedExpanded = when {
+            expandedFindingIndex == null -> null
+            expandedFindingIndex == removed -> survivor
+            expandedFindingIndex > removed -> expandedFindingIndex - 1
+            else -> expandedFindingIndex
+        }
+        // The gesture belonged to a slot on a card that just merged away, or on one that shifted
+        // underneath it. Neither address is safe to keep drawing against.
+        val remappedDrawTarget = drawTarget?.takeIf { it.findingIndex < removed }
+        return copy(
+            findings = merge.findings,
+            expandedFindingIndex = remappedExpanded,
+            drawTarget = remappedDrawTarget,
+        )
     }
 
     /**
@@ -768,7 +912,12 @@ class VerificationViewModel @Inject constructor(
         val slotIsValid = when {
             slot == null -> finding.prediction != null
             finding.prediction != null -> false
-            else -> slot in 0 until findings.unboxedCountOf(finding.answers.speciesLabel)
+            else -> slot in
+                0 until findings.unboxedCountOf(
+                    finding.answers.speciesLabel,
+                    finding.answers.stage,
+                    finding.answers.otherStageText,
+                )
         }
         if (slotIsValid) {
             _state.update { it.copy(drawTarget = DrawTarget(findingIndex, slot)) }
@@ -885,17 +1034,28 @@ class VerificationViewModel @Inject constructor(
         val snapshot = _state.value
         if (!snapshot.canSubmit) return
 
+        // Which added card is primary for each species is decided right here, the same election
+        // toDetectionEntities is about to make from this very list. Writing it back onto state
+        // now — not just using it transiently for this submit — is what stops a later in-session
+        // removal (no reopen involved) from re-electing a different card as primary on the next
+        // submit; see `Finding.withResolvedPrimaryPins`.
+        val findingsToSubmit = snapshot.findings.consolidateAddedTwins().withResolvedPrimaryPins()
+
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                findings = snapshot.findings,
+                findings = findingsToSubmit,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
             ).fold(
                 onSuccess = {
                     currentFrame = null
-                    _state.update { it.copy(isSubmitting = false) }
+                    // Only now, once the pins this submit acted on are actually durable, does the
+                    // election they encode become the pin future in-session edits must respect.
+                    // Writing it earlier (or on failure, below) would lock in a decision nothing
+                    // was ever persisted for.
+                    _state.update { it.copy(isSubmitting = false, findings = findingsToSubmit) }
                     _events.emit(VerificationEvent.Dismiss)
                 },
                 onFailure = { throwable ->

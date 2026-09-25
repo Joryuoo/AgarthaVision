@@ -5,6 +5,8 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.toDomain
@@ -86,29 +88,27 @@ class OpenVerificationTargetUseCase @Inject constructor(
         }
 
         // Everything the medtech added on top of the model's boxes. `sample_species_findings`
-        // stores the field total per species — which is exactly what the added row now holds,
-        // so it is carried across rather than subtracted down to a remainder. A species whose
-        // total the boxes already account for needs no added row at all.
+        // stores the field total per species+stage — which is exactly what the added row now
+        // holds, so it is carried across rather than subtracted down to a remainder. A
+        // species+stage whose total the boxes already account for needs no added row at all.
         val boxedCounts = boxFindings
             .filter { it.countsAsEgg }
-            .groupingBy { it.answers.speciesLabel }
+            .mapNotNull { it.answers.speciesStageKey }
+            .groupingBy { it }
             .eachCount()
-        val addedFindings = findingDao.getFindingsForSample(sampleId).mapNotNull { row ->
-            if (row.eggCount <= (boxedCounts[row.species] ?: 0)) return@mapNotNull null
+        val findingRows = findingDao.getFindingsForSample(sampleId)
+        // Only the rows that survive the boxedCounts filter below are genuine added-card rows -
+        // a species+stage the boxes already fully account for produces no added row at all, so
+        // counting every raw row (including those) would overcount how many added cards a
+        // species really has and switch the legacy-id fallback off when it is still safe.
+        val survivingRows = findingRows.mapNotNull { row ->
             val (parsedStage, otherStage) = parseStage(row.stage)
-            Finding(
-                prediction = null,
-                answers = VerificationAnswers(
-                    species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
-                    otherSpeciesText = row.species.takeIf {
-                        EggSpecies.fromClassLabel(it) == null
-                    }.orEmpty(),
-                    stage = parsedStage,
-                    otherStageText = otherStage,
-                    fieldTotal = row.eggCount,
-                    drawnBoxes = recoverDrawnBoxes(sampleId, row.species, storedById),
-                ),
-            )
+            val key = SpeciesStageKey(row.species, parsedStage, otherStage.trim())
+            row.takeIf { row.eggCount > (boxedCounts[key] ?: 0) }?.let { it to key }
+        }
+        val rowCountBySpecies = survivingRows.groupingBy { (row, _) -> row.species }.eachCount()
+        val addedFindings = survivingRows.map { (row, _) ->
+            recoverAddedFinding(sampleId, row, rowCountBySpecies, storedById)
         }
 
         VerificationTarget(
@@ -124,6 +124,75 @@ class OpenVerificationTargetUseCase @Inject constructor(
             // must not have one invented on the medtech's behalf.
             missedEgg = entity.needsReannotation.takeIf { detections.isNotEmpty() },
             userNote = entity.userNote.orEmpty(),
+        )
+    }
+
+    /**
+     * Rebuilds one added finding from its `sample_species_findings` row.
+     *
+     * A row's own on-disk id is checked first: a row whose non-plain slot-0 id (its real stage
+     * segment, or [UNSTAGED_ADDED_STAGE_KEY] when it has none) is already present in `storedById`
+     * already carries a segment distinct from the plain id and is pinned non-primary, regardless
+     * of how many rows of that species currently survive. This matters because a species can
+     * genuinely end up with exactly one surviving row that already owns a non-plain id - e.g. a
+     * sibling that used to pin it non-primary was later removed - and that row must stay pinned
+     * non-primary so its id does not flip back to plain on the next unedited resubmit (which
+     * would leave its old non-plain rows stranded remotely while a duplicate set gets written
+     * under the plain id).
+     *
+     * Only once a row does not already own a non-plain id does row count decide the pin: a lone
+     * row (`rowCountBySpecies == 1`) with no non-plain id of its own is pinned primary - being
+     * alone with no distinct segment already on disk is what makes primary correct, whether it is
+     * a brand-new species or a legacy plain-id row. With two-or-more such rows, each row's own
+     * on-disk id is checked directly: the one row with no non-plain id of its own is the one
+     * whose boxes (if any) are still filed under the old, stage-less id, so it is pinned primary
+     * and keeps that id. A pinned-non-primary row is never re-elected primary later just because
+     * siblings are removed - see [VerificationAnswers.isPrimaryAdded].
+     */
+    private fun recoverAddedFinding(
+        sampleId: String,
+        row: SampleSpeciesFindingEntity,
+        rowCountBySpecies: Map<String, Int>,
+        storedById: Map<String, DetectionEntity>,
+    ): Finding {
+        val (parsedStage, otherStage) = parseStage(row.stage)
+        val answers = VerificationAnswers(
+            species = EggSpecies.fromClassLabel(row.species) ?: EggSpecies.OTHER,
+            otherSpeciesText = row.species.takeIf {
+                EggSpecies.fromClassLabel(it) == null
+            }.orEmpty(),
+            stage = parsedStage,
+            otherStageText = otherStage,
+            fieldTotal = row.eggCount,
+        )
+        val isLoneRow = rowCountBySpecies[row.species] == 1
+        // "Owns a non-plain id" - a stage-aware one when this row has a real stage, or the
+        // unstaged sentinel when it does not (14zcqnthz6e). Either form means this row was
+        // written non-primary and must stay pinned non-primary; only a row that owns neither can
+        // ever be (re-)elected primary below.
+        val nonPlainStageKey = answers.stageLabel ?: UNSTAGED_ADDED_STAGE_KEY
+        val ownsNonPlainId = storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, nonPlainStageKey))
+        val isPrimaryAdded = when {
+            ownsNonPlainId -> false
+            isLoneRow -> true
+            else -> storedById.containsKey(addedDetectionIdFor(sampleId, row.species, 0, stageKey = null))
+        }
+        return Finding(
+            prediction = null,
+            answers = answers.copy(
+                isPrimaryAdded = isPrimaryAdded,
+                drawnBoxes = recoverDrawnBoxes(
+                    sampleId,
+                    row.species,
+                    // A primary card's boxes are always filed under the plain id, whatever its own
+                    // stage; a non-primary card's are filed under its real stage segment, or the
+                    // unstaged sentinel when it has none - never under `null`, which would read the
+                    // primary's boxes instead of its own.
+                    if (isPrimaryAdded) answers.stageLabel else nonPlainStageKey,
+                    isPrimaryAdded,
+                    storedById,
+                ),
+            ),
         )
     }
 
@@ -258,24 +327,43 @@ class OpenVerificationTargetUseCase @Inject constructor(
     }
 
     /**
-     * The boxes the medtech drew for an added species, in slot order.
+     * The boxes the medtech drew for an added species+stage, in slot order.
      *
-     * Added eggs are one detection row each, keyed `#finding#<species>#<slot>`, and the drawn
-     * ones occupy the front slots — so this walks up from zero and stops at the first row with
-     * no geometry, which is where the drawn ones end. Stopping there rather than scanning the
-     * whole species is what keeps the round trip stable: the list that comes back is the list
-     * that went out, and re-submitting writes the same slots to the same ids.
+     * Added eggs are one detection row each, keyed `#finding#<species>#<stage>#<slot>`, and the
+     * drawn ones occupy the front slots — so this walks up from zero and stops at the first row
+     * with no geometry, which is where the drawn ones end. Stopping there rather than scanning
+     * the whole species is what keeps the round trip stable: the list that comes back is the
+     * list that went out, and re-submitting writes the same slots to the same ids.
+     *
+     * **Falls back to the old species-only id when the stage-aware lookup finds nothing and
+     * [allowLegacyFallback] says it is safe.** Rows written before this change (or by an earlier
+     * build of this feature) derived their id with no stage segment at all; without the
+     * fallback, a card reopened after that would show its total but silently lose the boxes
+     * already drawn on it. [allowLegacyFallback] is the row's own primary pin
+     * (`recoverAddedFinding`'s `isPrimaryAdded`) — the plain id can only ever belong to the one
+     * row of a species that owns it, so only that row is allowed to go looking for boxes under
+     * it; a non-primary sibling's own id is already stage-aware, and guessing at the plain id on
+     * its behalf would risk handing it boxes that belong to a different card.
      */
     private fun recoverDrawnBoxes(
         sampleId: String,
         species: String,
+        stageKey: String?,
+        allowLegacyFallback: Boolean,
         storedById: Map<String, DetectionEntity>,
-    ): List<ImageBox> = generateSequence(0) { it + 1 }
-        .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot)]?.storedBox() }
-        .takeWhile { it != null }
-        .filterNotNull()
-        .toList()
-
+    ): List<ImageBox> {
+        val staged = generateSequence(0) { it + 1 }
+            .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot, stageKey)]?.storedBox() }
+            .takeWhile { it != null }
+            .filterNotNull()
+            .toList()
+        if (staged.isNotEmpty() || stageKey == null || !allowLegacyFallback) return staged
+        return generateSequence(0) { it + 1 }
+            .map { slot -> storedById[addedDetectionIdFor(sampleId, species, slot)]?.storedBox() }
+            .takeWhile { it != null }
+            .filterNotNull()
+            .toList()
+    }
 }
 
 /** A frame plus whatever the medtech has already said about it. */

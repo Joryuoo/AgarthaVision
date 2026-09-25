@@ -1,4 +1,4 @@
-@file:Suppress("FunctionNaming", "LongMethod", "LongParameterList")
+@file:Suppress("FunctionNaming", "LongMethod", "LongParameterList", "TooManyFunctions")
 
 package com.agarthavision.ui.verify
 
@@ -7,6 +7,8 @@ import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,11 +43,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -65,6 +73,10 @@ import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.AgarthaToastHost
+import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
@@ -88,6 +100,8 @@ fun VerificationSheet(
     prior: VerificationTarget? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val toastState = rememberAgarthaToastState()
+    val finishFirst = stringResource(R.string.verify_add_species_blocked)
 
     // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
     // such as the answers already given, so keying on the frame would re-seed it — and wipe
@@ -96,11 +110,12 @@ fun VerificationSheet(
         viewModel.setFrame(frame, prior)
     }
 
-    LaunchedEffect(viewModel) {
+    LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
             when (event) {
                 is VerificationEvent.Dismiss -> onDismiss()
                 is VerificationEvent.ShowError -> Unit
+                VerificationEvent.FinishCurrentSpeciesFirst -> toastState.show(finishFirst)
             }
         }
     }
@@ -134,6 +149,8 @@ fun VerificationSheet(
                 onUserNoteChanged = viewModel::onUserNoteChanged,
                 onAddSpecies = viewModel::onAddSpecies,
                 onRemoveFinding = viewModel::onRemoveFinding,
+                onExpandFinding = viewModel::onExpandFinding,
+                onCollapseFinding = viewModel::onCollapseFinding,
                 onFieldTotalChanged = viewModel::onFieldTotalChanged,
                 onAddedSpeciesSelected = viewModel::onAddedSpeciesSelected,
                 onAddedStageSelected = viewModel::onAddedStageSelected,
@@ -148,11 +165,19 @@ fun VerificationSheet(
                 onDismissLeave = viewModel::onDismissLeave,
             ),
         )
+        AgarthaToastHost(
+            state = toastState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+        )
     }
 }
 
 @VisibleForTesting
 @Composable
+@Suppress("CyclomaticComplexMethod")
 internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
@@ -174,192 +199,203 @@ internal fun VerificationSheetContent(
     val currentPrediction = frame.predictions.getOrNull(state.currentDetectionIndex)
     val currentAnswers = state.findings.getOrNull(state.currentDetectionIndex)?.answers
     val boxCount = frame.predictions.size
+    val anchor = remember { ExpandedCardAnchor() }
+    val expandedIndexState = rememberUpdatedState(state.expandedFindingIndex)
 
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-                .verticalScroll(scrollState)
-                // Out of reach while the draw screen covers it, for TalkBack as much as for a finger.
+            modifier = Modifier.fillMaxSize()
                 .then(if (state.isDrawing) Modifier.clearAndSetSemantics {} else Modifier),
         ) {
-            // 1. Top bar: back, and the sample's label. The frame counter that used to live in the
-            //    meta line is now the Current Sample indicator, beneath the frame it counts.
+            // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
             ScreenTopBar(
                 title = capturedAtLabel,
                 metaText = "",
                 onBack = actions.onCancel,
             )
 
-            Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-                // 2. Frame section: the image, then one row carrying where you are and how to move.
-                val imageModel = rememberFrameImageModel(frame, state.imageSource)
-                if (imageModel == null) {
-                    // Honest about it, rather than opening a blank canvas the medtech might
-                    // annotate into the void. A missing image and an empty one used to be
-                    // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
-                    // and every sample synced from another device opened silently empty.
-                    FrameUnavailable(
-                        reason = state.imageSource,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(frame.previewAspectRatio())
-                            .testTag(VerifyTestTags.FRAME_UNAVAILABLE)
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(bottom = 32.dp)
+                    .onGloballyPositioned { anchor.sheet = it }
+                    .collapseOnOutsideTap(
+                        anchor = anchor,
+                        expandedIndex = { expandedIndexState.value },
+                        onOutsideTap = actions.onCollapseFinding,
                     )
-                } else {
-                    FrameWithBoxes(
-                        imageModel = imageModel,
-                        // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
-                        // `frame.predictions` alone never held a hand-drawn box, so every one of them
-                        // was invisible and a replaced box left the model's wrong rectangle on screen.
-                        boxes = state.findings.frameBoxes(
-                            active = DrawTarget(state.currentDetectionIndex),
-                        ),
-                        showBoxes = state.showBoundingBoxes,
-                        inferenceImageWidth = frame.imageWidth,
-                        inferenceImageHeight = frame.imageHeight,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(frame.previewAspectRatio())
-                            .testTag(VerifyTestTags.FRAME_PREVIEW)
-                            .clip(RoundedCornerShape(18.dp))
-                            .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-                    )
-                }
-
-                CycleRow(
-                    indicator = if (state.frameIndexInQueue > 0) {
-                        stringResource(
-                            R.string.verify_sample_indicator,
-                            state.frameIndexInQueue,
-                            state.queueSize,
+                    .verticalScroll(scrollState),
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 22.dp)) {
+                    // 2. Frame section: the image, then one row carrying where you are and how to move.
+                    val imageModel = rememberFrameImageModel(frame, state.imageSource)
+                    if (imageModel == null) {
+                        // Honest about it, rather than opening a blank canvas the medtech might
+                        // annotate into the void. A missing image and an empty one used to be
+                        // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
+                        // and every sample synced from another device opened silently empty.
+                        FrameUnavailable(
+                            reason = state.imageSource,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(frame.previewAspectRatio())
+                                .testTag(VerifyTestTags.FRAME_UNAVAILABLE)
+                                .clip(RoundedCornerShape(18.dp))
+                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
                         )
                     } else {
-                        stringResource(R.string.verify_sample_out_of_queue)
-                    },
-                    prevDescription = stringResource(R.string.verify_prev_frame),
-                    nextDescription = stringResource(R.string.verify_next_frame),
-                    prevTag = VerifyTestTags.FRAME_PREV,
-                    nextTag = VerifyTestTags.FRAME_NEXT,
-                    canGoPrev = state.canGoPrev,
-                    canGoNext = state.canGoNext,
-                    onPrev = actions.onFramePrev,
-                    onNext = actions.onFrameNext,
-                    modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
-                )
+                        FrameWithBoxes(
+                            imageModel = imageModel,
+                            // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
+                            // `frame.predictions` alone never held a hand-drawn box, so every one of them
+                            // was invisible and a replaced box left the model's wrong rectangle on screen.
+                            boxes = state.findings.frameBoxes(
+                                active = DrawTarget(state.currentDetectionIndex),
+                            ),
+                            showBoxes = state.showBoundingBoxes,
+                            inferenceImageWidth = frame.imageWidth,
+                            inferenceImageHeight = frame.imageHeight,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(frame.previewAspectRatio())
+                                .testTag(VerifyTestTags.FRAME_PREVIEW)
+                                .clip(RoundedCornerShape(18.dp))
+                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
+                        )
+                    }
 
-                // 3. Model output: what the container said, or that it said nothing, or that it has
-                //    not answered yet. Always present, never collapsed to two states.
-                ModelOutputSection(output = frame.modelOutput())
-
-                // 4. Current detection. Only when there is model output with at least one box -
-                //    every question in here is a question about a box.
-                if (boxCount > 0) {
                     CycleRow(
-                        indicator = stringResource(
-                            R.string.verify_detection_counter,
-                            state.currentDetectionIndex + 1,
-                            boxCount,
-                        ),
-                        prevDescription = stringResource(R.string.verify_prev_egg),
-                        nextDescription = stringResource(R.string.verify_next_egg),
-                        prevTag = VerifyTestTags.DETECTION_PREV,
-                        nextTag = VerifyTestTags.DETECTION_NEXT,
-                        // Counted from frame.predictions, never from the answer list: the medtech
-                        // can append a species the model never boxed, so the answer list is the
-                        // longer of the two and paging by it would walk off the end of the boxes.
-                        canGoPrev = state.currentDetectionIndex > 0,
-                        canGoNext = state.currentDetectionIndex < boxCount - 1,
-                        onPrev = actions.onDetectionPrev,
-                        onNext = actions.onDetectionNext,
+                        indicator = if (state.frameIndexInQueue > 0) {
+                            stringResource(
+                                R.string.verify_sample_indicator,
+                                state.frameIndexInQueue,
+                                state.queueSize,
+                            )
+                        } else {
+                            stringResource(R.string.verify_sample_out_of_queue)
+                        },
+                        prevDescription = stringResource(R.string.verify_prev_frame),
+                        nextDescription = stringResource(R.string.verify_next_frame),
+                        prevTag = VerifyTestTags.FRAME_PREV,
+                        nextTag = VerifyTestTags.FRAME_NEXT,
+                        canGoPrev = state.canGoPrev,
+                        canGoNext = state.canGoNext,
+                        onPrev = actions.onFramePrev,
+                        onNext = actions.onFrameNext,
+                        modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
+                    )
+
+                    // 3. Model output: what the container said, or that it said nothing, or that it has
+                    //    not answered yet. Always present, never collapsed to two states.
+                    ModelOutputSection(output = frame.modelOutput())
+
+                    // 4. Current detection. Only when there is model output with at least one box -
+                    //    every question in here is a question about a box.
+                    if (boxCount > 0) {
+                        CycleRow(
+                            indicator = stringResource(
+                                R.string.verify_detection_counter,
+                                state.currentDetectionIndex + 1,
+                                boxCount,
+                            ),
+                            prevDescription = stringResource(R.string.verify_prev_egg),
+                            nextDescription = stringResource(R.string.verify_next_egg),
+                            prevTag = VerifyTestTags.DETECTION_PREV,
+                            nextTag = VerifyTestTags.DETECTION_NEXT,
+                            // Counted from frame.predictions, never from the answer list: the medtech
+                            // can append a species the model never boxed, so the answer list is the
+                            // longer of the two and paging by it would walk off the end of the boxes.
+                            canGoPrev = state.currentDetectionIndex > 0,
+                            canGoNext = state.currentDetectionIndex < boxCount - 1,
+                            onPrev = actions.onDetectionPrev,
+                            onNext = actions.onDetectionNext,
+                            modifier = Modifier.padding(bottom = 12.dp),
+                        )
+                    }
+
+                    // Offered whenever the frame has anything to show, which since 86d4by5n4 includes a
+                    // frame with no model output at all: a manual capture the medtech located eggs on by
+                    // hand has boxes to hide and used to have no control that could hide them, because
+                    // this sat inside the Current Detection block and that block needs a model box to
+                    // exist. Its position is unchanged for every frame that has one.
+                    if (boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }) {
+                        BoundingBoxesToggle(
+                            checked = state.showBoundingBoxes,
+                            onToggle = actions.onToggleBoundingBoxes,
+                        )
+                    }
+
+                    if (boxCount > 0) {
+                        BoxQuestionChain(
+                            answers = currentAnswers,
+                            suggestedSpecies = currentPrediction
+                                ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                            detectionIndex = state.currentDetectionIndex,
+                            actions = actions,
+                            // Derived against this field's own text, so a list fetched for another row
+                            // - or for a keystroke since typed over - simply does not come back.
+                            suggestions = state.suggestionsFor(
+                                SuggestionTarget.CurrentDetection,
+                                currentAnswers?.otherSpeciesText.orEmpty(),
+                            ),
+                        )
+                    }
+
+                    // 5. Add Species. Always present, with or without model output - it is the only
+                    //    path by which a frame captured with the container unreachable can be verified
+                    //    at all, and a frame with model output still needs it for eggs the model missed.
+                    AddedFindings(
+                        findings = state.findings,
+                        boxCount = boxCount,
+                        actions = actions,
+                        expandedIndex = state.expandedFindingIndex,
+                        onExpandedCardPositioned = { anchor.card = it },
+                        suggestionsFor = { index ->
+                            state.suggestionsFor(
+                                SuggestionTarget.AddedFinding(index),
+                                state.findings.getOrNull(index)?.answers?.otherSpeciesText.orEmpty(),
+                            )
+                        },
+                    )
+
+                    // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
+                    // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
+                    // species than the model boxed already answers it, and asking again lets the two
+                    // disagree.
+
+                    // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
+                    SheetSectionLabel(
+                        text = stringResource(R.string.verify_remarks_label),
+                        modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
+                    )
+                    NoteField(
+                        value = state.userNote,
+                        onValueChange = actions.onUserNoteChanged,
+                        placeholder = stringResource(R.string.verify_remarks_placeholder),
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
-                }
 
-                // Offered whenever the frame has anything to show, which since 86d4by5n4 includes a
-                // frame with no model output at all: a manual capture the medtech located eggs on by
-                // hand has boxes to hide and used to have no control that could hide them, because
-                // this sat inside the Current Detection block and that block needs a model box to
-                // exist. Its position is unchanged for every frame that has one.
-                if (boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }) {
-                    BoundingBoxesToggle(
-                        checked = state.showBoundingBoxes,
-                        onToggle = actions.onToggleBoundingBoxes,
-                    )
-                }
-
-                if (boxCount > 0) {
-                    BoxQuestionChain(
-                        answers = currentAnswers,
-                        suggestedSpecies = currentPrediction
-                            ?.let { EggSpecies.fromClassLabel(it.classLabel) },
-                        detectionIndex = state.currentDetectionIndex,
-                        actions = actions,
-                        // Derived against this field's own text, so a list fetched for another row
-                        // - or for a keystroke since typed over - simply does not come back.
-                        suggestions = state.suggestionsFor(
-                            SuggestionTarget.CurrentDetection,
-                            currentAnswers?.otherSpeciesText.orEmpty(),
-                        ),
-                    )
-                }
-
-                // 5. Add Species. Always present, with or without model output - it is the only
-                //    path by which a frame captured with the container unreachable can be verified
-                //    at all, and a frame with model output still needs it for eggs the model missed.
-                AddedFindings(
-                    findings = state.findings,
-                    boxCount = boxCount,
-                    actions = actions,
-                    suggestionsFor = { index ->
-                        state.suggestionsFor(
-                            SuggestionTarget.AddedFinding(index),
-                            state.findings.getOrNull(index)?.answers?.otherSpeciesText.orEmpty(),
+                    state.errorMessage?.let {
+                        Text(
+                            text = it,
+                            color = AgarthaTheme.colors.danger,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(bottom = 8.dp),
                         )
-                    },
-                )
+                    }
 
-                FindingsSummary(findings = state.findings)
-
-                // No Q4 section. "Did the model miss any eggs in this frame?" is derived from the
-                // findings, not asked - see VerificationUiState.missedEgg. Claiming more eggs of a
-                // species than the model boxed already answers it, and asking again lets the two
-                // disagree.
-
-                // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
-                SheetSectionLabel(
-                    text = stringResource(R.string.verify_remarks_label),
-                    modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
-                )
-                NoteField(
-                    value = state.userNote,
-                    onValueChange = actions.onUserNoteChanged,
-                    placeholder = stringResource(R.string.verify_remarks_placeholder),
-                    modifier = Modifier.padding(bottom = 12.dp),
-                )
-
-                state.errorMessage?.let {
-                    Text(
-                        text = it,
-                        color = AgarthaTheme.colors.danger,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(bottom = 8.dp),
+                    SheetActionRow(
+                        SheetActionRowState(
+                            primaryLabel = "Submit",
+                            secondaryLabel = "Discard",
+                            onPrimaryClick = actions.onSubmit,
+                            onSecondaryClick = { showDiscardConfirm.value = true },
+                            primaryLoading = state.isSubmitting,
+                            primaryEnabled = state.canSubmit,
+                        )
                     )
                 }
-
-                SheetActionRow(
-                    SheetActionRowState(
-                        primaryLabel = "Submit",
-                        secondaryLabel = "Discard",
-                        onPrimaryClick = actions.onSubmit,
-                        onSecondaryClick = { showDiscardConfirm.value = true },
-                        primaryLoading = state.isSubmitting,
-                        primaryEnabled = state.canSubmit,
-                    )
-                )
             }
         }
 
@@ -429,19 +465,24 @@ private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
+        containerColor = AgarthaTheme.colors.surface,
+        titleContentColor = AgarthaTheme.colors.textPrimary,
+        textContentColor = AgarthaTheme.colors.textPrimary,
         title = { Text(stringResource(R.string.verify_leave_title)) },
         text = { Text(stringResource(R.string.verify_leave_body)) },
         confirmButton = {
-            TextButton(
+            AgarthaButton(
                 onClick = onConfirm,
+                variant = AgarthaButtonVariant.Destructive,
                 modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
             ) {
-                Text(stringResource(R.string.verify_leave_confirm), color = AgarthaTheme.colors.danger)
+                Text(stringResource(R.string.verify_leave_confirm))
             }
         },
         dismissButton = {
-            TextButton(
+            AgarthaButton(
                 onClick = onDismiss,
+                variant = AgarthaButtonVariant.Secondary,
                 modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
             ) {
                 Text(stringResource(R.string.verify_leave_dismiss))
@@ -715,11 +756,12 @@ internal fun FrameUnavailable(reason: SampleImageSource?, modifier: Modifier = M
 @Composable
 internal fun DrawBoxAction(
     icon: ImageVector,
-    label: String,
+    label: String? = null,
+    contentDescription: String? = label,
     tag: String,
+    tint: Color = AgarthaTheme.colors.accent,
     onClick: () -> Unit,
 ) {
-    val accent = AgarthaTheme.colors.accent
     Row(
         modifier = Modifier
             .testTag(tag)
@@ -731,17 +773,19 @@ internal fun DrawBoxAction(
     ) {
         Icon(
             imageVector = icon,
-            contentDescription = null,
-            tint = accent,
+            contentDescription = if (label == null) contentDescription else null,
+            tint = tint,
             modifier = Modifier.size(18.dp),
         )
-        Text(
-            text = label,
-            color = accent,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(start = 6.dp),
-        )
+        if (label != null) {
+            Text(
+                text = label,
+                color = tint,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(start = 6.dp),
+            )
+        }
     }
 }
 
@@ -838,3 +882,41 @@ private fun NoteField(
         ),
     )
 }
+
+private class ExpandedCardAnchor {
+    var sheet: LayoutCoordinates? = null
+    var card: LayoutCoordinates? = null
+}
+
+private fun Modifier.collapseOnOutsideTap(
+    anchor: ExpandedCardAnchor,
+    expandedIndex: () -> Int?,
+    onOutsideTap: (Int) -> Unit,
+): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val index = expandedIndex() ?: return@awaitEachGesture
+        val sheet = anchor.sheet
+        val card = anchor.card
+        val isAttached = card?.isAttached == true
+        if (sheet != null && card != null && isAttached) {
+            if (sheet.localBoundingBoxOf(card, clipBounds = false).contains(down.position)) {
+                return@awaitEachGesture
+            }
+        }
+        var isTap = true
+        var pointerPressed = true
+        while (pointerPressed) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id }
+            if (change == null) {
+                break
+            }
+            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) {
+                isTap = false
+            }
+            pointerPressed = change.pressed
+        }
+        if (isTap) onOutsideTap(index)
+    }
+}
+

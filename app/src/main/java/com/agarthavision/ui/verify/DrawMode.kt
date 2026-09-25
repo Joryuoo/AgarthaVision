@@ -227,11 +227,13 @@ private fun VerificationUiState.drawTargetCaption(): String {
         )
         else -> {
             val species = finding.answers.speciesLabel.orEmpty()
+            val stage = finding.answers.stage
+            val otherStageText = finding.answers.otherStageText
             stringResource(
                 R.string.verify_locate_egg_row,
                 species,
-                findings.boxedCountOf(species) + target.slot + 1,
-                findings.fieldTotalOf(species),
+                findings.boxedCountOf(species, stage, otherStageText) + target.slot + 1,
+                findings.fieldTotalOf(species, stage, otherStageText),
             )
         }
     }

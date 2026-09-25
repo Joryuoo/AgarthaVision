@@ -343,7 +343,7 @@ private fun AppBar(onBack: () -> Unit) {
             Text(
                 text = stringResource(R.string.sessions_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = colors.textPrimary,
+                color = colors.accent,
             )
             Text(
                 text = stringResource(R.string.sessions_subtitle_purpose),

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -16,21 +17,70 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AgarthaColors
+
+/** Corner radius shared by every field in the manual-verify species form. */
+internal val FieldShape = RoundedCornerShape(12.dp)
+
+/** Value text style shared by every field in the manual-verify species form. */
+internal val FieldTextStyle: TextStyle
+    @Composable
+    get() = TextStyle(
+        fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = AgarthaTheme.colors.textPrimary,
+    )
+
+/**
+ * Label-above text matching [com.agarthavision.ui.components.SheetInput] and
+ * `SearchableDropdown`'s `FieldLabel` — 13sp Medium, no rule line, a 6dp gap to the field below.
+ */
+@Composable
+internal fun FieldLabel(label: String) {
+    Text(
+        text = label,
+        fontSize = 13.sp,
+        fontWeight = FontWeight.Medium,
+        color = AgarthaTheme.colors.textSecondary,
+        modifier = Modifier.padding(bottom = 6.dp),
+    )
+}
+
+/**
+ * The single [OutlinedTextFieldDefaults.colors] used by every field in this file, replacing the
+ * two near-duplicate `fieldColors` helpers that used to live separately on [SpeciesDropdown] and
+ * [StageDropdown]. Border and background follow the same state logic as `SheetInput` and
+ * `SearchField`: danger on error, accent while focused, `borderStrong` otherwise.
+ */
+@Composable
+internal fun fieldColors(colors: AgarthaColors) = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = colors.accent,
+    unfocusedBorderColor = colors.borderStrong,
+    errorBorderColor = colors.danger,
+    focusedContainerColor = colors.surface,
+    unfocusedContainerColor = colors.surface,
+    errorContainerColor = colors.dangerTint.copy(alpha = 0.5f),
+    focusedTextColor = colors.textPrimary,
+    unfocusedTextColor = colors.textPrimary,
+    errorTextColor = colors.textPrimary,
+    cursorColor = colors.accent,
+    errorCursorColor = colors.danger,
+)
 
 // Selection state, the two callbacks it raises, the modifier and the suggestion list.
 // Bundling them would add a type that exists only to satisfy the threshold.
@@ -53,69 +103,36 @@ fun SpeciesDropdown(
     suggestions: List<String> = emptyList(),
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var query by remember { mutableStateOf(selected?.displayName ?: "") }
-    LaunchedEffect(selected) {
-        query = selected?.displayName ?: ""
-    }
     val colors = AgarthaTheme.colors
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = colors.accent,
-        unfocusedBorderColor = colors.borderStrong,
-        focusedContainerColor = colors.surface,
-        unfocusedContainerColor = colors.surface,
-        focusedTextColor = colors.textPrimary,
-        unfocusedTextColor = colors.textPrimary,
-        focusedLabelColor = colors.textSecondary,
-        unfocusedLabelColor = colors.textSecondary,
-    )
-    // The committed selection's own name is not a filter: reopening the menu after a pick
-    // must still show every species, not just the one already chosen.
-    val committedName = selected?.displayName ?: ""
-    val filteredSpecies = EggSpecies.entries.filter { species ->
-        query.isBlank() || query == committedName || species.displayName.contains(query, ignoreCase = true)
-    }
+    val colorScheme = fieldColors(colors)
 
     Column(modifier = modifier) {
+        FieldLabel(stringResource(R.string.verify_species_picker_label))
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = query,
-                onValueChange = {
-                    query = it
-                    expanded = true
-                },
-                readOnly = false,
-                label = { Text(stringResource(R.string.verify_species_picker_label)) },
+                value = selected?.displayName.orEmpty(),
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                textStyle = FieldTextStyle,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = fieldColors,
+                colors = colorScheme,
+                shape = FieldShape,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)
-                    .onFocusChanged { focusState ->
-                        // Losing focus without tapping a menu item (e.g. tabbing away, or the
-                        // outside-click that also triggers onDismissRequest) must not leave a
-                        // typed-but-uncommitted query on screen - it has to fall back to the
-                        // last committed selection.
-                        if (!focusState.isFocused) {
-                            expanded = false
-                            query = selected?.displayName ?: ""
-                        }
-                    },
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = {
-                    expanded = false
-                    query = selected?.displayName ?: ""
-                },
+                onDismissRequest = { expanded = false },
             ) {
-                filteredSpecies.forEach { species ->
+                EggSpecies.entries.forEach { species ->
                     DropdownMenuItem(
                         text = { Text(species.displayName) },
                         onClick = {
-                            query = species.displayName
                             onSpeciesSelected(species)
                             expanded = false
                         },
@@ -124,12 +141,14 @@ fun SpeciesDropdown(
             }
         }
         if (selected == EggSpecies.OTHER) {
+            FieldLabel(stringResource(R.string.verify_other_label))
             OutlinedTextField(
                 value = otherText,
                 onValueChange = onOtherTextChanged,
-                label = { Text(stringResource(R.string.verify_other_label)) },
                 placeholder = { Text(stringResource(R.string.verify_other_hint)) },
-                colors = fieldColors,
+                textStyle = FieldTextStyle,
+                colors = colorScheme,
+                shape = FieldShape,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -210,69 +229,37 @@ fun StageDropdown(
     if (stages.isEmpty()) return
 
     var expanded by remember { mutableStateOf(false) }
-    var query by remember(selectedStage, selectedSpecies) {
-        mutableStateOf(selectedStage?.getDisplayName(selectedSpecies) ?: "")
-    }
-
-    LaunchedEffect(selectedStage, selectedSpecies) {
-        query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-    }
 
     val colors = AgarthaTheme.colors
-    val fieldColors = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = colors.accent,
-        unfocusedBorderColor = colors.borderStrong,
-        focusedContainerColor = colors.surface,
-        unfocusedContainerColor = colors.surface,
-        focusedTextColor = colors.textPrimary,
-        unfocusedTextColor = colors.textPrimary,
-        focusedLabelColor = colors.textSecondary,
-        unfocusedLabelColor = colors.textSecondary,
-    )
-
-    val committedName = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-    val filteredStages = stages.filter { stage ->
-        val displayName = stage.getDisplayName(selectedSpecies)
-        query.isBlank() || query == committedName || displayName.contains(query, ignoreCase = true)
-    }
+    val colorScheme = fieldColors(colors)
 
     Column(modifier = modifier) {
+        FieldLabel(stringResource(R.string.verify_stage_picker_label))
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = it },
         ) {
             OutlinedTextField(
-                value = query,
-                onValueChange = {
-                    query = it
-                    expanded = true
-                },
-                readOnly = false,
-                label = { Text(stringResource(R.string.verify_stage_picker_label)) },
+                value = selectedStage?.getDisplayName(selectedSpecies).orEmpty(),
+                onValueChange = {},
+                readOnly = true,
+                singleLine = true,
+                textStyle = FieldTextStyle,
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                colors = fieldColors,
+                colors = colorScheme,
+                shape = FieldShape,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)
-                    .onFocusChanged { focusState ->
-                        if (!focusState.isFocused) {
-                            expanded = false
-                            query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-                        }
-                    },
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
             )
             ExposedDropdownMenu(
                 expanded = expanded,
-                onDismissRequest = {
-                    expanded = false
-                    query = selectedStage?.getDisplayName(selectedSpecies) ?: ""
-                },
+                onDismissRequest = { expanded = false },
             ) {
-                filteredStages.forEach { stage ->
+                stages.forEach { stage ->
                     DropdownMenuItem(
                         text = { Text(stage.getDisplayName(selectedSpecies)) },
                         onClick = {
-                            query = stage.getDisplayName(selectedSpecies)
                             onStageSelected(stage)
                             expanded = false
                         },
@@ -281,12 +268,14 @@ fun StageDropdown(
             }
         }
         if (selectedStage == EggStage.OTHER) {
+            FieldLabel(stringResource(R.string.verify_other_stage_label))
             OutlinedTextField(
                 value = otherStageText,
                 onValueChange = onOtherStageTextChanged,
-                label = { Text(stringResource(R.string.verify_other_stage_label)) },
                 placeholder = { Text(stringResource(R.string.verify_other_stage_hint)) },
-                colors = fieldColors,
+                textStyle = FieldTextStyle,
+                colors = colorScheme,
+                shape = FieldShape,
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -295,4 +284,3 @@ fun StageDropdown(
         }
     }
 }
-

@@ -94,6 +94,30 @@ data class VerificationAnswers(
     /** Developmental stage chosen by the medtech for STH species. */
     val stage: EggStage? = null,
     val otherStageText: String = "",
+    /**
+     * Whether this added card permanently owns its species' plain, stage-less detection id.
+     *
+     * Tri-state and deliberately not a plain `Boolean`. `null` is "undecided" — a card added
+     * fresh this session with no persisted history yet to consult. `true` and `false` are pins
+     * set once by [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] from
+     * what is already on disk when a verified sample is reopened, and reflect which id this card
+     * already owns (or should own) — not simply how many rows its species currently has: `false`
+     * when this card's boxes are already filed under a stage-aware id, however many siblings
+     * survive alongside it (including none — a species can be down to a single row that still
+     * owns a stage-aware id from before a sibling was removed). `true` when this card owns, or
+     * should claim, the plain stage-less id — the common case of a lone row with no stage-aware
+     * id of its own, or the one row of a multi-row species that never got a stage segment.
+     *
+     * **A `false` pin must never flip to `true` later in the same session**, even if every
+     * sibling of that species is subsequently removed and this card ends up alone. Re-electing it
+     * as primary would move the plain id onto a row that is not the one currently holding it
+     * remotely — the same orphan-row double-count `14zcqnthz6e` exists to prevent, just triggered
+     * by an in-session removal instead of a later reopen. See
+     * `VerificationMapper.toDetectionEntities` for where this is read, and
+     * `Finding.primaryAddedIndexBySpecies` for how a still-undecided (`null`) species falls back
+     * to a stable, list-order rule.
+     */
+    val isPrimaryAdded: Boolean? = null,
 ) {
     /**
      * True when the species and stage questions are answered.

@@ -63,8 +63,8 @@ internal data class ModelSpeciesCount(
  * Reads a frame's model output.
  *
  * This is the model's own claim, before any human answer — deliberately not the same number as
- * `FindingsSummary`, which shows what submitting would write. The two can and should differ: the
- * gap between them is exactly what the medtech is being asked to create.
+ * what submitting would write. The two can and should differ: the gap between them is exactly
+ * what the medtech is being asked to create.
  *
  * @param isResolving true while the frame is still being fetched and its detections are not yet
  *   known. Nothing sets it today; see [ModelOutput.InProgress].

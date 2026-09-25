@@ -293,6 +293,88 @@ class SubmitVerificationUseCaseTest {
             )
         }
 
+    /**
+     * **Stale-row cleanup generalizes to the sentinel id (14zcqnthz6e follow-up).** A non-primary
+     * card reopened with no stage - and therefore filed under [UNSTAGED_ADDED_STAGE_KEY] - later
+     * gets a real stage filled in before this submit. The new stage-aware id is a different
+     * detection id than the old sentinel one, so the old placeholder row must be recognised as
+     * stale (not in the newly written set, not a model box id) and pruned by the same generic
+     * cleanup that already handles a lowered added count.
+     */
+    @Test
+    fun `a non-primary card whose stage is filled in before submit sheds its old sentinel row`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(syncSampleUseCase.invoke(any())).thenReturn(Result.success(Unit))
+
+            val oldSentinelId = com.agarthavision.data.local.mapper.addedDetectionIdFor(
+                "sample-1",
+                "Ascaris lumbricoides",
+                0,
+                com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY,
+            )
+            val primaryId = addedDetectionIdFor("sample-1", "Ascaris lumbricoides", 0, stageKey = null)
+            whenever(detectionDao.getDetectionsForSample("sample-1")).thenReturn(
+                listOf(oldSentinelId, primaryId).map { id ->
+                    DetectionEntity(
+                        detectionId = id,
+                        sampleId = "sample-1",
+                        classLabel = "Ascaris lumbricoides",
+                        confidence = 1.0f,
+                        bboxX = null,
+                        bboxY = null,
+                        bboxW = null,
+                        bboxH = null,
+                        verdict = DetectionVerdict.CONFIRMED.value,
+                    )
+                },
+            )
+
+            val primary = Finding(
+                prediction = null,
+                answers = VerificationAnswers(
+                    species = com.agarthavision.domain.model.EggSpecies.ASCARIS,
+                    stage = com.agarthavision.domain.model.EggStage.CORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                    isPrimaryAdded = true,
+                ),
+            )
+            // Previously unstaged and non-primary; now given a real stage before this submit.
+            val nowStaged = Finding(
+                prediction = null,
+                answers = VerificationAnswers(
+                    species = com.agarthavision.domain.model.EggSpecies.ASCARIS,
+                    stage = com.agarthavision.domain.model.EggStage.DECORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                    isPrimaryAdded = false,
+                ),
+            )
+
+            useCase(frame, listOf(primary, nowStaged), missedEgg = null)
+            advanceUntilIdle()
+
+            val newStageId = addedDetectionIdFor(
+                "sample-1",
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            val insertCaptor = argumentCaptor<List<DetectionEntity>>()
+            verify(detectionDao).insertDetections(insertCaptor.capture())
+            assertEquals(
+                "The card now writes under its real stage segment, not the sentinel.",
+                setOf(primaryId, newStageId),
+                insertCaptor.firstValue.map { it.detectionId }.toSet(),
+            )
+
+            val deleteCaptor = argumentCaptor<List<String>>()
+            verify(detectionDao).deleteDetectionsByIds(deleteCaptor.capture())
+            assertEquals(
+                "The old sentinel-id row is stale now that this card writes under a real stage.",
+                listOf(oldSentinelId),
+                deleteCaptor.firstValue,
+            )
+        }
+
     @Test
     fun `removing a species replaces the findings rows wholesale`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
