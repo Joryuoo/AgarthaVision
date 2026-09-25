@@ -59,6 +59,7 @@ import com.agarthavision.domain.usecase.patients.PatientListItem
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SearchInput
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
@@ -150,28 +151,44 @@ fun PatientsScreen(
                 if (shouldLoadMore) viewModel.onLoadMore()
             }
 
-            if (!state.isLoading && state.patients.isEmpty()) {
-                val narrowed = state.isNarrowed
-                val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
-                    null
-                } else {
-                    { NewPatientButton(onClick = viewModel::onCreatePatient) }
+            when {
+                state.isLoading && state.patients.isEmpty() -> Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            start = Spacing.lg,
+                            end = Spacing.lg,
+                            top = Spacing.xs,
+                            bottom = FloatingActionClearance,
+                        ),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                ) {
+                    repeat(3) {
+                        PatientCardSkeleton()
+                    }
                 }
-                EmptyState(
-                    icon = Icons.Outlined.Inbox,
-                    title = stringResource(
-                        if (narrowed) R.string.patients_empty_filtered_title
-                        else R.string.patients_empty_title,
-                    ),
-                    body = stringResource(
-                        if (narrowed) R.string.patients_empty_filtered_body
-                        else R.string.patients_empty_body,
-                    ),
-                    modifier = Modifier.padding(top = Spacing.xxl),
-                    action = emptyAction,
-                )
-            } else {
-                LazyColumn(
+                !state.isLoading && state.patients.isEmpty() -> {
+                    val narrowed = state.isNarrowed
+                    val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
+                        null
+                    } else {
+                        { NewPatientButton(onClick = viewModel::onCreatePatient) }
+                    }
+                    EmptyState(
+                        icon = Icons.Outlined.Inbox,
+                        title = stringResource(
+                            if (narrowed) R.string.patients_empty_filtered_title
+                            else R.string.patients_empty_title,
+                        ),
+                        body = stringResource(
+                            if (narrowed) R.string.patients_empty_filtered_body
+                            else R.string.patients_empty_body,
+                        ),
+                        modifier = Modifier.padding(top = Spacing.xxl),
+                        action = emptyAction,
+                    )
+                }
+                else -> LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
@@ -376,6 +393,30 @@ private fun PatientRow(
                 )
             }
         }
+    }
+}
+
+/** Loading placeholder for [PatientRow], modeled on SessionsScreen's `SessionCardSkeleton`. */
+@Composable
+private fun PatientCardSkeleton(modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(colors.surface)
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
+            .padding(start = Spacing.md, end = Spacing.xs, top = Spacing.sm, bottom = Spacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+        ) {
+            SkeletonBox(modifier = Modifier.height(15.sp.value.dp).width(140.dp))
+            SkeletonBox(modifier = Modifier.height(12.sp.value.dp).width(100.dp))
+        }
+        SkeletonBox(modifier = Modifier.size(24.dp))
     }
 }
 
