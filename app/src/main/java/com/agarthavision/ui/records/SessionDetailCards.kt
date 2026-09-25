@@ -70,12 +70,17 @@ internal fun ReportsSection(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // A report covers verified samples only, so with none there is nothing to report on
+        // (86d4bzm9k). A sample verified as negative still counts: that is a result.
+        val canGenerate = state.session.verifiedSamples.isNotEmpty()
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            // The subtitle can now be a full sentence; weight lets it wrap instead of pushing
+            // the button out, and the gap keeps the two apart when it does.
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.report_section_title),
                     fontSize = 13.sp,
@@ -83,10 +88,10 @@ internal fun ReportsSection(
                     color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
-                    text = if (state.totalReports == 0) {
-                        stringResource(R.string.report_empty)
-                    } else {
-                        stringResource(R.string.report_generated_count, state.totalReports)
+                    text = when {
+                        !canGenerate -> stringResource(R.string.report_needs_verified_sample)
+                        state.totalReports == 0 -> stringResource(R.string.report_empty)
+                        else -> stringResource(R.string.report_generated_count, state.totalReports)
                     },
                     fontSize = 12.sp,
                     color = AgarthaTheme.colors.textSecondary,
@@ -95,7 +100,11 @@ internal fun ReportsSection(
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(isGenerating = state.isGenerating, onClick = state.onGenerate)
+            GenerateReportButton(
+                isGenerating = state.isGenerating,
+                enabled = canGenerate,
+                onClick = state.onGenerate,
+            )
         }
 
         state.reports.forEach { report ->
@@ -158,18 +167,23 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
 
 
 @Composable
-private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) -> Unit) {
+private fun GenerateReportButton(
+    isGenerating: Boolean,
+    enabled: Boolean,
+    onClick: (ExportFormat) -> Unit,
+) {
     val colors = AgarthaTheme.colors
     var menuExpanded by remember { mutableStateOf(false) }
+    val clickable = enabled && !isGenerating
     Box {
         Box(
             modifier = Modifier
                 .size(34.dp)
                 .background(
-                    if (isGenerating) colors.borderStrong else colors.accent,
+                    if (clickable) colors.accent else colors.borderStrong,
                     RoundedCornerShape(999.dp),
                 )
-                .clickable(enabled = !isGenerating, onClick = { menuExpanded = true }),
+                .clickable(enabled = clickable, onClick = { menuExpanded = true }),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

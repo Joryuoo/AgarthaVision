@@ -54,7 +54,12 @@ class GenerateSessionReportUseCase @Inject constructor(
             "Session $sessionId is not owned by the current user."
         }
 
+        // Verified samples only: the query leaves out every frame still waiting in the queue.
+        // With none, the report would be a signed-off document covering zero fields, written,
+        // uploaded and synced before anyone noticed it was empty (86d4bzm9k). The button is
+        // disabled in that state too; this keeps any other caller from producing one.
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
+        require(samples.isNotEmpty()) { NO_VERIFIED_SAMPLES_MESSAGE }
         // No floor. It existed to keep a mean from dividing by zero, and the mean is gone.
         val fieldCount = samples.size
         val detectionsBySample = samples.associate { sample ->
@@ -125,5 +130,9 @@ class GenerateSessionReportUseCase @Inject constructor(
             }
         }
         return csvFilePath to pdfFilePath
+    }
+
+    companion object {
+        const val NO_VERIFIED_SAMPLES_MESSAGE = "Verify at least one sample to generate a report."
     }
 }
