@@ -3,17 +3,22 @@ package com.agarthavision.core.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import com.agarthavision.data.local.dao.DetectionDao
+import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.PatientEntity
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.PsgcBarangayEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
 
 /**
  * AgarthaVision Room database.
@@ -30,14 +35,75 @@ import com.agarthavision.data.local.entity.SessionEntity
  *
  * `psgc_barangays` is the one table here with no Supabase mirror: it is reference data
  * seeded from an APK asset by [com.agarthavision.data.local.psgc.PsgcSeeder], and the
- * surveillance map joins on the code a session stores rather than on this table.
+ * surveillance map joins on the code a patient stores rather than on this table.
  *
  * Version 12 adds the `sample_species_findings` table and `detections.species_touched`
  * (`0012_polyparasitism_findings.sql`) plus `samples.deleted_at`
- * (`0013_sample_soft_delete.sql`). Version 13 replaces `reports.epg_per_species_json` with
- * `lpf_per_species_json` (ticket 86d4a6jxw).
+ * (`0013_sample_soft_delete.sql`).
  *
- * **The jump from 10 to 12 is deliberate: 11 is left free.** Three branches wanted version 10
+ * **Two branches minted a version 13.** `staging` used it for the LPF density work
+ * (86d4a6jxw), which replaces `reports.epg_per_species_json` with `lpf_per_species_json`;
+ * this branch used it for the patient schema. The exported `13.json` here is the patient
+ * one, because that is the lineage this branch continues; the LPF column arrives below at
+ * version 15, where the two lines meet. Neither 13 ever reached a release build, so no
+ * device carries the other hash.
+ *
+ * Version 13 is the patient-based schema (`0001_init.sql` on the new `agarthavision`
+ * project). It adds `patients` and the `patient_users` join, gives `sessions` a
+ * `patient_id`, and drops five columns: `sessions.ended_at`, `sessions.notes`,
+ * `sessions.psgc_barangay_code`, `sessions.claim_exempt` and all three `samples.gps_*`,
+ * plus `reports.epg_per_species_json`.
+ *
+ * Version 14 adds `species_suggestions`, the offline index behind the "Other species"
+ * field (PB-08b). Like `psgc_barangays` it has no Supabase mirror — it is derived locally
+ * from rows the device already holds.
+ *
+ * Version 15 carries `reports.lpf_per_species_json` in from `staging` (86d4a6jxw) — the
+ * per-species min-max low-power-field range that replaced EPG for direct smear. It is a
+ * new number rather than a reshaped 14 for the reason immediately below: 14 is already
+ * committed and installed, and changing its shape in place is the collision, not the bump.
+ *
+ * Version 17 adds a unique composite index on `sessions(patient_id, label)` enforcing
+ * per-patient label uniqueness (86d4bzjhw). Labels are still per-patient scoped, not
+ * globally unique, and remain user-editable subject to the uniqueness guard. SQLite treats
+ * NULL as distinct in a unique index so unlabelled rows never collide.
+ *
+ * Version 18 was meant to add an index on `patients.updated_at` to support sorting by
+ * recent activity (86d4bze80), landing as a plain version bump after two branches
+ * independently minted version 17 for different shapes (this one, and the session-label
+ * branch, 86d4bzjhw). It was poisoned the same way: a dev device had already installed a
+ * build declaring version 18 for the patients-only shape (hash b9e65459a2a73a08bb31d7ccb34af5a2)
+ * before the two branches' schemas were reconciled into one combined 18 (hash
+ * cb092c054b468b6f6b59a2a24e4ff0c3) — an equal-version-different-hash collision, not a
+ * version change, so destructive fallback does not fire and Room throws on open. Version 18
+ * is therefore left free too, and the combined shape (both the `patients.updated_at` index
+ * and the `sessions(patient_id, label)` unique index) moves to version 19. **Never re-export
+ * an already-committed version's schema under the same number, even to merge two branches'
+ * changes together — reconciling divergent schemas always earns a new version, the same way
+ * version 15 carried a merged change in rather than reshaping 14.**
+ *
+ * Version 22 drops `detections.species_touched` and `detections.verified_by_user`
+ * (14zcqnthrx8). `species_touched` recorded taps rather than judgements: a pre-filled row the
+ * medtech read and agreed with submits untouched, so it could not tell attention from its
+ * absence, and every row it did mark was already marked by its verdict or by a null
+ * `prediction_id`. `verified_by_user` was dropped from Postgres long ago and was hardcoded
+ * `true` at every write site here (86d4akgmf). **Version 21 is left free:** `development`
+ * briefly carried a `21.json` for an `is_edited` column no entity ever declared, and a device
+ * that installed that build holds version 21 under a different hash.
+ *
+ * **It is a bump rather than an addition at 13, and that is not fussiness.** Version 13 is
+ * already committed and on devices. Adding a table without changing the number is precisely
+ * the equal-version-different-hash case described below: destructive fallback does not
+ * fire, Room throws `Room cannot verify the data integrity` on open, and every device
+ * carrying the other build crashes at launch. A version bump is cheap and a collision is
+ * not.
+ *
+ * **Version 13 owns the whole shape.** `claim_exempt` is dropped here rather than in the
+ * mandatory-login change that makes it dead, because a second schema change at the same
+ * version is precisely the collision described below — the login work removes Kotlin, not
+ * columns.
+ *
+ * **The jump from 10 to 12 was deliberate, and 11 is still left free.** Three branches wanted version 10
  * at once — `feat/sample-geospatial-mapping` (`psgc_barangays`), which won it and is merged
  * above; `feature/editable-report` (`detections.stage`), which lost it and was reverted on
  * staging with 86d4a6jwy deprioritised; and this one. Room only falls back destructively on a
@@ -56,20 +122,25 @@ import com.agarthavision.data.local.entity.SessionEntity
     entities = [
         SampleEntity::class,
         SessionEntity::class,
+        PatientEntity::class,
+        PatientUserEntity::class,
         DetectionEntity::class,
         ReportEntity::class,
         SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
+        SpeciesSuggestionEntity::class,
     ],
-    version = 13,
+    version = 22,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleDao(): SampleDao
     abstract fun sessionDao(): SessionDao
+    abstract fun patientDao(): PatientDao
     abstract fun detectionDao(): DetectionDao
     abstract fun reportDao(): ReportDao
     abstract fun psgcBarangayDao(): PsgcBarangayDao
+    abstract fun speciesSuggestionDao(): SpeciesSuggestionDao
 
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
 }

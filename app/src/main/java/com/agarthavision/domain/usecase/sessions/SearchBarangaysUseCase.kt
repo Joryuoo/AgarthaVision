@@ -34,6 +34,6 @@ class SearchBarangaysUseCase @Inject constructor(
         const val MIN_QUERY_LENGTH = 2
 
         /** Enough to scroll, few enough to stay responsive on a low-end device. */
-        const val RESULT_LIMIT = 50
+        const val RESULT_LIMIT = 80
     }
 }

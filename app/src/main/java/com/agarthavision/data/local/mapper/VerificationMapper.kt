@@ -2,10 +2,15 @@ package com.agarthavision.data.local.mapper
 
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.FindingRow
+import com.agarthavision.domain.usecase.verify.SpeciesStageKey
+import com.agarthavision.domain.usecase.verify.primaryAddedIndexBySpecies
+import com.agarthavision.domain.usecase.verify.speciesStageKey
+import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import java.util.UUID
 
@@ -30,10 +35,6 @@ import java.util.UUID
  * counted. `0002_verification_fields.sql` describes the narrower original rule; it is applied
  * and is not edited (C6), so `schema.ts` and `docs/map/objects/Detection.md` carry the current
  * one.
- *
- * `species_touched` is orthogonal to all of this and never alters a verdict. It is deliberately
- * not a new [DetectionVerdict] member — that would mean touching the Supabase CHECK constraint
- * and every raw query naming a verdict, for a training-weight signal a boolean carries.
  */
 fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionVerdict = when {
     answers.isEgg != true -> DetectionVerdict.FALSE_POSITIVE
@@ -58,11 +59,47 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * is no longer nulled on verify. An added row keys on what the medtech asserted, so re-adding
  * the same species lands on the same row rather than duplicating it.
  */
-private fun detectionId(sampleId: String, finding: Finding, ordinal: Int): String =
-    if (finding.prediction != null) {
-        detectionIdFor(sampleId, ordinal)
+/**
+ * The id an added egg's detection row gets: its species, stage, and its slot within that
+ * species+stage.
+ *
+ * **The slot is what this change added, and it was a data-loss bug without it.** The key used to
+ * be the species alone, so two eggs of one species derived the same id and
+ * `OnConflictStrategy.REPLACE` silently kept one. That was invisible while added rows carried no
+ * geometry; the moment they could (86d4bk534), two hand-drawn boxes on two Ascaris eggs became
+ * one box on submit, with no error anywhere.
+ *
+ * **[stageKey] is what a later change added, for the same reason.** Two added cards of one
+ * species at different stages used to derive the same id too, so the second stage silently
+ * overwrote the first (14zcqnthz6e). A null [stageKey] — an unstaged card, or a species the stage
+ * question does not apply to — keeps the *old* key with no stage segment, so rows a build before
+ * this change already wrote keep resolving to the same id and are not silently duplicated.
+ *
+ * Exposed so the reopen path can find the rows an added species produced without re-deriving the
+ * rule in a second place — two derivations of one key is how an edit starts appending instead of
+ * replacing.
+ */
+
+/**
+ * The stage segment a non-primary card with NO stage gets, in place of `null`.
+ *
+ * `stageLabel` is already `null` for an unstaged card, which is the same value the *primary*
+ * card's plain id is built with — a non-primary unstaged card cannot use `null` here or its id
+ * collapses onto the primary card's, silently dropping the primary's boxes on submit
+ * (14zcqnthz6e). This sentinel gives it a distinct segment instead. It cannot collide with a real
+ * [com.agarthavision.domain.usecase.verify.VerificationAnswers.stageLabel]: every non-`OTHER`
+ * stage resolves to an [com.agarthavision.domain.model.EggStage] enum name, and `OTHER` resolves
+ * to trimmed free text a medtech would have to type verbatim, including the marker characters, to
+ * collide — a risk accepted the same way the id scheme already accepts species free text as a
+ * segment.
+ */
+const val UNSTAGED_ADDED_STAGE_KEY: String = "#_unstaged#"
+
+fun addedDetectionIdFor(sampleId: String, species: String, slot: Int, stageKey: String? = null): String =
+    if (stageKey == null) {
+        derive("$sampleId#finding#$species#$slot")
     } else {
-        derive("$sampleId#finding#${finding.answers.speciesLabel.orEmpty()}")
+        derive("$sampleId#finding#$species#$stageKey#$slot")
     }
 
 /**
@@ -74,28 +111,118 @@ private fun detectionId(sampleId: String, finding: Finding, ordinal: Int): Strin
  */
 fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#box#$ordinal")
 
+/**
+ * The id the model's own prediction at [ordinal] gets in `predictions`.
+ *
+ * Same derivation as [detectionIdFor] on a different key, so the prediction and the detection
+ * that rules on it are both stable under a re-push. `0004_predictions.sql` recomputes this in
+ * SQL for its backfill, so the key string is part of the schema contract: change it and every
+ * link the migration made stops matching what the app pushes.
+ */
+fun predictionIdFor(sampleId: String, ordinal: Int): String =
+    derive("$sampleId#prediction#$ordinal")
+
 private fun derive(key: String): String =
     UUID.nameUUIDFromBytes(key.toByteArray()).toString()
 
 /**
  * Stable finding-row id, keyed to match the table's uniqueness rule.
  *
- * `sample_species_findings` is unique on `(sample_id, species)` while `stage` is null, which it
- * always is — nothing writes a stage since 86d4a6jwy was reverted. If the stage work returns,
- * this key and `sample_species_findings_unique_staged` have to move together.
+ * `sample_species_findings` is unique on `(sample_id, species, stage)` (`stage` nullable), and
+ * [row]'s own stage is written into the key here so two stages of one species land on distinct
+ * rows instead of one REPLACE-ing the other.
  */
-private fun findingId(sampleId: String, row: FindingRow): String =
-    UUID.nameUUIDFromBytes("$sampleId#row#${row.species}".toByteArray()).toString()
+private fun findingId(sampleId: String, row: FindingRow): String {
+    val stageKey = row.stageDisplayName ?: row.stage?.name.orEmpty()
+    return UUID.nameUUIDFromBytes("$sampleId#row#${row.species}#$stageKey".toByteArray()).toString()
+}
 
 /**
- * Persists one finding as a detection row.
+ * Every detection row a reviewed frame writes — **one row per egg**, which is what the table
+ * says it is (`0001_init.sql`: "One row per detected egg").
  *
- * Both shapes land in the same table. A prediction-backed finding carries the model's box and
- * confidence; a finding the medtech added carries no box at all — all four bbox columns null,
- * confidence 1.0 — which is exactly the shape a manual capture has always been written with,
- * and is why `bbox_*` was made nullable in `0007_detection_bbox_nullable.sql`.
+ * A list rather than a per-finding mapping, because neither half can be decided on one row any
+ * more. An added row carries a field total for its whole species, so how many *unboxed* eggs it
+ * is worth depends on how many boxes its siblings kept, and one such row therefore produces
+ * however many rows that leaves.
+ *
+ * Both shapes land in the same table. A prediction-backed finding carries the model's
+ * confidence and the box a human stands behind — the model's, the medtech's redraw, or none at
+ * all on a `BOX_INCORRECT` row that was not redrawn. An added egg carries a box only if the
+ * medtech drew one, and otherwise all four bbox columns are null at confidence 1.0 — the shape a
+ * manual capture has always been written with, and why `bbox_*` was made nullable in
+ * `0007_detection_bbox_nullable.sql`.
+ *
+ * **The null-bbox rows are load-bearing for the corpus, and so is being able to spot them.** A
+ * frame whose eggs are counted but not located cannot be used for detection training as it
+ * stands: the usual pipeline treats un-annotated image regions as background, so fourteen
+ * unboxed Ascaris teach the model fourteen times that an Ascaris egg is background. Writing a
+ * row per egg either way is what makes the difference queryable with no extra column — a frame
+ * is exhaustively localised iff
+ *
+ * ```sql
+ * not exists (select 1 from public.detections d
+ *             where d.sample_id = s.id and d.bbox_x is null and d.verdict <> 'FALSE_POSITIVE')
+ * ```
+ *
+ * and a frame that fails it belongs in classification crops and hard-negative mining, never in
+ * background sampling.
+ *
+ * Added rows are emitted for distinct species+stage only. The UI merges two cards that land on
+ * one species+stage, and this is the backstop: emitting both would derive the same slot ids
+ * twice and REPLACE would keep whichever came last.
+ *
+ * **The stage segment is only derived for a species' non-primary added cards.** Old data was
+ * saved under species-only ids, before stage-aware ids existed. Deriving a stage-aware id
+ * unconditionally for every staged card meant resubmitting an *unchanged* old card wrote it
+ * under a brand-new id and deleted the old one — locally harmless, but the sync pipeline only
+ * ever upserts remotely and never deletes, so Supabase ends up holding both the old and new rows
+ * and double-counts the species on the next pull.
+ *
+ * One added card per species — its **primary**, from [Finding.primaryAddedIndexBySpecies] — keeps
+ * resolving to the old, stage-less id it always has, so an unedited resubmit writes nothing new.
+ * The stage segment switches on for every *other* added card of that species, to disambiguate —
+ * which is the case the id had to be made stage-aware for in the first place (14zcqnthz6e).
+ *
+ * **Which card is primary is decided once, on reopen, and then pinned — not re-derived from the
+ * card count on every call.** Re-deriving it from "is this species' card count currently 1"
+ * reintroduced the same orphan-row bug one step removed: a species resubmitted alone today under
+ * the plain id, then joined by a same-species sibling in a *later* reopen session, would flip
+ * that already-synced card's id from plain to stage-aware on the very next submit — deleting the
+ * synced row locally while the upsert-only server keeps it forever. See
+ * [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] for where the pin is
+ * set from what is already on disk, and [VerificationAnswers.isPrimaryAdded] for why a card
+ * pinned non-primary is never re-elected primary later, even once every sibling of its species is
+ * removed.
  */
-fun Finding.toDetectionEntity(sampleId: String, ordinal: Int): DetectionEntity {
+fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
+    val emitted = mutableSetOf<SpeciesStageKey>()
+    val primaryIndexBySpecies = primaryAddedIndexBySpecies()
+    return flatMapIndexed { ordinal, finding ->
+        val key = finding.answers.speciesStageKey
+        when {
+            finding.prediction != null -> listOf(finding.toDetectionEntity(sampleId, ordinal))
+            key == null || !emitted.add(key) -> emptyList()
+            else -> {
+                val useStageSegment = primaryIndexBySpecies[key.species] != ordinal
+                (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
+                    .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot, useStageSegment) }
+            }
+        }
+    }
+}
+
+/** Persists one finding as one detection row. See [toDetectionEntities] for the shapes. */
+// The branch count is the answer matrix itself - verdict, species, box origin and the
+// touched flags each read from a different answer. Flattening it would hide the mapping
+// that C7 depends on being auditable.
+@Suppress("CyclomaticComplexMethod")
+private fun Finding.toDetectionEntity(
+    sampleId: String,
+    ordinal: Int,
+    slot: Int? = null,
+    useStageSegment: Boolean = true,
+): DetectionEntity {
     val label = answers.speciesLabel
     val modelClass = prediction?.classLabel
     val verdict = if (modelClass != null) {
@@ -111,20 +238,50 @@ fun Finding.toDetectionEntity(sampleId: String, ordinal: Int): DetectionEntity {
         EggSpecies.fromClassLabel(modelClass)?.canonicalClass == label -> null
         else -> label
     }
+    // An added egg takes its own slot's box; a model box takes the replacement, if there was one.
+    val drawn = if (slot == null) answers.drawnBox else answers.drawnBoxes.getOrNull(slot)
+    // The model's box is written only where a human stood behind it. On a BOX_INCORRECT row
+    // the medtech did not redraw, the box is the one they said is in the wrong place, and
+    // storing it here would record rejected geometry as where the egg is — the frame would
+    // then pass the exhaustiveness rule below and go into background sampling (14zcqnthrx6).
+    // The model's own geometry is not lost: it is the `predictions` row this detection links to.
+    val box = when {
+        drawn != null -> drawn
+        prediction == null || verdict == DetectionVerdict.BOX_INCORRECT -> null
+        else -> ImageBox(prediction.x, prediction.y, prediction.width, prediction.height)
+    }
     return DetectionEntity(
-        detectionId = detectionId(sampleId, this, ordinal),
+        detectionId = if (slot == null) {
+            detectionIdFor(sampleId, ordinal)
+        } else {
+            // A primary card always writes the plain id (stageKey null), whatever its own stage
+            // is. A non-primary card writes its real stage segment when it has one, or the
+            // unstaged sentinel when it doesn't — never null, which would collide with the
+            // primary's plain id.
+            val stageKey = when {
+                !useStageSegment -> null
+                answers.stageLabel != null -> answers.stageLabel
+                else -> UNSTAGED_ADDED_STAGE_KEY
+            }
+            addedDetectionIdFor(sampleId, label.orEmpty(), slot, stageKey)
+        },
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }
             ?: label.orEmpty(),
+        // A hand-drawn box wins over the model's, because that is what replacing one means.
+        // The model's confidence is NOT overwritten with 1.0 on a replaced box: "the model was
+        // this sure and still localised it wrong" is the training signal, and a BOX_INCORRECT
+        // verdict already says a human supplied the geometry. An added row has no prediction to
+        // take a confidence from and so is written at 1.0 anyway, which is the shape a manual
+        // finding has always had.
         confidence = prediction?.confidence ?: 1.0f,
-        bboxX = prediction?.x,
-        bboxY = prediction?.y,
-        bboxW = prediction?.width,
-        bboxH = prediction?.height,
+        bboxX = box?.x,
+        bboxY = box?.y,
+        bboxW = box?.width,
+        bboxH = box?.height,
         verdict = verdict.value,
         expertClass = expertClass,
-        verifiedByUser = true,
-        speciesTouched = answers.speciesTouched,
+        stage = answers.stageLabel,
     )
 }
 
@@ -134,8 +291,6 @@ fun FindingRow.toFindingEntity(sampleId: String): SampleSpeciesFindingEntity =
         findingId = findingId(sampleId, this),
         sampleId = sampleId,
         species = species,
-        // Always null: the column exists because `0012_polyparasitism_findings.sql` is applied
-        // and frozen (C6), but 86d4a6jwy was reverted on staging, so nothing produces a stage.
-        stage = null,
+        stage = stageDisplayName ?: stage?.name,
         eggCount = eggCount,
     )

@@ -7,12 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import com.agarthavision.ui.components.SearchableDropdown
-import com.agarthavision.ui.components.SearchableDropdownActions
-import com.agarthavision.ui.components.SearchableDropdownConfig
-import com.agarthavision.ui.components.SearchableDropdownState
-import com.agarthavision.ui.components.SearchableOption
-import com.agarthavision.ui.components.SvgIcon
+import com.agarthavision.ui.components.BackArrow
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +19,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -41,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
@@ -50,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,11 +56,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalContext
@@ -75,18 +72,25 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
-import com.agarthavision.domain.model.PsgcBarangay
-import com.agarthavision.domain.model.SessionLinkState
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.model.SessionWithStats
-import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.navigation.Screen
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.components.ScreenHeader
+import com.agarthavision.ui.components.SheetInput
+import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -96,19 +100,26 @@ import java.time.format.DateTimeFormatter
 
 @Composable
 fun SessionsScreen(
+    onBack: () -> Unit,
     onNavigate: (String) -> Unit = {},
     onNavigateToCapture: (String) -> Unit,
-    onSessionSelected: (String) -> Unit,
     viewModel: SessionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val colors = AgarthaTheme.colors
+    var showCreateDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
-                is SessionsEvent.NavigateToCapture -> onNavigateToCapture(event.sessionId)
+                is SessionsEvent.NavigateToCapture -> {
+                    showCreateDialog = false
+                    onNavigateToCapture(event.sessionId)
+                }
+                is SessionsEvent.NavigateToVerificationQueue -> {
+                    onNavigate(Screen.VerificationQueue.route)
+                }
                 is SessionsEvent.ShareExport -> {
                     val sendIntent = Intent().apply {
                         action = Intent.ACTION_SEND
@@ -121,8 +132,6 @@ fun SessionsScreen(
             }
         }
     }
-
-    var showCreateDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -140,13 +149,26 @@ fun SessionsScreen(
                 // only what had been scrolled into view. Sessions do not end any more, so the
                 // count is of frames awaiting review rather than of open sessions - the
                 // latter would have counted every session and said nothing.
-                AppBar(unverifiedCount = state.unverifiedCount, totalCount = state.totalCount)
+                AppBar(
+                    onBack = onBack,
+                )
+
+                // Patient Identity Preview Header / Card
+                state.patient?.let { patient ->
+                    PatientPreviewCard(
+                        patient = patient,
+                        barangayName = state.barangayName,
+                        totalCount = state.totalCount,
+                        unverifiedCount = state.unverifiedCount,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
+                    )
+                }
 
                 // Search + date filter row
                 SearchInput(
                     value = state.searchQuery,
                     onValueChange = viewModel::onSearchQueryChanged,
-                    placeholder = "Search sessions, notes...",
+                    placeholder = stringResource(R.string.sessions_search_placeholder),
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                 )
                 DateRangeFilterBar(
@@ -194,14 +216,21 @@ fun SessionsScreen(
                         items(state.sessions, key = { it.session.id }) { sessionData ->
                             SessionCard(
                                 sessionData = sessionData,
-                                isActive = sessionData.session.endedAt == null,
+                                isActive = sessionData.session.id == state.activeSessionId,
                                 actions = SessionCardActions(
-                                    onClick = {
-                                        if (sessionData.session.endedAt == null) {
-                                            viewModel.onResumeSession(sessionData.session.id)
-                                        } else {
-                                            onSessionSelected(sessionData.session.id)
-                                        }
+                                    // Every row opens Capture. There is no second
+                                    // destination to branch to: a session does not end, so
+                                    // the medtech is always going back to the smear to
+                                    // capture or correct a frame. Session Detail is reached
+                                    // from Records, which is where reading a finished
+                                    // session belongs.
+                                    onClick = { viewModel.onResumeSession(sessionData.session.id) },
+                                    onVerifyClick = {
+                                        viewModel.onOpenVerificationQueue(sessionData.session.id)
+                                    },
+                                    onViewReportClick = {
+                                        val route = Screen.SessionDetail.createRoute(sessionData.session.id)
+                                        onNavigate(route)
                                     },
                                 )
                             )
@@ -228,10 +257,19 @@ fun SessionsScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        // This screen is a drill-down with no tab bar under it, so nothing
+                        // else reserves the system navigation bar's space. Without this the
+                        // button's lower half renders behind the system buttons and they take
+                        // the taps. Inset here rather than on the root Column so the list
+                        // above still scrolls the full height of the screen.
+                        .navigationBarsPadding()
                         .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp)
                 ) {
                     Button(
-                        onClick = { showCreateDialog = true },
+                        onClick = {
+                            viewModel.onDismissError()
+                            showCreateDialog = true
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(49.dp),
@@ -241,10 +279,12 @@ fun SessionsScreen(
                             contentColor = colors.onAccent
                         )
                     ) {
-                        SvgIcon(
-                            "M12 5v14M5 12h14",
-                            strokeWidth = 2.2f,
-                            color = colors.onAccent,
+                        Icon(
+                            imageVector = Icons.Outlined.Add,
+                            // The button's own "New session" label says it; repeating it
+                            // makes TalkBack read the control twice.
+                            contentDescription = null,
+                            tint = colors.onAccent,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -256,44 +296,180 @@ fun SessionsScreen(
 
     if (showCreateDialog) {
         NewSessionSheet(
-            barangay = BarangayPickerState(
-                selected = state.selectedBarangay,
-                query = state.barangayQuery,
-                results = state.barangayResults,
-                actions = SearchableDropdownActions(
-                    onQueryChange = viewModel::onBarangayQueryChanged,
-                    onSelect = { option -> viewModel.onBarangaySelected(option.key) },
-                    onClear = viewModel::onBarangayCleared,
-                ),
-            ),
+            // Leaving the sheet abandons the draft; the label is local `remember` state and
+            // resets with it. There is nothing left in the ViewModel to reset — the barangay
+            // moved to the patient and the note is gone.
+            state = state,
+            onClearError = viewModel::onDismissError,
             onDismiss = {
-                // Leaving the sheet abandons the whole draft, so the picker resets too —
-                // label and note are local `remember` state and reset with it.
-                viewModel.onBarangayCleared()
+                viewModel.onDismissError()
                 showCreateDialog = false
             },
-            onSubmit = { label, note ->
-                viewModel.onCreateSession(label, note)
-                showCreateDialog = false
+            onSubmit = { label ->
+                viewModel.onCreateSession(label)
             }
         )
     }
-
-    // KebabMenu is now hoisted into SessionCard
 }
 
+/**
+ * This screen is a drill-down now, so it carries a back arrow.
+ *
+ * It used to be a root tab, where the bottom bar was the way out. It is registered at
+ * `patients/{patientId}`, which is not in `bottomBarRoutes`, so without this the only way
+ * back is the system gesture — and a screen reachable only by gesture reads as a dead end.
+ *
+ * The [Row] owns `.statusBarsPadding()` so the back arrow and the title text share the
+ * same inset origin and align correctly. The old implementation wrapped [ScreenHeader] (a
+ * component that applies its own `.statusBarsPadding()` internally) inside a plain [Row]
+ * alongside [BackArrow], which caused the title to sit lower than the arrow by the height
+ * of the status bar.
+ *
+ * Pattern matches `SessionDetailScreen.SessionDetailAppBar`.
+ */
 @Composable
-private fun AppBar(unverifiedCount: Int, totalCount: Int) {
-    ScreenHeader(
-        title = stringResource(R.string.sessions_title),
-        purpose = stringResource(R.string.sessions_subtitle_purpose),
-        status = pluralStringResource(R.plurals.sessions_subtitle, totalCount, totalCount, unverifiedCount),
-    )
+private fun AppBar(onBack: () -> Unit) {
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .statusBarsPadding()
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+    ) {
+        BackArrow(onBack = onBack)
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
+            Text(
+                text = stringResource(R.string.sessions_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.accent,
+            )
+            Text(
+                text = stringResource(R.string.sessions_subtitle_purpose),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Patient identity preview card shown below the app bar.
+ *
+ * Establishes immediate clinical context (full name, age, sex, barangay) so the medtech
+ * can verify they are reading smears for the correct patient without navigating back.
+ * Persists while scrolling the session list below.
+ */
+@Composable
+private fun PatientPreviewCard(
+    patient: Patient,
+    barangayName: String?,
+    totalCount: Int,
+    unverifiedCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val context = LocalContext.current
+    var isRevealed by rememberSaveable { mutableStateOf(false) }
+    val age = patient.ageYears(Instant.now())
+    val ageText = context.resources.getQuantityString(R.plurals.patient_preview_age, age, age)
+    val sexLabel = when (patient.sex) {
+        Sex.MALE -> stringResource(R.string.patients_sex_male)
+        Sex.FEMALE -> stringResource(R.string.patients_sex_female)
+        null -> stringResource(R.string.patients_sex_unknown)
+    }
+    val ageSex = stringResource(R.string.patient_preview_age_sex, ageText, sexLabel)
+    val barangay = barangayName ?: patient.psgcBarangayCode
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.accent)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = if (isRevealed) patient.displayName else patient.maskedDisplayName,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    lineHeight = 30.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = colors.onAccent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (!patient.isCodename) {
+                val icon = if (isRevealed) Icons.Outlined.Visibility else Icons.Outlined.VisibilityOff
+                val descRes = if (isRevealed) {
+                    R.string.patients_mask_name_desc
+                } else {
+                    R.string.patients_reveal_name_desc
+                }
+                IconButton(
+                    onClick = { isRevealed = !isRevealed },
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = stringResource(descRes),
+                        tint = colors.onAccent,
+                    )
+                }
+            }
+        }
+        Text(
+            text = ageSex,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = barangay,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = pluralStringResource(
+                R.plurals.sessions_subtitle,
+                totalCount,
+                totalCount,
+                unverifiedCount,
+            ),
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            ),
+            color = colors.onAccent.copy(alpha = 0.9f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
 }
 
 /** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
 private data class SessionCardActions(
     val onClick: () -> Unit,
+    val onVerifyClick: () -> Unit = {},
+    val onViewReportClick: () -> Unit = {},
 )
 
 internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
@@ -314,22 +490,15 @@ private fun SessionCard(
     val session = sessionData.session
     val date = formatDate(session.startedAt)
     val time = formatTime(session.startedAt)
-    val meta = if (session.notes.isNullOrBlank()) {
-        "$date · $time"
-    } else {
-        "$date · $time · ${session.notes}"
-    }
+    // Date and time only. The note that used to tail this line was an ad-hoc patient
+    // identifier; the patient is a record of its own now and the column is gone.
+    val meta = "$date · $time"
 
     val (bgColor, borderColor) = if (isActive) {
         colors.accentTint2 to colors.accentTint
     } else {
         colors.surface to colors.border
     }
-    // Per ADR-007: unowned or opted-out sessions show a neutral "Not linked" badge
-    // regardless of active/ended state — local-only is a neutral state, not a warning.
-    val linkState = session.linkState
-    val showNotLinkedBadge = linkState == SessionLinkState.UNOWNED || linkState == SessionLinkState.NOT_LINKED
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -356,21 +525,6 @@ private fun SessionCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (showNotLinkedBadge) {
-                Spacer(modifier = Modifier.height(6.dp))
-                Box(
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, CircleShape)
-                        .padding(horizontal = 9.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        stringResource(R.string.session_not_linked),
-                        color = colors.textSecondary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
         }
 
         Row(
@@ -390,7 +544,15 @@ private fun SessionCard(
                 }
                 Row(
                     modifier = Modifier
-                        .background(badgeBg, CircleShape)
+                        .clip(CircleShape)
+                        .background(badgeBg)
+                        .then(
+                            when (queueBadge) {
+                                SessionQueueBadge.PENDING -> Modifier.clickable { actions.onVerifyClick() }
+                                SessionQueueBadge.ALL_VERIFIED -> Modifier.clickable { actions.onViewReportClick() }
+                                SessionQueueBadge.NO_ITEMS -> Modifier
+                            }
+                        )
                         .padding(horizontal = 9.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -421,7 +583,9 @@ private fun SessionCard(
                 val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
                 Box(
                     modifier = Modifier
+                        .clip(CircleShape)
                         .background(badgeBg, CircleShape)
+                        .clickable { actions.onViewReportClick() }
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
                     Text("$eggs eggs", color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
@@ -449,23 +613,22 @@ fun LiveDot() {
     )
 }
 
-/** The barangay picker's slice of [SessionsState], hoisted into [NewSessionSheet]. */
-private data class BarangayPickerState(
-    val selected: PsgcBarangay?,
-    val query: String,
-    val results: List<PsgcBarangay>,
-    val actions: SearchableDropdownActions,
-)
-
-private fun PsgcBarangay.toOption(): SearchableOption =
-    SearchableOption(key = code, title = name, subtitle = parentPath)
-
+/**
+ * The New Session sheet: a label, and nothing else.
+ *
+ * It used to collect a barangay and a note as well. The barangay moved to the patient — it is
+ * the unit surveillance aggregates on and what the admin site's geospatial mapping tracks, and
+ * it does not change from one smear to the next. The note was an ad-hoc patient identifier
+ * that the patient record now carries properly. The patient itself comes from the route this
+ * screen is reached at, not from the sheet.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NewSessionSheet(
-    barangay: BarangayPickerState,
+    state: SessionsState,
+    onClearError: () -> Unit,
     onDismiss: () -> Unit,
-    onSubmit: (label: String, note: String) -> Unit
+    onSubmit: (label: String) -> Unit
 ) {
     val colors = AgarthaTheme.colors
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -484,9 +647,18 @@ private fun NewSessionSheet(
         },
         shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
     ) {
-        var label by remember { mutableStateOf("") }
-        var note by remember { mutableStateOf("") }
-        var showError by remember { mutableStateOf(false) }
+        // Keyed on the suggestion so a sheet opened after the previous smear was created
+        // starts on the new number rather than the one already used. It is only a seed: the
+        // field is editable from the first keystroke, and nothing re-applies it.
+        var label by remember(state.suggestedLabel) { mutableStateOf(state.suggestedLabel) }
+        var showEmptyError by remember { mutableStateOf(false) }
+
+        val activeErrorMessage = when {
+            showEmptyError && label.isBlank() -> stringResource(R.string.session_new_label_required)
+            !state.errorMessage.isNullOrBlank() -> state.errorMessage
+            else -> null
+        }
+        val isError = activeErrorMessage != null
 
         Column(
             modifier = Modifier
@@ -523,10 +695,10 @@ private fun NewSessionSheet(
                         .size(32.dp)
                         .background(colors.surfaceMuted, CircleShape)
                 ) {
-                    SvgIcon(
-                        "M18 6L6 18M6 6l12 12",
-                        color = colors.textSecondary,
-                        strokeWidth = 2f,
+                    Icon(
+                        imageVector = Icons.Outlined.Close,
+                        contentDescription = stringResource(R.string.session_new_sheet_close),
+                        tint = colors.textSecondary,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -536,67 +708,22 @@ private fun NewSessionSheet(
             Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
                 SheetInput(
                     value = label,
-                    onValueChange = { label = it; showError = false },
+                    onValueChange = {
+                        label = it
+                        showEmptyError = false
+                        if (state.errorMessage != null) onClearError()
+                    },
                     config = SheetInputConfig(
-                        label = "Label",
-                        placeholder = "e.g. 325",
-                        isError = showError && label.isBlank(),
+                        label = stringResource(R.string.session_label_field_label),
+                        placeholder = stringResource(R.string.session_label_placeholder),
+                        isError = isError,
                         maxLength = SESSION_LABEL_MAX_LENGTH
-                    )
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                SearchableDropdown(
-                    state = SearchableDropdownState(
-                        selected = barangay.selected?.toOption(),
-                        query = barangay.query,
-                        options = barangay.results.map { it.toOption() },
-                    ),
-                    config = SearchableDropdownConfig(
-                        label = stringResource(R.string.session_new_barangay_label),
-                        placeholder = stringResource(R.string.session_new_barangay_placeholder),
-                        hint = stringResource(
-                            R.string.session_new_barangay_hint,
-                            SearchBarangaysUseCase.MIN_QUERY_LENGTH,
-                        ),
-                        noMatches = stringResource(R.string.session_new_barangay_no_matches),
-                        clearLabel = stringResource(R.string.session_new_barangay_clear),
-                        minQueryLength = SearchBarangaysUseCase.MIN_QUERY_LENGTH,
-                        badge = stringResource(R.string.session_new_required_badge),
-                        isError = showError && barangay.selected == null,
-                    ),
-                    actions = SearchableDropdownActions(
-                        onQueryChange = {
-                            showError = false
-                            barangay.actions.onQueryChange(it)
-                        },
-                        onSelect = {
-                            showError = false
-                            barangay.actions.onSelect(it)
-                        },
-                        onClear = barangay.actions.onClear,
-                    ),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(modifier = Modifier.height(14.dp))
-                SheetInput(
-                    value = note,
-                    onValueChange = { note = it; showError = false },
-                    config = SheetInputConfig(
-                        label = "Note",
-                        placeholder = "Patient ID, clinical context, sample details...",
-                        isError = false, // Note is never in error since it's optional
-                        isTextArea = true,
-                        isRequired = false,
-                        maxLength = SESSION_NOTE_MAX_LENGTH
                     )
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                val missingLabel = showError && label.isBlank()
-                val missingBarangay = showError && barangay.selected == null
-                if (missingLabel || missingBarangay) {
-                    val bannerDanger = colors.danger
+                if (activeErrorMessage != null) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -606,25 +733,16 @@ private fun NewSessionSheet(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon(
-                            "M12 8v4M12 16h.01",
-                            drawExtras = {
-                                drawCircle(
-                                    bannerDanger,
-                                    radius = 9f,
-                                    center = Offset(12f, 12f),
-                                    style = Stroke(width = 1.8f)
-                                )
-                            },
-                            color = colors.danger,
+                        Icon(
+                            // Was a bare "!" stroke with the surrounding ring hand-drawn
+                            // through `drawExtras`; the Material glyph already carries it.
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = colors.danger,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            if (label.isBlank()) {
-                                stringResource(R.string.session_new_label_required)
-                            } else {
-                                stringResource(R.string.session_new_barangay_required)
-                            },
+                            text = activeErrorMessage,
                             fontSize = 12.sp,
                             color = colors.dangerText,
                             fontWeight = FontWeight.Medium,
@@ -632,7 +750,6 @@ private fun NewSessionSheet(
                         )
                     }
                 } else {
-                    val bannerAccent = colors.accent
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -641,21 +758,14 @@ private fun NewSessionSheet(
                         verticalAlignment = Alignment.Top,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        SvgIcon(
-                            "M12 8v4M12 16h.01",
-                            drawExtras = {
-                                drawCircle(
-                                    bannerAccent,
-                                    radius = 9f,
-                                    center = Offset(12f, 12f),
-                                    style = Stroke(width = 1.8f)
-                                )
-                            },
-                            color = colors.accent,
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = colors.accent,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            "A session label is required by lab protocol. You can edit it later from Session Detail.",
+                            stringResource(R.string.session_label_helper),
                             fontSize = 12.sp,
                             color = colors.textSecondary,
                             lineHeight = 16.sp
@@ -673,6 +783,7 @@ private fun NewSessionSheet(
             ) {
                 Button(
                     onClick = onDismiss,
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
@@ -684,117 +795,31 @@ private fun NewSessionSheet(
                 }
                 Button(
                     onClick = {
-                        if (label.isBlank() || barangay.selected == null) {
-                            showError = true
-                        } else {
-                            onSubmit(label, note)
-                        }
+                        if (label.isBlank()) showEmptyError = true else onSubmit(label)
                     },
+                    enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
                 ) {
-                    Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    SvgIcon(
-                        "M5 12h14M13 5l7 7-7 7",
-                        color = colors.onAccent,
-                        strokeWidth = 2.2f,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Static config for [SheetInput], separate from its stateful (value, onValueChange) pair. */
-internal data class SheetInputConfig(
-    val label: String,
-    val placeholder: String,
-    val isError: Boolean,
-    val isTextArea: Boolean = false,
-    val isRequired: Boolean = true,
-    val maxLength: Int = Int.MAX_VALUE
-)
-
-@Composable
-internal fun SheetInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    config: SheetInputConfig
-) {
-    val colors = AgarthaTheme.colors
-    val (label, placeholder, isError) = config
-    val isTextArea = config.isTextArea
-    val isRequired = config.isRequired
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colors.textSecondary)
-            if (isRequired) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "REQUIRED",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.04.em,
-                    color = colors.dangerText,
-                    modifier = Modifier
-                        .background(colors.dangerTint, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                )
-            } else {
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    "OPTIONAL",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.04.em,
-                    color = colors.textSecondary,
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 7.dp, vertical = 2.dp)
-                )
-            }
-        }
-
-        var isFocused by remember { mutableStateOf(false) }
-        val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
-        val bgColor = if (isError) colors.dangerTint.copy(alpha = 0.5f) else colors.surface
-
-        BasicTextField(
-            value = value,
-            onValueChange = { onValueChange(limitInput(value, it, config.maxLength)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused },
-            textStyle = androidx.compose.ui.text.TextStyle(fontSize = 15.sp, color = colors.textPrimary),
-            singleLine = !isTextArea,
-            minLines = if (isTextArea) 3 else 1,
-            cursorBrush = SolidColor(colors.accent),
-            decorationBox = { innerTextField ->
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .then(if (isTextArea) Modifier.heightIn(min = 88.dp) else Modifier)
-                        .background(bgColor, RoundedCornerShape(12.dp))
-                        .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 13.dp),
-                    contentAlignment = if (isTextArea) Alignment.TopStart else Alignment.CenterStart
-                ) {
-                    if (value.isEmpty()) {
-                        Text(placeholder, fontSize = 15.sp, color = colors.textTertiary, lineHeight = 21.75.sp)
+                    if (state.isCreating) {
+                        CircularProgressIndicator(
+                            color = colors.onAccent,
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
+                            contentDescription = null,
+                            tint = colors.onAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
                     }
-                    innerTextField()
                 }
             }
-        )
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text(
-                text = stringResource(R.string.session_new_char_counter, value.length, config.maxLength),
-                fontSize = 11.sp,
-                color = if (value.length >= config.maxLength) colors.danger else colors.textTertiary
-            )
         }
     }
 }

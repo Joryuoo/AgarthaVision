@@ -3,50 +3,57 @@ package com.agarthavision.domain.model
 /**
  * Domain model for one capture session. Per ADR-005 a session equals one fecal
  * smear; [label] is the medtech-entered smear name set in the SessionPicker.
+ *
+ * **A session no longer carries a barangay or a note.** The barangay lives on the patient,
+ * because it is the unit surveillance aggregates on and the admin site's geospatial mapping
+ * tracks the patient, not the smear — and it does not change from one smear to the next.
+ * The note was only ever an ad-hoc patient identifier, which [Patient] now is properly.
+ * Both are gone from the Room row, from Supabase, and from here.
+ *
+ * **`endedAt` is gone too.** Nothing had written it since 86d4ab4vm, and Room 13 dropped the
+ * column; the field survived only so the Sessions list could derive an active/resumable flag
+ * from it. That derivation was the bug: a column no writer sets makes `endedAt == null` true
+ * for every row, so every card rendered active while still reading like a test. The one
+ * session the app is actually working in comes from
+ * [com.agarthavision.core.session.SessionManager], which is the only thing that knows.
  */
 data class Session(
     val id: String,
     val userId: String?,
+    /**
+     * The patient this smear belongs to. Not nullable: `sessions.patient_id` is
+     * `not null references patients(id)` on both sides, so a session without one cannot
+     * exist in either database.
+     */
+    val patientId: String,
     val deviceId: String,
     val startedAt: Long,
-    val endedAt: Long?,
-    val notes: String?,
     val label: String?,
-    /**
-     * The patient's barangay as a canonical zero-padded 10-digit PSGC code, or null for
-     * sessions created before the picker existed. The unit of analysis for surveillance
-     * mapping; the per-sample GPS fix is provenance only.
-     */
-    val psgcBarangayCode: String? = null,
     /** Cloud sync state; `pending` until the Supabase row exists. Per ADR-007. */
     val supabaseStatus: SessionSyncStatus = SessionSyncStatus.SYNCED,
-    /** `true` when opted out of being claimed at the next login. Per ADR-007. */
-    val claimExempt: Boolean = false,
 ) {
     /**
-     * Derived link state for the Sessions UI: whether this session is owned, still
-     * local-only (unowned or opted out), pending upload, or fully synced.
+     * Derived link state for the Sessions UI: whether this session is awaiting upload or
+     * fully synced.
+     *
+     * There is no unowned state any more. Login is mandatory on first run, so a session
+     * has an owner from the moment it is created.
      */
     val linkState: SessionLinkState
-        get() = when {
-            userId == null && claimExempt -> SessionLinkState.NOT_LINKED
-            userId == null -> SessionLinkState.UNOWNED
-            supabaseStatus == SessionSyncStatus.SYNCED -> SessionLinkState.SYNCED
+        get() = when (supabaseStatus) {
+            SessionSyncStatus.SYNCED -> SessionLinkState.SYNCED
             else -> SessionLinkState.PENDING
         }
 }
 
 /**
- * UI-facing link state for a session, derived from ownership and sync status.
- * Per ADR-007.
+ * UI-facing sync state for a session.
+ *
+ * `UNOWNED` and `NOT_LINKED` are gone: mandatory first-run login means every session has
+ * an owner when it is created, so the whole unowned axis — and the deferred-claim
+ * machinery that served it — has nothing left to represent.
  */
 enum class SessionLinkState {
-    /** No owner yet; will be claimed by the next login unless opted out. */
-    UNOWNED,
-
-    /** Owner is null and the medtech opted out of claiming; stays local-only. */
-    NOT_LINKED,
-
     /** Owned and awaiting cloud upload. */
     PENDING,
 

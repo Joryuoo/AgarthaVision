@@ -3,6 +3,9 @@ package com.agarthavision.ui.records
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.session.SessionManager
+import com.agarthavision.core.session.SessionState
+import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportFormat
@@ -11,6 +14,7 @@ import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportCountUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionReportsUseCase
+import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.domain.usecase.records.SessionSamples
 import com.agarthavision.domain.usecase.records.SessionSamplesResult
 import com.agarthavision.domain.usecase.reports.SessionEggCountUseCase
@@ -24,7 +28,9 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -34,6 +40,11 @@ import kotlinx.coroutines.launch
  * Reason why a session cannot be displayed on this device.
  */
 enum class SessionUnavailable { NOT_FOUND, NOT_VISIBLE }
+
+/**
+ * Tab options on the Session Detail screen.
+ */
+enum class SessionDetailTab { REPORT, SAMPLES }
 
 /**
  * UI state for one session's verified samples + persisted reports.
@@ -52,13 +63,21 @@ data class SessionDetailState(
     val isGenerating: Boolean = false,
     val generationError: String? = null,
     val pendingFlagged: Int = 0,
+    /**
+     * Whether this is the smear the app is currently working in, per [SessionManager].
+     *
+     * It used to be `session.endedAt == null`. Nothing writes `ended_at`, so that was true
+     * for every session ever opened and the shortcut appeared on all of them.
+     */
+    val isActiveSession: Boolean = false,
+    val selectedTab: SessionDetailTab = SessionDetailTab.REPORT,
 ) {
     /**
      * The Verify Queue always shows the *active* session, so the shortcut into it is only
-     * offered while this session is still running and actually has frames waiting.
+     * offered on that session, and only while it actually has frames waiting.
      */
     val canOpenVerifyQueue: Boolean
-        get() = session != null && session.session.endedAt == null && pendingFlagged > 0
+        get() = session != null && isActiveSession && pendingFlagged > 0
 }
 
 /** Reports shown per page; more than this paginate via the Prev/Next pager. */
@@ -87,6 +106,28 @@ sealed interface SessionDetailEvent {
         val csvPath: String?,
         val format: ExportFormat,
     ) : SessionDetailEvent
+
+    /**
+     * A report's file was not on this device and is being fetched from Storage. Emitted so
+     * the tap has a visible consequence: a download over a field connection is not instant,
+     * and silence reads as the same dead tap this whole change exists to remove.
+     */
+    data object ReportRestoreStarted : SessionDetailEvent
+
+    /**
+     * A report's file is now on this device, at these paths. Either may be null — a report is
+     * generated in one format, not both.
+     */
+    data class ReportRestored(
+        val pdfPath: String?,
+        val csvPath: String?,
+    ) : SessionDetailEvent
+
+    /**
+     * Nothing could be recovered: the report predates the `reports` bucket, or the device is
+     * offline. Distinct from [ReportRestoreStarted] so the screen can stop saying "fetching".
+     */
+    data object ReportRestoreFailed : SessionDetailEvent
 }
 
 /**
@@ -94,6 +135,7 @@ sealed interface SessionDetailEvent {
  */
 // Each parameter here is a separately tested, separately named use case — bundling would not
 // simplify the dependency graph; LongParameterList is the expected cost of composing 7 flows.
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @Suppress("LongParameterList")
 @HiltViewModel
 class SessionDetailViewModel @Inject constructor(
@@ -104,6 +146,8 @@ class SessionDetailViewModel @Inject constructor(
     observeSessionPendingCountUseCase: ObserveSessionPendingCountUseCase,
     private val sessionEggCountUseCase: SessionEggCountUseCase,
     private val generateSessionReportUseCase: GenerateSessionReportUseCase,
+    private val restoreReportFilesUseCase: RestoreReportFilesUseCase,
+    sessionManager: SessionManager,
 ) : ViewModel() {
     private val sessionId: String = checkNotNull(savedStateHandle["sessionId"])
     private val generationState = MutableStateFlow(GenerationState())
@@ -116,6 +160,20 @@ class SessionDetailViewModel @Inject constructor(
         observeSessionReportsUseCase(sessionId, REPORTS_PER_PAGE, page * REPORTS_PER_PAGE)
     }
 
+    /** True while this screen's session is the one [SessionManager] is attached to. */
+    private val isActiveSessionFlow = sessionManager.state
+        .map { (it as? SessionState.Active)?.session?.sessionId == sessionId }
+        .distinctUntilChanged()
+
+    private val selectedTab = MutableStateFlow(SessionDetailTab.REPORT)
+    private var cachedEggCounts: Pair<List<SampleRecordItem>, SessionEggCounts>? = null
+
+    /**
+     * Reports with a restore in flight. Only touched from the main thread — the tap and
+     * [viewModelScope]'s dispatcher — so a plain set is enough.
+     */
+    private val restoringReportIds = mutableSetOf<String>()
+
     private val _events = MutableSharedFlow<SessionDetailEvent>(extraBufferCapacity = 4)
     val events: SharedFlow<SessionDetailEvent> = _events.asSharedFlow()
 
@@ -127,12 +185,24 @@ class SessionDetailViewModel @Inject constructor(
             generationState,
             currentReportPage,
         ) { result, reports, totalReports, generation, page ->
-            val eggCounts = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
             val resolvedSession = (result as? SessionSamplesResult.Visible)?.data
             val unavail = when (result) {
                 is SessionSamplesResult.NotFound -> SessionUnavailable.NOT_FOUND
                 is SessionSamplesResult.NotVisible -> SessionUnavailable.NOT_VISIBLE
                 else -> null
+            }
+            val eggCounts = if (resolvedSession != null) {
+                val samples = resolvedSession.samples
+                val cached = cachedEggCounts
+                if (cached != null && cached.first == samples) {
+                    cached.second
+                } else {
+                    val fresh = sessionEggCountUseCase(sessionId).getOrDefault(SessionEggCounts.empty())
+                    cachedEggCounts = samples to fresh
+                    fresh
+                }
+            } else {
+                SessionEggCounts.empty()
             }
             SessionDetailState(
                 session = resolvedSession,
@@ -150,8 +220,10 @@ class SessionDetailViewModel @Inject constructor(
             )
         },
         observeSessionPendingCountUseCase(sessionId),
-    ) { partial, pending ->
-        partial.copy(pendingFlagged = pending)
+        isActiveSessionFlow,
+        selectedTab,
+    ) { partial, pending, isActive, tab ->
+        partial.copy(pendingFlagged = pending, isActiveSession = isActive, selectedTab = tab)
     }
         .mapLatest { it }
         .stateIn(
@@ -159,6 +231,10 @@ class SessionDetailViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(5_000),
             initialValue = SessionDetailState(),
         )
+
+    fun onTabSelected(tab: SessionDetailTab) {
+        selectedTab.value = tab
+    }
 
     /**
      * Generates a fresh report for this session in the chosen [format] (the use case writes only
@@ -187,6 +263,39 @@ class SessionDetailViewModel @Inject constructor(
                     }
                 },
             )
+        }
+    }
+
+    /**
+     * Fetches a report's files from Storage when this device does not have them.
+     *
+     * A report row syncs between devices; its `pdf_file_path` does not travel with it,
+     * because that path is a MediaStore id or an absolute path and means nothing anywhere
+     * else. So a report generated on another device — or on this one before its `Documents`
+     * folder was cleared — opens to nothing. Rather than report that as an error, fetch the
+     * document and open it.
+     */
+    fun restoreReportFiles(reportId: String) {
+        // A second tap while the first download is still running would fetch the same object
+        // again and write a second copy beside the first — and nothing deletes the extra (C8).
+        if (!restoringReportIds.add(reportId)) return
+        viewModelScope.launch {
+            try {
+                _events.emit(SessionDetailEvent.ReportRestoreStarted)
+                restoreReportFilesUseCase(reportId).fold(
+                    onSuccess = { files ->
+                        _events.emit(
+                            SessionDetailEvent.ReportRestored(
+                                pdfPath = files.pdfFilePath,
+                                csvPath = files.csvFilePath,
+                            ),
+                        )
+                    },
+                    onFailure = { _events.emit(SessionDetailEvent.ReportRestoreFailed) },
+                )
+            } finally {
+                restoringReportIds.remove(reportId)
+            }
         }
     }
 

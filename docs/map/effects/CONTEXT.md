@@ -13,11 +13,12 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 `supabase/migrations/` (highest number wins) · the matching Room entity.
 
 **Then check, in order:**
-1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`,
-   `samples.status`, `sessions.claim_exempt`, `reports.supabase_status`.
+1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`
+   (its content syncs as `predictions` rows instead), `samples.status`, `reports.supabase_status`,
+   `psgc_barangays`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
-3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:46`.
+3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:105`.
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
@@ -94,9 +95,9 @@ container image, the client is an APK.
 (`inference/server.py:47`), copied verbatim into `bbox_*`
 (`data/local/mapper/VerificationMapper.kt:36-39`), despite comments in `DetectionEntity.kt:13`
 and `supabase/migrations/0001_init.sql:64` claiming they are normalised. And renaming a model
-class silently changes every verdict and every EPG grouping, because
+class silently changes every verdict and every LPF grouping, because
 `EggSpecies.fromClassLabel` matches on the literal string
-(`domain/model/EggSpecies.kt:15-22`).
+(`domain/model/EggSpecies.kt`).
 
 ## Changing validation logic
 
@@ -118,26 +119,36 @@ sensitive code in the repo.
 
 Push order is FK-safe and not incidental: sessions → samples → reports.
 
-**The non-obvious break:** there are **no retries and no `Worker`**. WorkManager is a declared
-dependency with no implementation (`app/build.gradle.kts:164`). A `sync_failed` row waits for a
-foreground trigger — login, app start while authenticated, or connectivity returning. Also,
-claim runs *before* sync and is what lets a nullable local `user_id` satisfy a NOT NULL remote
-column.
+**The non-obvious break:** sync is scheduled, not called. Everything except login goes through
+`SyncScheduler.requestSync()` and lands in `data/sync/SyncWorker`, so a change here runs on
+WorkManager's thread with WorkManager's retry policy, not on the caller's scope. Login is the
+one direct awaited call and is deliberately so.
 
-## Changing report generation, CSV, or EPG
+`WorkManagerSyncScheduler.isSyncing` is a **cold** flow and must stay one. Built eagerly it
+touches `WorkManager.getInstance()` while Hilt is still field-injecting `AgarthaVisionApp`,
+which calls back for a `HiltWorkerFactory` that the same pass has not assigned yet, and the app
+dies at launch.
+
+**Corrected 86d4brr1f:** this section used to say a failed row waits for "login, app start while
+authenticated, or connectivity returning". Login was real; **app start did not exist** until
+86d4brr1f added it, and **connectivity returning still does not** — nothing observes
+`ConnectivityObserver` to trigger a pass. The network constraint on the work request is the
+closest thing, and it gates a pass that was already requested rather than starting one.
+
+## Changing report generation or LPF density
 
 **Open:** `../processes/report.md` · `Report.md` ·
-`domain/usecase/records/GenerateSessionReportUseCase.kt` · `core/util/EpgCalculator.kt`.
+`domain/usecase/records/GenerateSessionReportUseCase.kt` · `domain/usecase/reports/LpfAggregation.kt`.
 
-**The non-obvious break:** EPG's real definition is the WHERE clause at
-`data/local/dao/DetectionDao.kt:33-52`, which counts every detection that is **not** a false
-positive — so `WRONG_CLASS` and `BOX_INCORRECT` boxes count as eggs. Prose describing EPG as
-"confirmed detections only" matches a different query
-(`data/local/dao/DetectionDao.kt:66`). Reports are snapshots and are never recomputed, so
-changing the multiplier or the rule changes future numbers only.
+**The non-obvious break:** egg count's real definition is the WHERE clause at
+`data/local/dao/DetectionDao.kt:43`, which counts every detection that is **not** a false
+positive (`d.verdict != 'false_positive'`) — so `WRONG_CLASS` and `BOX_INCORRECT` boxes count as
+eggs. Findings are aggregated per species across all session fields into an LPF `min..max` range
+via `aggregateLpfPerSpecies`. Reports are snapshots and are never recomputed, so changing the
+aggregation or qualitative descriptor rule changes future numbers only.
 
 Report generation also **requires a live auth session**
-(`GenerateSessionReportUseCase.kt:38`), unlike the rest of the offline-capable flows.
+(`GenerateSessionReportUseCase.kt:47-49`), unlike the rest of the offline-capable flows.
 
 ## Changing UI, theme, or design tokens
 
@@ -156,14 +167,15 @@ the screen the product is actually about.
 **Open:** `../../stack.md` · `../../commands.md` · `gradle/libs.versions.toml`.
 
 **The non-obvious break:** the `pre-commit` hook runs a full `assembleDebug` plus tests plus
-lint, so any change that slows the build slows every commit. And there is **no CI** — no
-`.github/` directory exists — so the hooks are the only gate that exists at all.
+lint, so any change that slows the build slows every commit. Pull requests are gated by GitHub
+Actions CI (`.github/workflows/build-and-test.yml`), which runs `:app:verifyRoborazziDebug`.
 
 ## Changing commit, branch, or PR conventions
 
 **Open:** `../../non-negotiables.md` · `../../constraints.md` C9.
 
-**The non-obvious break:** nothing enforces the convention. The `commit-msg` hook was removed,
-and the committed `commitlint.config.js` encodes a *conventional-commit* shape that
-contradicts the documented `[type][ClickUp-ID][Lastname]` format while being wired to no hook.
-Do not assume a tool will catch a mistake here.
+**The non-obvious break:** `.husky/commit-msg` enforces the commit subject line format, but
+branch names, ticket structure, and PR conventions are checked by review only. The committed
+`commitlint.config.js` encodes a *conventional-commit* shape that contradicts the documented
+`[type][ClickUp-ID][Lastname]` format while being wired to no hook.
+

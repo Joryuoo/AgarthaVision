@@ -77,7 +77,7 @@ class PersistFlaggedFrameUseCaseTest {
             advanceUntilIdle()
 
             val sampleCaptor = argumentCaptor<SampleEntity>()
-            verify(sampleDao).insertSample(sampleCaptor.capture())
+            verify(sampleDao).upsertSample(sampleCaptor.capture())
             verify(sampleImageStore).persistJpeg(eq("user-1"), eq(sampleId), any())
 
             val sample = sampleCaptor.firstValue
@@ -110,7 +110,7 @@ class PersistFlaggedFrameUseCaseTest {
             advanceUntilIdle()
 
             val sampleCaptor = argumentCaptor<SampleEntity>()
-            verify(sampleDao).insertSample(sampleCaptor.capture())
+            verify(sampleDao).upsertSample(sampleCaptor.capture())
             verify(sampleImageStore).persistJpeg(eq("user-1"), eq(sampleId), any())
 
             val sample = sampleCaptor.firstValue

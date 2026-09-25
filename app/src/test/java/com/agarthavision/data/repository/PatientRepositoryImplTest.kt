@@ -1,0 +1,541 @@
+package com.agarthavision.data.repository
+
+import android.content.Context
+import androidx.room.Room
+import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.data.local.dao.PatientDao
+import com.agarthavision.data.local.entity.PatientUserEntity
+import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Sex
+import java.time.Instant
+import java.time.LocalDate
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runTest
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import com.agarthavision.domain.sync.RecordingSyncScheduler
+
+/**
+ * In-memory Room tests for [PatientRepositoryImpl].
+ *
+ * The rule under test is the one that has to match Supabase exactly: **visibility resolves
+ * through `patient_users`, not `created_by`.** A patient created by user A is invisible to
+ * user B until a link row exists — and visible the moment one does, which is what an admin
+ * sharing a patient looks like. Getting this wrong on the client gives the app a second,
+ * quieter definition of who can see a patient than the RLS policy has.
+ */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [36])
+class PatientRepositoryImplTest {
+
+    private lateinit var db: AgarthaDatabase
+    private lateinit var dao: PatientDao
+    private val syncScheduler = RecordingSyncScheduler()
+
+    private lateinit var repository: PatientRepositoryImpl
+
+    @Before
+    fun setUp() {
+        val ctx: Context = RuntimeEnvironment.getApplication()
+        db = Room.inMemoryDatabaseBuilder(ctx, AgarthaDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        dao = db.patientDao()
+        repository = PatientRepositoryImpl(dao, syncScheduler)
+    }
+
+    @After
+    fun tearDown() {
+        db.close()
+    }
+
+    private fun patient(
+        id: String = "p-1",
+        lastname: String = "Cruz",
+        firstname: String = "Gerald",
+        createdBy: String = USER_A,
+    ) = Patient(
+        id = id,
+        lastname = lastname,
+        firstname = firstname,
+        middleName = "Mendoza",
+        sex = Sex.MALE,
+        birthdate = LocalDate.of(1998, 7, 30),
+        psgcBarangayCode = "0102801001",
+        createdBy = createdBy,
+        createdAt = Instant.ofEpochMilli(1_700_000_000_000),
+        updatedAt = Instant.ofEpochMilli(1_700_000_000_000),
+    )
+
+    private suspend fun page(userId: String, query: String = "") =
+        repository.observePatients(userId, query, limit = 50).first()
+
+    private fun session(
+        sessionId: String = "s-1",
+        patientId: String = "p-1",
+        startedAt: Long = 1_000L,
+        userId: String? = USER_A,
+    ) = SessionEntity(
+        sessionId = sessionId,
+        userId = userId,
+        patientId = patientId,
+        deviceId = "device-1",
+        startedAt = startedAt,
+    )
+
+    private fun sample(
+        sampleId: String = "sa-1",
+        sessionId: String = "s-1",
+        timestamp: Long = 1_000L,
+        verifiedAt: Long = 0L,
+        deletedAt: Long? = null,
+    ) = SampleEntity(
+        sampleId = sampleId,
+        sessionId = sessionId,
+        userId = USER_A,
+        deviceId = "device-1",
+        timestamp = timestamp,
+        verifiedAt = verifiedAt,
+        imagePath = "/tmp/$sampleId.jpg",
+        status = if (verifiedAt > 0) "verified" else "flagged",
+        deletedAt = deletedAt,
+    )
+
+    // ── visibility resolves through patient_users ─────────────────────────────
+
+    @Test
+    fun `saving a patient asks for a sync pass`() = runTest {
+        // A patient is the first thing the server needs: sessions.patient_id references it,
+        // so a session pushed ahead of its patient is rejected. Asking here is what stops
+        // that wait being "until somebody opens Settings".
+        repository.insert(patient())
+        assertEquals(1, syncScheduler.requests)
+
+        repository.update(patient().copy(lastname = "Reyes"))
+        assertEquals(2, syncScheduler.requests)
+    }
+
+    @Test
+    fun `a patient created by user A is visible to user A`() = runTest {
+        repository.insert(patient())
+
+        assertEquals(listOf("p-1"), page(USER_A).map { it.id })
+    }
+
+    @Test
+    fun `a patient created by user A is not visible to user B`() = runTest {
+        repository.insert(patient())
+
+        assertTrue(page(USER_B).isEmpty())
+    }
+
+    @Test
+    fun `user B sees the patient once a link row shares it with them`() = runTest {
+        repository.insert(patient())
+
+        dao.linkPatientToUser(PatientUserEntity("p-1", USER_B, linkedAt = 1_700_000_000_000))
+
+        assertEquals(listOf("p-1"), page(USER_B).map { it.id })
+    }
+
+    @Test
+    fun `insert writes the creator link in the same transaction`() = runTest {
+        repository.insert(patient())
+
+        val links = dao.getLinksForUser(USER_A)
+        assertEquals(1, links.size)
+        assertEquals("p-1", links.first().patientId)
+        assertEquals(1_700_000_000_000, links.first().linkedAt)
+    }
+
+    // ── filtering and counting ────────────────────────────────────────────────
+
+    @Test
+    fun `a blank query matches every visible patient`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz"))
+        repository.insert(patient(id = "p-2", lastname = "Santos"))
+
+        assertEquals(2, page(USER_A).size)
+    }
+
+    @Test
+    fun `the query filters on lastname`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz"))
+        repository.insert(patient(id = "p-2", lastname = "Santos"))
+
+        assertEquals(listOf("p-2"), page(USER_A, query = "Santos").map { it.id })
+    }
+
+    @Test
+    fun `the query filters on firstname`() = runTest {
+        repository.insert(patient(id = "p-1", firstname = "Gerald"))
+        repository.insert(patient(id = "p-2", firstname = "Maria"))
+
+        assertEquals(listOf("p-2"), page(USER_A, query = "Maria").map { it.id })
+    }
+
+    @Test
+    fun `the count matches the filtered page and is scoped the same way`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz"))
+        repository.insert(patient(id = "p-2", lastname = "Santos"))
+
+        assertEquals(2, repository.observePatientCount(USER_A, "").first())
+        assertEquals(1, repository.observePatientCount(USER_A, "Santos").first())
+        assertEquals(0, repository.observePatientCount(USER_B, "").first())
+    }
+
+    @Test
+    fun `observePatients filters by sex`() = runTest {
+        repository.insert(patient(id = "p-1").copy(sex = Sex.MALE))
+        repository.insert(patient(id = "p-2").copy(sex = Sex.FEMALE))
+
+        val males = repository.observePatients(USER_A, "", 50, sex = Sex.MALE).first()
+        val females = repository.observePatients(USER_A, "", 50, sex = Sex.FEMALE).first()
+
+        assertEquals(listOf("p-1"), males.map { it.id })
+        assertEquals(listOf("p-2"), females.map { it.id })
+    }
+
+    @Test
+    fun `observePatients filters by barangayCode`() = runTest {
+        repository.insert(patient(id = "p-1").copy(psgcBarangayCode = "0102801001"))
+        repository.insert(patient(id = "p-2").copy(psgcBarangayCode = "0723017001"))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            barangayCode = "0723017001",
+        ).first()
+
+        assertEquals(listOf("p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients filters by birthdate range`() = runTest {
+        // p-1: 1990-01-01 (epoch millis 631152000000)
+        // p-2: 2000-01-01 (epoch millis 946684800000)
+        // p-3: 2010-01-01 (epoch millis 1262304000000)
+        repository.insert(patient(id = "p-1").copy(birthdate = LocalDate.of(1990, 1, 1)))
+        repository.insert(patient(id = "p-2").copy(birthdate = LocalDate.of(2000, 1, 1)))
+        repository.insert(patient(id = "p-3").copy(birthdate = LocalDate.of(2010, 1, 1)))
+
+        val minMillis = LocalDate.of(1995, 1, 1)
+            .atStartOfDay(com.agarthavision.domain.model.CLINICAL_ZONE).toInstant().toEpochMilli()
+        val maxMillis = LocalDate.of(2005, 1, 1)
+            .atStartOfDay(com.agarthavision.domain.model.CLINICAL_ZONE).toInstant().toEpochMilli()
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 50,
+            minBirthdate = minMillis,
+            maxBirthdate = maxMillis,
+        ).first()
+
+        assertEquals(listOf("p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients combines query, sex, barangay, and birthdate`() = runTest {
+        repository.insert(
+            patient(id = "p-1", lastname = "Cruz").copy(
+                sex = Sex.MALE,
+                psgcBarangayCode = "0723017001",
+                birthdate = LocalDate.of(2000, 1, 1),
+            ),
+        )
+        repository.insert(
+            patient(id = "p-2", lastname = "Cruz").copy(
+                sex = Sex.FEMALE,
+                psgcBarangayCode = "0723017001",
+                birthdate = LocalDate.of(2000, 1, 1),
+            ),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "Cruz",
+            limit = 50,
+            sex = Sex.MALE,
+            barangayCode = "0723017001",
+        ).first()
+
+        assertEquals(listOf("p-1"), results.map { it.id })
+
+        val count = repository.observePatientCount(
+            userId = USER_A,
+            query = "Cruz",
+            sex = Sex.MALE,
+            barangayCode = "0723017001",
+        ).first()
+        assertEquals(1, count)
+    }
+
+    // ── sorting ───────────────────────────────────────────────────────────────
+
+    @Test
+    fun `observePatients orders by recent activity by default`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by lastname when LAST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Abad").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.LAST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients orders by firstname when FIRST_NAME sort requested`() = runTest {
+        repository.insert(patient(id = "p-1", firstname = "Zoren").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", firstname = "Ana").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.FIRST_NAME,
+        ).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with recent session start to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 3_000L))
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with validated sample to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 600L, verifiedAt = 5_000L),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients bumps patient with unvalidated sample capture to top`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 4_000L, verifiedAt = 0L),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-2", "p-1"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients ignores tombstoned samples when sorting by recent activity`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 500L))
+        db.sampleDao().upsertSample(
+            sample(
+                sampleId = "sa-1",
+                sessionId = "s-1",
+                timestamp = 600L,
+                verifiedAt = 9_000L,
+                deletedAt = 9_500L,
+            ),
+        )
+
+        val results = repository.observePatients(USER_A, "", 50).first()
+        assertEquals(listOf("p-1", "p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `name sorts ignore session and sample activity`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Abad").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+
+        // Even though p-2 has newer session and sample activity, LAST_NAME puts Abad (p-1) first
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 5_000L))
+        db.sampleDao().upsertSample(
+            sample(sampleId = "sa-1", sessionId = "s-1", timestamp = 6_000L, verifiedAt = 7_000L),
+        )
+
+        val results = repository.observePatients(
+            USER_A,
+            "",
+            50,
+            sort = com.agarthavision.domain.usecase.patients.PatientSort.LAST_NAME,
+        ).first()
+        assertEquals(listOf("p-1", "p-2"), results.map { it.id })
+    }
+
+    @Test
+    fun `observePatients flow re-emits when a session is added`() = runTest {
+        repository.insert(patient(id = "p-1", lastname = "Cruz").copy(updatedAt = Instant.ofEpochMilli(2_000)))
+        repository.insert(patient(id = "p-2", lastname = "Santos").copy(updatedAt = Instant.ofEpochMilli(1_000)))
+
+        val channel = Channel<List<Patient>>(Channel.UNLIMITED)
+        backgroundScope.launch {
+            repository.observePatients(USER_A, "", 50).collect { list ->
+                channel.send(list)
+            }
+        }
+
+        val initial = channel.receive()
+        assertEquals(listOf("p-1", "p-2"), initial.map { it.id })
+
+        db.sessionDao().upsertSession(session(sessionId = "s-1", patientId = "p-2", startedAt = 3_000L))
+
+        val updated = channel.receive()
+        assertEquals(listOf("p-2", "p-1"), updated.map { it.id })
+    }
+
+    // ── single reads and update ───────────────────────────────────────────────
+
+    @Test
+    fun `getPatientById round-trips the domain model`() = runTest {
+        repository.insert(patient())
+
+        val loaded = repository.getPatientById("p-1")
+        assertEquals("Cruz, Gerald M.", loaded?.displayName)
+        assertEquals(LocalDate.of(1998, 7, 30), loaded?.birthdate)
+    }
+
+    @Test
+    fun `getPatientById returns null for an unknown id`() = runTest {
+        assertNull(repository.getPatientById("nope"))
+    }
+
+    @Test
+    fun `observePatientById emits the stored patient`() = runTest {
+        repository.insert(patient())
+
+        assertEquals("p-1", repository.observePatientById("p-1").first()?.id)
+    }
+
+    @Test
+    fun `update re-queues the row for sync`() = runTest {
+        repository.insert(patient())
+        dao.updateSyncStatus("p-1", "synced")
+
+        repository.update(patient().copy(lastname = "Cruz-Reyes"))
+
+        val stored = dao.getPatientById("p-1")
+        assertEquals("Cruz-Reyes", stored?.lastname)
+        assertEquals("pending", stored?.supabaseStatus)
+        assertEquals(1, dao.getPatientsPendingSync(USER_A).size)
+    }
+
+    // ── the upsert must not cascade the link away ─────────────────────────────
+
+    @Test
+    fun `re-upserting a patient keeps its creator link, and the patient visible`() = runTest {
+        repository.insert(patient())
+        assertEquals(listOf("p-1"), page(USER_A).map { it.id })
+
+        // What a pull does to a patient the device already holds.
+        dao.upsertPatient(
+            dao.getPatientById("p-1")!!.copy(lastname = "Cruz-Reyes", supabaseStatus = "synced"),
+        )
+
+        // Fails on @Insert(REPLACE): SQLite resolves the conflict by deleting the row, which
+        // cascades patient_users away, and every read here resolves through that join. The
+        // patient would still be on the device and invisible to the medtech who created it.
+        assertEquals(listOf("p-1"), page(USER_A).map { it.id })
+        assertEquals(listOf("p-1"), dao.getLinksForUser(USER_A).map { it.patientId })
+        assertEquals("Cruz-Reyes", dao.getPatientById("p-1")?.lastname)
+    }
+
+    @Test
+    fun `a bulk upsert keeps links too`() = runTest {
+        repository.insert(patient(id = "p-1"))
+        repository.insert(patient(id = "p-2", lastname = "Santos"))
+
+        dao.upsertPatients(listOf(dao.getPatientById("p-1")!!, dao.getPatientById("p-2")!!))
+
+        assertEquals(listOf("p-1", "p-2"), page(USER_A).map { it.id }.sorted())
+    }
+
+    // ── pending sync is scoped to the medtech ─────────────────────────────────
+
+    @Test
+    fun `getPatientsPendingSync returns only the calling medtech's rows`() = runTest {
+        repository.insert(patient(id = "p-1", createdBy = USER_A))
+        repository.insert(patient(id = "p-2", lastname = "Santos", createdBy = USER_B))
+
+        // Unscoped, a sync pass run by A pushed B's offline patient under A's session; the
+        // server rejects it and the row lands back here marked sync_failed.
+        assertEquals(listOf("p-1"), dao.getPatientsPendingSync(USER_A).map { it.patientId })
+        assertEquals(listOf("p-2"), dao.getPatientsPendingSync(USER_B).map { it.patientId })
+    }
+
+    @Test
+    fun `getPatientsPendingSync includes a patient shared by an admin`() = runTest {
+        repository.insert(patient(id = "p-1", createdBy = USER_A))
+        dao.linkPatientToUser(PatientUserEntity("p-1", USER_B, linkedAt = 1_700_000_000_000))
+
+        // Scoping on created_by instead of the join would hide it, which is the whole reason
+        // the join table exists.
+        assertEquals(listOf("p-1"), dao.getPatientsPendingSync(USER_B).map { it.patientId })
+    }
+
+    @Test
+    fun `getExistingCodenamesByPrefix returns matching lastname prefixes`() = runTest {
+        // legacy old-format
+        repository.insert(patient(id = "p-1", lastname = "M24-001"))
+        repository.insert(patient(id = "p-2", lastname = "M24-002"))
+        // new single-word format
+        repository.insert(patient(id = "p-5", lastname = "ALPHA-M24"))
+        // new stacked-word format
+        repository.insert(patient(id = "p-6", lastname = "ALPHATEKNOY-M24"))
+        // bare new format (no word, no numeric suffix)
+        repository.insert(patient(id = "p-7", lastname = "M24"))
+        // different buckets — must be excluded
+        repository.insert(patient(id = "p-3", lastname = "F30-001"))
+        repository.insert(patient(id = "p-4", lastname = "M25-001"))
+
+        val results = repository.getExistingCodenamesByPrefix(USER_A, "M24")
+        assertEquals(
+            listOf("ALPHA-M24", "ALPHATEKNOY-M24", "M24", "M24-001", "M24-002"),
+            results.sorted(),
+        )
+    }
+
+    private companion object {
+        const val USER_A = "user-a"
+        const val USER_B = "user-b"
+    }
+}

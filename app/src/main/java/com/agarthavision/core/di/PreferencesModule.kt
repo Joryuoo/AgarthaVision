@@ -6,7 +6,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.agarthavision.core.session.ActiveSessionIdStore
 import com.agarthavision.core.session.DataStoreActiveSessionIdStore
+import com.agarthavision.core.sync.DataStoreFetchOutcomeStore
 import com.agarthavision.core.sync.DataStoreInitialFetchStateStore
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.repository.ThemePreferenceRepositoryImpl
 import com.agarthavision.domain.repository.ThemePreferenceRepository
@@ -55,4 +57,9 @@ abstract class PreferencesRepositoryModule {
     abstract fun bindInitialFetchStateStore(
         implementation: DataStoreInitialFetchStateStore,
     ): InitialFetchStateStore
+
+    @Binds
+    abstract fun bindFetchOutcomeStore(
+        implementation: DataStoreFetchOutcomeStore,
+    ): FetchOutcomeStore
 }

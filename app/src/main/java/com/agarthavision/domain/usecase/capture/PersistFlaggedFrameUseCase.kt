@@ -38,7 +38,7 @@ class PersistFlaggedFrameUseCase @Inject constructor(
             FrameSource.MODEL -> frame.inferenceModelVersion ?: "unknown"
         }
 
-        sampleDao.insertSample(
+        sampleDao.upsertSample(
             SampleEntity(
                 sampleId = sampleId,
                 sessionId = frame.sessionId,
@@ -49,9 +49,6 @@ class PersistFlaggedFrameUseCase @Inject constructor(
                 imagePath = imagePath,
                 inferenceModelVersion = inferenceModelVersion,
                 needsReannotation = false,
-                gpsLatitude = null,
-                gpsLongitude = null,
-                gpsAccuracy = null,
                 status = SampleStatus.FLAGGED.value,
                 userNote = null,
                 isManual = frame.source == FrameSource.MANUAL,

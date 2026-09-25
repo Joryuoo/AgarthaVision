@@ -3,12 +3,13 @@ package com.agarthavision.domain.usecase.verify
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
-import com.agarthavision.data.local.mapper.toDetectionEntity
+import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
-import com.agarthavision.domain.repository.LocationProvider
+import com.agarthavision.domain.sync.SyncScheduler
 import java.time.Instant
 import javax.inject.Inject
 
@@ -29,8 +30,8 @@ class SubmitVerificationUseCase @Inject constructor(
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
-    private val locationProvider: LocationProvider,
     private val syncSampleUseCase: SyncSampleUseCase,
+    private val syncScheduler: SyncScheduler,
 ) {
     suspend operator fun invoke(
         frame: FlaggedFrame,
@@ -42,7 +43,6 @@ class SubmitVerificationUseCase @Inject constructor(
         // its existing owner (cached identity or null) and is claimed at the next login.
         val sampleId = frame.sampleId
         require(sampleId.isNotBlank()) { "Flagged sample id is required." }
-        val location = locationProvider.getCurrentLocation()
         val verifiedAt = Instant.now()
 
         // Setting status back to VERIFIED is what re-arms sync on an edit: an already-SYNCED
@@ -54,17 +54,32 @@ class SubmitVerificationUseCase @Inject constructor(
             verifiedAt = verifiedAt.toEpochMilli(),
             needsReannotation = missedEgg == true,
             userNote = userNote?.takeIf { it.isNotBlank() },
-            gpsLatitude = location?.latitude,
-            gpsLongitude = location?.longitude,
-            gpsAccuracy = location?.accuracyMeters,
         )
 
         // A rejected box still persists, as a labelled FALSE_POSITIVE row — that is what makes
         // detections a retraining corpus instead of a results table (C8). So every finding is
         // written, not just the ones that counted.
-        detectionDao.insertDetections(
-            findings.mapIndexed { ordinal, finding -> finding.toDetectionEntity(sampleId, ordinal) },
-        )
+        val detections = findings.toDetectionEntities(sampleId)
+        detectionDao.insertDetections(detections)
+
+        // An added species the medtech counted down on re-open — 23 Ascaris, then 20 — leaves
+        // three slots behind, because the insert above replaces and never deletes. Left alone
+        // they stay as null-bbox rows for eggs nobody claims any more, inflating the corpus and
+        // making the frame read as un-localised forever.
+        //
+        // Not a C8 deletion, on the same reading `replaceFindingsForSample` below already works
+        // on: what C8 protects is the clinical record and the model's own claims — the JPEG and
+        // every prediction-backed row, rejections included — and a slot from an edit the medtech
+        // has since revised is neither. The model's boxes are excluded by id rather than by
+        // trusting the diff, so this cannot reach one even if the finding list is wrong.
+        val modelBoxIds = frame.predictions.indices.map { detectionIdFor(sampleId, it) }.toSet()
+        val written = detections.mapTo(mutableSetOf()) { it.detectionId }
+        val stale = detectionDao.getDetectionsForSample(sampleId)
+            .map { it.detectionId }
+            .filter { it !in written && it !in modelBoxIds }
+        if (stale.isNotEmpty()) {
+            detectionDao.deleteDetectionsByIds(stale)
+        }
 
         // Wholesale replace, so a species the medtech removed on re-open actually disappears
         // instead of lingering and inflating the count. Not a C8 deletion: a count is a current
@@ -76,6 +91,10 @@ class SubmitVerificationUseCase @Inject constructor(
         )
 
         syncSampleUseCase.invoke(sampleId)
+        // Verification works offline by design, so the direct push above often cannot land.
+        // The scheduler is what gets the sample up once there is a network, with backoff,
+        // rather than it waiting for the next time someone opens Settings.
+        syncScheduler.requestSync()
 
         sampleId
     }

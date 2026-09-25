@@ -16,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -120,12 +119,14 @@ internal data class SyncCardState(
     val counts: PendingSyncCounts,
     val isSyncing: Boolean,
     val canSyncNow: Boolean,
-    val unlinkedSessions: Int,
     val initialFetchDone: Boolean = true,
     val isFetching: Boolean = false,
+    val lastFetchIncomplete: Boolean = false,
 )
 
-internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_SYNCED, NOT_LINKED, NOTHING_TO_SYNC }
+internal enum class SyncBadge {
+    FAILED, PENDING, FETCHING, NOT_YET_SYNCED, INCOMPLETE, ALL_SYNCED, NOTHING_TO_SYNC
+}
 
 /**
  * Pure function that maps sign-in state + sync counts + fetch state to a [SyncBadge] variant.
@@ -135,23 +136,30 @@ internal enum class SyncBadge { FAILED, PENDING, FETCHING, NOT_YET_SYNCED, ALL_S
  * - pending uploads next
  * - actively fetching from server
  * - initial fetch never ran (badge prompts a manual sync)
+ * - the last pull lost an entity type (the worker is already retrying)
  * - otherwise all synced
  *
- * When signed out, unlinked-session count drives the badge. Per ADR-007.
+ * The signed-out branch is vestigial: login is mandatory on first run, so isSignedIn is
+ * false only in the instant before the gate resolves. It is kept as a total function
+ * rather than a `requireNotNull`, because a badge is not worth a crash.
  */
 internal fun syncBadgeState(
     isSignedIn: Boolean,
     counts: PendingSyncCounts,
-    unlinkedSessions: Int,
     initialFetchDone: Boolean = true,
     isFetching: Boolean = false,
+    lastFetchIncomplete: Boolean = false,
 ): SyncBadge = when {
     isSignedIn && counts.failed > 0 -> SyncBadge.FAILED
     isSignedIn && counts.totalPending > 0 -> SyncBadge.PENDING
     isSignedIn && isFetching -> SyncBadge.FETCHING
     isSignedIn && !initialFetchDone -> SyncBadge.NOT_YET_SYNCED
+    // Above ALL_SYNCED deliberately. The upload queue can be empty while the download half
+    // threw on every entity type, and "All synced" sitting over "last sync incomplete" would
+    // contradict itself. The badge is the thing a medtech remembers, so it has to be the
+    // honest one.
+    isSignedIn && lastFetchIncomplete -> SyncBadge.INCOMPLETE
     isSignedIn -> SyncBadge.ALL_SYNCED
-    unlinkedSessions > 0 -> SyncBadge.NOT_LINKED
     else -> SyncBadge.NOTHING_TO_SYNC
 }
 
@@ -177,17 +185,8 @@ internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
             )
             SyncStatusBadge(state = state)
         }
-        if (!state.isSignedIn && state.unlinkedSessions > 0) {
-            val n = state.unlinkedSessions
-            Spacer(Modifier.height(Spacing.sm))
-            Text(
-                text = pluralStringResource(R.plurals.settings_sync_sign_in_to_link, n, n),
-                color = colors.textSecondary,
-                fontSize = 13.sp,
-            )
-        }
         if (state.isSignedIn) {
-            SyncCounts(counts = state.counts)
+            SyncCounts(counts = state.counts, lastFetchIncomplete = state.lastFetchIncomplete)
             Spacer(Modifier.height(Spacing.md))
             AgarthaButton(
                 onClick = onSyncNowClick,
@@ -208,9 +207,12 @@ internal fun SyncCard(state: SyncCardState, onSyncNowClick: () -> Unit) {
 }
 
 @Composable
-private fun SyncCounts(counts: PendingSyncCounts) {
+private fun SyncCounts(counts: PendingSyncCounts, lastFetchIncomplete: Boolean = false) {
     val colors = AgarthaTheme.colors
     Spacer(Modifier.height(Spacing.md))
+    // Patients lead, matching the FK-safe push order: a patient that will not sync blocks
+    // every session that references it, so it is the first thing worth looking at.
+    SyncCountRow(label = stringResource(R.string.settings_sync_patients), count = counts.pendingPatients)
     SyncCountRow(label = stringResource(R.string.settings_sync_sessions), count = counts.pendingSessions)
     SyncCountRow(label = stringResource(R.string.settings_sync_samples), count = counts.pendingSamples)
     SyncCountRow(label = stringResource(R.string.settings_sync_reports), count = counts.pendingReports)
@@ -218,6 +220,19 @@ private fun SyncCounts(counts: PendingSyncCounts) {
         Spacer(Modifier.height(Spacing.xs))
         Text(
             text = stringResource(R.string.settings_sync_failed, counts.failed),
+            color = colors.danger,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+    // One aggregate line, not four per-type ones. Which entity failed is not something a
+    // medtech can act on, and naming all four would add items to hold in mind for no decision.
+    // It says "will retry" because the worker genuinely will: an unfinished task that looks
+    // abandoned is worse than one that is visibly still going.
+    if (lastFetchIncomplete) {
+        Spacer(Modifier.height(Spacing.xs))
+        Text(
+            text = stringResource(R.string.settings_sync_incomplete),
             color = colors.danger,
             fontSize = 13.sp,
             fontWeight = FontWeight.Medium,
@@ -243,12 +258,10 @@ private fun SyncCountRow(label: String, count: Int) {
 private fun SyncStatusBadge(state: SyncCardState) {
     val colors = AgarthaTheme.colors
     val counts = state.counts
-    val n = state.unlinkedSessions
     val (bg, fg, text) = when (
         syncBadgeState(
             isSignedIn = state.isSignedIn,
             counts = counts,
-            unlinkedSessions = n,
             initialFetchDone = state.initialFetchDone,
             isFetching = state.isFetching,
         )
@@ -273,15 +286,15 @@ private fun SyncStatusBadge(state: SyncCardState) {
             colors.warningText,
             stringResource(R.string.settings_sync_not_yet_synced),
         )
+        SyncBadge.INCOMPLETE -> Triple(
+            colors.warningTint,
+            colors.warningText,
+            stringResource(R.string.settings_sync_incomplete_badge),
+        )
         SyncBadge.ALL_SYNCED -> Triple(
             colors.successTint,
             colors.successText,
             stringResource(R.string.settings_sync_all_synced),
-        )
-        SyncBadge.NOT_LINKED -> Triple(
-            colors.surfaceMuted,
-            colors.textSecondary,
-            pluralStringResource(R.plurals.settings_sync_not_linked, n, n),
         )
         SyncBadge.NOTHING_TO_SYNC -> Triple(
             colors.surfaceMuted,

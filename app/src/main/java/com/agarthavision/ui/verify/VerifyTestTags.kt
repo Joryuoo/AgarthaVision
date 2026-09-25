@@ -1,7 +1,5 @@
 package com.agarthavision.ui.verify
 
-import com.agarthavision.domain.model.EggSpecies
-
 /**
  * Stable handles for the verification sheets' UI tests.
  *
@@ -10,6 +8,7 @@ import com.agarthavision.domain.model.EggSpecies
  * reason. Anything here is a contract with `src/test/java/.../ui/verify/` — renaming
  * a tag means updating the tests in the same change.
  */
+@Suppress("TooManyFunctions")
 internal object VerifyTestTags {
     /** [SheetActionRow]'s confirm button — "Submit" at both sheet call sites. */
     const val SHEET_PRIMARY_ACTION = "sheet_primary_action"
@@ -23,6 +22,12 @@ internal object VerifyTestTags {
 
     /** The JPEG preview. Present whether or not the image itself decodes. */
     const val FRAME_PREVIEW = "frame_preview"
+
+    /**
+     * Shown in the preview's place when there is no image to load at all — neither local bytes,
+     * nor a local file, nor a signed Storage URL.
+     */
+    const val FRAME_UNAVAILABLE = "frame_unavailable"
 
     /** Detection-level navigation within a frame (AI sheet only). */
     const val DETECTION_PREV = "detection_prev"
@@ -43,6 +48,8 @@ internal object VerifyTestTags {
      */
     const val DISCARD_DIALOG_CONFIRM = "discard_dialog_confirm"
     const val DISCARD_DIALOG_DISMISS = "discard_dialog_dismiss"
+    const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
+    const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
     /** Custom-species dialog opened by [SPECIES_CHIP_OTHER]. */
     const val CUSTOM_SPECIES_FIELD = "custom_species_field"
@@ -50,15 +57,18 @@ internal object VerifyTestTags {
     const val CUSTOM_SPECIES_DISMISS = "custom_species_dismiss"
 
     /**
-     * The AI sheet's three yes/no questions. All three render the same "Yes"/"No" labels,
-     * so a test that looked them up by text would match whichever came first.
+     * The AI sheet's three checkboxes. They carry statements rather than questions now, but the
+     * tags keep the Q names: they are what the constraint docs and the tickets call them, and
+     * the chain's order is still Q1 gates Q2 gates Q3.
      */
     const val QUESTION_Q1 = "q1"
     const val QUESTION_Q2 = "q2"
 
-    /** "Is this egg <suggested species>?" — shown only when the model's class is a known species. */
+    /** "This egg is <suggested species>" — shown only when the model's class is a known species. */
     const val QUESTION_Q3 = "q3"
-    const val QUESTION_Q4 = "q4"
+
+    // There is no QUESTION_Q4. "Did the model miss any eggs in this frame?" is derived from the
+    // findings rather than asked, so there is no control to tag.
 
     /**
      * Species picker, shown once Q1 and Q2 are both yes and either the medtech said the
@@ -66,46 +76,126 @@ internal object VerifyTestTags {
      */
     const val SPECIES_DROPDOWN = "species_dropdown"
 
+    /** Developmental stage picker, shown when selected species has stages. */
+    const val STAGE_DROPDOWN = "stage_dropdown"
+
+    const val OTHER_STAGE_FIELD = "other_stage_field"
+
 
     /** Bounding-box visibility switch. */
     const val BOXES_TOGGLE = "boxes_toggle"
 
-    /** Card naming the species under review, with the provenance pill inside it. */
-    const val DETECTION_CARD = "detection_card"
+    /** The overlay the boxes are drawn on, and the surface a new box is dragged out on. */
+    const val FRAME_CANVAS = "frame_canvas"
 
-    /** Caution line under the card, present only for model frames. */
+    /** Accept and cancel for a box being drawn. */
+    const val DRAW_ACCEPT = "draw_accept"
+    const val DRAW_CANCEL = "draw_cancel"
+
+    /** The full-screen surface a box is drawn on, and the line naming what it is for. */
+    const val DRAW_MODE = "draw_mode"
+    const val DRAW_MODE_TARGET = "draw_mode_target"
+
+    /** Redraw the box, offered whenever Q2 is unticked, replaced or not. */
+    const val REDRAW_BOX = "redraw_box"
+
+    /** Discards a replaced box, offered beside the redraw once one has been drawn. */
+    const val REMOVE_REPLACEMENT_BOX = "remove_replacement_box"
+
+    /** The line saying a box has been replaced, which is also why Q2 is latched at "No". */
+    const val BOX_REPLACED_NOTE = "box_replaced_note"
+
+    /**
+     * Caution line under the model-output summary, present only when the model named something.
+     *
+     * It used to sit under a maroon card naming the current detection's species, once per box.
+     * The card went with the section restructure - the species it announced is asked about
+     * directly by Q3, and the source it badged is now the whole point of the model-output
+     * section's three states.
+     */
     const val AI_SUGGESTION_NOTE = "ai_suggestion_note"
 
-    /** AI-suggested vs Manual provenance pill. */
-    const val SOURCE_BADGE = "source_badge"
-
-    /** The model-output panel. Present for every frame; its text differs by source. */
+    /** The model-output section. Present for every frame; its body is one of three states. */
     const val MODEL_OUTPUT_PANEL = "model_output_panel"
 
-    /** "Add species" button beneath the added-findings list. */
+    /** The spinner inside the model-output section while inference has not come back. */
+    const val MODEL_OUTPUT_SPINNER = "model_output_spinner"
+
+    /** "Add species" button beneath the added-species cards. Present on every frame. */
     const val ADD_SPECIES = "add_species"
 
-    /** The live per-species summary of what submitting would write. */
-    const val FINDINGS_SUMMARY = "findings_summary"
+    /**
+     * The disclosure that reveals the added eggs still waiting for a box.
+     *
+     * Present only when at least one added egg has no box. Its label carries "n of m located",
+     * which is the whole reason it is a disclosure and not a hidden screen.
+     */
+    const val LOCATE_TOGGLE = "locate_toggle"
 
-    const val MANUAL_NO_DETECTION = "manual_no_detection"
-    const val MANUAL_OTHER_NAME_FIELD = "manual_other_name_field"
 
-    fun manualSpeciesCheckbox(species: EggSpecies): String = "manual_species_" + species.name
-    fun manualCountField(species: EggSpecies): String = "manual_count_" + species.name
+    /**
+     * The species already on this device, offered under whichever "Other species" field is
+     * being typed into.
+     *
+     * One tag, not one per field: only one free-text field is ever being typed into, and the
+     * view model's own [VerificationUiState.suggestionsFor] is what keeps a list from rendering
+     * under a field it does not belong to. A test asserting there is exactly one of these is
+     * asserting that rule.
+     */
+    const val OTHER_SPECIES_SUGGESTIONS = "other_species_suggestions"
+
+    // The manual-capture checklist tags went with the checklist. A frame captured while the
+    // inference container was unreachable is verified through the same Add Egg section as every
+    // other frame, so there is no separate set of controls to address.
 
     fun speciesChip(speciesName: String): String = SPECIES_CHIP_PREFIX + speciesName
+
+    /** One offered species name, keyed on the name so a test can tap the one it means. */
+    fun otherSpeciesSuggestion(speciesName: String): String =
+        "other_species_suggestion_" + speciesName
 
     /** Remove button on the added finding at [index]. */
     fun removeFinding(index: Int): String = "remove_finding_" + index
 
-    /** Egg-count field on the added finding at [index]. */
+    /** Field-total field on the added species at [index]. */
     fun countField(index: Int): String = "count_field_" + index
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
 
-    /** One option within a question, e.g. `questionOption(QUESTION_Q1, "Yes")`. */
-    fun questionOption(question: String, label: String): String =
-        question + "_" + label.lowercase()
+    fun addedSpeciesSummary(index: Int): String = "added_species_summary_" + index
+    fun addedSpeciesForm(index: Int): String = "added_species_form_" + index
+    fun saveFinding(index: Int): String = "save_finding_" + index
+
+    /** Wraps the left-side name/stage/warning column on the summary card at [index]. */
+    fun addedSpeciesSummaryText(index: Int): String = "added_species_summary_text_" + index
+
+    /** The species name line on the summary card at [index]. */
+    fun addedSpeciesSummaryName(index: Int): String = "added_species_summary_name_" + index
+
+    /** The stage line on the summary card at [index], present only when a stage is shown. */
+    fun addedSpeciesSummaryStage(index: Int): String = "added_species_summary_stage_" + index
+
+    /** The egg-count text on the summary card at [index]. */
+    fun addedSpeciesSummaryCount(index: Int): String = "added_species_summary_count_" + index
+
+    /** Stage picker on the added finding at [index]. */
+    fun addedStageDropdown(index: Int): String = "added_stage_dropdown_" + index
+
+    fun addedOtherStageField(index: Int): String = "added_other_stage_field_" + index
+
+    /**
+     * Draw / redraw affordance for egg [slot] of the added species at [findingIndex].
+     *
+     * Keyed on both, because an added species is one row holding several eggs now, and a tag
+     * naming only the row would collide across every egg under it.
+     */
+    fun drawBox(findingIndex: Int, slot: Int): String = "draw_box_" + findingIndex + "_" + slot
+
+    /** Discards the box already drawn on egg [slot] of the added species at [findingIndex]. */
+    fun removeDrawnBox(findingIndex: Int, slot: Int): String =
+        "remove_drawn_box_" + findingIndex + "_" + slot
+
+    // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
+    // so a question has one control and its own tag is enough to reach it.
 }

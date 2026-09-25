@@ -23,7 +23,7 @@ interface SessionRepository {
     suspend fun getSessionById(sessionId: String): Session?
 
     /**
-     * Observes sessions with sample and EPG counts.
+     * Observes sessions with sample and egg counts.
      */
     fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
 
@@ -33,21 +33,19 @@ interface SessionRepository {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for [patientId]'s smears, newest-agnostic and unordered.
+     *
+     * Feeds the sequence in the next auto-generated label. Returns labels, not a count: a
+     * count would drift the moment a session was created on another device and pulled down,
+     * or a label edited, and the sequence has to be derived from what is actually there.
+     */
+    suspend fun getSessionLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions owned by [userId] plus any unclaimed local sessions. When
      * [userId] is null (never-signed-in device), observes all local sessions. Per ADR-007.
      */
     fun observeVisibleSessions(userId: String?): Flow<List<Session>>
-
-    /**
-     * Opts a session out of (or back into) being claimed at the next login. Per ADR-007.
-     */
-    suspend fun setClaimExempt(sessionId: String, exempt: Boolean)
-
-    /**
-     * Claims a single unowned session for [userId] (the manual "Link to account" action).
-     * Per ADR-007.
-     */
-    suspend fun claimSession(sessionId: String, userId: String)
 
     /**
      * Observes a paginated, filtered window of sessions for the Records screen.
@@ -83,18 +81,23 @@ interface SessionRepository {
     ): Flow<RecordsTotals>
 
     /**
-     * Observes a paginated, filtered window of sessions for the Sessions screen.
-     * When [userId] is null (never-signed-in device), observes all local sessions
-     * without a date cap; otherwise applies the recent-window / date-range filter.
+     * Observes a paginated, filtered window of one patient's sessions for the Sessions
+     * screen. When [userId] is null (never-signed-in device), observes that patient's local
+     * sessions without a date cap; otherwise applies the recent-window / date-range filter.
      *
-     * [activeSessionId] is exempt from the filter so the smear currently being worked in is
-     * never hidden by a date range. Null when there is no active session. This used to be
-     * `ended_at IS NULL`, which stopped distinguishing anything when sessions stopped
-     * ending. Per ADR-007.
+     * [patientId] is a hard scope, not a filter: the screen is reached from a patient row and
+     * lists that patient's smears only.
+     *
+     * [activeSessionId] is exempt from the date filter so the smear currently being worked in
+     * is never hidden by a date range — but not from [patientId], because an open smear under
+     * another patient does not belong in this list. Null when there is no active session. The
+     * exemption used to be `ended_at IS NULL`, which stopped distinguishing anything when
+     * sessions stopped ending. Per ADR-007.
      */
     @Suppress("LongParameterList")
     fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -104,6 +107,22 @@ interface SessionRepository {
     ): Flow<List<SessionWithStats>>
 
     /**
+     * Returns true when [label] is already in use by another session for [patientId].
+     *
+     * [excludingSessionId] is the id of the session being renamed — its own current label
+     * must not count as a collision. Pass null (or omit) when creating a new session.
+     *
+     * This is a pre-check only. The [SessionEntity] unique index on `(patient_id, label)`
+     * is the authoritative enforcement; this function is a best-effort guard against the
+     * common case so the user sees a friendly error rather than a constraint violation.
+     */
+    suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String? = null,
+    ): Boolean
+
+    /**
      * Live counts (sessions, and frames awaiting review) for the Sessions screen header.
      * Applies the same filter predicate as [observeVisibleSessionsPage] so the header and
      * the list can never disagree. Per ADR-007.
@@ -111,6 +130,7 @@ interface SessionRepository {
     @Suppress("LongParameterList")
     fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,

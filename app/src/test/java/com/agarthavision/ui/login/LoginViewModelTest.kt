@@ -3,7 +3,6 @@ package com.agarthavision.ui.login
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
@@ -41,9 +40,6 @@ class LoginViewModelTest {
         whenever(it.currentlyOnline()).thenReturn(true)
         whenever(it.isOnline).thenReturn(MutableStateFlow(true))
     }
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock<ClaimLocalDataUseCase>().also {
-        runBlocking { whenever(it.invoke("user-1", null)).thenReturn(Result.success(0)) }
-    }
     private val syncPendingDataUseCase: SyncPendingDataUseCase = mock<SyncPendingDataUseCase>().also {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(SyncSummary.Skipped)) }
     }
@@ -55,7 +51,6 @@ class LoginViewModelTest {
         signInUseCase = signInUseCase,
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
-        claimLocalDataUseCase = claimLocalDataUseCase,
         syncPendingDataUseCase = syncPendingDataUseCase,
         fetchRemoteDataUseCase = fetchRemoteDataUseCase,
     )
@@ -124,7 +119,7 @@ class LoginViewModelTest {
         }
 
     @Test
-    fun `submit success claims local data and triggers pending sync`() =
+    fun `submit success triggers pending sync then the remote fetch`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(signInUseCase.invoke("user@example.com", "secret123"))
                 .thenReturn(Result.success(Unit))
@@ -138,13 +133,12 @@ class LoginViewModelTest {
                 awaitItem()
             }
 
-            verify(claimLocalDataUseCase).invoke("user-1", null)
             verify(syncPendingDataUseCase).invoke()
             verify(fetchRemoteDataUseCase).invoke()
         }
 
     @Test
-    fun `post-login sequence is claim then push then pull in that order`() =
+    fun `post-login sequence is push then pull in that order`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(signInUseCase.invoke("user@example.com", "secret123"))
                 .thenReturn(Result.success(Unit))
@@ -158,8 +152,9 @@ class LoginViewModelTest {
                 awaitItem() // consume NavigateBack
             }
 
-            val order = inOrder(claimLocalDataUseCase, syncPendingDataUseCase, fetchRemoteDataUseCase)
-            order.verify(claimLocalDataUseCase).invoke("user-1", null)
+            // There is no claim step any more: login is mandatory on first run, so nothing
+            // can have been created without an owner for a claim to adopt.
+            val order = inOrder(syncPendingDataUseCase, fetchRemoteDataUseCase)
             order.verify(syncPendingDataUseCase).invoke()
             order.verify(fetchRemoteDataUseCase).invoke()
         }

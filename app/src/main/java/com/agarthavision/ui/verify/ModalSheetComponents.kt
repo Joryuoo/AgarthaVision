@@ -14,22 +14,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import com.agarthavision.R
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.domain.model.FlaggedFrame
@@ -37,6 +35,14 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.MonoSmallStyle
 
+/**
+ * Back arrow, a title, and an optional line of meta beneath it.
+ *
+ * [metaText] is blank on the Verification Screen: the sample's label is the whole title there,
+ * and the frame counter it used to carry now sits beneath the frame as the Current Sample
+ * indicator, next to the control that changes it. A blank meta renders nothing rather than an
+ * empty line that pushes the title off centre.
+ */
 @Composable
 fun ScreenTopBar(
     title: String,
@@ -70,12 +76,14 @@ fun ScreenTopBar(
             // MonoSmallStyle is the app-wide face for timestamps and counters (Inter + tnum);
             // the platform monospace face this used to force is what made the sheets look
             // different from every other screen.
-            Text(
-                metaText.uppercase(),
-                color = colors.textSecondary,
-                letterSpacing = 0.5.sp,
-                style = MonoSmallStyle,
-            )
+            if (metaText.isNotBlank()) {
+                Text(
+                    metaText.uppercase(),
+                    color = colors.textSecondary,
+                    letterSpacing = 0.5.sp,
+                    style = MonoSmallStyle,
+                )
+            }
         }
         Spacer(modifier = Modifier.weight(1f))
         actions()
@@ -177,116 +185,96 @@ internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * Snapshot a [NavPairRow] renders from — bundled like [SheetActionRowState], since the two
- * halves always travel together.
+ * Where you are in a cycle, and the two controls that move you through it.
+ *
+ * Used twice on the Verification Screen, for the two things a medtech steps through: the samples
+ * in the queue, and the detections within one sample. The indicator sits left and the pair of
+ * icon buttons right, per the screen's section spec.
+ *
+ * **Iconised, but not small.** The full-width labelled pair this replaced was full-width on
+ * purpose — a medtech works a microscope one-handed and a small arrow is a miss waiting to
+ * happen. Icons win the vertical space back for the frame, so the targets are held at the 48dp
+ * minimum instead: smaller to look at, the same size to hit. Do not shrink them to fit the row.
+ *
+ * Each side goes dead at its end of the range rather than wrapping, so the control cannot read
+ * as a way to leave the cycle.
  */
-internal data class NavPairState(
-    val prevLabel: String,
-    val nextLabel: String,
-    val prevTag: String,
-    val nextTag: String,
-    val canGoPrev: Boolean,
-    val canGoNext: Boolean,
-    val onPrev: () -> Unit,
-    val onNext: () -> Unit,
-)
-
-/**
- * A full-width previous / next pair. Full-width on purpose: the medtech is working a
- * microscope with one hand, so small arrow buttons are a miss waiting to happen.
- */
+// A prev/next pair needs its label, description, tag and enablement on both sides; bundling
+// them into a holder would add a type that exists only to satisfy the threshold.
+@Suppress("LongParameterList")
 @Composable
-internal fun NavPairRow(state: NavPairState, modifier: Modifier = Modifier) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = modifier,
-    ) {
-        SmallToggle(
-            label = state.prevLabel,
-            selected = false,
-            onClick = state.onPrev,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(state.prevTag),
-            enabled = state.canGoPrev,
-        )
-        SmallToggle(
-            label = state.nextLabel,
-            selected = false,
-            onClick = state.onNext,
-            modifier = Modifier
-                .weight(1f)
-                .testTag(state.nextTag),
-            enabled = state.canGoNext,
-        )
-    }
-}
-
-/**
- * Previous / next frame pair, laid out under the frame preview on both sheets.
- */
-@Composable
-internal fun FrameNavRow(
+internal fun CycleRow(
+    indicator: String,
+    prevDescription: String,
+    nextDescription: String,
+    prevTag: String,
+    nextTag: String,
     canGoPrev: Boolean,
     canGoNext: Boolean,
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    NavPairRow(
-        state = NavPairState(
-            prevLabel = stringResource(R.string.verify_prev_frame),
-            nextLabel = stringResource(R.string.verify_next_frame),
-            prevTag = VerifyTestTags.FRAME_PREV,
-            nextTag = VerifyTestTags.FRAME_NEXT,
-            canGoPrev = canGoPrev,
-            canGoNext = canGoNext,
-            onPrev = onPrev,
-            onNext = onNext,
-        ),
-        modifier = modifier,
-    )
-}
-
-/**
- * Compact pill button. When [enabled] is false it dims and stops accepting taps —
- * used to show the ends of the verification queue.
- */
-@Composable
-internal fun SmallToggle(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    val borderColor = when {
-        !enabled -> AgarthaTheme.colors.border
-        selected -> AgarthaTheme.colors.accent
-        else -> AgarthaTheme.colors.borderStrong
-    }
-    val labelColor = when {
-        !enabled -> AgarthaTheme.colors.textTertiary
-        selected -> AgarthaTheme.colors.accent
-        else -> AgarthaTheme.colors.textSecondary
-    }
-
-    Box(
-        modifier = modifier
-            .background(
-                if (selected && enabled) AgarthaTheme.colors.accentTint else AgarthaTheme.colors.surface,
-                RoundedCornerShape(10.dp)
-            )
-            .border(1.dp, borderColor, RoundedCornerShape(10.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 9.dp),
-        contentAlignment = Alignment.Center,
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = label,
-            color = labelColor,
-            fontSize = 12.sp,
+            text = indicator,
+            color = AgarthaTheme.colors.textSecondary,
+            fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        CycleButton(
+            icon = Icons.AutoMirrored.Outlined.ArrowBack,
+            contentDescription = prevDescription,
+            enabled = canGoPrev,
+            onClick = onPrev,
+            tag = prevTag,
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        CycleButton(
+            icon = Icons.AutoMirrored.Outlined.ArrowForward,
+            contentDescription = nextDescription,
+            enabled = canGoNext,
+            onClick = onNext,
+            tag = nextTag,
         )
     }
 }
+
+/** One side of a [CycleRow]. 48dp square — the minimum touch target, not a decorative size. */
+@Composable
+private fun CycleButton(
+    icon: ImageVector,
+    contentDescription: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    tag: String,
+) {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .border(
+                1.dp,
+                if (enabled) colors.borderStrong else colors.border,
+                RoundedCornerShape(12.dp),
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .testTag(tag),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (enabled) colors.textPrimary else colors.textTertiary,
+        )
+    }
+}
+
+// SmallToggle is gone with the labelled previous/next pair it rendered. Its one job was a
+// full-width pill that dimmed at the ends of a cycle; CycleRow's icon buttons carry that
+// behaviour, and there is no second caller to keep it alive for.

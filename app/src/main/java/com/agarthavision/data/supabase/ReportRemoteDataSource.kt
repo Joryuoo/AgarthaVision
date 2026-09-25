@@ -9,6 +9,7 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
+import io.github.jan.supabase.storage.storage
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.serialization.SerialName
@@ -22,13 +23,19 @@ import kotlinx.serialization.json.put
  * Writes persisted session reports to Supabase Postgres. Row-only sync — the
  * CSV file stays local on the device; only the metadata + aggregate stats are
  * mirrored to `public.reports`.
+ *
+ * **`epg_per_species` is gone from both sides,** and `lpf_per_species` took its place on
+ * both at once. `0001_init.sql` declares `lpf_per_species jsonb not null default '{}'` and
+ * [ReportEntity] stores `lpf_per_species_json`; neither side carries EPG any more. The pair
+ * has to move together — an insert naming a column the table lacks fails at runtime, not at
+ * compile time, and only once a report is actually generated online.
  */
 open class ReportRemoteDataSource @Inject constructor(
     private val supabase: SupabaseClient,
     private val gson: Gson,
 ) {
     /**
-     * Inserts the report row matching `0008_reports.sql` + `0011_reports_pdf_and_lpf.sql`.
+     * Inserts the report row matching `public.reports` in `0001_init.sql`.
      *
      * @throws IllegalStateException when no Supabase user session is available.
      */
@@ -37,6 +44,32 @@ open class ReportRemoteDataSource @Inject constructor(
             ?: error("A Supabase user session is required to sync reports.")
         supabase.postgrest[REPORTS_TABLE].insert(report.toInsertRow(userId))
     }
+
+    /**
+     * Uploads a generated report file to the `reports` bucket.
+     *
+     * [objectPath] comes from [objectPathFor], so it always starts with the owner's uid —
+     * which is what the bucket's RLS matches on. `upsert` is on because regenerating a
+     * report reuses its id, and a plain upload would be rejected the second time.
+     */
+    open suspend fun uploadReportFile(objectPath: String, bytes: ByteArray) {
+        supabase.storage.from(REPORTS_BUCKET).upload(objectPath, bytes) {
+            upsert = true
+        }
+    }
+
+    /**
+     * Downloads a report file previously uploaded by [uploadReportFile].
+     *
+     * Authenticated rather than signed, matching `SampleRemoteDataSource.downloadSampleImage`:
+     * this runs with a live session and the bytes are read here rather than handed to a
+     * renderer, so a signed URL would only add a round trip.
+     *
+     * Throws when the object is absent — a report generated before the bucket existed has
+     * nothing stored, and the caller reports that rather than pretending it recovered.
+     */
+    open suspend fun downloadReportFile(objectPath: String): ByteArray =
+        supabase.storage.from(REPORTS_BUCKET).downloadAuthenticated(objectPath)
 
     private fun ReportEntity.toInsertRow(userId: String): ReportInsertRow {
         val positives: List<String> = runCatching {
@@ -75,7 +108,6 @@ open class ReportRemoteDataSource @Inject constructor(
         buildJsonObject {
             forEach { (species, density) ->
                 put(species, buildJsonObject {
-                    put("mean", density.mean)
                     put("min", density.min)
                     put("max", density.max)
                 })
@@ -126,14 +158,16 @@ open class ReportRemoteDataSource @Inject constructor(
     )
 
     private fun ReportRow.toEntity(): ReportEntity {
-        val generatedAtMs = Instant.parse(generatedAt).toEpochMilli()
+        val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
         val positiveSpeciesJson = gson.toJson(positiveSpecies)
         val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
             val obj = v as JsonObject
+            // `mean` is not read even when an older row still carries it: PB-17 made the
+            // range the figure, and reviving a superseded number from storage is how the wrong
+            // definition comes back.
             LpfDensity(
-                mean = (obj["mean"] as JsonPrimitive).content.toFloat(),
                 min = (obj["min"] as JsonPrimitive).content.toInt(),
-                max = (obj["max"] as JsonPrimitive).content.toInt()
+                max = (obj["max"] as JsonPrimitive).content.toInt(),
             )
         }
         val lpfPerSpeciesJson = gson.toJson(lpfMap)
@@ -154,7 +188,27 @@ open class ReportRemoteDataSource @Inject constructor(
         )
     }
 
-    private companion object {
+    companion object {
+        /** Storage bucket holding generated report files. Mirrors `samples` in layout. */
+        const val REPORTS_BUCKET = "reports"
+
+        /** File extension for a report PDF, as used by [objectPathFor]. */
+        const val PDF_EXTENSION = "pdf"
+
+        /** File extension for a report CSV, as used by [objectPathFor]. */
+        const val CSV_EXTENSION = "csv"
+
+        /**
+         * The object path a report's file occupies: `{userId}/{reportId}.{extension}`.
+         *
+         * Derived rather than stored. Both parts already live on the row, so there is no
+         * column to add, no migration to apply by hand, and no way for a stored key to drift
+         * out of step with the row that owns it. The leading uid is also what the bucket's
+         * RLS policies match on, so a path built any other way would simply be refused.
+         */
+        fun objectPathFor(userId: String, reportId: String, extension: String): String =
+            "$userId/$reportId.$extension"
+
         private const val REPORTS_TABLE = "reports"
         private val stringListType = object : TypeToken<List<String>>() {}.type
         private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>>() {}.type

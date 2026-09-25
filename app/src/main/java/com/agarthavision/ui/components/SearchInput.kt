@@ -25,6 +25,7 @@ fun SearchInput(
     onValueChange: (String) -> Unit,
     placeholder: String = "Search sessions, notes, species...",
     modifier: Modifier = Modifier,
+    trailingIcon: (@Composable () -> Unit)? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -45,6 +46,7 @@ fun SearchInput(
                 modifier = Modifier.size(18.dp),
             )
         },
+        trailingIcon = trailingIcon,
         singleLine = true,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(

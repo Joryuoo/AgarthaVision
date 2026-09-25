@@ -68,6 +68,16 @@ class SearchBarangaysUseCaseTest {
         assertTrue(result.isFailure)
     }
 
+    /**
+     * Guards against silently reverting the limit. If [SearchBarangaysUseCase.RESULT_LIMIT]
+     * is changed from 80 the test referencing the symbol would still pass — this one
+     * catches the regression by asserting the concrete value.
+     */
+    @Test
+    fun `RESULT_LIMIT is 80 after ticket 86d4brgef raised it from 50`() {
+        assertEquals(80, SearchBarangaysUseCase.RESULT_LIMIT)
+    }
+
     private val adams = PsgcBarangay(
         code = "0102801001",
         name = "Adams",

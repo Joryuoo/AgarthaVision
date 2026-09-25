@@ -15,10 +15,12 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.icons.LabProfile
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.FactCheck
 import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.agarthavision.ui.components.SvgIcon
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,6 +32,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -66,12 +69,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
@@ -89,8 +90,6 @@ import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastVariant
 import com.agarthavision.ui.components.MicroscopyViewport
 import com.agarthavision.ui.components.rememberAgarthaToastState
-import com.agarthavision.ui.sessions.SESSION_NOTE_MAX_LENGTH
-import com.agarthavision.ui.sessions.limitInput
 import com.agarthavision.ui.theme.AgarthaSpacing
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
@@ -207,24 +206,6 @@ private fun Modifier.glassCircle(enabled: Boolean, onClick: () -> Unit): Modifie
     .clickable(enabled = enabled) { onClick() }
 
 @Composable
-private fun IconButtonGlass(
-    pathData: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    drawExtras: (DrawScope.() -> Unit)? = null,
-) {
-    Box(modifier = Modifier.glassCircle(enabled, onClick), contentAlignment = Alignment.Center) {
-        SvgIcon(
-            pathData,
-            color = Color.White,
-            strokeWidth = 1.8f,
-            modifier = Modifier.size(22.dp),
-            drawExtras = drawExtras,
-        )
-    }
-}
-
-@Composable
 internal fun IconButtonGlass(
     icon: ImageVector,
     contentDescription: String?,
@@ -255,16 +236,11 @@ private fun VerificationQueueButton(
 ) {
     Box {
         IconButtonGlass(
-            "M9 12l2 2 4-4",
-            drawExtras = {
-                drawRoundRect(
-                    Color.White,
-                    Offset(3f, 3f),
-                    Size(18f, 18f),
-                    CornerRadius(2f, 2f),
-                    style = Stroke(1.6f),
-                )
-            },
+            // Was a check stroke with the surrounding box hand-drawn through `drawExtras`.
+            // FactCheck is that glyph, and it is already what Session Detail uses for the
+            // same "go and review these frames" action.
+            icon = Icons.AutoMirrored.Outlined.FactCheck,
+            contentDescription = stringResource(R.string.capture_verify_action_desc),
             onClick = onClick,
         )
 
@@ -309,6 +285,7 @@ fun CaptureScreen(
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
     val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
+    val frameCapturedNoModelMessage = stringResource(R.string.capture_frame_captured_no_model_message)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -343,23 +320,31 @@ fun CaptureScreen(
         }
     }
 
+    // One confirmation per successful tap, driven by the tap's own outcome rather than by
+    // watching the queue: a Room-backed list moves on its own, and a toast derived from its head
+    // announced frames the medtech had not just captured. Exactly one toast fires per capture —
+    // a frame with detections does not get a second, competing message.
     LaunchedEffect(viewModel) {
-        viewModel.state
-            // Keyed on the id, not capturedAt: two frames sharing a millisecond used to
-            // look like one arrival to distinctUntilChanged, and neither got a toast.
-            .map { it.flaggedFrames.firstOrNull()?.sampleId }
-            .distinctUntilChanged()
-            .collect { sampleId ->
-                if (sampleId == null) return@collect
-                val frame = viewModel.state.value.flaggedFrames.firstOrNull() ?: return@collect
-
-                toastState.show(
-                    message = frameCapturedMessage,
-                    variant = AgarthaToastVariant.Default,
-                    actionLabel = detectionView,
-                    onAction = { viewModel.onDetectionToastTap(frame) },
-                )
+        viewModel.events.collect { event ->
+            when (event) {
+                is CaptureEvent.FrameCaptured -> {
+                    val outcome = event.outcome
+                    toastState.show(
+                        // Not Destructive, and deliberately: an unreachable container still
+                        // recorded the field, and the medtech's next action is the same either
+                        // way. It is named, because ten identical confirmations would otherwise
+                        // be the only sign that no model ran on any of them.
+                        message = when (outcome.source) {
+                            FrameSource.MODEL -> frameCapturedMessage
+                            FrameSource.MANUAL -> frameCapturedNoModelMessage
+                        },
+                        variant = AgarthaToastVariant.Default,
+                        actionLabel = detectionView,
+                        onAction = { viewModel.onCapturedFrameToastTap(outcome.sampleId) },
+                    )
+                }
             }
+        }
     }
 
     // Surface capture errors ("No active session", "Waiting for a live frame", or an
@@ -421,7 +406,11 @@ fun CaptureScreen(
         ) {
             // Back
             IconButtonGlass(
-                pathData = "M 15 18 L 9 12 L 15 6",
+                // The house back glyph, same as BackArrow and the verification sheets —
+                // C11 wants a new affordance to match its neighbours, and back already
+                // has one.
+                icon = AgarthaIcons.ArrowBackIosNew,
+                contentDescription = stringResource(R.string.capture_back_desc),
                 onClick = onNavigateBack,
                 enabled = !state.isBusy,
             )
@@ -497,13 +486,17 @@ fun CaptureScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                // The inset goes on the controls, not on the screen: the viewport is meant to
+                // run edge to edge behind the system bars, and insetting the whole Box would
+                // letterbox the camera preview. Without it the system navigation bar sits over
+                // the lower part of the shutter and swallows those taps.
+                .navigationBarsPadding()
                 .padding(bottom = 28.dp)
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: the verification queue. Its badge counts unverified frames only - verified
-            // samples live in the queue too now, and including them would inflate a "needs
-            // review" number into a "how much is in here" number.
+            // Left: the verification queue. The badge is a "needs review" number, so it counts
+            // flagged frames only - the same set the queue itself lists.
             Box(
                 modifier = Modifier.weight(1f),
                 contentAlignment = Alignment.CenterStart,

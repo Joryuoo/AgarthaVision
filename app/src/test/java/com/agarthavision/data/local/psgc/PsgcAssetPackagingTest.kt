@@ -50,15 +50,33 @@ class PsgcAssetPackagingTest {
     }
 
     @Test
-    fun `the asset is still a gzip stream and not a decompressed copy`() {
+    fun `the asset is a SQLite database and not something packaging rewrote`() {
         val header = context.assets.open(PsgcDataset.ASSET_PATH).use { stream ->
-            ByteArray(2).also { stream.read(it) }
+            ByteArray(SQLITE_MAGIC.size).also { stream.read(it) }
         }
 
-        // 0x1f 0x8b is the gzip magic number. If packaging ever expands the asset again this
-        // reads as plain CSV ('c', 'o') and fails here rather than silently bloating the APK.
-        assertEquals("Not a gzip stream: first byte", 0x1f, header[0].toInt() and 0xff)
-        assertEquals("Not a gzip stream: second byte", 0x8b, header[1].toInt() and 0xff)
+        // Every SQLite file opens with this literal. The asset used to be gzip and the same
+        // assertion was made on 0x1f 0x8b; the point is unchanged, which is that packaging
+        // must hand the device the bytes this constant names.
+        assertEquals(
+            "The bundled PSGC asset does not start with the SQLite file header.",
+            SQLITE_MAGIC.toList(),
+            header.toList(),
+        )
+    }
+
+    @Test
+    fun `the asset carries the barangay table and no Room metadata`() {
+        // This is what keeps the asset independent of Room's identityHash. The moment it
+        // carries room_master_table somebody has regenerated it as a Room database, and it
+        // starts having to be rebuilt on every schema version bump.
+        val tables = bundledAssetTables(context)
+
+        assertTrue("The asset has no psgc_barangays table: $tables", "psgc_barangays" in tables)
+        assertFalse(
+            "The asset carries room_master_table, which recouples it to Room's schema version.",
+            "room_master_table" in tables,
+        )
     }
 
     @Test
@@ -75,5 +93,10 @@ class PsgcAssetPackagingTest {
             PsgcDataset.ASSET_SHA256,
             digest,
         )
+    }
+
+    private companion object {
+        /** `SQLite format 3` and its terminating NUL — the first 16 bytes of any SQLite file. */
+        private val SQLITE_MAGIC = "SQLite format 3".toByteArray(Charsets.US_ASCII) + 0
     }
 }

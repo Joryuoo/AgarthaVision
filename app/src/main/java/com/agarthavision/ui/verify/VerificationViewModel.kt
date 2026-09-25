@@ -3,15 +3,28 @@ package com.agarthavision.ui.verify
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.AddedCardMerge
+import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.floorFor
+import com.agarthavision.domain.usecase.verify.mergeAddedCardIntoTwin
+import com.agarthavision.domain.usecase.verify.speciesStageKeyIsSettled
+import com.agarthavision.domain.usecase.verify.totalsAreConsistent
+import com.agarthavision.domain.usecase.verify.unboxedCountOf
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.withResolvedPrimaryPins
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,7 +51,6 @@ import javax.inject.Inject
  * @property findings what the medtech is asserting about this frame. The first
  *   `frame.predictions.size` entries are the model's boxes, in order; anything after them
  *   is a species the medtech added. An empty list on an AI frame is a clean field.
- * @property missedEgg frame-level Q4 answer — sets `samples.needs_reannotation`.
  * @property isSubmitting true while [SubmitVerificationUseCase] is in flight.
  * @property errorMessage submission failure message; surfaced inline.
  * @property canSubmit derived — true when every finding is complete and we're not already
@@ -50,36 +62,144 @@ data class VerificationUiState(
     val frameIndexInQueue: Int = 0,
     val queueSize: Int = 0,
     val frame: FlaggedFrame? = null,
+    /**
+     * Where the frame's image can be loaded from, when it did not come with its own bytes.
+     *
+     * Null on the capture path, where the frame carries the JPEG it was just taken from.
+     */
+    val imageSource: SampleImageSource? = null,
     val currentDetectionIndex: Int = 0,
     val showBoundingBoxes: Boolean = true,
     val findings: List<Finding> = emptyList(),
-    val missedEgg: Boolean? = null,
+    /**
+     * What the medtech is drawing a box for, or null when nobody is drawing.
+     *
+     * An address rather than a boolean, because one gesture serves two jobs — replacing a box
+     * the model got wrong, and locating an egg it never boxed — and the frame can only host one
+     * at a time.
+     */
+    val drawTarget: DrawTarget? = null,
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    val noDetectionSelected: Boolean = false,
+    /**
+     * Species already recorded on this device that match what is being typed into a free-text
+     * "Other species" field, with the field they were fetched for and the text they answer.
+     *
+     * All three, because the screen has **two** free-text fields — Current Detection and every
+     * added species — and only one is ever being typed into. Carrying the target and the query
+     * alongside the names lets [suggestionsFor] *derive* whether a list still belongs where it
+     * is about to render, instead of the view model having to remember to clear it on every
+     * path that moves the medtech elsewhere. A suggestion list rendered under the wrong row
+     * would be worse than no suggestions at all: it invites a tap that writes one row's species
+     * into another.
+     */
+    val speciesSuggestions: List<String> = emptyList(),
+    val speciesSuggestionTarget: SuggestionTarget? = null,
+    val speciesSuggestionQuery: String = "",
+    /**
+     * Index into [findings] of the one added species card shown as an editable form, or null when
+     * all are compact. Always >= frame.predictions.size.
+     */
+    val expandedFindingIndex: Int? = null,
+    /**
+     * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
+     * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
+     */
+    val openedFindings: List<Finding> = emptyList(),
+    val openedNote: String = "",
+    /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
+    val pendingLeave: LeaveIntent? = null,
 ) {
     /**
-     * A clean field — an AI capture the model returned no detections for — has no findings to
-     * complete, and the old `answers.isNotEmpty()` gate made it permanently un-submittable.
-     * It is a normal negative result and has to be recordable. But the missed-egg answer is
-     * then the entire content of the review, so it must be given rather than defaulting
-     * through as null.
+     * True when leaving now would throw away something the medtech entered.
+     *
+     * Compared by value against what the sample opened with, so an answer changed and changed
+     * back reads as untouched: there is nothing to lose. The Boxes toggle and which detection is
+     * on screen are not inputs, and moving them costs nothing.
      */
+    val hasUnsavedChanges: Boolean
+        get() = frame != null && (findings != openedFindings || userNote != openedNote)
+
+    /**
+     * The suggestions to show under [target]'s free-text field, given what it currently holds.
+     *
+     * Empty unless the last lookup was for this field *and* for this exact text, so a stale list
+     * cannot outlive the keystroke that produced it.
+     */
+    fun suggestionsFor(target: SuggestionTarget, query: String): List<String> =
+        if (target == speciesSuggestionTarget && query == speciesSuggestionQuery) {
+            speciesSuggestions
+        } else {
+            emptyList()
+        }
+
+    /**
+     * Q4 — "did the model miss any eggs in this frame?" — **derived, never asked.**
+     *
+     * The medtech already answers it by acting: recording an egg the model never boxed *is*
+     * saying the model missed one, and taking that egg away again says it did not. Asking a
+     * second time is asking them to restate what the screen can already see, and lets the two
+     * disagree.
+     *
+     * Read off the findings with no prediction behind them rather than by comparing totals
+     * against `frame.predictions.size`. The two agree on every transition the spec describes,
+     * and differ in one case the totals get wrong: a frame where the medtech rejects one of the
+     * model's boxes *and* adds an egg it missed nets out to the same count while both things
+     * are true.
+     *
+     * Null on a frame with no model output. There is no model claim there to have missed
+     * anything, so the question does not apply — which is also why it is never rendered for one.
+     * `samples.needs_reannotation` is nullable for exactly this.
+     */
+    val missedEgg: Boolean?
+        get() = when {
+            frame == null -> null
+            frame.source == FrameSource.MANUAL -> null
+            else -> findings.any {
+                it.prediction == null &&
+                    findings.unboxedCountOf(it.answers.speciesLabel, it.answers.stage, it.answers.otherStageText) > 0
+            }
+        }
+
     val isManual: Boolean
         get() = frame?.source == FrameSource.MANUAL
 
+    /** An AI capture the model returned no detections for: a real negative result. */
     val isCleanField: Boolean
         get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
 
+    /**
+     * Submit unlocks when every row the medtech is asserting is finished.
+     *
+     * **An empty list qualifies, and that is the point.** A clean field the medtech agrees with,
+     * and a No-Model-Output field where they saw nothing, are both real results with nothing to
+     * fill in; the screen's governing principle is that a medtech whose model was right submits
+     * without tapping anything. The gate this replaced demanded a missed-egg answer on a clean
+     * field and an explicit no-detection assertion on a manual one, both of which were a tap
+     * asking the medtech to restate the absence of work.
+     *
+     * The one thing it does hold for is a contradiction: an added species whose typed total is
+     * lower than the eggs the frame already accounts for — the boxes kept, plus the boxes the
+     * medtech drew themselves. Submitting that would write fewer slots than there are drawn
+     * boxes and quietly lose hand-placed geometry, so it is refused rather than clamped as they
+     * type. See `List<Finding>.totalsAreConsistent`.
+     *
+     * C7 is unaffected: nothing reaches `samples` except through `SubmitVerificationUseCase`.
+     */
     val canSubmit: Boolean
         get() = when {
             isSubmitting -> false
             frame == null -> false
-            isManual -> noDetectionSelected || (findings.isNotEmpty() && findings.all { it.isComplete })
-            isCleanField -> missedEgg != null && findings.all { it.isComplete }
-            else -> findings.isNotEmpty() && findings.all { it.isComplete }
+            else -> {
+                val consolidated = findings.consolidateAddedTwins()
+                findings.all { it.isComplete } && consolidated.totalsAreConsistent()
+            }
         }
+
+    /** True while a box is being drawn, which is what dims every existing box on the frame. */
+    val isDrawing: Boolean
+        get() = drawTarget != null
 
     /** False on the first frame of the queue, or when the position is unknown. */
     val canGoPrev: Boolean
@@ -90,9 +210,60 @@ data class VerificationUiState(
         get() = frameIndexInQueue in 1 until queueSize
 }
 
+/**
+ * What a box being drawn is for.
+ *
+ * @property findingIndex the row in `findings` the box belongs to.
+ * @property slot which egg of an added species, when [findingIndex] names an added row. Null on
+ *   a prediction-backed row, where there is exactly one box and drawing replaces it. The two
+ *   cases commit differently — a replacement latches `boxReplaced` and holds Q2 at "No", a
+ *   location has no model claim to contradict — so the address has to carry which one it is
+ *   rather than leaving `onBoxDrawn` to guess from the row.
+ */
+data class DrawTarget(val findingIndex: Int, val slot: Int? = null)
+
+/**
+ * Which free-text species field a suggestion list was fetched for.
+ *
+ * Not an `Int?` index with null meaning "the current detection". The two fields are different
+ * things — one names the egg in a box the model drew, the other names a species the model never
+ * boxed — and a nullable index makes "the current detection" and "some added row" the same type,
+ * which is how a list ends up rendering under the wrong one.
+ */
+sealed interface SuggestionTarget {
+    /** The "Other species" field under Q3, for the box currently on screen. */
+    data object CurrentDetection : SuggestionTarget
+
+    /** The "Other species" field on the added species at [index]. */
+    data class AddedFinding(val index: Int) : SuggestionTarget
+}
+
+/**
+ * A way off the sample that drops whatever has not been submitted.
+ *
+ * Submit and Discard are not here: one saves the edits and the other already asks first.
+ */
+enum class LeaveIntent { PREVIOUS_SAMPLE, NEXT_SAMPLE, EXIT }
+
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
+    data object FinishCurrentSpeciesFirst : VerificationEvent
+}
+
+private fun VerificationUiState.firstUnfinishedAddedIndex(): Int? {
+    val boxCount = frame?.predictions?.size ?: 0
+    // See the matching comment in VerificationFindings.AddedFindings: two not-yet-settled cards
+    // of one species share a SpeciesStageKey, so the floor has to come from the consolidated
+    // list or it can be read off the wrong sibling's drawn boxes.
+    val findingsForFloor = findings.consolidateAddedTwins()
+    return findings.indices.firstOrNull { i ->
+        i >= boxCount && findings[i].let { f ->
+            !f.isComplete ||
+                (f.answers.fieldTotal ?: 0) <
+                findingsForFloor.floorFor(f.answers.speciesLabel, f.answers.stage, f.answers.otherStageText)
+        }
+    }
 }
 
 /**
@@ -104,7 +275,8 @@ sealed interface VerificationEvent {
  * - **Detection-level navigation** within the current frame
  *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
  *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
- * - **Frame-level Q4** ("did the model miss any eggs?", via [onQ4Selected]).
+ * - **Added-species card expansion and lifecycle**
+ *   ([onAddSpecies], [onRemoveFinding], [onExpandFinding], [onCollapseFinding]).
  * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
  *   the frame is removed from the store; the verdict model (per ADR-004)
  *   persists every detection regardless of mix (false positives, wrong
@@ -120,6 +292,7 @@ sealed interface VerificationEvent {
 class VerificationViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,
     private val submitVerificationUseCase: SubmitVerificationUseCase,
+    private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VerificationUiState())
@@ -129,6 +302,9 @@ class VerificationViewModel @Inject constructor(
     val events: SharedFlow<VerificationEvent> = _events.asSharedFlow()
 
     private var currentFrame: FlaggedFrame? = null
+
+    /** The in-flight suggestion lookup, cancelled by the next keystroke. */
+    private var suggestionJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -188,19 +364,24 @@ class VerificationViewModel @Inject constructor(
      */
     fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
+        val findings = prior?.findings?.takeIf { it.isNotEmpty() } ?: frame.initialFindings()
+        val note = prior?.userNote.orEmpty()
         _state.update {
             it.copy(
                 isVisible = true,
                 frame = frame,
+                imageSource = prior?.imageSource,
                 frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
-                    ?: frame.initialFindings(),
-                missedEgg = prior?.missedEgg,
+                findings = findings,
+                drawTarget = null,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = prior?.userNote.orEmpty(),
-                noDetectionSelected = prior != null && frame.source == FrameSource.MANUAL && prior.findings.isEmpty(),
+                userNote = note,
+                openedFindings = findings,
+                openedNote = note,
+                pendingLeave = null,
+                expandedFindingIndex = null,
             )
         }
     }
@@ -213,15 +394,48 @@ class VerificationViewModel @Inject constructor(
         _state.update { it.copy(userNote = text) }
     }
 
+    /**
+     * Tapping the answer a row already holds does nothing.
+     *
+     * Not a nicety. Every row opens pre-filled from model output, and changing an earlier answer
+     * clears the later ones — so without this, re-affirming a correct "Yes" would wipe the
+     * pre-filled species underneath it and hand the medtech back the work the pre-fill saved
+     * them. A tap that asserts what is already asserted has changed nothing, so nothing
+     * downstream of it has gone stale.
+     *
+     * **Ticking Q1 back on answers Q2 and Q3 "No", not "unanswered".** A checkbox has no third
+     * state to show for null: an unanswered Q2 rendered unticked, but without the redraw action
+     * an unticked Q2 carries, and hid Q3 entirely — so the medtech had to tick and untick both
+     * just to reach the controls. The model's claims were already disowned by unticking Q1, so
+     * the questions come back unticked for real, each with its correction under it.
+     */
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            it.clearSpecies().copy(isEgg = isEgg, isBoxCorrect = null)
+            when {
+                it.isEgg == isEgg -> it
+                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
+                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+            }
         }
     }
 
+    /**
+     * **A replaced box cannot be told it was placed correctly.**
+     *
+     * Once the medtech has redrawn a box, "yes the model placed it right" is false, and it stays
+     * false — the model did put the box in the wrong place, and a human fixing it does not undo
+     * that. Letting Q2 flip back would leave a detection claiming correct localisation while
+     * carrying the human's geometry, which is exactly the label the drawing feature exists to
+     * produce. Refused silently, because the screen does not offer the affordance on a replaced
+     * row; this is the backstop.
+     *
+     * **The species answer survives a change here.** Q2 is about where the box sits, and a box in
+     * the wrong place still holds the same egg — so whatever Q3 held, the model's species
+     * confirmed or one picked from the dropdown, it still holds.
+     */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            it.clearSpecies().copy(isEgg = it.isEgg, isBoxCorrect = isBoxCorrect)
+            if (it.boxReplaced && isBoxCorrect) it else it.copy(isBoxCorrect = isBoxCorrect)
         }
     }
 
@@ -243,9 +457,6 @@ class VerificationViewModel @Inject constructor(
                     speciesConfirmed = confirmed,
                     species = if (confirmed) suggested else null,
                     otherSpeciesText = "",
-                    // A yes is a deliberate assertion, not a silent pass-through: the medtech
-                    // read the model's answer and agreed with it.
-                    speciesTouched = confirmed,
                 ),
             )
         }
@@ -260,63 +471,191 @@ class VerificationViewModel @Inject constructor(
      * "is this egg <species>?", and re-seeding here would answer that question on the
      * medtech's behalf - the one thing the confirm step exists to stop.
      *
-     * [VerificationAnswers.speciesConfirmed] and [VerificationAnswers.speciesTouched] go with
-     * it: whatever was asserted no longer applies to the question now being asked.
+     * [VerificationAnswers.speciesConfirmed] goes with it: whatever was asserted no longer
+     * applies to the question now being asked.
      */
     private fun VerificationAnswers.clearSpecies(): VerificationAnswers = VerificationAnswers(
-        eggCount = eggCount,
+        fieldTotal = fieldTotal,
+        // Geometry is not an answer to any of the questions being cleared. A medtech who redrew
+        // a box and then changed their mind about the species has not un-drawn the box, and
+        // dropping it here would quietly restore the model's own geometry under them. The same
+        // holds for the boxes on an added species: the eggs are still where they were put.
+        drawnBox = drawnBox,
+        drawnBoxes = drawnBoxes,
+        boxReplaced = boxReplaced,
     )
 
     /**
      * Records a deliberate species choice.
      *
-     * [VerificationAnswers.speciesTouched] is set unconditionally. Under the confirm-first flow
-     * this is reached only after the medtech has said the model was wrong (or there was nothing
-     * to confirm), so it is a human judgement by construction — and the flag stays because
-     * `detections` doubles as the retraining corpus, where a species with no human behind it
-     * must never be indistinguishable from one with.
+     * Under the confirm-first flow this is reached only after the medtech has said the model was
+     * wrong (or there was nothing to confirm), so it is a human judgement by construction.
      */
     fun onSpeciesSelected(species: EggSpecies) {
+        updateCurrentAnswer { it.withSpecies(species) }
+    }
+
+    /**
+     * Applies a species change, keeping the current stage only when it still applies.
+     *
+     * A stage picked for one species can be meaningless for another — CF only means something on
+     * Ascaris/Trichuris/Hookworm, and Other has no stage question at all. Left in place, a stale
+     * stage would either become an invisible mismatch once stage matching is exact (a box counted
+     * under a stage the medtech never saw for this species) or silently persist a stage the
+     * screen no longer shows a control for.
+     */
+    private fun VerificationAnswers.withSpecies(species: EggSpecies): VerificationAnswers {
+        val keepsStage = stage != null && stage in EggStage.forSpecies(species)
+        val speciesChanged = species != this.species
+        return copy(
+            species = species,
+            otherSpeciesText = "",
+            stage = stage.takeIf { keepsStage },
+            otherStageText = if (keepsStage) otherStageText else "",
+            // A pin was derived for the OLD species (from persisted DB state or a prior submit).
+            // Once the species actually changes, that pin is meaningless for the new species and
+            // must be re-derived from scratch, or a stale `false` pin can block the list-order
+            // fallback from electing any primary for the new species.
+            isPrimaryAdded = if (speciesChanged) null else isPrimaryAdded,
+        )
+    }
+
+    fun onStageSelected(stage: EggStage) {
         updateCurrentAnswer {
-            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+            if (stage != EggStage.OTHER) {
+                it.copy(stage = stage, otherStageText = "")
+            } else {
+                it.copy(stage = stage)
+            }
         }
+    }
+
+    /**
+     * Applies a stage choice to an added card.
+     *
+     * A non-Other stage settles the card's key immediately — there is no further text to wait
+     * for — so it merges into a twin right away. An Other stage waits for [onAddedOtherStageChanged]
+     * and one of the settle points, the same as a species that resolves to Other.
+     */
+    fun onAddedStageSelected(index: Int, stage: EggStage) {
+        _state.update { current ->
+            val updated = current.findings.mapIndexed { i, finding ->
+                if (i != index) {
+                    finding
+                } else if (stage != EggStage.OTHER) {
+                    finding.copy(answers = finding.answers.copy(stage = stage, otherStageText = ""))
+                } else {
+                    finding.copy(answers = finding.answers.copy(stage = stage))
+                }
+            }
+            if (stage != EggStage.OTHER) {
+                current.applyMerge(updated.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = updated)
+            } else {
+                current.copy(findings = updated)
+            }
+        }
+    }
+
+    fun onOtherStageChanged(text: String) {
+        updateCurrentAnswer { it.copy(otherStageText = text) }
     }
 
     fun onOtherSpeciesChanged(text: String) {
         updateCurrentAnswer { it.copy(otherSpeciesText = text) }
+        searchSuggestions(SuggestionTarget.CurrentDetection, text)
     }
 
     /**
-     * What the screen opens with, for each of the three shapes a frame can take.
+     * What the screen opens with, for each of the shapes a frame can take.
      *
-     * A manual capture gets exactly one finding with no prediction: there is no box, so the
-     * isEgg and isBoxCorrect questions never render, and the medtech names a species and a
-     * count directly. An AI frame with boxes gets one empty finding per box, each carrying the
-     * prediction it is about. An AI frame with none gets an empty list — a clean field, which
-     * is a real result and is submittable on the missed-egg answer alone.
+     * **Every answer is pre-filled from model output.** A box the model drew opens as "yes there
+     * is an egg", "yes the box is placed right", and "yes it is the species the model named" —
+     * so a medtech whose model was right submits without tapping anything, and answering is only
+     * required where the model was wrong. That is the whole economics of the screen: ten fields
+     * a smear, most of them the model gets right.
      *
-     * **No answer is seeded.** The species used to be pre-filled from the model's class; that
-     * was replaced by the explicit confirm step (86d4auj84), which gets the same
-     * "correct what is wrong rather than retype what is right" benefit without ever putting an
-     * unreviewed model answer where a human answer is read from. isEgg, isBoxCorrect and
-     * missedEgg were never pre-filled and still are not: they are the active-judgment gates,
-     * and answering any of them would let a frame reach CONFIRMED with no engagement at all.
+     * A model class this app cannot map to an [EggSpecies] seeds **nothing** for the species
+     * question — guessing OTHER would be wrong, because OTHER carries a free-text box only a
+     * human can fill, so the row would look answered while being incomplete. The chain offers
+     * the picker directly instead, and the row stays incomplete until a species is chosen.
+     *
+     * A frame with no boxes — a clean field, or one captured with the container unreachable —
+     * opens with nothing. There is no box to ask a question about; what it gets is the Add Egg
+     * section, which is always present.
      */
-    private fun FlaggedFrame.initialFindings(): List<Finding> = when {
-        predictions.isNotEmpty() -> predictions.map { Finding(prediction = it) }
-        source == FrameSource.MANUAL -> emptyList()
-        else -> emptyList()
+    private fun FlaggedFrame.initialFindings(): List<Finding> = predictions.map { prediction ->
+        val suggested = EggSpecies.fromClassLabel(prediction.classLabel)
+        Finding(
+            prediction = prediction,
+            answers = VerificationAnswers(
+                isEgg = true,
+                isBoxCorrect = true,
+                speciesConfirmed = if (suggested != null) true else null,
+                species = suggested,
+            ),
+        )
     }
 
     /**
-     * Appends a species the model never boxed.
+     * Adds an egg the model never boxed.
      *
-     * The new row has no prediction, which is the same shape a manual capture has: a human
-     * assertion with no box. It is asked for a species and a count, and never for the
-     * isEgg / isBoxCorrect questions, which are questions about a box.
+     * The new row has no prediction, which is the same shape a frame captured with the container
+     * unreachable has: a human assertion with no box. It is asked for a species and a count, and
+     * never for the isEgg / isBoxCorrect questions, which are questions about a box.
+     *
+     * **It opens holding one egg**, because the button says Add Egg and one egg is what the
+     * medtech just said they saw. The count stays editable: a field with five of the same species
+     * is one row reading 5, not five taps. An added egg needs no bounding box to be a complete
+     * finding — `detections.bbox_*` is nullable precisely for this
+     * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
-    fun onAddFinding() {
-        _state.update { it.copy(findings = it.findings + Finding()) }
+    fun onAddSpecies() {
+        val unfinished = _state.value.firstUnfinishedAddedIndex()
+        if (unfinished != null) {
+            _state.update { it.copy(expandedFindingIndex = unfinished) }
+            viewModelScope.launch { _events.emit(VerificationEvent.FinishCurrentSpeciesFirst) }
+        } else {
+            _state.update {
+                val consolidated = it.findings.consolidateAddedTwins()
+                val nextIndex = consolidated.size
+                it.copy(
+                    findings = consolidated + Finding(answers = VerificationAnswers(fieldTotal = 1)),
+                    expandedFindingIndex = nextIndex,
+                )
+            }
+        }
+    }
+
+    /**
+     * Expands an added finding at [index] into an editable card.
+     *
+     * Refused on a prediction-backed row (index < boxCount) or out-of-range index.
+     */
+    fun onExpandFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index >= boxCount && index in current.findings.indices) {
+                current.copy(expandedFindingIndex = index)
+            } else {
+                current
+            }
+        }
+    }
+
+    /**
+     * Collapses an added finding at [index] if it is currently expanded, and folds it into a
+     * twin card sharing its species+stage — the settle point for a card left without a stage, or
+     * left on an Other stage whose text now matches another card's.
+     */
+    fun onCollapseFinding(index: Int) {
+        _state.update { current ->
+            if (current.expandedFindingIndex != index) {
+                current
+            } else {
+                val collapsed = current.copy(expandedFindingIndex = null)
+                collapsed.applyMerge(collapsed.findings.mergeAddedCardIntoTwin(index)) ?: collapsed
+            }
+        }
     }
 
     /**
@@ -333,72 +672,144 @@ class VerificationViewModel @Inject constructor(
             if (index < boxCount || index !in current.findings.indices) {
                 current
             } else {
-                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+                val newExpanded = when {
+                    current.expandedFindingIndex == index -> null
+                    current.expandedFindingIndex != null && current.expandedFindingIndex > index ->
+                        current.expandedFindingIndex - 1
+                    else -> current.expandedFindingIndex
+                }
+                current.copy(
+                    findings = current.findings.filterIndexed { i, _ -> i != index },
+                    expandedFindingIndex = newExpanded,
+                )
             }
         }
     }
 
-    /** Eggs of this species the medtech counted in the field. */
-    fun onEggCountChanged(index: Int, text: String) {
+    /**
+     * Eggs of this species the medtech counted in the field, **the model's boxes included**.
+     *
+     * Taken as typed. It is not clamped up to the floor here, because the floor is often above
+     * the first digit of the number being typed — heading for 23 against nine boxed eggs, a
+     * clamp would snap "2" to 9 and the 3 would land on the wrong number. A total below the
+     * floor holds submit and says why instead; see `List<Finding>.totalsAreConsistent`.
+     */
+    fun onFieldTotalChanged(index: Int, text: String) {
         val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
-        updateAnswerAt(index) { it.copy(eggCount = parsed) }
+        updateAnswerAt(index) { it.copy(fieldTotal = parsed) }
     }
 
+    /**
+     * Names the species on an added card, keeping its stage only when it still applies (see
+     * [VerificationAnswers.withSpecies]), and merging it into an existing card of the same
+     * species+stage once that key is settled.
+     *
+     * **Merging is deferred until [speciesStageKeyIsSettled].** Right after the species is
+     * picked the stage is often still unanswered, and an unstaged Ascaris card is not yet the
+     * same finding as another unstaged Ascaris card that never gets a stage — merging here on
+     * species alone is exactly the silent-merge this ticket exists to fix. [onAddedStageSelected]
+     * and the settle points ([onAddSpecies], [onCollapseFinding], [onSubmit]) are what actually
+     * fold twins together, once the key can no longer change under them.
+     *
+     * The merge itself is not tidiness. `sample_species_findings` is unique on
+     * `(sample_id, species, stage)`, the detection ids derive from species+stage, and the reopen
+     * path rebuilds one card per species+stage — two cards naming the same one have nowhere to be
+     * stored separately and would come back as one anyway. The card that already held the key
+     * survives; the one just renamed into it adds its total and hands over its drawn boxes, so
+     * nothing the medtech placed is dropped by renaming a card into a collision.
+     */
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
-        updateAnswerAt(index) {
-            it.copy(species = species, otherSpeciesText = "", speciesTouched = true)
+        _state.update { current ->
+            val named = current.findings.getOrNull(index)?.answers?.withSpecies(species)
+                ?: return@update current
+            val renamed = current.findings.mapIndexed { i, finding ->
+                if (i == index) finding.copy(answers = named) else finding
+            }
+            if (!named.speciesStageKeyIsSettled) {
+                current.copy(findings = renamed)
+            } else {
+                current.applyMerge(renamed.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = renamed)
+            }
         }
     }
 
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
+        searchSuggestions(SuggestionTarget.AddedFinding(index), text)
     }
 
-    fun onManualNoDetectionSelected() {
-        _state.update { it.copy(noDetectionSelected = true, findings = emptyList()) }
+    fun onAddedOtherStageChanged(index: Int, text: String) {
+        updateAnswerAt(index) { it.copy(otherStageText = text) }
     }
 
-    fun onManualSpeciesToggled(species: EggSpecies, checked: Boolean) {
-        _state.update { current ->
-            val withoutSpecies = current.findings.filter { it.answers.species != species }
-            val newFindings = if (checked) {
-                withoutSpecies + Finding(answers = VerificationAnswers(species = species, speciesTouched = true))
-            } else {
-                withoutSpecies
+    /**
+     * Applies [merge], if any, remapping [VerificationUiState.expandedFindingIndex] and
+     * [VerificationUiState.drawTarget] so neither points at a card that just vanished or shifted.
+     *
+     * Null when [merge] is null — nothing to fold, caller keeps its own findings unchanged.
+     */
+    private fun VerificationUiState.applyMerge(merge: AddedCardMerge?): VerificationUiState? {
+        if (merge == null) return null
+        val removed = merge.removedIndex
+        val survivor = merge.survivorIndex
+        val remappedExpanded = when {
+            expandedFindingIndex == null -> null
+            expandedFindingIndex == removed -> survivor
+            expandedFindingIndex > removed -> expandedFindingIndex - 1
+            else -> expandedFindingIndex
+        }
+        // The gesture belonged to a slot on a card that just merged away, or on one that shifted
+        // underneath it. Neither address is safe to keep drawing against.
+        val remappedDrawTarget = drawTarget?.takeIf { it.findingIndex < removed }
+        return copy(
+            findings = merge.findings,
+            expandedFindingIndex = remappedExpanded,
+            drawTarget = remappedDrawTarget,
+        )
+    }
+
+    /**
+     * Looks up species already on this device for whichever free-text field is being typed into.
+     *
+     * One job, cancelled on every keystroke, so a burst of typing costs one query at the end of
+     * it rather than one per character. The debounce is also what keeps the results honest: an
+     * in-flight lookup for "asc" must never land after the one for "ascar" and put the wider
+     * list back on screen.
+     *
+     * A failed lookup shows nothing rather than leaving the previous names up. The index is a
+     * local table read, so a failure here is not a transient offline blip that is worth riding
+     * out - it means the query did not answer, and stale names under a live field would be a
+     * suggestion the device cannot stand behind.
+     *
+     * Nothing is written from here. A suggestion is a convenience: the medtech's typing is the
+     * answer, and a name absent from the index has to keep working, since that is the only way a
+     * species new to this device ever enters the corpus.
+     */
+    private fun searchSuggestions(target: SuggestionTarget, query: String) {
+        suggestionJob?.cancel()
+        suggestionJob = viewModelScope.launch {
+            delay(SUGGESTION_DEBOUNCE_MS)
+            val names = searchSpeciesSuggestions(query).getOrDefault(emptyList())
+            _state.update {
+                it.copy(
+                    speciesSuggestions = names,
+                    speciesSuggestionTarget = target,
+                    speciesSuggestionQuery = query,
+                )
             }
-            current.copy(findings = newFindings, noDetectionSelected = false)
         }
     }
 
-    fun onManualCountChanged(species: EggSpecies, text: String) {
-        val parsed = text.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()?.coerceAtLeast(0)
-        updateFindingForSpecies(species) { it.copy(eggCount = parsed) }
-    }
-
-    fun onManualOtherNameChanged(text: String) {
-        updateFindingForSpecies(EggSpecies.OTHER) { it.copy(otherSpeciesText = text) }
-    }
-
-    private fun updateFindingForSpecies(
-        species: EggSpecies,
-        transform: (VerificationAnswers) -> VerificationAnswers,
-    ) {
-        _state.update { current ->
-            current.copy(
-                findings = current.findings.map { finding ->
-                    if (finding.answers.species == species) {
-                        finding.copy(answers = transform(finding.answers))
-                    } else {
-                        finding
-                    }
-                },
-            )
-        }
-    }
-
-    fun onQ4Selected(missedEgg: Boolean) {
-        _state.update { it.copy(missedEgg = missedEgg) }
-    }
+    // The manual species checklist is gone, and with it onManualNoDetectionSelected,
+    // onManualSpeciesToggled, onManualCountChanged, onManualOtherNameChanged and
+    // updateFindingForSpecies. A frame captured with the inference container unreachable is no
+    // longer a different kind of screen with its own controls: it is a frame whose Model Output
+    // section says the container never answered, verified through the same always-present Add
+    // Egg section every other frame uses. One path, so there is one place for it to be wrong.
+    //
+    // onQ4Selected went with them. Q4 is derived from the findings now - see
+    // VerificationUiState.missedEgg - because recording an egg the model never boxed already
+    // says the model missed one, and asking again lets the two disagree.
 
     fun onDetectionPrev() {
         _state.update { current ->
@@ -413,20 +824,59 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onFramePrev() {
-        val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx <= 0) return
-        setFrame(frames[idx - 1])
+    fun onFramePrev() = requestLeave(LeaveIntent.PREVIOUS_SAMPLE)
+
+    fun onFrameNext() = requestLeave(LeaveIntent.NEXT_SAMPLE)
+
+    /**
+     * Leaves the sample, or asks first when that would drop unsubmitted edits.
+     *
+     * Nothing on this screen is saved until Submit — paging to another sample or backing out
+     * re-seeds from scratch — and the cycle buttons sit right beside the frame, where a stray
+     * thumb lands. So a way off a sample with edits on it is held until the medtech confirms,
+     * and one with nothing to lose goes straight through, as it always did.
+     *
+     * A cycle button at the end of the queue does nothing and asks nothing: there is nowhere to
+     * go, so there is nothing to confirm.
+     */
+    private fun requestLeave(intent: LeaveIntent) {
+        if (intent != LeaveIntent.EXIT && neighbourFor(intent) == null) return
+        if (_state.value.hasUnsavedChanges) {
+            _state.update { it.copy(pendingLeave = intent) }
+        } else {
+            leave(intent)
+        }
     }
 
-    fun onFrameNext() {
+    /** The medtech chose to leave and lose the edits. */
+    fun onConfirmLeave() {
+        val intent = _state.value.pendingLeave ?: return
+        _state.update { it.copy(pendingLeave = null) }
+        leave(intent)
+    }
+
+    /** The medtech chose to stay. Everything they entered is still there. */
+    fun onDismissLeave() {
+        _state.update { it.copy(pendingLeave = null) }
+    }
+
+    private fun leave(intent: LeaveIntent) {
+        when (intent) {
+            LeaveIntent.EXIT -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+            else -> neighbourFor(intent)?.let { setFrame(it) }
+        }
+    }
+
+    /** The sample a cycle button would open, or null at either end or off the queue. */
+    private fun neighbourFor(intent: LeaveIntent): FlaggedFrame? {
         val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx < 0 || idx >= frames.size - 1) return
-        setFrame(frames[idx + 1])
+        val idx = currentFrame?.let { frames.indexOfSample(it) } ?: -1
+        val step = when (intent) {
+            LeaveIntent.PREVIOUS_SAMPLE -> -1
+            LeaveIntent.NEXT_SAMPLE -> 1
+            LeaveIntent.EXIT -> 0
+        }
+        return if (idx < 0 || step == 0) null else frames.getOrNull(idx + step)
     }
 
     fun onDeleteFrame() {
@@ -446,6 +896,135 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Starts drawing a box for the finding at [index].
+     *
+     * Two call sites, one capability: replacing the model's box after Q2 is answered "No", and
+     * giving an added egg a box. Both are optional — answering "No" without redrawing is a
+     * complete, valid answer that records a localisation error, and an added egg with no box is
+     * a complete finding whose drawing may be deferred to the Sample Data Screen entirely.
+     */
+    fun onBeginDraw(findingIndex: Int, slot: Int? = null) {
+        val findings = _state.value.findings
+        val finding = findings.getOrNull(findingIndex) ?: return
+        // A slot may sit one past the drawn boxes (the next egg to locate) but never beyond the
+        // eggs that species actually claims, and a prediction-backed row has no slots at all.
+        val slotIsValid = when {
+            slot == null -> finding.prediction != null
+            finding.prediction != null -> false
+            else -> slot in
+                0 until findings.unboxedCountOf(
+                    finding.answers.speciesLabel,
+                    finding.answers.stage,
+                    finding.answers.otherStageText,
+                )
+        }
+        if (slotIsValid) {
+            _state.update { it.copy(drawTarget = DrawTarget(findingIndex, slot)) }
+        }
+    }
+
+    fun onCancelDraw() {
+        _state.update { it.copy(drawTarget = null) }
+    }
+
+    /**
+     * Records a box the medtech drew.
+     *
+     * The geometry arrives already in the model's coordinate space — centre-based pixels in the
+     * source image — from `FrameWithBoxes`. **Nothing is converted here.** If a box lands half
+     * its own size out of place, the bug is in that transform, and patching it at this layer
+     * would hide it behind a second, disagreeing convention.
+     *
+     * Committing a redraw sets Q2 to "No" and latches it there. On an added row there is no Q2
+     * to set: there was never a model box to be wrong about.
+     */
+    fun onBoxDrawn(box: ImageBox) {
+        val target = _state.value.drawTarget ?: return
+        _state.update { current ->
+            val updated = current.findings.toMutableList()
+            val finding = updated.getOrNull(target.findingIndex)
+            if (finding != null) {
+                updated[target.findingIndex] = if (target.slot == null) {
+                    finding.copy(
+                        answers = finding.answers.copy(
+                            drawnBox = box,
+                            isBoxCorrect = false,
+                            boxReplaced = true,
+                        ),
+                    )
+                } else {
+                    // Drawn boxes stay packed at the front, so a slot either replaces one that
+                    // is already there or lands next in line. Nothing is ever written past the
+                    // end, which is what keeps "lowering the count drops undrawn eggs first"
+                    // true without a second rule to enforce it.
+                    val boxes = finding.answers.drawnBoxes.toMutableList()
+                    if (target.slot in boxes.indices) boxes[target.slot] = box else boxes += box
+                    finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+                }
+            }
+            current.copy(findings = updated, drawTarget = null)
+        }
+    }
+
+    /**
+     * Discards a box the medtech drew on an added egg, without touching the count.
+     *
+     * The gap this closes: accepting a box committed it with no way back. Lowering the species'
+     * total is not a way back either — `totalsAreConsistent` floors it at the drawn boxes, so a
+     * badly placed box made the count it belongs to unlowerable too, and the only escape was to
+     * remove the species card and retype everything.
+     *
+     * Removing shifts the later boxes down a slot, which is what keeps drawn boxes packed at the
+     * front — the invariant that makes "lowering the count drops undrawn eggs first" true. The
+     * species still claims the same number of eggs; one of them simply goes back to unlocated,
+     * which is a complete answer.
+     *
+     * Refused on a prediction-backed row: there is no slot there, and a model box is never
+     * removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
+        _state.update { current ->
+            val finding = current.findings.getOrNull(findingIndex)
+            if (finding == null || finding.prediction != null ||
+                slot !in finding.answers.drawnBoxes.indices
+            ) {
+                return@update current
+            }
+            val boxes = finding.answers.drawnBoxes.toMutableList().apply { removeAt(slot) }
+            val updated = current.findings.toMutableList()
+            updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+            // A draw aimed at a slot that just moved would land on the wrong egg.
+            val target = current.drawTarget
+            val keepTarget = target == null ||
+                target.findingIndex != findingIndex ||
+                (target.slot ?: 0) < slot
+            current.copy(
+                findings = updated,
+                drawTarget = if (keepTarget) target else null,
+            )
+        }
+    }
+
+    /**
+     * Takes back a box the medtech drew over one of the model's, leaving the row answering
+     * "the model misplaced this box" with no replacement — a complete answer on its own.
+     *
+     * The same undo an added egg's box has had since 86d4by5n5. Without it a replacement drawn in
+     * the wrong place was final: redrawing could move it, but nothing could say "I have no better
+     * box than the model's after all".
+     *
+     * [VerificationAnswers.boxReplaced] clears with the box. It latches Q2 because a human box
+     * sits on the row, and once none does there is nothing to protect: the medtech may now decide
+     * the model's box was right after all. Q2 itself stays unticked until they say so. The model's
+     * box is untouched either way — it is never removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveReplacementBox(findingIndex: Int) {
+        updateAnswerAt(findingIndex) {
+            if (it.boxReplaced) it.copy(drawnBox = null, boxReplaced = false) else it
+        }
+    }
+
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }
@@ -455,17 +1034,28 @@ class VerificationViewModel @Inject constructor(
         val snapshot = _state.value
         if (!snapshot.canSubmit) return
 
+        // Which added card is primary for each species is decided right here, the same election
+        // toDetectionEntities is about to make from this very list. Writing it back onto state
+        // now — not just using it transiently for this submit — is what stops a later in-session
+        // removal (no reopen involved) from re-electing a different card as primary on the next
+        // submit; see `Finding.withResolvedPrimaryPins`.
+        val findingsToSubmit = snapshot.findings.consolidateAddedTwins().withResolvedPrimaryPins()
+
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                findings = snapshot.findings,
+                findings = findingsToSubmit,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
             ).fold(
                 onSuccess = {
                     currentFrame = null
-                    _state.update { it.copy(isSubmitting = false) }
+                    // Only now, once the pins this submit acted on are actually durable, does the
+                    // election they encode become the pin future in-session edits must respect.
+                    // Writing it earlier (or on failure, below) would lock in a decision nothing
+                    // was ever persisted for.
+                    _state.update { it.copy(isSubmitting = false, findings = findingsToSubmit) }
                     _events.emit(VerificationEvent.Dismiss)
                 },
                 onFailure = { throwable ->
@@ -476,9 +1066,8 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onCancel() {
-        viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
-    }
+    /** The top bar's back and the hardware back gesture. Asks first when edits would be lost. */
+    fun onCancel() = requestLeave(LeaveIntent.EXIT)
 
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity
@@ -491,6 +1080,14 @@ class VerificationViewModel @Inject constructor(
     private companion object {
         /** [VerificationUiState.frameIndexInQueue] when the open frame left the cycle. */
         const val OUT_OF_CYCLE = 0
+
+        /**
+         * How long typing has to pause before the suggestion index is queried.
+         *
+         * Long enough that a species name typed straight through costs one lookup, short enough
+         * that a medtech who pauses to think sees the list without wondering whether it works.
+         */
+        const val SUGGESTION_DEBOUNCE_MS = 250L
     }
 
     private fun updateCurrentAnswer(transform: (VerificationAnswers) -> VerificationAnswers) {

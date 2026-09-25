@@ -30,7 +30,8 @@ class SessionEggCountUseCaseTest {
         val result = useCase("session-1").getOrThrow()
 
         assertEquals(0, result.totalEggCount)
-        assertEquals(1, result.fieldCount) // coerceAtLeast(1)
+        // No floor any more: the floor existed to keep a mean from dividing by zero.
+        assertEquals(0, result.fieldCount)
         assertEquals(0, result.lpfPerSpecies.size)
     }
 
@@ -67,17 +68,15 @@ class SessionEggCountUseCaseTest {
 
         assertEquals(3, result.fieldCount)
         
-        // Ascaris: mean (2+4+0)/3 = 2.0, min 0, max 4
+        // Ascaris: seen in 2 of 3 fields, so the clean one pulls the minimum to 0.
         assertTrue("Ascaris should be in results", result.lpfPerSpecies.containsKey("Ascaris"))
         val ascaris = result.lpfPerSpecies["Ascaris"]!!
-        assertEquals(2.0f, ascaris.mean, 0.01f)
         assertEquals(0, ascaris.min)
         assertEquals(4, ascaris.max)
 
-        // Hookworm: mean (0+1+0)/3 = 0.33, min 0, max 1
+        // Hookworm: one field of 1, and two without it.
         assertTrue("Hookworm should be in results", result.lpfPerSpecies.containsKey("Hookworm"))
         val hookworm = result.lpfPerSpecies["Hookworm"]!!
-        assertEquals(0.33f, hookworm.mean, 0.01f)
         assertEquals(0, hookworm.min)
         assertEquals(1, hookworm.max)
     }
@@ -91,9 +90,6 @@ class SessionEggCountUseCaseTest {
         deviceId = "device-1",
         filePath = "path/to/file",
         status = com.agarthavision.domain.model.SampleStatus.VERIFIED,
-        latitude = null,
-        longitude = null,
-        accuracyMeters = null,
         isManual = false,
         userNote = null,
         inferenceModelVersion = "v1"

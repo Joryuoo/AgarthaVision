@@ -101,6 +101,10 @@ android {
         // Robolectric resolves resources, themes, and the merged debug manifest from
         // the built variant. Required for the Compose UI tests under src/test/.
         unitTests.isIncludeAndroidResources = true
+        unitTests.all { test ->
+            test.maxHeapSize = "2048m"
+            test.forkEvery = 100 // Recycles test JVM worker process every 100 tests to prevent Robolectric OOM
+        }
     }
 }
 
@@ -110,7 +114,6 @@ ksp {
 
 dependencies {
     implementation(libs.foundation.layout)
-    implementation(libs.play.services.location)
     // CameraX
     implementation(libs.camerax.core)
     implementation(libs.camerax.camera2)
@@ -142,6 +145,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     // Room
     implementation(libs.room.runtime)
@@ -177,9 +182,6 @@ dependencies {
 
     // Image loading
     implementation(libs.coil)
-
-    // Location
-    implementation(libs.play.services.location)
 
     // Testing
     testImplementation(libs.junit)

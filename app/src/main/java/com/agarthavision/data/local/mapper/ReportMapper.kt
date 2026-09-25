@@ -12,7 +12,16 @@ import java.time.Instant
 private val stringListType = object : TypeToken<List<String>>() {}.type
 private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>>() {}.type
 
-fun ReportEntity.toDomain(gson: Gson): Report {
+/**
+ * `reports.epg_per_species_json` is gone as of Room 13, and `epg_per_species` with it in
+ * `0001_init.sql`. EPG is eggs-per-gram via Kato-Katz; Philippine medtechs use direct
+ * smear, so the x24 multiplier was wrong for the method in use (86d4a6jxw).
+ *
+ * [Report.lpfPerSpecies] takes its place and *is* persisted, because a report is a record
+ * of what was found at generation time. Correcting a finding afterwards does not rewrite a
+ * report that already went out — PB-20 makes that explicit.
+ */
+fun ReportEntity.toDomain(gson: Gson, sessionLabel: String? = null): Report {
     val positives: List<String> = runCatching {
         gson.fromJson<List<String>>(positiveSpeciesJson, stringListType)
     }.getOrNull().orEmpty()
@@ -32,6 +41,7 @@ fun ReportEntity.toDomain(gson: Gson): Report {
         csvFilePath = csvFilePath,
         pdfFilePath = pdfFilePath,
         supabaseStatus = ReportSyncStatus.fromValue(supabaseStatus),
+        sessionLabel = sessionLabel,
     )
 }
 

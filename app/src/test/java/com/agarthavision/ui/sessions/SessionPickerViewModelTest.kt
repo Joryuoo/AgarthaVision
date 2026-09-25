@@ -1,30 +1,28 @@
 package com.agarthavision.ui.sessions
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.LocalIdentity
-import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
-import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -34,6 +32,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 
@@ -49,21 +48,31 @@ class SessionPickerViewModelTest {
         // VM now uses observeVisibleSessionsPage / observeVisibleSessionsCounts.
         whenever(
             it.observeVisibleSessionsPage(
-                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(), any(),
             ),
         )
             .thenReturn(sessionsFlow)
         whenever(
             it.observeVisibleSessionsCounts(
-                anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(),
+                anyOrNull(), any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), any(),
             ),
         )
             .thenReturn(countsFlow)
         // Keep the old stub so any residual call doesn't NPE (defensive).
         whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
+        // Unstubbed, this suspend fun returns null through Mockito's default answer, which
+        // NPEs when unboxed to Boolean and silently kills onCreateSession's coroutine.
+        it.stub {
+            onBlocking { isSessionLabelTaken(any(), any(), anyOrNull()) } doReturn false
+        }
     }
     private val sessionManager: SessionManager = mock {
         on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+    }
+    // Called from the VM's init. An unstubbed mock returns null for a non-null Result and
+    // takes down every test here, so it is stubbed even though the label is not asserted.
+    private val generateSessionLabelUseCase: GenerateSessionLabelUseCase = mock {
+        onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
     }
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase =
         mock<ObserveLocalIdentityUseCase>().also {
@@ -71,21 +80,26 @@ class SessionPickerViewModelTest {
                 MutableStateFlow(LocalIdentity(userId = "user-1", email = "user@example.com")),
             )
         }
-    private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase = mock()
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase = mock()
-
-    // The real use case over a mocked repository, so the minimum-query-length rule is
-    // exercised here rather than stubbed away.
+    private val patientRepository: PatientRepository = mock {
+        on { observePatientById(any()) } doReturn flowOf(null)
+    }
     private val psgcRepository: PsgcRepository = mock()
-    private val searchBarangaysUseCase = SearchBarangaysUseCase(psgcRepository)
 
-    private fun viewModel() = SessionsViewModel(
+    /**
+     * The screen is reached at `patients/{patientId}`, so the patient a new session belongs
+     * to comes off the route rather than out of the sheet. Pass a null id to model a route
+     * that carries none.
+     */
+    private fun viewModel(patientId: String? = PATIENT_ID) = SessionsViewModel(
         sessionRepository = sessionRepository,
         sessionManager = sessionManager,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
-        setSessionClaimExemptUseCase = setSessionClaimExemptUseCase,
-        claimLocalDataUseCase = claimLocalDataUseCase,
-        searchBarangaysUseCase = searchBarangaysUseCase,
+        generateSessionLabelUseCase = generateSessionLabelUseCase,
+        patientRepository = patientRepository,
+        psgcRepository = psgcRepository,
+        savedStateHandle = SavedStateHandle(
+            if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
+        ),
     )
 
     @Test
@@ -108,12 +122,11 @@ class SessionPickerViewModelTest {
     @Test
     fun `onCreateSession emits navigate event`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
         val vm = viewModel()
-        whenever(sessionManager.startSession(any(), anyOrNull(), anyOrNull()))
+        whenever(sessionManager.startSession(any(), any()))
             .thenReturn(makeSessionEntity("session-1"))
-        selectBarangay(vm)
 
         vm.events.test {
-            vm.onCreateSession("Smear 1", null)
+            vm.onCreateSession("Smear 1")
             advanceUntilIdle()
             val event = awaitItem() as SessionsEvent.NavigateToCapture
             assertEquals("session-1", event.sessionId)
@@ -121,104 +134,60 @@ class SessionPickerViewModelTest {
     }
 
     @Test
-    fun `onCreateSession passes the selected barangay through`() =
+    fun `onOpenVerificationQueue resumes session and emits NavigateToVerificationQueue`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            whenever(sessionManager.startSession(any(), anyOrNull(), anyOrNull()))
+            whenever(sessionManager.resumeSession("session-1"))
                 .thenReturn(makeSessionEntity("session-1"))
-            selectBarangay(vm)
 
-            vm.onCreateSession("Smear 1", null)
-            advanceUntilIdle()
-
-            verify(sessionManager).startSession(
-                label = eq("Smear 1"),
-                psgcBarangayCode = eq(LAHUG.code),
-                notes = anyOrNull(),
-            )
+            vm.events.test {
+                vm.onOpenVerificationQueue("session-1")
+                advanceUntilIdle()
+                val event = awaitItem() as SessionsEvent.NavigateToVerificationQueue
+                assertEquals("session-1", event.sessionId)
+            }
+            verify(sessionManager).resumeSession("session-1")
         }
 
     @Test
-    fun `onCreateSession refuses a session with no barangay`() =
+    fun `onCreateSession attributes the session to the patient from the route`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
+            whenever(sessionManager.startSession(any(), any()))
+                .thenReturn(makeSessionEntity("session-1"))
+
+            vm.onCreateSession("Smear 1")
+            advanceUntilIdle()
+
+            // sessions.patient_id is NOT NULL with a foreign key onto patients, so getting
+            // this wrong is an insert failure rather than a mis-filed smear.
+            verify(sessionManager).startSession(label = eq("SMEAR 1"), patientId = eq(PATIENT_ID))
+        }
+
+    @Test
+    fun `onCreateSession refuses when the route carries no patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel(patientId = null)
             vm.state.test {
                 var snapshot = awaitItem()
                 while (snapshot.isLoading) {
                     snapshot = awaitItem()
                 }
-                vm.onCreateSession("Smear 1", null)
-                val withError = awaitItem()
-                // Asserted word for word, not with `contains`: this copy has to stay
-                // identical to R.string.session_new_barangay_required, and a substring
-                // match would let the two drift into two messages for one rule.
-                assertEquals(
-                    "Please select the patient's barangay to continue.",
-                    withError.errorMessage,
-                )
+                // The *list* refuses first now: with no patient to scope the query to there
+                // is nothing to ask Room for, so the screen resolves to an error rather than
+                // an empty list that would read as "this patient has no smears".
+                assertTrue(snapshot.errorMessage?.contains("patient") == true)
+
+                // onCreateSession refuses for the same reason. It cannot be asserted with
+                // another awaitItem(): the state is already carrying this error, and a
+                // StateFlow does not re-emit an equal value.
+                vm.onCreateSession("Smear 1")
+                assertTrue(vm.state.value.errorMessage?.contains("patient") == true)
                 cancelAndIgnoreRemainingEvents()
             }
-            verify(sessionManager, never()).startSession(any(), anyOrNull(), anyOrNull())
+            // Better to refuse than to write a session that fails its foreign key on insert.
+            verify(sessionManager, never()).startSession(any(), any())
         }
-
-    @Test
-    fun `barangay query debounces into one search`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
-            val vm = viewModel()
-
-            // A burst of keystrokes, as typing produces.
-            vm.onBarangayQueryChanged("l")
-            vm.onBarangayQueryChanged("la")
-            vm.onBarangayQueryChanged("lah")
-            vm.onBarangayQueryChanged("lahu")
-            advanceUntilIdle()
-
-            verify(psgcRepository).searchBarangays(query = eq("lahu"), limit = any())
-        }
-
-    @Test
-    fun `selecting a barangay clears the query and results`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
-            val vm = viewModel()
-            selectBarangay(vm)
-
-            vm.state.test {
-                var snapshot = awaitItem()
-                while (snapshot.isLoading || snapshot.selectedBarangay == null) {
-                    snapshot = awaitItem()
-                }
-                assertEquals(LAHUG, snapshot.selectedBarangay)
-                assertEquals("", snapshot.barangayQuery)
-                assertTrue(snapshot.barangayResults.isEmpty())
-                cancelAndIgnoreRemainingEvents()
-            }
-        }
-
-    @Test
-    fun `clearing the barangay drops the selection`() =
-        runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
-            val vm = viewModel()
-            selectBarangay(vm)
-
-            vm.onBarangayCleared()
-            advanceUntilIdle()
-
-            vm.state.test {
-                assertNull(awaitItem().selectedBarangay)
-                cancelAndIgnoreRemainingEvents()
-            }
-        }
-
-    /** Drives the picker the way the sheet does: type, wait for results, tap one. */
-    private suspend fun TestScope.selectBarangay(vm: SessionsViewModel) {
-        whenever(psgcRepository.searchBarangays(any(), any())).thenReturn(listOf(LAHUG))
-        vm.onBarangayQueryChanged("lahug")
-        advanceUntilIdle()
-        vm.onBarangaySelected(LAHUG.code)
-    }
 
     @Test
     fun `onCreateSession rejects blank labels`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
@@ -228,7 +197,7 @@ class SessionPickerViewModelTest {
             while (snapshot.isLoading) {
                 snapshot = awaitItem()
             }
-            vm.onCreateSession("   ", null)
+            vm.onCreateSession("   ")
             val withError = awaitItem()
             assertTrue(withError.errorMessage?.contains("Label") == true)
             cancelAndIgnoreRemainingEvents()
@@ -236,13 +205,7 @@ class SessionPickerViewModelTest {
     }
 
     private companion object {
-        private val LAHUG = PsgcBarangay(
-            code = "0730600051",
-            name = "Lahug",
-            cityMuniName = "City of Cebu",
-            provinceName = null,
-            regionName = "Region VII (Central Visayas)",
-        )
+        private const val PATIENT_ID = "patient-1"
     }
 
     private fun makeSessionStats(id: String): SessionWithStats =
@@ -252,8 +215,7 @@ class SessionPickerViewModelTest {
                 userId = "user-1",
                 deviceId = "device-1",
                 startedAt = Instant.EPOCH.toEpochMilli(),
-                endedAt = null,
-                notes = null,
+                patientId = "patient-1",
                 label = "Smear 1",
             ),
             totalSamples = 0,
@@ -265,10 +227,9 @@ class SessionPickerViewModelTest {
     private fun makeSessionEntity(id: String): SessionEntity = SessionEntity(
         sessionId = id,
         userId = "user-1",
+        patientId = PATIENT_ID,
         deviceId = "device-1",
         startedAt = Instant.EPOCH.toEpochMilli(),
-        endedAt = null,
-        notes = null,
         label = "Smear 1",
     )
 }

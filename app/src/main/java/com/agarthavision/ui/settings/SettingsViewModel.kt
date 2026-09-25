@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
@@ -12,7 +13,6 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
-import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -42,10 +42,10 @@ data class SettingsUiState(
     val isSignedIn: Boolean = false,
     val isOffline: Boolean = false,
     val isDarkMode: Boolean = false,
-    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
-    val unlinkedSessions: Int = 0,
     val initialFetchDone: Boolean = true,
+    val lastFetchIncomplete: Boolean = false,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -69,8 +69,8 @@ class SettingsViewModel @Inject constructor(
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val signOutUseCase: SignOutUseCase,
-    private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val fetchOutcomeStore: FetchOutcomeStore,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -81,7 +81,7 @@ class SettingsViewModel @Inject constructor(
 
     private val pendingSyncFlow = identityFlow.flatMapLatest { identity ->
         if (identity == null) {
-            flowOf(PendingSyncCounts(0, 0, 0, 0))
+            flowOf(PendingSyncCounts(0, 0, 0, 0, 0))
         } else {
             observePendingSyncCountsUseCase(identity.userId)
         }
@@ -96,17 +96,19 @@ class SettingsViewModel @Inject constructor(
         identity?.let { initialFetchStateStore.observeCompleted(it.userId) } ?: flowOf(true)
     }
 
+    // Whether the last pull left an entity type unfetched. Read from a store rather than held
+    // here because the pass that fails is usually the worker's, with this screen not in memory.
+    private val lastFetchIncompleteFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { fetchOutcomeStore.observeIncomplete(it.userId) } ?: flowOf(false)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(
-            isSyncingFlow,
-            observeUnlinkedSessionCountUseCase(),
-            initialFetchDoneFlow,
-        ) { s, u, f -> Triple(s, u, f) },
-    ) { identity, online, themeMode, pendingSync, (syncing, unlinked, initialFetchDone) ->
+        combine(isSyncingFlow, initialFetchDoneFlow, lastFetchIncompleteFlow, ::Triple),
+    ) { identity, online, themeMode, pendingSync, (syncing, initialFetchDone, fetchIncomplete) ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
@@ -115,8 +117,8 @@ class SettingsViewModel @Inject constructor(
             isDarkMode = themeMode == ThemeMode.DARK,
             pendingSyncCounts = pendingSync,
             isSyncing = syncing,
-            unlinkedSessions = unlinked,
             initialFetchDone = initialFetchDone,
+            lastFetchIncomplete = fetchIncomplete,
         )
     }.stateIn(
         scope = viewModelScope,

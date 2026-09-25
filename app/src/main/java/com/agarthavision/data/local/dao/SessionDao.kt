@@ -2,10 +2,9 @@ package com.agarthavision.data.local.dao
 
 import androidx.room.ColumnInfo
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.room.Embedded
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
@@ -20,8 +19,25 @@ import kotlinx.coroutines.flow.Flow
 @Suppress("TooManyFunctions")
 @Dao
 interface SessionDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSession(session: SessionEntity)
+    /**
+     * Writes a session, inserting or updating in place.
+     *
+     * **`@Upsert`, not `@Insert(REPLACE)`**, for the reason spelled out on
+     * [SampleDao.upsertSample]: a REPLACE conflict deletes the existing row before re-inserting
+     * it, and `reports.session_id` is `onDelete = CASCADE`. Re-inserting a session the device
+     * already holds silently deleted its reports — the row, not the CSV or PDF on disk, so the
+     * files stayed behind orphaned and unreachable while every list that reads them went empty.
+     *
+     * Note what does *not* save this. `samples.session_id` is `NO_ACTION`, which refuses a
+     * delete that would orphan samples — but REPLACE re-inserts the parent under the same id
+     * inside the same statement, so the constraint is satisfied by the time it is checked and
+     * the statement succeeds. The samples survive; the reports are already gone. A NO_ACTION
+     * key is not a guard against this.
+     *
+     * `SampleDaoUpsertCascadeTest` pins it.
+     */
+    @Upsert
+    suspend fun upsertSession(session: SessionEntity)
 
     @Update
     suspend fun updateSession(session: SessionEntity)
@@ -47,6 +63,20 @@ interface SessionDao {
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**
+     * Every label already minted for one patient, for the sequence in the next one.
+     *
+     * Deliberately not `MAX(...)` in SQL: the sequence is the tail of a text label the medtech
+     * can edit, so `MAX` over the whole string would order lexically and pick the label that
+     * sorts last rather than the highest number. Parsing happens in
+     * [com.agarthavision.domain.session.SessionLabelGenerator], where it is testable.
+     *
+     * Rows with no label are excluded rather than returned as nulls — an unlabelled session
+     * holds no sequence.
+     */
+    @Query("SELECT label FROM sessions WHERE patient_id = :patientId AND label IS NOT NULL")
+    suspend fun getLabelsForPatient(patientId: String): List<String>
+
+    /**
      * Observes sessions visible to a signed-out or offline medtech: those owned by
      * [userId] plus any not-yet-claimed local sessions (`user_id IS NULL`). Newest first.
      * Per ADR-007.
@@ -60,21 +90,19 @@ interface SessionDao {
     )
     fun observeOwnedOrUnowned(userId: String): Flow<List<SessionEntity>>
 
-    /**
-     * Observes all local sessions regardless of owner (used when no identity is cached
-     * yet — a never-logged-in device). Newest first. Per ADR-007.
-     */
-    @Query("SELECT * FROM sessions ORDER BY started_at DESC")
-    fun observeAllLocal(): Flow<List<SessionEntity>>
+    // `observeAllLocal` is gone. It was `SELECT * FROM sessions` with no owner guard, for a
+    // never-logged-in device — a state mandatory first-run login (86d4be3ke) removed. On a
+    // shared phone it returned another medtech's smears. Signed out now reads as empty, in
+    // SessionRepositoryImpl; see `observeAllSessions` above for the guard that was right.
 
     /**
-     * Owned, non-exempt sessions still awaiting cloud upload, oldest first so the sync
-     * pass pushes them in creation order. Per ADR-007.
+     * Sessions still awaiting cloud upload, oldest first so the sync pass pushes them in
+     * creation order.
      */
     @Query(
         """
         SELECT * FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0
+        WHERE user_id = :userId
           AND supabase_status IN ('pending', 'sync_failed')
         ORDER BY started_at ASC
         """
@@ -82,87 +110,70 @@ interface SessionDao {
     suspend fun getSessionsPendingSync(userId: String): List<SessionEntity>
 
     /**
-     * Unowned (`user_id IS NULL`) sessions that have not been opted out, newest first.
-     * Drives the login-time claim. Per ADR-007.
+     * Hard-deletes a session and, by cascade, its reports (`ReportEntity` declares
+     * `onDelete = CASCADE`).
+     *
+     * **Samples are deliberately untouched.** `SampleEntity` declares its `session_id` foreign
+     * key as `NO_ACTION` (added in Room 16), so this refuses outright rather than cascading into
+     * the verified samples and detections that C8 protects — the caller has to deal with the
+     * samples first, and `DiscardUnsyncedDataUseCase` already does. Sign-out tombstones those
+     * separately rather than deleting them.
+     */
+    @Query("DELETE FROM sessions WHERE session_id = :sessionId")
+    suspend fun deleteSession(sessionId: String)
+
+    /** Sessions still attached to a patient, used to keep a delete off a NO_ACTION foreign key. */
+    @Query("SELECT COUNT(*) FROM sessions WHERE patient_id = :patientId")
+    suspend fun countSessionsForPatient(patientId: String): Int
+
+    /**
+     * Counts how many sessions for [patientId] already carry [label], excluding
+     * [excludingSessionId] so an in-place rename does not flag itself.
+     *
+     * Used by [com.agarthavision.data.repository.SessionRepositoryImpl.isSessionLabelTaken]
+     * to enforce per-patient label uniqueness before writing. Pass an empty string for
+     * [excludingSessionId] when checking a new session (no id to exclude yet).
      */
     @Query(
-        """
-        SELECT * FROM sessions
-        WHERE user_id IS NULL AND claim_exempt = 0
-        ORDER BY started_at DESC
-        """
+        "SELECT COUNT(*) FROM sessions " +
+        "WHERE patient_id = :patientId AND label = :label AND session_id != :excludingSessionId"
     )
-    suspend fun getClaimableSessions(): List<SessionEntity>
+    suspend fun countLabelCollisions(
+        patientId: String,
+        label: String,
+        excludingSessionId: String,
+    ): Int
 
     /** Updates the Room-only cloud sync status for a session. Per ADR-007. */
     @Query("UPDATE sessions SET supabase_status = :status WHERE session_id = :sessionId")
     suspend fun updateSupabaseStatus(sessionId: String, status: String)
 
-    /** Toggles the claim-exempt flag for a session. Per ADR-007. */
-    @Query("UPDATE sessions SET claim_exempt = :exempt WHERE session_id = :sessionId")
-    suspend fun setClaimExempt(sessionId: String, exempt: Boolean)
-
     /**
-     * Claims all unowned, non-exempt sessions for [userId], marking them pending sync.
-     * Only touches `user_id IS NULL` rows so it is idempotent. Per ADR-007.
-     */
-    @Query(
-        """
-        UPDATE sessions
-        SET user_id = :userId, supabase_status = 'pending'
-        WHERE user_id IS NULL AND claim_exempt = 0
-        """
-    )
-    suspend fun claimUnownedSessions(userId: String)
-
-    /**
-     * Claims a single unowned session by id (the manual "Link to account" action).
-     * Per ADR-007.
-     */
-    @Query(
-        """
-        UPDATE sessions
-        SET user_id = :userId, supabase_status = 'pending', claim_exempt = 0
-        WHERE session_id = :sessionId AND user_id IS NULL
-        """
-    )
-    suspend fun claimSession(sessionId: String, userId: String)
-
-    /**
-     * Live count of owned, non-exempt sessions still awaiting cloud upload (`pending`
-     * only, not `sync_failed`). Drives the Settings Data & Sync section. Per ADR-007.
+     * Live count of sessions still awaiting cloud upload (`pending` only, not
+     * `sync_failed`). Drives the Settings Data & Sync section.
      */
     @Query(
         """
         SELECT COUNT(*) FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'pending'
+        WHERE user_id = :userId AND supabase_status = 'pending'
         """,
     )
     fun observePendingCount(userId: String): Flow<Int>
 
     /**
-     * Live count of owned, non-exempt sessions whose last sync attempt failed. Drives
-     * the Settings Data & Sync section. Per ADR-007.
+     * Live count of sessions whose last sync attempt failed. Drives the Settings
+     * Data & Sync section.
      */
     @Query(
         """
         SELECT COUNT(*) FROM sessions
-        WHERE user_id = :userId AND claim_exempt = 0 AND supabase_status = 'sync_failed'
+        WHERE user_id = :userId AND supabase_status = 'sync_failed'
         """,
     )
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
-     * Live count of unowned, non-exempt local sessions (user_id IS NULL AND claim_exempt = 0):
-     * recorded while signed out and still claimable at the next login. Drives the signed-out
-     * "not linked" badge in Settings. Session-level only - unowned samples always belong to
-     * an unowned session, so a session count fully describes the claim backlog. Per ADR-007.
-     */
-    @Query("SELECT COUNT(*) FROM sessions WHERE user_id IS NULL AND claim_exempt = 0")
-    fun observeUnlinkedCount(): Flow<Int>
-
-    /**
-     * Observes sessions with their associated sample, verification, and EPG counts.
+     * Observes sessions with their associated sample, verification, and egg counts.
      */
     @Query(
         """
@@ -177,7 +188,7 @@ interface SessionDao {
         LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
         LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
         WHERE s.user_id = :userId
-          AND (s.ended_at IS NULL OR s.started_at >= :sinceMillis)
+          AND s.started_at >= :sinceMillis
         GROUP BY s.session_id
         ORDER BY s.started_at DESC
         """
@@ -186,7 +197,7 @@ interface SessionDao {
 
     /**
      * Observes a paginated, filtered window of sessions for the Records screen.
-     * Non-flagged sample counts and non-false-positive detection EPG totals are
+     * Non-flagged sample counts and non-false-positive detection totals are
      * pre-aggregated so the UI avoids per-session N+1 queries. The verdict filter
      * (`d.verdict != 'false_positive'`) matches [DetectionDao.getConfirmedEggCountsForSession]
      * so Records cards and Session Detail counts are always consistent.
@@ -280,6 +291,7 @@ interface SessionDao {
     )
     fun observeSessionsPage(
         userId: String,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -293,9 +305,9 @@ interface SessionDao {
      * Shares the predicate with [observeSessionsPage] so the header counts
      * and the list can never disagree. Per ADR-007.
      *
-     * The second column used to count open sessions (`ended_at IS NULL`). Sessions do not
-     * end any more (86d4ab4vm), so that counted every session and said nothing. Frames
-     * still awaiting review is a number the medtech can act on.
+     * The second column counts frames still awaiting review — a number the medtech can act
+     * on. It used to count open sessions, which stopped distinguishing anything when
+     * sessions stopped ending (86d4ab4vm).
      *
      * It is computed here rather than summed from the loaded page because the list is
      * paginated: a locally-summed header would report only what had been scrolled into
@@ -311,6 +323,7 @@ interface SessionDao {
     )
     fun observeSessionsCounts(
         userId: String,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -318,45 +331,10 @@ interface SessionDao {
         query: String,
     ): Flow<SessionsCountsRow>
 
-    /**
-     * Observes a paginated, filtered window of local sessions for a never-logged-in device.
-     * All sessions are visible (no user_id guard); active sessions are always included.
-     * Shares [LOCAL_SESSIONS_FILTER] with [observeAllLocalCounts]. Per ADR-007.
-     */
-    @Suppress("LongParameterList")
-    @Query(
-        "SELECT s.* FROM sessions s" + LOCAL_SESSIONS_FILTER +
-        " ORDER BY s.started_at DESC LIMIT :limit"
-    )
-    fun observeAllLocalPage(
-        activeSessionId: String?,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-        limit: Int,
-    ): Flow<List<SessionEntity>>
-
-    /**
-     * Live count of total local sessions and unreviewed frames matching
-     * [LOCAL_SESSIONS_FILTER]. Shares the predicate with [observeAllLocalPage]. Per ADR-007.
-     *
-     * Counts unreviewed frames rather than open sessions, for the reason given on
-     * [observeSessionsCounts].
-     */
-    @Suppress("LongParameterList")
-    @Query(
-        "SELECT COUNT(DISTINCT s.session_id) AS totalCount, " +
-        "COALESCE(SUM(CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END), 0) AS unverifiedCount " +
-        "FROM sessions s " +
-        "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null" +
-        LOCAL_SESSIONS_FILTER
-    )
-    fun observeAllLocalCounts(
-        activeSessionId: String?,
-        startMillis: Long?,
-        endMillis: Long?,
-        query: String,
-    ): Flow<SessionsCountsRow>
+    // `observeAllLocalPage` and `observeAllLocalCounts` are gone with LOCAL_SESSIONS_FILTER,
+    // for the reason above. That filter carried the patient scope and the date range but no
+    // owner guard at all, so a signed-out Session List showed every smear recorded under the
+    // patient by anyone who had used the device.
 }
 
 /**
@@ -373,7 +351,6 @@ private const val RECORDS_FILTER = """
     AND (:query = ''
          OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
          OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\'
          OR EXISTS (SELECT 1 FROM detections dq JOIN samples sq ON sq.sample_id = dq.sample_id
                     WHERE sq.session_id = s.session_id AND sq.deleted_at is null
                       AND dq.verdict != 'false_positive'
@@ -387,9 +364,11 @@ private const val RECORDS_FILTER = """
 
 /**
  * Shared WHERE predicate for the Sessions paginated page and counts queries.
- * The **active** session is always visible; every other session appears when it falls
- * within the recent window (`:sinceMillis`) or within an explicit date range
- * (`:startMillis`/`:endMillis`).
+ * The list belongs to **one patient**: `:patientId` is a hard AND above everything else,
+ * including the active-session exemption, because a smear open under patient A has no
+ * business appearing in patient B's list. Within that patient the **active** session is
+ * always visible; every other session appears when it falls within the recent window
+ * (`:sinceMillis`) or within an explicit date range (`:startMillis`/`:endMillis`).
  *
  * That exemption used to read `ended_at IS NULL`, meaning "a session still open". Once
  * sessions stopped ending (86d4ab4vm) that matched every session ever started, and the
@@ -403,40 +382,16 @@ private const val RECORDS_FILTER = """
  */
 private const val SESSIONS_FILTER = """
   WHERE s.user_id = :userId
+    AND s.patient_id = :patientId
     AND ( s.session_id = :activeSessionId
           OR (:startMillis IS NULL AND :endMillis IS NULL AND s.started_at >= :sinceMillis)
           OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
     AND (:query = ''
          OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\')
+         OR s.label      LIKE '%' || :query || '%' ESCAPE '\')
 """
 
-/**
- * Shared WHERE predicate for the local-only (never-logged-in) paginated page and
- * counts queries. No user_id guard; the active session is always visible, for the
- * reason given on [SESSIONS_FILTER].
- *
- * Columns are qualified with `s.` so the counts query can join `samples` without the
- * bare names becoming ambiguous.
- *
- * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
- * and `\` in the needle before passing it in.
- */
-private const val LOCAL_SESSIONS_FILTER = """
-  WHERE ( s.session_id = :activeSessionId
-          OR (:startMillis IS NULL AND :endMillis IS NULL)
-          OR (:startMillis IS NOT NULL AND s.started_at >= :startMillis AND s.started_at <= :endMillis) )
-    AND (:query = ''
-         OR s.session_id LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.label      LIKE '%' || :query || '%' ESCAPE '\'
-         OR s.notes      LIKE '%' || :query || '%' ESCAPE '\')
-"""
-
-/**
- * Aggregate row returned by [SessionDao.observeSessionsCounts] and
- * [SessionDao.observeAllLocalCounts].
- */
+/** Aggregate row returned by [SessionDao.observeSessionsCounts]. */
 data class SessionsCountsRow(
     @ColumnInfo(name = "totalCount") val totalCount: Int,
     /** Frames still awaiting review across the filtered sessions. See [SessionDao]. */

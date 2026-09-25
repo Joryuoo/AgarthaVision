@@ -16,6 +16,7 @@ class SyncBadgeStateTest {
         pending: Int = 0,
         failed: Int = 0,
     ) = PendingSyncCounts(
+        pendingPatients = 0,
         pendingSessions = pending,
         pendingSamples = 0,
         pendingReports = 0,
@@ -29,7 +30,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(failed = 1),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.FAILED, result)
     }
@@ -39,7 +39,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(pending = 5, failed = 2),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.FAILED, result)
     }
@@ -49,7 +48,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(failed = 3),
-            unlinkedSessions = 5,
         )
         assertEquals(SyncBadge.FAILED, result)
     }
@@ -61,7 +59,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(pending = 3),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.PENDING, result)
     }
@@ -73,7 +70,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.ALL_SYNCED, result)
     }
@@ -84,7 +80,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 3,
         )
         assertEquals(SyncBadge.ALL_SYNCED, result)
     }
@@ -92,44 +87,12 @@ class SyncBadgeStateTest {
     // ── Signed-out ───────────────────────────────────────────────────────────
 
     @Test
-    fun `signed out with unlinked 3 returns NOT_LINKED`() {
-        val result = syncBadgeState(
-            isSignedIn = false,
-            counts = counts(),
-            unlinkedSessions = 3,
-        )
-        assertEquals(SyncBadge.NOT_LINKED, result)
-    }
-
-    @Test
-    fun `signed out with unlinked 1 returns NOT_LINKED`() {
-        val result = syncBadgeState(
-            isSignedIn = false,
-            counts = counts(),
-            unlinkedSessions = 1,
-        )
-        assertEquals(SyncBadge.NOT_LINKED, result)
-    }
-
-    @Test
     fun `signed out with unlinked 0 returns NOTHING_TO_SYNC`() {
         val result = syncBadgeState(
             isSignedIn = false,
             counts = counts(),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.NOTHING_TO_SYNC, result)
-    }
-
-    @Test
-    fun `signed out with impossible pending gt 0 and unlinked gt 0 returns NOT_LINKED`() {
-        // pending/failed are meaningless when signed out but the function must handle them gracefully.
-        val result = syncBadgeState(
-            isSignedIn = false,
-            counts = counts(pending = 5, failed = 2),
-            unlinkedSessions = 3,
-        )
-        assertEquals(SyncBadge.NOT_LINKED, result)
     }
 
     @Test
@@ -137,7 +100,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = false,
             counts = counts(pending = 5, failed = 2),
-            unlinkedSessions = 0,
         )
         assertEquals(SyncBadge.NOTHING_TO_SYNC, result)
     }
@@ -149,7 +111,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 0,
             initialFetchDone = true,
             isFetching = true,
         )
@@ -161,7 +122,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(failed = 1),
-            unlinkedSessions = 0,
             initialFetchDone = true,
             isFetching = true,
         )
@@ -173,7 +133,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(pending = 2),
-            unlinkedSessions = 0,
             initialFetchDone = true,
             isFetching = true,
         )
@@ -185,7 +144,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 0,
             initialFetchDone = false,
             isFetching = false,
         )
@@ -198,7 +156,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 0,
             initialFetchDone = false,
             isFetching = true,
         )
@@ -210,7 +167,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(failed = 1),
-            unlinkedSessions = 0,
             initialFetchDone = false,
         )
         assertEquals(SyncBadge.FAILED, result)
@@ -221,7 +177,6 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(),
-            unlinkedSessions = 0,
             initialFetchDone = true,
             isFetching = false,
         )
@@ -233,22 +188,9 @@ class SyncBadgeStateTest {
         val result = syncBadgeState(
             isSignedIn = true,
             counts = counts(pending = 3),
-            unlinkedSessions = 0,
             initialFetchDone = false,
         )
         assertEquals(SyncBadge.PENDING, result)
     }
 
-    @Test
-    fun `signed out isFetching and initialFetchDone false returns NOT_LINKED when unlinked gt 0`() {
-        // When signed out, fetch-state parameters are irrelevant — unlinked drives it
-        val result = syncBadgeState(
-            isSignedIn = false,
-            counts = counts(),
-            unlinkedSessions = 2,
-            initialFetchDone = false,
-            isFetching = true,
-        )
-        assertEquals(SyncBadge.NOT_LINKED, result)
-    }
 }

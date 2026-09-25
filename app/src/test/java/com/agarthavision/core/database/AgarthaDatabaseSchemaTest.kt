@@ -79,26 +79,21 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the species provenance flag is present and is not verified_by_user`() {
+    fun `detections carry neither species_touched nor verified_by_user`() {
+        // Both dropped at version 22 (14zcqnthrx8). `species_touched` recorded taps rather than
+        // judgements, and `verified_by_user` had been gone from Postgres since legacy 0002.
         val columns = columnsOf("detections")
-        assertTrue(
-            "detections.species_touched is missing — an untouched model pre-fill would be " +
-                "indistinguishable from a deliberate human confirmation in the training corpus.",
-            columns.contains("species_touched"),
-        )
-        // Deliberately a new column rather than reusing the dead one. If verified_by_user has
-        // gone, ticket 86d4akgmf landed and this assertion is the one to delete.
-        assertTrue(columns.contains("verified_by_user"))
+        assertFalse(columns.contains("species_touched"))
+        assertFalse(columns.contains("verified_by_user"))
     }
 
     @Test
-    fun `detections carry no stage column`() {
-        // Not an omission. Staging reverted 86d4a6jwy (9dcfd5d) because the four stages shipped
-        // there were never checked against literature — Ascaris could only be tagged
-        // UNFERTILIZED, the one stage that is never infective. This branch cherry-picked that
-        // commit before the revert existed, so this merge is the exact place it could come back
-        // by accident. It must not.
-        assertFalse(columnsOf("detections").contains("stage"))
+    fun `detections carry a stage column`() {
+        assertTrue(
+            "detections.stage is missing from v$EXPECTED_VERSION — ticket 86d4a6jwy stage classification.",
+            columnsOf("detections").contains("stage"),
+        )
+        assertFalse(isNotNull("detections", "stage"))
     }
 
     @Test
@@ -123,29 +118,103 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
-    fun `the barangay picker's half of the schema survived the merge`() {
+    fun `patients and the visibility join exist`() {
         assertTrue(
-            "psgc_barangays is missing from v$EXPECTED_VERSION — the picker has no data.",
-            tables().contains("psgc_barangays"),
+            "patients is missing from v$EXPECTED_VERSION — a session has nothing to belong to.",
+            tables().contains("patients"),
         )
         assertTrue(
-            "sessions.psgc_barangay_code is missing — the picker would write to nothing.",
-            columnsOf("sessions").contains("psgc_barangay_code"),
+            "patient_users is missing — patient visibility resolves through it, so without " +
+                "it a medtech can read no patient at all.",
+            tables().contains("patient_users"),
+        )
+        listOf(
+            "lastname", "firstname", "middle_name", "sex", "birthdate",
+            "psgc_barangay_code", "created_by", "created_at", "updated_at",
+        ).forEach { column ->
+            assertTrue("patients.$column is missing.", columnsOf("patients").contains(column))
+        }
+        // Only the middle name is optional — the rest identify the patient.
+        assertFalse(isNotNull("patients", "middle_name"))
+        assertTrue(isNotNull("patients", "lastname"))
+        assertTrue(isNotNull("patients", "birthdate"))
+        assertTrue(isNotNull("patients", "psgc_barangay_code"))
+    }
+
+    @Test
+    fun `a session belongs to a patient`() {
+        assertTrue(
+            "sessions.patient_id is missing — sessions would still hang off the user alone.",
+            columnsOf("sessions").contains("patient_id"),
+        )
+        // Not null: a session is always created from a patient's session list, so the
+        // patient is known at creation. A nullable column here would let an orphan smear
+        // exist and quietly drop out of every per-patient report.
+        assertTrue(isNotNull("sessions", "patient_id"))
+    }
+
+    @Test
+    fun `sessions no longer carry notes, ended_at, psgc_barangay_code or claim_exempt`() {
+        // Each removal has its own reason and each would be easy to restore by reflex:
+        //  - ended_at: sessions never end (86d4ab4vm), so nothing wrote it and
+        //    `ended_at IS NULL` silently matched every row while still reading as a filter.
+        //  - notes: it was doubling as an ad-hoc patient identifier. Patient replaces it.
+        //  - psgc_barangay_code: moved to the patient, the unit surveillance aggregates on.
+        //  - claim_exempt: login is mandatory on first run, so every row has an owner.
+        listOf("notes", "ended_at", "psgc_barangay_code", "claim_exempt").forEach { column ->
+            assertFalse(
+                "sessions.$column should be gone at v$EXPECTED_VERSION.",
+                columnsOf("sessions").contains(column),
+            )
+        }
+    }
+
+    @Test
+    fun `samples no longer carry a GPS fix`() {
+        // The fix was taken at the microscope, so it recorded where the smear was read, not
+        // where the infection came from. Mapping keys on the patient's barangay now.
+        listOf("gps_latitude", "gps_longitude", "gps_accuracy").forEach { column ->
+            assertFalse(
+                "samples.$column should be gone at v$EXPECTED_VERSION.",
+                columnsOf("samples").contains(column),
+            )
+        }
+    }
+
+    @Test
+    fun `reports no longer carry an EPG figure`() {
+        // EPG is eggs-per-gram via Kato-Katz; these smears are direct smears, so the x24
+        // multiplier was wrong for the method in use. A stale EPG surviving into a generated
+        // report is a clinical error, not a cosmetic one.
+        assertFalse(
+            "reports.epg_per_species_json should be gone at v$EXPECTED_VERSION.",
+            columnsOf("reports").contains("epg_per_species_json"),
         )
     }
 
     @Test
-    fun `the barangay code is nullable so sessions predating the picker survive`() {
-        // Nothing backfills older rows, and the destructive migration means a device may hold
-        // sessions created before the column existed. A NOT NULL here would be unrecoverable.
-        assertFalse(isNotNull("sessions", "psgc_barangay_code"))
+    fun `the barangay reference table survived the merge`() {
+        assertTrue(
+            "psgc_barangays is missing from v$EXPECTED_VERSION — the picker has no data.",
+            tables().contains("psgc_barangays"),
+        )
     }
+
+    // There is deliberately no assertion that `sessions` carries a barangay code. Two tests
+    // here used to make one, contradicting `sessions no longer carry notes, ended_at,
+    // psgc_barangay_code or claim_exempt` a few cases above. Room 13 moved the code to the
+    // patient — it is the unit surveillance aggregates on and it does not change from one
+    // smear to the next — and `patients and the visibility join exist` pins it there.
 
     @Test
     fun `the tables the earlier versions added are still present`() {
         // If one of these goes missing, a merge dropped a side.
         val tables = tables()
-        listOf("samples", "sessions", "detections", "reports").forEach { table ->
+        listOf(
+            "samples", "sessions", "detections", "reports",
+            // v13 and v14's own additions, so a later merge cannot quietly drop them either.
+            "patients", "patient_users", "species_suggestions",
+        ).forEach { table ->
             assertTrue("$table is missing from v$EXPECTED_VERSION", tables.contains(table))
         }
         assertTrue(
@@ -188,8 +257,71 @@ class AgarthaDatabaseSchemaTest {
                 result
             }
 
+    @Test
+    fun `patients carries an index on updated_at for recent activity sort`() {
+        val indices = database.openHelper.writableDatabase
+            .query("PRAGMA index_list('patients')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+            }
+        val indexedColumns = indices.flatMap { indexName ->
+            database.openHelper.writableDatabase
+                .query("PRAGMA index_info('$indexName')")
+                .use { cursor ->
+                    val colIndex = cursor.getColumnIndexOrThrow("name")
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(colIndex)) }
+                }
+        }
+        assertTrue(
+            "patients.updated_at is not indexed at v$EXPECTED_VERSION — recent-activity sort would scan.",
+            indexedColumns.contains("updated_at"),
+        )
+    }
+
+    @Test
+    fun `sessions carry a unique per-patient label index`() {
+        // v17 (86d4bzjhw): per-patient label uniqueness is enforced at the SQLite level.
+        // Without this index two concurrent offline creates with the same label collide
+        // silently into a duplicate row pair that confuses the medtech's list.
+        val indexNames = database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                buildList { while (cursor.moveToNext()) add(cursor.getString(nameIndex)) }
+            }
+        val uniqueIndex = indexNames.firstOrNull { name ->
+            val columns = database.openHelper.writableDatabase
+                .query("PRAGMA index_info($name)")
+                .use { cursor ->
+                    val colIndex = cursor.getColumnIndexOrThrow("name")
+                    buildList { while (cursor.moveToNext()) add(cursor.getString(colIndex)) }
+                }
+            columns.containsAll(listOf("patient_id", "label")) && columns.size == 2
+        }
+        // Confirm the index is actually unique.
+        val isUnique = uniqueIndex != null && database.openHelper.writableDatabase
+            .query("PRAGMA index_list('sessions')")
+            .use { cursor ->
+                val nameIndex = cursor.getColumnIndexOrThrow("name")
+                val uniqueIndex2 = cursor.getColumnIndexOrThrow("unique")
+                var result = false
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(nameIndex) == uniqueIndex) {
+                        result = cursor.getInt(uniqueIndex2) == 1
+                    }
+                }
+                result
+            }
+        assertTrue(
+            "sessions(patient_id, label) unique index is missing — duplicate labels for the " +
+                "same patient can slip through on concurrent offline creates.",
+            isUnique,
+        )
+    }
+
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 13
+        private const val EXPECTED_VERSION = 22
     }
 }

@@ -2,6 +2,8 @@ package com.agarthavision.data.local.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
+import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
@@ -11,7 +13,35 @@ import androidx.room.PrimaryKey
  * `image_path`) and in Supabase Storage (`storage_path` after sync). This entity
  * only stores the metadata needed for traceability and sync.
  */
-@Entity(tableName = "samples")
+/**
+ * **The session foreign key mirrors the server, the delete rule deliberately does not.**
+ * `0001_init.sql:183` declares `session_id uuid not null references public.sessions(id) on
+ * delete cascade`; Room declared no foreign key at all, so a sample could outlive its session
+ * locally, pointing at an id nothing resolves. Every other parent/child pair here already
+ * declares one.
+ *
+ * `NO_ACTION` rather than `CASCADE` because of C8. A cascade would let any session delete take
+ * its verified samples and their detections with it, silently, and `docs/non-negotiables.md`
+ * forbids exactly that. `NO_ACTION` makes such a delete fail loudly instead, so a caller has to
+ * decide what happens to the samples rather than not notice. The server can afford the cascade:
+ * its `detections` rows are the corpus and `0003_storage_rls.sql` grants no DELETE on the bucket
+ * anyway.
+ *
+ * The one caller that deletes a session today, `DiscardUnsyncedDataUseCase`, already removes
+ * that session's samples first, so it is unaffected either way.
+ */
+@Entity(
+    tableName = "samples",
+    foreignKeys = [
+        ForeignKey(
+            entity = SessionEntity::class,
+            parentColumns = ["session_id"],
+            childColumns = ["session_id"],
+            onDelete = ForeignKey.NO_ACTION,
+        ),
+    ],
+    indices = [Index("session_id")],
+)
 data class SampleEntity(
     @PrimaryKey
     @ColumnInfo(name = "sample_id")
@@ -50,14 +80,10 @@ data class SampleEntity(
     @ColumnInfo(name = "needs_reannotation", defaultValue = "0")
     val needsReannotation: Boolean = false,
 
-    @ColumnInfo(name = "gps_latitude")
-    val gpsLatitude: Double?,
-
-    @ColumnInfo(name = "gps_longitude")
-    val gpsLongitude: Double?,
-
-    @ColumnInfo(name = "gps_accuracy")
-    val gpsAccuracy: Float?,
+    // The three gps_* columns are gone as of Room 13. The fix was taken at the
+    // microscope, so it recorded where the smear was read, not where the infection came
+    // from — plotted, it mapped laboratories. Geospatial mapping keys on the patient's
+    // barangay now. Nothing ever read them.
 
     @ColumnInfo(name = "status")
     val status: String,
@@ -74,7 +100,7 @@ data class SampleEntity(
     /**
      * `true` when this sample was taken via the Capture button on
      * `CaptureScreen` (no AI inference involved). Syncs to Supabase via
-     * migration `0006_sample_is_manual.sql`. Counted in EPG identically to
+     * migration `0006_sample_is_manual.sql`. Counted identically to
      * AI-confirmed samples. Per ADR-005.
      */
     @ColumnInfo(name = "is_manual", defaultValue = "0")

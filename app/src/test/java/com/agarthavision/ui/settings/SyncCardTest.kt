@@ -16,11 +16,13 @@ import org.robolectric.annotation.Config
  * Robolectric Compose tests for [SyncCard].
  *
  * Covers:
- *  - signed-out, unlinked > 0 → badge + helper text shown; Sync now absent; count rows absent
- *  - signed-out, unlinked = 1 → singular helper text
- *  - signed-out, unlinked = 0 → "Nothing to sync" badge; helper absent
+ *  - signed-out → "Nothing to sync" badge; Sync now absent; count rows absent
  *  - signed-in, zeros → "All synced" badge; Sync now present
  *  - signed-in, failed = 2 → "2 failed" badge
+ *
+ * The unlinked-session cases are gone with the state they tested. Mandatory first-run login
+ * (86d4be3ke) means a session always has an owner, so there is no NOT_LINKED badge and no
+ * "Sign in to link and upload N sessions" copy left to assert.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -29,25 +31,24 @@ class SyncCardTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    private fun emptyCounts() = PendingSyncCounts(0, 0, 0, 0)
+    private fun emptyCounts() = PendingSyncCounts(0, 0, 0, 0, 0)
 
-    private fun signedOutState(unlinked: Int) = SyncCardState(
+    private fun signedOutState() = SyncCardState(
         isSignedIn = false,
         isOffline = false,
         counts = emptyCounts(),
         isSyncing = false,
         canSyncNow = false,
-        unlinkedSessions = unlinked,
     )
 
     private fun signedInState(
         pending: Int = 0,
         failed: Int = 0,
-        unlinked: Int = 0,
     ) = SyncCardState(
         isSignedIn = true,
         isOffline = false,
         counts = PendingSyncCounts(
+            pendingPatients = 0,
             pendingSessions = pending,
             pendingSamples = 0,
             pendingReports = 0,
@@ -55,92 +56,36 @@ class SyncCardTest {
         ),
         isSyncing = false,
         canSyncNow = true,
-        unlinkedSessions = unlinked,
     )
 
-    // ── signed-out, unlinked = 3 ─────────────────────────────────────────────
+    // ── signed-out ───────────────────────────────────────────────────
 
     @Test
-    fun `signed out unlinked 3 shows not-linked badge`() {
+    fun `signed out does not show Sync now button`() {
         composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(3), onSyncNowClick = {}) }
-        }
-
-        composeRule.onNodeWithText("3 not linked").assertIsDisplayed()
-    }
-
-    @Test
-    fun `signed out unlinked 3 shows plural helper text`() {
-        composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(3), onSyncNowClick = {}) }
-        }
-
-        composeRule
-            .onNodeWithText("Sign in to link and upload 3 sessions.")
-            .assertIsDisplayed()
-    }
-
-    @Test
-    fun `signed out unlinked 3 does not show Sync now button`() {
-        composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(3), onSyncNowClick = {}) }
+            AgarthaVisionTheme { SyncCard(state = signedOutState(), onSyncNowClick = {}) }
         }
 
         composeRule.onNodeWithText("Sync now").assertDoesNotExist()
     }
 
     @Test
-    fun `signed out unlinked 3 does not show Sessions count row`() {
+    fun `signed out does not show the Sessions count row`() {
         composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(3), onSyncNowClick = {}) }
+            AgarthaVisionTheme { SyncCard(state = signedOutState(), onSyncNowClick = {}) }
         }
 
-        // "Sessions" is the label for the pending sessions count row — only visible when signed in
+        // "Sessions" labels the pending-sessions count row — only visible when signed in.
         composeRule.onNodeWithText("Sessions").assertDoesNotExist()
     }
 
-    // ── signed-out, unlinked = 1 (singular) ──────────────────────────────────
-
     @Test
-    fun `signed out unlinked 1 shows singular helper text`() {
+    fun `signed out shows the Nothing to sync badge`() {
         composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(1), onSyncNowClick = {}) }
-        }
-
-        composeRule
-            .onNodeWithText("Sign in to link and upload 1 session.")
-            .assertIsDisplayed()
-    }
-
-    @Test
-    fun `signed out unlinked 1 shows singular badge text`() {
-        composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(1), onSyncNowClick = {}) }
-        }
-
-        composeRule.onNodeWithText("1 not linked").assertIsDisplayed()
-    }
-
-    // ── signed-out, unlinked = 0 ─────────────────────────────────────────────
-
-    @Test
-    fun `signed out unlinked 0 shows Nothing to sync badge`() {
-        composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(0), onSyncNowClick = {}) }
+            AgarthaVisionTheme { SyncCard(state = signedOutState(), onSyncNowClick = {}) }
         }
 
         composeRule.onNodeWithText("Nothing to sync").assertIsDisplayed()
-    }
-
-    @Test
-    fun `signed out unlinked 0 does not show helper text`() {
-        composeRule.setContent {
-            AgarthaVisionTheme { SyncCard(state = signedOutState(0), onSyncNowClick = {}) }
-        }
-
-        composeRule
-            .onNodeWithText("Sign in to link", substring = true)
-            .assertDoesNotExist()
     }
 
     // ── signed-in, zeros ─────────────────────────────────────────────────────

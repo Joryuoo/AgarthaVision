@@ -16,7 +16,6 @@ import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.repository.ReportFileStore
@@ -32,6 +31,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 class GenerateSessionReportUseCaseTest {
     @Test
@@ -55,8 +55,14 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(2, report.totalSamples)
         assertEquals(3, report.totalEggsConfirmed)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
-        assertEquals(1.0f, report.lpfPerSpecies["Ascaris lumbricoides"]!!.mean)
-        assertEquals(0.5f, report.lpfPerSpecies["Trichuris trichiura"]!!.mean)
+        // The range, not a mean, and the report path now computes it through the same
+        // aggregation the screen uses rather than its own copy of the arithmetic.
+        val ascaris = report.lpfPerSpecies["Ascaris lumbricoides"]!!
+        assertEquals(0, ascaris.min)
+        assertEquals(2, ascaris.max)
+        val trichuris = report.lpfPerSpecies["Trichuris trichiura"]!!
+        assertEquals(0, trichuris.min)
+        assertEquals(1, trichuris.max)
         assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
         // CSV-format report carries no PDF, and the PDF renderer was never invoked.
         assertNull(report.pdfFilePath)
@@ -123,6 +129,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.CSV)
@@ -150,6 +157,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.PDF)
@@ -197,6 +205,7 @@ class GenerateSessionReportUseCaseTest {
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
     }
 }
@@ -232,10 +241,14 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(session?.let(::listOf).orEmpty())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?,
         startMillis: Long?,
@@ -254,6 +267,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -264,6 +278,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -307,8 +322,6 @@ private class ReportDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
@@ -329,6 +342,32 @@ private class FakeReportRepository : ReportRepository {
     ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
 
     override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeAll(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeAllCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
 
     override suspend fun getById(reportId: String): com.agarthavision.domain.model.Report? = null
 
@@ -359,6 +398,12 @@ private class FakeReportFileStore : ReportFileStore {
         lastPdfBytes = pdf
         return "/Documents/AgarthaVision/report.pdf"
     }
+
+    override suspend fun readBytes(path: String): ByteArray? = when (path) {
+        "/Documents/AgarthaVision/report.pdf" -> lastPdfBytes
+        "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
+        else -> null
+    }
 }
 
 private fun reportSession(sessionId: String, userId: String): Session =
@@ -367,8 +412,7 @@ private fun reportSession(sessionId: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
-        notes = null,
+        patientId = "patient-1",
         label = "Session A",
     )
 
@@ -384,9 +428,6 @@ private fun reportSample(id: String, sessionId: String, userId: String): Sample 
         storagePath = "$userId/$id.jpg",
         inferenceModelVersion = "model-1",
         isManual = false,
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
 
@@ -407,17 +448,22 @@ private fun reportDetection(
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = expertClass,
-        verifiedByUser = true,
     )
 
 private fun noOpSyncReportUseCase(): SyncReportUseCase =
     SyncReportUseCase(
         reportDao = NoOpReportDao(),
         remoteDataSource = NoOpReportRemoteDataSource(),
+        reportFileStore = FakeReportFileStore(),
     )
 
 private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun insertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit
+    override suspend fun updateFilePaths(
+        reportId: String,
+        pdfFilePath: String?,
+        csvFilePath: String?,
+    ) = Unit
     override fun observeReportsForSession(
         sessionId: String,
         userId: String,
@@ -425,10 +471,33 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
         offset: Int,
     ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
     override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+    override fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
+    override fun observeAllReportsCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> = flowOf(emptyList())
+    override fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
     override suspend fun getReportsPendingSync(
         userId: String,
     ): List<com.agarthavision.data.local.entity.ReportEntity> = emptyList()
+    override suspend fun deleteReport(reportId: String) = Unit
     override suspend fun updateSupabaseStatus(reportId: String, status: String) = Unit
     override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) = Unit
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)

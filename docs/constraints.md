@@ -19,11 +19,11 @@ complexity, naming, and magic numbers — there is no import-boundary rule in it
 (`detekt.yml:1-49`).
 
 **As-built:** the literal rule holds — no file under `ui/` imports `androidx.room`,
-`retrofit2`, or `io.github.jan.*`. The spirit is bent in three ViewModels that inject the
-data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:9`,
-`ui/verify/VerificationViewModel.kt:5`, `ui/verify/VerificationQueueViewModel.kt:5`). It was
-four until `ManualCaptureViewModel` was deleted by the one-verification-screen merge
-(86d4ab4tq). The composable that once rendered a wire DTO no
+`retrofit2`, or `io.github.jan.*`. The spirit is bent in two ViewModels that inject the
+data-layer `FlaggedFrameStore` directly (`app/src/main/java/com/agarthavision/ui/capture/CaptureViewModel.kt:10`,
+`ui/verify/VerificationViewModel.kt:5`). It was four until `ManualCaptureViewModel` was deleted
+by the one-verification-screen merge (86d4ab4tq) and `VerificationQueueViewModel` moved to
+`ObserveVerificationQueueUseCase`. The composable that once rendered a wire DTO no
 longer does — `FrameWithBoxes` takes domain `Prediction` values
 (`ui/verify/FrameWithBoxes.kt:15`), and nothing under `ui/` imports from `data/remote/dto/`.
 
@@ -53,12 +53,11 @@ bindings exist, not that the boundary is respected
 (`app/src/main/java/com/agarthavision/core/di/DatabaseModule.kt:79-127`).
 
 **As-built:** the interface/implementation split is clean. The layering below it is not:
-eleven `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
+several `domain/` files import `com.agarthavision.data.*`, including use cases that call DAOs
 directly rather than going through a repository —
-`domain/usecase/verify/SubmitVerificationUseCase.kt:3-6`,
-`domain/usecase/auth/ClaimLocalDataUseCase.kt:3-5`,
-`domain/usecase/sync/SyncPendingDataUseCase.kt:4-9`. `ClaimLocalDataUseCase` documents the
-deviation and defers the fix to Phase 2 (`domain/usecase/auth/ClaimLocalDataUseCase.kt:16-19`).
+`domain/usecase/verify/SubmitVerificationUseCase.kt:3-8`,
+`domain/usecase/sync/SyncPendingDataUseCase.kt:4-11`,
+`domain/usecase/sync/FetchRemoteDataUseCase.kt:7-17`.
 
 ## C4 — Use cases return `Result<T>`
 
@@ -85,23 +84,22 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 
 ## C6 — Migrations own the schema
 
-`supabase/migrations/*.sql` is the authority for Postgres tables, nullability, defaults,
-foreign keys, CHECKs, and RLS. Do not change schema behaviour without updating both the
-migration SQL **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in
-the Supabase dashboard SQL editor — never applied programmatically
-(`supabase/migrations/0001_init.sql:2`). Room is a separate mirror: a Room-shape change means
-bumping `AgarthaDatabase.version` (`core/database/AgarthaDatabase.kt:46`).
+`supabase/migrations/0001_init.sql` is the authority for Postgres tables, nullability, defaults,
+foreign keys, CHECKs, and RLS on the consolidated `agarthavision` project; pre-patient migration
+history `0001`–`0013` is archived under `supabase/migrations/legacy-dev/` as the description of
+the dev and prod projects. Do not change schema behaviour without updating both the migration SQL
+**and** `schema.ts`. Migrations are numbered, committed, and run **manually** in the Supabase
+dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:2`).
+Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
+(`core/database/AgarthaDatabase.kt:105`).
 
-**Enforcement:** review only. There is no migration runner, no schema-diff test, and no CI.
+**Enforcement:** review only. There is no migration runner and no schema-diff test.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).
 
-**Known drift, code wins:** `schema.ts` names `samples.timestamp`, `samples.image_path`,
-`samples.created_at`, `samples.gps_lat/gps_lng/gps_accuracy_m`, and `detections.created_at`
-(`schema.ts:284-342`, `schema.ts:321`). None of those columns exist in Postgres. The
-migration creates `captured_at`, `gps_latitude`, `gps_longitude`, `gps_accuracy` and no
-`created_at` (`supabase/migrations/0001_init.sql:43-55`), and the insert row confirms it
-(`data/supabase/SampleRemoteDataSource.kt:100-127`). Those `schema.ts` names describe the
-Room entity, not Postgres.
+**Known drift, code wins:** `schema.ts` previously named Room entity names (`samples.timestamp`,
+`samples.image_path`, `samples.created_at`, `gps_*`) as if they were Postgres columns. The
+consolidated schema aligns with Postgres `0001_init.sql` (`captured_at`, `verified_at`, etc.)
+and explicitly separates Room-only columns.
 
 ## C7 — Human validation gates every AI output
 
@@ -153,18 +151,52 @@ its own ticket.
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
 
+**Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
+images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
+data (patient names, birthdates, sex, barangays) is governed by Philippine RA 10173 and clinical
+retention policies. Model retraining requires labeled tensors, not patient identities. The privacy
+position permanently separating the retraining corpus from patient PII is documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 ## C9 — Commit and branch format
 
 Commits: `[type][ClickUp-ID][Lastname]: Task title` — note the colon before the title.
 Types: `feat enhancements fix security docs ui ux uiux refactor test ci chore`. Branches:
-cut from `staging` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
-`test/…`. PRs target `staging`, never `main`.
+cut from `development` as `feat/<description>`, `fix/…`, `refactor/…`, `docs/…`, `ci/…`,
+`test/…`. PRs target `development` (workflow: `development` → `staging` → `main`).
+
+**Commits are sole-authored.** No `Co-Authored-By` trailer, no session trailer, and no tool
+or model identifier anywhere in a pushed artifact — not in a commit subject or body, not in
+a PR description, not in a code comment. A "generated by" line in a PR body is the same
+thing and is equally out.
 
 **A branch name carries no ClickUp ID.** It describes the work, not the ticket — good:
 `feat/verified-findings-reporting`; bad: `feat/86d4a6jwy-verification-logging`. One branch
 can carry commits for several tickets, so an ID baked into the name is wrong the moment a
 second ticket lands on it, and the ID is already captured per commit by the subject format
 above. Nothing enforces this at push time; it is a review check.
+
+**AI-assisted ticket writing: keep the ticket specific, not over-specified.** When using AI to
+investigate an issue and draft a ticket, keep the focus on the problem and expected outcome
+rather than prescribing exact implementation steps. Tickets must not dictate code edits (e.g.,
+instructing a developer to edit a specific function, rewrite an exact `runCatching` block, or inject
+checks at named lines) as hard requirements. Codebases evolve, early AI investigations can make
+faulty assumptions, and cleaner architectural homes for a fix often exist. An over-specified
+ticket leads the next engineer (or their agent) to follow outdated or suboptimal instructions
+instead of evaluating the real problem.
+
+A well-formed ticket focuses on:
+1. Problem / Context
+2. How to Reproduce (if applicable)
+3. Actual Behavior
+4. Expected Behavior
+5. Acceptance Criteria
+
+Suspected root causes, candidate file paths, and implementation ideas can still be provided, but
+they must be labeled as hints or exploratory findings rather than mandatory directives, unless a
+specific implementation detail is itself the requirement. Tickets are written for human
+developers to understand, verify, and decide how to solve.
+
 
 **Enforcement:** `.husky/commit-msg` checks the subject line against exactly the type list
 above (`.husky/commit-msg:14-17`). Merge, revert, fixup, and squash subjects are skipped
@@ -190,13 +222,19 @@ at build time (`app/build.gradle.kts:19-21`, `app/build.gradle.kts:47-93`). A mi
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
 
-**Enforcement:** `.gitignore` plus review. There is no secret-scanning step, because there is
-no CI at all — no `.github/` directory exists in this repository.
+**Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
+(verifying compile and Roborazzi screenshot tests without requiring secrets).
 
-**Drift:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
-`INFERENCE_API_KEY_PROD`, but `local.properties.example:26` documents a single
-`INFERENCE_API_KEY`. Following the example file yields an empty bearer token. The build file
-wins.
+**Drift, fixed in PB-01:** `app/build.gradle.kts:67` and `:90` read `INFERENCE_API_KEY_DEV` /
+`INFERENCE_API_KEY_PROD`. `local.properties.example` now documents both suffixed names.
+
+**Patient data privacy and at-rest security:** Like application secrets, patient Personally
+Identifiable Information (PII) and Sensitive Personal Information (SPI) must never leak into git
+history, test artifacts, or logs. Local on-device SQLite storage (Room) and report PDFs in shared
+storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
+validation mandate requiring synthetic patient profiles are documented in
+[`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
 
 ## C11 — One design system
 
@@ -206,10 +244,33 @@ palette definition; screens read the mode-aware `AgarthaTheme.colors.*` rather t
 `AppColors.*` directly, so both modes resolve. Capture is exempt — it stays dark and
 immersive regardless of the toggle. No second theme and no charting library: small dataviz
 is hand-built inline SVG. Icons are mixed and deliberately so — `material-icons-extended`
-(`app/build.gradle.kts:122`) supplies utility glyphs inside screens (chevrons, back arrows,
-filter, flag), while the bottom bar, brand marks and anything read as house identity are
-hand-authored 1.7-stroke outline drawables in `res/drawable/`. Match the neighbours: a new
-tab or brand icon is drawn, a new in-screen affordance may come from Material.
+(`app/build.gradle.kts:121`) supplies utility glyphs inside screens (chevrons, back arrows,
+filter, flag), while the bottom bar, brand marks and anything read as house identity come
+from `ui/icons/` as **Material Symbols (Rounded, fill 0)** exports generated into Compose
+`ImageVector`s (`ui/icons/AgarthaIcons.kt`). Match the neighbours: a new tab or brand icon is
+exported into `ui/icons/` alongside its siblings; a new in-screen affordance may come from
+`Icons.*` directly.
+
+**Never author glyph geometry by hand.** Do not write SVG path data or `ImageVector` path
+coordinates for a new icon — export it. Invented coordinates will not match the set's stroke
+weight or optical sizing however long they take. When the right export cannot be obtained in
+the moment, reuse an existing glyph from `ui/icons/` as a marked placeholder rather than
+drawing one — `AgarthaBottomBar.kt`'s `Tab.Patients` carries exactly that marker today.
+
+**The last hand-authored geometry is gone.** `ui/components/SvgIcon.kt` was a generic
+path-string renderer with eleven call sites carrying inline SVG — a close cross, a search
+lens, a plus, a warning triangle, an arrow, and two "!" strokes whose surrounding circle was
+drawn separately through a `drawExtras` lambda. All eleven are `Icons.*` or a `ui/icons/`
+export now and the component is deleted, so the rule above has no vehicle left to break. It
+also closed an accessibility hole the rule did not mention: `SvgIcon` drew onto a `Canvas`
+with no `contentDescription`, so a capture back button and a sheet close button were
+invisible to TalkBack.
+
+**Drift, corrected in 86d4be3na:** this paragraph described house glyphs as "hand-authored
+1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds only
+`ic_launcher_background`, `ic_launcher_foreground` and `ic_logo`; every UI glyph is, and was,
+a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
+the stale wording is what produced a hand-drawn tab icon (C13).
 
 **Enforcement:** review only. The token definitions are the single source —
 `ui/theme/Color.kt`, `ui/theme/Palette.kt`, `ui/theme/Spacing.kt`, `ui/theme/Theme.kt`,
@@ -238,9 +299,9 @@ opening the file it describes.
 trustworthy. Every load-bearing claim in `docs/` carries a `path:line` citation precisely so
 this rule is checkable.
 
-**Live examples of documents losing:** the `schema.ts` column names in C6; the
-`INFERENCE_API_KEY` name in C10; the "flagged frames are transient / in-memory" claim, which
-is wrong — `FlaggedFrameStore` is Room-backed
+**Live examples of documents losing:** the `schema.ts` column names in C6 (corrected in PB-24);
+the `INFERENCE_API_KEY` name in C10 (corrected in PB-01); the "flagged frames are transient / in-memory"
+claim, which is wrong — `FlaggedFrameStore` is Room-backed
 (`data/repository/FlaggedFrameStore.kt:33-34`, `:58-74`); and the LPF counting rule, where the
 query counts everything that is not a false positive
 (`data/local/dao/DetectionDao.kt:43`).

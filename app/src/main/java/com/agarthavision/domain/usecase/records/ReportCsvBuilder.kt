@@ -46,7 +46,9 @@ class ReportCsvBuilder @Inject constructor() {
             "# session_id: ${session.id}",
             "# session_label: ${session.label.orEmpty()}",
             "# session_started_at: ${Instant.ofEpochMilli(session.startedAt)}",
-            "# session_ended_at: ${session.endedAt?.let { Instant.ofEpochMilli(it).toString() }.orEmpty()}",
+            // No `session_ended_at`. Sessions do not end (86d4ab4vm) and the column is gone
+            // as of Room 13, so the row only ever emitted an empty value.
+            "# patient_id: ${session.patientId}",
             "# device_id: ${session.deviceId}",
             "# generated_by: ${metadata.generatedBy}",
             "# generated_at: ${metadata.generatedAt}",
@@ -59,7 +61,6 @@ class ReportCsvBuilder @Inject constructor() {
             .forEach { canonical ->
                 val density = metadata.lpfPerSpecies[canonical]
                 val key = canonical.toLpfHeaderKey()
-                headerLines += "# lpf_mean_$key: ${density?.mean ?: 0.0f}"
                 headerLines += "# lpf_range_$key: ${density?.min ?: 0}-${density?.max ?: 0}"
             }
         return headerLines
@@ -73,10 +74,8 @@ class ReportCsvBuilder @Inject constructor() {
             detection?.classLabel.orEmpty(),
             detection?.confidence?.toString().orEmpty(),
             detection?.expertClass.orEmpty(),
+            detection?.stage?.name.orEmpty(),
             detection?.verdict?.value.orEmpty(),
-            latitude?.toString().orEmpty(),
-            longitude?.toString().orEmpty(),
-            accuracyMeters?.toString().orEmpty(),
             isManual.toString(),
             userNote.orEmpty(),
             inferenceModelVersion,
@@ -106,7 +105,7 @@ class ReportCsvBuilder @Inject constructor() {
         // deleted now, not marked. Anything parsing this file by column position shifts left
         // by one from user_note onward.
         private const val CSV_HEADER =
-            "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,verdict," +
-                "gps_lat,gps_lng,gps_accuracy,is_manual,user_note,model_version"
+            "sample_id,captured_at,verified_at,model_class,model_confidence,expert_class,stage,verdict," +
+                "is_manual,user_note,model_version"
     }
 }

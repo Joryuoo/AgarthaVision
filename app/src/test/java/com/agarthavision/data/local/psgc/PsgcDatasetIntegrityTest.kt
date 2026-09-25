@@ -1,6 +1,5 @@
 package com.agarthavision.data.local.psgc
 
-import android.content.Context
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.BeforeClass
@@ -9,18 +8,16 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import java.io.InputStreamReader
-import java.util.zip.GZIPInputStream
 
 /**
  * Structural sweep of every row in the bundled dataset.
  *
- * [PsgcSeederTest] proves the seeding path works and spot-checks three known barangays. That
+ * [PsgcSeederTest] proves the copy path works and spot-checks three known barangays. That
  * would not notice a regenerated asset that silently truncated a region, duplicated a code or
  * shifted a column on the rest — and a wrong `city_muni_code` is invisible in the
  * picker but breaks the Admin Website's rollup. These assertions cover the whole file.
  *
- * Parsed once for the class: 42,010 rows through the real parser is not free.
+ * Read once for the class: 42,010 rows out of the bundled asset is not free.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -90,6 +87,20 @@ class PsgcDatasetIntegrityTest {
     }
 
     @Test
+    fun `the provinceless rows are the highly urbanised cities and nothing else`() {
+        // Null province is legitimate but it is also what a shifted column looks like, so the
+        // count is pinned. It moves only when the vintage does — it was 3,083 under 4Q 2023.
+        val provinceless = rows.filter { it.provinceCode == null }
+
+        assertEquals(PsgcDataset.PROVINCELESS_COUNT, provinceless.size)
+        assertTrue(
+            "A row with no province code should have no province name either: " +
+                provinceless.filter { it.provinceName != null }.take(5).map { it.code },
+            provinceless.all { it.provinceName == null },
+        )
+    }
+
+    @Test
     fun `search text is lowercased so the SQL LIKE can match it`() {
         // PsgcSearchQuery lowercases the query in Kotlin rather than using SQL lower(), which
         // is ASCII-only and would not fold the 'ñ' in 439 barangay names. That only works if
@@ -103,13 +114,8 @@ class PsgcDatasetIntegrityTest {
 
         @BeforeClass
         @JvmStatic
-        fun parseOnce() {
-            val context: Context = RuntimeEnvironment.getApplication()
-            rows = context.assets.open(PsgcDataset.ASSET_PATH).use { asset ->
-                InputStreamReader(GZIPInputStream(asset), Charsets.UTF_8).buffered().useLines { lines ->
-                    PsgcCsvParser.parseLines(lines).toList()
-                }
-            }
+        fun readOnce() {
+            rows = readBundledBarangays(RuntimeEnvironment.getApplication())
         }
     }
 }

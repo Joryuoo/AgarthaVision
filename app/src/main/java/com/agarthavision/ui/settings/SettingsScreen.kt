@@ -47,6 +47,7 @@ data class SettingsActions(
 @Composable
 fun SettingsScreen(
     onSignInClick: () -> Unit,
+    onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -57,7 +58,12 @@ fun SettingsScreen(
     LaunchedEffect(eventFlow) {
         eventFlow.collectLatest { event ->
             when (event) {
-                SettingsEvent.SignedOut -> Unit
+                // Signing out used to do nothing here. The first-run auth gate resolves once
+                // at launch (see MainViewModel), so it does not re-fire mid-process: the
+                // medtech stayed inside the app with no identity, free to walk back into
+                // Patients and a patient's smears. Login is mandatory, so leaving is the
+                // whole point of signing out.
+                SettingsEvent.SignedOut -> onSignedOut()
                 is SettingsEvent.SignOutBlocked -> signOutBlockedReason = event.reason
             }
         }
@@ -75,7 +81,7 @@ fun SettingsScreen(
 
     if (showSignOutDialog) {
         SignOutConfirmDialog(
-            pendingCount = state.pendingSyncCounts.totalPending,
+            unsyncedCount = state.pendingSyncCounts.totalUnsynced,
             onConfirm = {
                 showSignOutDialog = false
                 viewModel.onSignOut()
@@ -130,9 +136,9 @@ private fun SettingsContent(
                             counts = state.pendingSyncCounts,
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
-                            unlinkedSessions = state.unlinkedSessions,
                             initialFetchDone = state.initialFetchDone,
                             isFetching = state.isSyncing,
+                            lastFetchIncomplete = state.lastFetchIncomplete,
                         ),
                         onSyncNowClick = actions.onSyncNowClick,
                     )
@@ -154,7 +160,7 @@ private fun SettingsContent(
 
 @Composable
 private fun SignOutConfirmDialog(
-    pendingCount: Int,
+    unsyncedCount: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -165,8 +171,8 @@ private fun SignOutConfirmDialog(
         title = { Text(stringResource(R.string.settings_sign_out_dialog_title)) },
         text = {
             Text(
-                if (pendingCount > 0) {
-                    stringResource(R.string.settings_sign_out_dialog_body_pending, pendingCount)
+                if (unsyncedCount > 0) {
+                    stringResource(R.string.settings_sign_out_dialog_body_pending, unsyncedCount)
                 } else {
                     stringResource(R.string.settings_sign_out_dialog_body_synced)
                 },
@@ -174,7 +180,14 @@ private fun SignOutConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.settings_sign_out_dialog_confirm), color = colors.danger)
+                // Names the consequence when there is one to name. A medtech who is fully
+                // synced is not losing anything and should not be warned as though they are.
+                val confirm = if (unsyncedCount > 0) {
+                    R.string.settings_sign_out_dialog_confirm_discard
+                } else {
+                    R.string.settings_sign_out_dialog_confirm
+                }
+                Text(stringResource(confirm), color = colors.danger)
             }
         },
         dismissButton = {
@@ -210,7 +223,7 @@ private fun SettingsScreenPreview() {
             isSignedIn = true,
             isOffline = false,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(2, 5, 1, 0),
+            pendingSyncCounts = PendingSyncCounts(1, 2, 5, 1, 0),
         ),
         actions = SettingsActions(
             onSignInClick = {},
@@ -231,8 +244,7 @@ private fun SettingsScreenSignedOutPreview() {
             isSignedIn = false,
             isOffline = false,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
-            unlinkedSessions = 3,
+            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
         ),
         actions = SettingsActions(
             onSignInClick = {},

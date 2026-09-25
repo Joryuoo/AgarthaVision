@@ -1,18 +1,14 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
-import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.model.Sample
-import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +18,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -563,10 +558,14 @@ internal class FakeSessionRepository(
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(rows.map { it.session }.filter { it.userId == null || it.userId == userId })
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -593,6 +592,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -603,6 +603,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -625,8 +626,6 @@ internal class FakeDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         speciesMap.filterKeys { it in sessionIds }
@@ -645,9 +644,13 @@ private class MultiEmitSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -672,6 +675,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -682,6 +686,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -700,8 +705,7 @@ private fun session(id: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
-        notes = null,
+        patientId = "patient-1",
         label = null,
     )
 

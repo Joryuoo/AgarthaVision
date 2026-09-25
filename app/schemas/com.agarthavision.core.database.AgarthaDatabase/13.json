@@ -2,11 +2,11 @@
   "formatVersion": 1,
   "database": {
     "version": 13,
-    "identityHash": "206be3798e008c22a6ea93fa651caeb2",
+    "identityHash": "aadf7bd90170e8233095370aebbd8e9c",
     "entities": [
       {
         "tableName": "samples",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `gps_latitude` REAL, `gps_longitude` REAL, `gps_accuracy` REAL, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, PRIMARY KEY(`sample_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`sample_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `timestamp` INTEGER NOT NULL, `verified_at` INTEGER NOT NULL DEFAULT 0, `image_path` TEXT NOT NULL, `storage_path` TEXT, `inference_model_version` TEXT NOT NULL DEFAULT 'unknown', `needs_reannotation` INTEGER NOT NULL DEFAULT 0, `status` TEXT NOT NULL, `user_note` TEXT, `is_manual` INTEGER NOT NULL DEFAULT 0, `predictions_json` TEXT, `image_width` INTEGER, `image_height` INTEGER, `deleted_at` INTEGER, PRIMARY KEY(`sample_id`))",
         "fields": [
           {
             "fieldPath": "sampleId",
@@ -70,21 +70,6 @@
             "defaultValue": "0"
           },
           {
-            "fieldPath": "gpsLatitude",
-            "columnName": "gps_latitude",
-            "affinity": "REAL"
-          },
-          {
-            "fieldPath": "gpsLongitude",
-            "columnName": "gps_longitude",
-            "affinity": "REAL"
-          },
-          {
-            "fieldPath": "gpsAccuracy",
-            "columnName": "gps_accuracy",
-            "affinity": "REAL"
-          },
-          {
             "fieldPath": "status",
             "columnName": "status",
             "affinity": "TEXT",
@@ -132,7 +117,7 @@
       },
       {
         "tableName": "sessions",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `ended_at` INTEGER, `notes` TEXT, `label` TEXT, `psgc_barangay_code` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'synced', `claim_exempt` INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(`session_id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`session_id` TEXT NOT NULL, `user_id` TEXT, `patient_id` TEXT NOT NULL, `device_id` TEXT NOT NULL, `started_at` INTEGER NOT NULL, `label` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'synced', PRIMARY KEY(`session_id`), FOREIGN KEY(`patient_id`) REFERENCES `patients`(`patient_id`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "sessionId",
@@ -144,6 +129,12 @@
             "fieldPath": "userId",
             "columnName": "user_id",
             "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "patientId",
+            "columnName": "patient_id",
+            "affinity": "TEXT",
+            "notNull": true
           },
           {
             "fieldPath": "deviceId",
@@ -158,23 +149,8 @@
             "notNull": true
           },
           {
-            "fieldPath": "endedAt",
-            "columnName": "ended_at",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "notes",
-            "columnName": "notes",
-            "affinity": "TEXT"
-          },
-          {
             "fieldPath": "label",
             "columnName": "label",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "psgcBarangayCode",
-            "columnName": "psgc_barangay_code",
             "affinity": "TEXT"
           },
           {
@@ -183,13 +159,6 @@
             "affinity": "TEXT",
             "notNull": true,
             "defaultValue": "'synced'"
-          },
-          {
-            "fieldPath": "claimExempt",
-            "columnName": "claim_exempt",
-            "affinity": "INTEGER",
-            "notNull": true,
-            "defaultValue": "0"
           }
         ],
         "primaryKey": {
@@ -197,7 +166,185 @@
           "columnNames": [
             "session_id"
           ]
-        }
+        },
+        "indices": [
+          {
+            "name": "index_sessions_patient_id",
+            "unique": false,
+            "columnNames": [
+              "patient_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sessions_patient_id` ON `${TABLE_NAME}` (`patient_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "NO ACTION",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patient_id"
+            ],
+            "referencedColumns": [
+              "patient_id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "patients",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`patient_id` TEXT NOT NULL, `lastname` TEXT NOT NULL, `firstname` TEXT NOT NULL, `middle_name` TEXT, `sex` TEXT NOT NULL, `birthdate` INTEGER NOT NULL, `psgc_barangay_code` TEXT NOT NULL, `created_by` TEXT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER NOT NULL, `supabase_status` TEXT NOT NULL DEFAULT 'pending', PRIMARY KEY(`patient_id`))",
+        "fields": [
+          {
+            "fieldPath": "patientId",
+            "columnName": "patient_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastname",
+            "columnName": "lastname",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstname",
+            "columnName": "firstname",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "middleName",
+            "columnName": "middle_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sex",
+            "columnName": "sex",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "birthdate",
+            "columnName": "birthdate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "psgcBarangayCode",
+            "columnName": "psgc_barangay_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdBy",
+            "columnName": "created_by",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "supabaseStatus",
+            "columnName": "supabase_status",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'pending'"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "patient_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patients_psgc_barangay_code",
+            "unique": false,
+            "columnNames": [
+              "psgc_barangay_code"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_psgc_barangay_code` ON `${TABLE_NAME}` (`psgc_barangay_code`)"
+          },
+          {
+            "name": "index_patients_lastname_firstname",
+            "unique": false,
+            "columnNames": [
+              "lastname",
+              "firstname"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patients_lastname_firstname` ON `${TABLE_NAME}` (`lastname`, `firstname`)"
+          }
+        ]
+      },
+      {
+        "tableName": "patient_users",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`patient_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `linked_at` INTEGER NOT NULL, PRIMARY KEY(`patient_id`, `user_id`), FOREIGN KEY(`patient_id`) REFERENCES `patients`(`patient_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "patientId",
+            "columnName": "patient_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "linkedAt",
+            "columnName": "linked_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "patient_id",
+            "user_id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_patient_users_user_id",
+            "unique": false,
+            "columnNames": [
+              "user_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_patient_users_user_id` ON `${TABLE_NAME}` (`user_id`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "patients",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "patient_id"
+            ],
+            "referencedColumns": [
+              "patient_id"
+            ]
+          }
+        ]
       },
       {
         "tableName": "detections",
@@ -324,7 +471,7 @@
       },
       {
         "tableName": "reports",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`report_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `report_type` TEXT NOT NULL DEFAULT 'session', `generated_at` INTEGER NOT NULL, `total_samples` INTEGER NOT NULL, `total_eggs_confirmed` INTEGER NOT NULL, `positive_species_json` TEXT NOT NULL, `lpf_per_species_json` TEXT NOT NULL, `csv_file_path` TEXT, `pdf_file_path` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'pending', `created_at` INTEGER NOT NULL, PRIMARY KEY(`report_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`report_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `report_type` TEXT NOT NULL DEFAULT 'session', `generated_at` INTEGER NOT NULL, `total_samples` INTEGER NOT NULL, `total_eggs_confirmed` INTEGER NOT NULL, `positive_species_json` TEXT NOT NULL, `csv_file_path` TEXT, `pdf_file_path` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'pending', `created_at` INTEGER NOT NULL, PRIMARY KEY(`report_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "reportId",
@@ -372,12 +519,6 @@
           {
             "fieldPath": "positiveSpeciesJson",
             "columnName": "positive_species_json",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lpfPerSpeciesJson",
-            "columnName": "lpf_per_species_json",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -606,7 +747,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '206be3798e008c22a6ea93fa651caeb2')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'aadf7bd90170e8233095370aebbd8e9c')"
     ]
   }
 }
