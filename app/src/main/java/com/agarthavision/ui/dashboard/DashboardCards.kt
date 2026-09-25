@@ -29,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
@@ -196,19 +197,14 @@ private fun KpiTile(
     colors: KpiTileColors,
     modifier: Modifier = Modifier
 ) {
-    if (data.isLoading) {
-        SkeletonBox(
-            modifier = modifier
-                .fillMaxWidth()
-                .height(76.dp),
-            shape = RoundedCornerShape(12.dp)
-        )
-    } else {
+    val shape = RoundedCornerShape(12.dp)
+    Box(modifier = modifier) {
         Column(
-            modifier = modifier
-                .background(colors.bgColor, RoundedCornerShape(12.dp))
-                .border(1.dp, colors.borderColor, RoundedCornerShape(12.dp))
+            modifier = Modifier
+                .background(if (data.isLoading) Color.Transparent else colors.bgColor, shape)
+                .border(1.dp, if (data.isLoading) Color.Transparent else colors.borderColor, shape)
                 .padding(14.dp)
+                .then(if (data.isLoading) Modifier.alpha(0f) else Modifier)
         ) {
             Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
             Spacer(Modifier.height(6.dp))
@@ -236,6 +232,12 @@ private fun KpiTile(
                     )
                 }
             }
+        }
+        if (data.isLoading) {
+            SkeletonBox(
+                modifier = Modifier.matchParentSize(),
+                shape = shape
+            )
         }
     }
 }
