@@ -25,7 +25,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Inbox
@@ -70,6 +69,8 @@ import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.ScreenHeader
 import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.FileOpen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
@@ -551,7 +552,7 @@ internal fun ReportCard(
                             color = AgarthaTheme.colors.textSecondary,
                         )
                         ReportIconAction(
-                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            icon = AgarthaIcons.FileOpen,
                             contentDescription = stringResource(R.string.reports_open_pdf),
                             onClick = onOpenPdf,
                         )
@@ -574,7 +575,7 @@ internal fun ReportCard(
                             color = AgarthaTheme.colors.textSecondary,
                         )
                         ReportIconAction(
-                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            icon = AgarthaIcons.FileOpen,
                             contentDescription = stringResource(R.string.reports_open_csv),
                             onClick = onOpenCsv,
                         )
