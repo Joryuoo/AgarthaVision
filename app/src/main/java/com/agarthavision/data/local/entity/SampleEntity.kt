@@ -132,4 +132,8 @@ data class SampleEntity(
      */
     @ColumnInfo(name = "deleted_at")
     val deletedAt: Long? = null,
+
+    /** Set to `true` when a sample's findings are modified post-verification. */
+    @ColumnInfo(name = "is_edited", defaultValue = "0")
+    val isEdited: Boolean = false,
 )

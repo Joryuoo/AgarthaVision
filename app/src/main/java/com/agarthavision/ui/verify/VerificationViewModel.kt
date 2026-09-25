@@ -106,8 +106,8 @@ data class VerificationUiState(
      * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
      * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
      */
-    val openedFindings: List<Finding> = emptyList(),
-    val openedNote: String = "",
+    val openedFindings: List<Finding> = findings,
+    val openedNote: String = userNote,
     /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
     val pendingLeave: LeaveIntent? = null,
 ) {

@@ -48,12 +48,17 @@ class SubmitVerificationUseCase @Inject constructor(
         // Setting status back to VERIFIED is what re-arms sync on an edit: an already-SYNCED
         // sample re-enters getSamplesPendingSync, so SyncPendingDataUseCase pushes the edit
         // when connectivity returns. Without it an offline edit would never reach Supabase.
+        val existingSample = sampleDao.getSampleById(sampleId)
+        val isEdited = existingSample?.isEdited == true ||
+            (existingSample != null && existingSample.status != SampleStatus.FLAGGED.value)
+
         sampleDao.updateSampleOnVerify(
             sampleId = sampleId,
             status = SampleStatus.VERIFIED.value,
             verifiedAt = verifiedAt.toEpochMilli(),
             needsReannotation = missedEgg == true,
             userNote = userNote?.takeIf { it.isNotBlank() },
+            isEdited = isEdited,
         )
 
         // A rejected box still persists, as a labelled FALSE_POSITIVE row — that is what makes

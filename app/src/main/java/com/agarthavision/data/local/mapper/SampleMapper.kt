@@ -18,6 +18,7 @@ fun Sample.toEntity(): SampleEntity =
         needsReannotation = needsReannotation,
         userNote = userNote,
         isManual = isManual,
+        isEdited = isEdited,
         status = status.value,
     )
 
@@ -35,5 +36,6 @@ fun SampleEntity.toDomain(): Sample =
         needsReannotation = needsReannotation,
         userNote = userNote,
         isManual = isManual,
+        isEdited = isEdited,
         status = SampleStatus.entries.firstOrNull { it.value == status } ?: SampleStatus.FLAGGED,
     )

@@ -35,14 +35,29 @@ open class ReportRemoteDataSource @Inject constructor(
     private val gson: Gson,
 ) {
     /**
-     * Inserts the report row matching `public.reports` in `0001_init.sql`.
+     * Writes the report row matching `public.reports` in `0001_init.sql`, or leaves the row
+     * alone when the server already has it.
+     *
+     * **Insert-if-absent, not a true upsert.** A plain insert made every retry conflict on the
+     * primary key, so a report whose row had already landed was parked in `sync_failed` and
+     * re-uploaded its files on every pass without ever completing (14zcqnthrx9). A conflicting
+     * id now does nothing and the write succeeds, so the caller marks the report synced.
+     *
+     * Nothing is lost by not updating. A report row never changes once generated: regenerating
+     * mints a new id, and the only later local edits are the sync status and this device's own
+     * file paths, neither of which belongs on the server. `0001_init.sql` also grants `reports`
+     * no UPDATE policy, which an `ON CONFLICT DO UPDATE` would need; `DO NOTHING` needs only
+     * `reports_insert_own`. Same shape as the predictions write in `SampleRemoteDataSource`.
      *
      * @throws IllegalStateException when no Supabase user session is available.
      */
     open suspend fun upsertReport(report: ReportEntity) {
         val userId = supabase.auth.currentUserOrNull()?.id
             ?: error("A Supabase user session is required to sync reports.")
-        supabase.postgrest[REPORTS_TABLE].insert(report.toInsertRow(userId))
+        supabase.postgrest[REPORTS_TABLE].upsert(report.toInsertRow(userId)) {
+            onConflict = "id"
+            ignoreDuplicates = true
+        }
     }
 
     /**

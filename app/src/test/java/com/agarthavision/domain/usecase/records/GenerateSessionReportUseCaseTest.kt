@@ -165,6 +165,41 @@ class GenerateSessionReportUseCaseTest {
         assertTrue(result.isFailure)
     }
 
+    @Test
+    fun `refuses a session with no verified samples and writes nothing`() = runTest {
+        // 86d4bzm9k. getSamplesForSession leaves out frames still in the queue, so an empty
+        // list is a session whose every sample is unverified, or one with none at all.
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val syncScheduler = RecordingSyncScheduler()
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(samples = emptyList()),
+            detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
+            findingDao = org.mockito.kotlin.mock(),
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
+            syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = syncScheduler,
+        )
+
+        val result = useCase("session-1", ReportFormat.PDF)
+
+        assertTrue(result.isFailure)
+        assertEquals(
+            GenerateSessionReportUseCase.NO_VERIFIED_SAMPLES_MESSAGE,
+            result.exceptionOrNull()?.message,
+        )
+        assertNull(reportRepository.lastInserted)
+        assertNull(reportFileStore.lastPdfReportId)
+        assertNull(reportFileStore.lastReportId)
+        assertEquals(0, syncScheduler.requests)
+    }
+
     private fun standardUseCase(
         reportRepository: FakeReportRepository,
         reportFileStore: FakeReportFileStore,
