@@ -25,10 +25,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.SearchOff
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -52,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -455,7 +458,7 @@ private fun SpeciesFilterDialog(
 }
 
 @Composable
-private fun ReportCard(
+internal fun ReportCard(
     report: Report,
     onSessionClick: () -> Unit,
     onOpenPdf: () -> Unit,
@@ -532,26 +535,55 @@ private fun ReportCard(
                 ),
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (report.pdfFilePath != null) {
-                    ActionChip(
-                        label = stringResource(R.string.reports_open_pdf),
-                        onClick = onOpenPdf,
-                    )
-                    ActionChip(
-                        label = stringResource(R.string.reports_share_pdf),
-                        onClick = onSharePdf,
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.reports_format_pdf),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AgarthaTheme.colors.textSecondary,
+                        )
+                        ReportIconAction(
+                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            contentDescription = stringResource(R.string.reports_open_pdf),
+                            onClick = onOpenPdf,
+                        )
+                        ReportIconAction(
+                            icon = Icons.Outlined.Share,
+                            contentDescription = stringResource(R.string.reports_share_pdf),
+                            onClick = onSharePdf,
+                        )
+                    }
                 }
                 if (report.csvFilePath != null) {
-                    ActionChip(
-                        label = stringResource(R.string.reports_open_csv),
-                        onClick = onOpenCsv,
-                    )
-                    ActionChip(
-                        label = stringResource(R.string.reports_share_csv),
-                        onClick = onShareCsv,
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.reports_format_csv),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AgarthaTheme.colors.textSecondary,
+                        )
+                        ReportIconAction(
+                            icon = Icons.AutoMirrored.Outlined.OpenInNew,
+                            contentDescription = stringResource(R.string.reports_open_csv),
+                            onClick = onOpenCsv,
+                        )
+                        ReportIconAction(
+                            icon = Icons.Outlined.Share,
+                            contentDescription = stringResource(R.string.reports_share_csv),
+                            onClick = onShareCsv,
+                        )
+                    }
                 }
             }
         }
@@ -559,23 +591,25 @@ private fun ReportCard(
 }
 
 @Composable
-private fun ActionChip(
-    label: String,
+private fun ReportIconAction(
+    icon: ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
+            .size(32.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(AgarthaTheme.colors.surfaceVariant)
             .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = label,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textPrimary,
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = AgarthaTheme.colors.textPrimary,
+            modifier = Modifier.size(18.dp),
         )
     }
 }

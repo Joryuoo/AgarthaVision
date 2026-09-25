@@ -239,6 +239,8 @@
     <string name="reports_open_csv">Open CSV</string>
     <string name="reports_share_pdf">Share PDF</string>
     <string name="reports_share_csv">Share CSV</string>
+    <string name="reports_format_pdf">PDF</string>
+    <string name="reports_format_csv">CSV</string>
     <string name="reports_total_count">%1$d reports</string>
     <string name="reports_session_link">Session %1$s</string>
     <string name="reports_species_more">+%1$d more</string>
