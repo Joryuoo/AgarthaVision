@@ -140,7 +140,16 @@ class SessionsViewModel @Inject constructor(
 
     // Debounced search prevents a new Room query on every keystroke; raw searchQuery
     // is still combined into the final state so the text field reflects input immediately.
-    private val debouncedSearch = searchQuery.debounce(SEARCH_DEBOUNCE_MS)
+    // The empty/initial query is exempt from the debounce: a screen's first load must not
+    // wait for a keystroke-coalescing window that doesn't apply to it. Without this, the
+    // debounce timer delayed the very first Room query on every fresh SessionsViewModel
+    // instance (i.e. every time a medtech re-enters a patient's Sessions screen), which is
+    // what caused a skeleton flash on every navigation regardless of actual query speed.
+    // distinctUntilChanged guards against a redundant re-emission if the query is cleared
+    // and something else briefly re-triggers the same empty value.
+    private val debouncedSearch = searchQuery
+        .debounce { query -> if (query.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
+        .distinctUntilChanged()
 
     /** Bundled upstream inputs, re-emitted whenever any input changes. */
     private data class SessionsInputs(

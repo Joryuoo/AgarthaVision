@@ -1085,6 +1085,59 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // 14zcqntj20y: the empty/initial query is exempt from the 300ms debounce
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `fresh viewModel queries repository without waiting out the debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                // Do not call advanceUntilIdle() first — that would mask a still-present
+                // 300ms delay. runCurrent() only drains work scheduled for "now"; if the
+                // empty query were still debounced, no repo call would exist yet here.
+                testScheduler.runCurrent()
+
+                assertTrue(
+                    "the initial empty search query must not wait out SEARCH_DEBOUNCE_MS " +
+                        "before the first repo query fires",
+                    recording.capturedArgs.isNotEmpty(),
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `non-empty query typed immediately still waits out the full debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                testScheduler.runCurrent()
+                val countAfterInitial = recording.capturedArgs.size
+
+                vm.onSearchQueryChanged("x")
+                testScheduler.runCurrent()
+                assertEquals(
+                    "a non-empty query must not fire before its debounce window elapses",
+                    countAfterInitial,
+                    recording.capturedArgs.size,
+                )
+
+                advanceTimeBy(SEARCH_DEBOUNCE_MS)
+                testScheduler.runCurrent()
+                assertTrue(
+                    "a non-empty query must fire once its 300ms debounce window elapses",
+                    recording.capturedArgs.size > countAfterInitial,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Patient Identity Preview Header
     // ---------------------------------------------------------------------------
 
