@@ -32,7 +32,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarDuration
-import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
@@ -92,7 +91,8 @@ internal data class SessionDetailUi(
 internal data class SampleUi(
     val id: String,
     val source: SampleSource,
-    val species: String,
+    /** Null for a model-captured sample whose every detection the medtech rejected: no eggs. */
+    val species: String?,
     val confidence: Int?,
     val filePath: String?,
     val storagePath: String?,
@@ -203,7 +203,7 @@ fun SessionDetailScreen(
                 onOpenVerifyQueue = onOpenVerifyQueue,
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        snackbarHost = { SessionDetailSnackbarHost(snackbarHostState) },
         containerColor = AgarthaTheme.colors.background,
         // AgarthaNavGraph zeroes contentWindowInsets app-wide, so each screen applies
         // its own. Without this the app bar draws under the status bar.
@@ -279,7 +279,7 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         SampleUi(
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
-            species = primary?.expertClass ?: primary?.classLabel ?: "Manual",
+            species = primary?.let { it.expertClass ?: it.classLabel } ?: if (hasAi) null else "Manual",
             confidence = primary?.confidence?.let { (it * CONFIDENCE_PERCENT_MULTIPLIER).toInt() },
             filePath = item.sample.filePath,
             storagePath = item.sample.storagePath,

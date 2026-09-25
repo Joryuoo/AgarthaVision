@@ -35,11 +35,17 @@ data class SampleRecordItem(
     val sample: Sample,
     val detections: List<Detection>,
 ) {
+    /**
+     * The detection a sample card is labelled with, or null when there is no egg to name.
+     *
+     * A rejected detection never qualifies, not even as a fallback. When the medtech rejected
+     * every box the model drew, the sample is negative, and labelling its card with the species
+     * the medtech just ruled out would state the opposite of the verified result.
+     */
     val primaryDetection: Detection?
         get() = detections
             .filterNot { it.verdict == DetectionVerdict.FALSE_POSITIVE }
             .maxByOrNull { it.confidence }
-            ?: detections.maxByOrNull { it.confidence }
 }
 
 /**

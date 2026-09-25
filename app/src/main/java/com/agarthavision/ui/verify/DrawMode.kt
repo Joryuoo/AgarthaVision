@@ -210,9 +210,10 @@ private fun DrawControlButton(
  * What the medtech is drawing for, in the words the screen they came from used.
  *
  * An added egg is named the way the reveal list names it — species, then which egg of the field's
- * total — because those are the numbers someone at a microscope is holding in their head. The
- * ordinal counts from the boxes the model already supplied, so "egg 10 of 23" means the tenth egg
- * of that species in this field rather than the first one the medtech happens to be locating.
+ * total, with its developmental stage shown in parentheses when one is set — because those are
+ * the numbers someone at a microscope is holding in their head. The ordinal counts from the boxes
+ * the model already supplied, so "egg 10 of 23" means the tenth egg of that species in this field
+ * rather than the first one the medtech happens to be locating.
  */
 @Composable
 private fun VerificationUiState.drawTargetCaption(): String {
@@ -229,9 +230,9 @@ private fun VerificationUiState.drawTargetCaption(): String {
             val species = finding.answers.speciesLabel.orEmpty()
             val stage = finding.answers.stage
             val otherStageText = finding.answers.otherStageText
-            stringResource(
-                R.string.verify_locate_egg_row,
+            locateEggRowText(
                 species,
+                finding.answers.summaryStageText(),
                 findings.boxedCountOf(species, stage, otherStageText) + target.slot + 1,
                 findings.fieldTotalOf(species, stage, otherStageText),
             )

@@ -60,7 +60,9 @@
     <string name="verify_locate_eggs_section">LOCATE EGGS</string>
     <string name="verify_locate_eggs">Locate eggs · %1$d of %2$d located</string>
     <string name="verify_locate_eggs_note">Optional. Drawing where they are improves future results.</string>
+    <string name="verify_locate_egg_title">%1$s (egg %2$d of %3$d)</string>
     <string name="verify_locate_egg_row">%1$s · egg %2$d of %3$d</string>
+    <string name="verify_locate_egg_row_staged">%1$s (%2$s) · egg %3$d of %4$d</string>
     <string name="verify_add_species_blocked">Finish the species above first: choose a species and enter its egg count.</string>
     <string name="verify_added_species_not_chosen">Species not chosen</string>
     <string name="verify_added_species_unfinished">Not finished. Tap to complete.</string>
@@ -112,7 +114,7 @@
     <string name="verify_detection_counter">Detection %1$d of %2$d</string>
     <string name="verify_boxes_toggle">Boxes</string>
     <string name="verify_draw_accept">Save box</string>
-    <string name="verify_draw_box">Draw Box</string>
+    <string name="verify_draw_box">Draw</string>
     <string name="verify_redraw_box">Redraw</string>
     <string name="verify_box_replaced">You replaced this box, so the model\'s placement stays recorded as wrong.</string>
     <string name="verify_draw_cancel">Cancel</string>
@@ -249,6 +251,8 @@
     <string name="reports_open_csv">Open CSV</string>
     <string name="reports_share_pdf">Share PDF</string>
     <string name="reports_share_csv">Share CSV</string>
+    <string name="reports_format_pdf">PDF</string>
+    <string name="reports_format_csv">CSV</string>
     <string name="reports_total_count">%1$d reports</string>
     <string name="reports_session_link">Session %1$s</string>
     <string name="reports_species_more">+%1$d more</string>
@@ -278,6 +282,7 @@
     <string name="report_pager_previous">Previous page</string>
     <string name="report_pager_next">Next page</string>
     <string name="report_empty">No reports yet.</string>
+    <string name="report_needs_verified_sample">Verify at least one sample to generate a report.</string>
     <string name="report_status_pending">Pending</string>
     <string name="report_status_synced">Synced</string>
     <string name="records_status_pending_sync">Pending sync</string>
@@ -332,9 +337,15 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
     <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
+    <string name="session_detail_sample_no_eggs">No eggs</string>
     <string name="sample_detail_image_desc">Verified microscopy sample image</string>
     <string name="sample_detail_no_detections">No detections recorded on this sample.</string>
     <string name="sample_detail_detections_heading">DETECTIONS</string>
+    <string name="sample_detail_no_confirmed">No eggs confirmed on this sample.</string>
+    <string name="sample_detail_misplaced_heading">MISPLACED BOX</string>
+    <string name="sample_detail_misplaced_caption">Counted, location not recorded</string>
+    <string name="sample_detail_rejected_heading">REJECTED</string>
+    <string name="sample_detail_rejected_caption">Not an egg, not counted</string>
     <string name="sample_detail_view_detection">View detection</string>
     <string name="sample_detail_image_unavailable">Image unavailable on this device.</string>
     <string name="sample_detail_hide_box">Hide the box for %1$s</string>

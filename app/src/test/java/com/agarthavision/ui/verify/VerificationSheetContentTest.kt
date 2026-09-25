@@ -15,6 +15,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasAnySibling
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -939,6 +940,27 @@ class VerificationSheetContentTest {
             .assertTextContains("Ascaris lumbricoides · egg 2 of 3")
     }
 
+    /** The draw screen's caption carries the stage too, same as the reveal list row. */
+    @Test
+    fun `the drawing surface names the egg's stage when one is set`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            stage = EggStage.CORTICATED_FERTILIZED,
+                            fieldTotal = 2,
+                        ),
+                    ),
+                ),
+            ).copy(drawTarget = DrawTarget(findingIndex = 0, slot = 0)),
+        )
+
+        composeRule.onNodeWithTag(VerifyTestTags.DRAW_MODE_TARGET)
+            .assertTextContains("Ascaris lumbricoides (Corticated Fertilized) · egg 1 of 2")
+    }
+
     /** No box drawn yet, so there is nothing to discard and nothing offered. */
     @Test
     fun `an unlocated egg offers no way to remove a box`() {
@@ -1240,6 +1262,92 @@ class VerificationSheetContentTest {
         // The slot travels with the request. Addressing the row alone is what let two eggs of
         // one species collide on a single box.
         assertEquals(listOf(0 to 1), r.beganDraw)
+    }
+
+    @Test
+    fun `a locate row shows the stage in parentheses when one is set`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            stage = EggStage.CORTICATED_FERTILIZED,
+                            fieldTotal = 2,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).performClick()
+
+        composeRule.onNodeWithText("Ascaris lumbricoides (egg 1 of 2)")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(
+            hasText("Corticated Fertilized") and hasAnySibling(hasText("Ascaris lumbricoides (egg 1 of 2)")),
+        )
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `a locate row shows typed OTHER stage text`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.ASCARIS,
+                            stage = EggStage.OTHER,
+                            otherStageText = "Embryonated",
+                            fieldTotal = 1,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).performClick()
+
+        composeRule.onNodeWithText("Ascaris lumbricoides (egg 1 of 1)")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNode(
+            hasText("Embryonated") and hasAnySibling(hasText("Ascaris lumbricoides (egg 1 of 1)")),
+        )
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    /**
+     * A stage left over from a species change never surfaces here either — same rule as the
+     * summary card ("a leftover stage never shows when the species is Other").
+     */
+    @Test
+    fun `a locate row drops a stale stage that the current species doesn't support`() {
+        setContent(
+            noModelOutputState(
+                findings = listOf(
+                    Finding(
+                        answers = VerificationAnswers(
+                            species = EggSpecies.OTHER,
+                            otherSpeciesText = "Taenia",
+                            stage = EggStage.CORTICATED_FERTILIZED,
+                            fieldTotal = 1,
+                        ),
+                    ),
+                ),
+            ),
+        )
+
+        sheetNode(VerifyTestTags.LOCATE_TOGGLE).performClick()
+
+        composeRule.onNodeWithText("Taenia (egg 1 of 1)").performScrollTo().assertIsDisplayed()
+        composeRule.onNode(
+            hasText("Corticated Fertilized") and hasAnySibling(hasText("Taenia (egg 1 of 1)")),
+        ).assertDoesNotExist()
     }
 
     /** A species the model's boxes already cover has nothing left to locate. */
