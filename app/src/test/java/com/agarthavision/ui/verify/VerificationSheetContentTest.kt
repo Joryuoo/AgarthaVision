@@ -780,7 +780,7 @@ class VerificationSheetContentTest {
         // queue screen, or tombstoned. Showing "Sample 0 of 4" was the bug.
         setContent(state(frameIndexInQueue = 0, queueSize = 4))
 
-        composeRule.onNodeWithText("Not in queue").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Verified sample · Editable").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithText("Sample 0 of 4").assertDoesNotExist()
     }
 

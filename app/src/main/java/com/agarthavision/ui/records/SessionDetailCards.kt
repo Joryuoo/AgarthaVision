@@ -303,6 +303,20 @@ internal fun SampleRow(
                         color = colors.textSecondary,
                     )
                 }
+                if (sample.isEdited) {
+                    Box(
+                        modifier = Modifier
+                            .background(colors.warningTint, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.badge_edited),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.warningText,
+                        )
+                    }
+                }
             }
             Spacer(Modifier.height(4.dp))
             val fontStyle = if (sample.species.isBinomial()) {

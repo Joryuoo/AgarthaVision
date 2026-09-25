@@ -164,6 +164,7 @@ fun VerificationSheet(
                 onConfirmLeave = viewModel::onConfirmLeave,
                 onDismissLeave = viewModel::onDismissLeave,
             ),
+            isEditing = prior != null,
         )
         AgarthaToastHost(
             state = toastState,
@@ -181,6 +182,7 @@ fun VerificationSheet(
 internal fun VerificationSheetContent(
     state: VerificationUiState,
     actions: VerificationSheetActions,
+    isEditing: Boolean = false,
 ) {
     val frame = state.frame ?: return
 
@@ -189,6 +191,7 @@ internal fun VerificationSheetContent(
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
     val showDiscardConfirm = remember { mutableStateOf(false) }
+    val showDiscardChangesDialog = remember { mutableStateOf(false) }
     // The sample's label is the moment it was captured. The same label the queue row carries,
     // so the row the medtech tapped names the screen they land on.
     val capturedAtLabel = remember(frame.capturedAt) {
@@ -209,9 +212,15 @@ internal fun VerificationSheetContent(
         ) {
             // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
             ScreenTopBar(
-                title = capturedAtLabel,
-                metaText = "",
-                onBack = actions.onCancel,
+                title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
+                metaText = if (isEditing) capturedAtLabel else "",
+                onBack = {
+                    if (state.hasUnsavedChanges || isEditing) {
+                        showDiscardChangesDialog.value = true
+                    } else {
+                        actions.onCancel()
+                    }
+                },
             )
 
             Column(
@@ -387,10 +396,16 @@ internal fun VerificationSheetContent(
 
                     SheetActionRow(
                         SheetActionRowState(
-                            primaryLabel = "Submit",
+                            primaryLabel = if (isEditing) "Save" else "Submit",
                             secondaryLabel = "Discard",
                             onPrimaryClick = actions.onSubmit,
-                            onSecondaryClick = { showDiscardConfirm.value = true },
+                            onSecondaryClick = {
+                                if (state.hasUnsavedChanges || isEditing) {
+                                    showDiscardChangesDialog.value = true
+                                } else {
+                                    showDiscardConfirm.value = true
+                                }
+                            },
                             primaryLoading = state.isSubmitting,
                             primaryEnabled = state.canSubmit,
                         )
@@ -428,10 +443,42 @@ internal fun VerificationSheetContent(
             )
         }
 
-        if (state.pendingLeave != null) {
-            LeaveSampleDialog(
-                onConfirm = actions.onConfirmLeave,
-                onDismiss = actions.onDismissLeave,
+        if (showDiscardChangesDialog.value || state.pendingLeave != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    showDiscardChangesDialog.value = false
+                    actions.onDismissLeave()
+                },
+                shape = DialogShape,
+                containerColor = AgarthaTheme.colors.surface,
+                titleContentColor = AgarthaTheme.colors.textPrimary,
+                textContentColor = AgarthaTheme.colors.textPrimary,
+                title = { Text(stringResource(R.string.verify_discard_changes_title)) },
+                text = { Text(stringResource(R.string.verify_discard_changes_body)) },
+                confirmButton = {
+                    AgarthaButton(
+                        onClick = {
+                            showDiscardChangesDialog.value = false
+                            actions.onConfirmLeave()
+                        },
+                        variant = AgarthaButtonVariant.Destructive,
+                        modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
+                    ) {
+                        Text(stringResource(R.string.verify_discard_changes_confirm))
+                    }
+                },
+                dismissButton = {
+                    AgarthaButton(
+                        onClick = {
+                            showDiscardChangesDialog.value = false
+                            actions.onDismissLeave()
+                        },
+                        variant = AgarthaButtonVariant.Secondary,
+                        modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
+                    ) {
+                        Text(stringResource(R.string.verify_discard_changes_keep))
+                    }
+                },
             )
         }
 
@@ -453,43 +500,7 @@ internal fun VerificationSheetContent(
     }
 }
 
-/**
- * Asks before a cycle button or back throws away edits that were never submitted.
- *
- * Nothing on the sheet is kept until Submit, and the cycle buttons sit right beside the frame
- * where a stray thumb lands, so leaving a sample that has edits on it is a question rather than
- * an accident. Keep editing is the dismiss action, so tapping outside the dialog is also "stay".
- */
-@Composable
-private fun LeaveSampleDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
-        titleContentColor = AgarthaTheme.colors.textPrimary,
-        textContentColor = AgarthaTheme.colors.textPrimary,
-        title = { Text(stringResource(R.string.verify_leave_title)) },
-        text = { Text(stringResource(R.string.verify_leave_body)) },
-        confirmButton = {
-            AgarthaButton(
-                onClick = onConfirm,
-                variant = AgarthaButtonVariant.Destructive,
-                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM),
-            ) {
-                Text(stringResource(R.string.verify_leave_confirm))
-            }
-        },
-        dismissButton = {
-            AgarthaButton(
-                onClick = onDismiss,
-                variant = AgarthaButtonVariant.Secondary,
-                modifier = Modifier.testTag(VerifyTestTags.LEAVE_DIALOG_DISMISS),
-            ) {
-                Text(stringResource(R.string.verify_leave_dismiss))
-            }
-        },
-    )
-}
+
 
 /**
  * Show / hide the model's boxes on the preview. Sits directly above the first question

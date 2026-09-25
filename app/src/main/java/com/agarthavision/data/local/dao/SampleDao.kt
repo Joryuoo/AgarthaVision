@@ -257,7 +257,8 @@ interface SampleDao {
         SET status = :status,
             verified_at = :verifiedAt,
             needs_reannotation = :needsReannotation,
-            user_note = :userNote
+            user_note = :userNote,
+            is_edited = :isEdited
         WHERE sample_id = :sampleId
         """,
     )
@@ -271,6 +272,7 @@ interface SampleDao {
         verifiedAt: Long,
         needsReannotation: Boolean,
         userNote: String?,
+        isEdited: Boolean = false,
     )
 
     @Query(
