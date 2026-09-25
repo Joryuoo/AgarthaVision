@@ -336,9 +336,15 @@
     <string name="sample_detail_no">No</string>
     <string name="sample_detail_image_no_storage_path">Sample image is not available locally and has not synced to Supabase.</string>
     <string name="sample_detail_image_remote_failed">Sample image could not be loaded from Supabase.</string>
+    <string name="session_detail_sample_no_eggs">No eggs</string>
     <string name="sample_detail_image_desc">Verified microscopy sample image</string>
     <string name="sample_detail_no_detections">No detections recorded on this sample.</string>
     <string name="sample_detail_detections_heading">DETECTIONS</string>
+    <string name="sample_detail_no_confirmed">No eggs confirmed on this sample.</string>
+    <string name="sample_detail_misplaced_heading">MISPLACED BOX</string>
+    <string name="sample_detail_misplaced_caption">Counted, location not recorded</string>
+    <string name="sample_detail_rejected_heading">REJECTED</string>
+    <string name="sample_detail_rejected_caption">Not an egg, not counted</string>
     <string name="sample_detail_view_detection">View detection</string>
     <string name="sample_detail_image_unavailable">Image unavailable on this device.</string>
     <string name="sample_detail_hide_box">Hide the box for %1$s</string>

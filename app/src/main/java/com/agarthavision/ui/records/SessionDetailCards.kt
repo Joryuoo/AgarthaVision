@@ -215,6 +215,7 @@ internal fun SampleTile(
     sample: SampleUi,
     onClick: () -> Unit,
 ) {
+    val species = sample.speciesLabel()
     Box(
         modifier = Modifier
             .aspectRatio(1f)
@@ -222,8 +223,14 @@ internal fun SampleTile(
             .background(AppColors.MicroscopeBrush)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "Sample ${sample.id}, ${sample.species}" +
-                    (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
+                // No confidence and not manual means the medtech rejected every box: no eggs,
+                // which the species label already says. It is not a manual capture.
+                val provenance = when {
+                    sample.confidence != null -> ", ${sample.confidence} percent confidence"
+                    sample.source == SampleSource.Manual -> ", manual capture"
+                    else -> ""
+                }
+                contentDescription = "Sample ${sample.id}, $species$provenance"
             },
     ) {
         SubcomposeAsyncImage(
@@ -247,7 +254,7 @@ internal fun SampleTile(
             )
         }
         SpeciesBadge(
-            text = sample.species,
+            text = species,
             isManual = sample.source == SampleSource.Manual,
             modifier = Modifier
                 .align(Alignment.BottomStart)
@@ -319,13 +326,14 @@ internal fun SampleRow(
                 }
             }
             Spacer(Modifier.height(4.dp))
-            val fontStyle = if (sample.species.isBinomial()) {
+            val species = sample.speciesLabel()
+            val fontStyle = if (species.isBinomial()) {
                 androidx.compose.ui.text.font.FontStyle.Italic
             } else {
                 androidx.compose.ui.text.font.FontStyle.Normal
             }
             Text(
-                text = sample.species,
+                text = species,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontStyle = fontStyle,
@@ -411,3 +419,11 @@ internal fun EmptyStateGraphic() {
         )
     }
 }
+
+/**
+ * What a sample card calls the sample. A null species means the model boxed something and the
+ * medtech rejected all of it, which is a negative result and says so rather than going blank.
+ */
+@Composable
+private fun SampleUi.speciesLabel(): String =
+    species ?: stringResource(R.string.session_detail_sample_no_eggs)
