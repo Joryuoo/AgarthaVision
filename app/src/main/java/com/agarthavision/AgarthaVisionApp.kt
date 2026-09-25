@@ -113,10 +113,19 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
      * App-wide ImageLoader. Coil calls this once (lazily, before the first load), at which
      * point Hilt field injection is already complete, so [sampleImageRepository] is ready.
      *
-     * Disk cache is fixed at 100MB (vs Coil's default of ~2% of disk space, clamped between
-     * 10MB and 250MB) and the memory cache is sized at 25% of the memory class (vs Coil's
-     * default 20%), both sized up because the records and verification queue screens are
-     * image-heavy.
+     * Disk cache is fixed at 250MB, matching (not exceeding) Coil's own maximum clamp of
+     * ~2% of disk space, capped between 10MB and 250MB. This is a floor-raise, not a
+     * reduction: devices with less storage that would otherwise land below the 250MB cap
+     * (roughly anything under ~12.5GB of storage) now get the full amount instead of a
+     * scaled-down one, while larger-storage devices aren't given more than Coil would already
+     * grant. Samples are resized to 640x640 JPEG (~50-150KB each), so 250MB holds several
+     * thousand images for the image-heavy records and verification queue screens.
+     *
+     * Memory cache is fixed at 25% of the memory class (vs Coil's default of 20%, or 15% on
+     * low-RAM devices). This is a flat override applied uniformly regardless of device RAM
+     * class: it does NOT preserve Coil's own low-RAM-device reduction, so low-RAM devices get
+     * a relatively larger memory cache than Coil would default to. This is an accepted
+     * tradeoff for this image-heavy app, not an oversight.
      */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
@@ -148,8 +157,10 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
 
     private companion object {
         private const val TAG = "AgarthaVisionApp"
+        // Uniform override regardless of device RAM class; see newImageLoader() KDoc.
         private const val MEMORY_CACHE_PERCENT = 0.25
-        private const val DISK_CACHE_MAX_BYTES = 100L * 1024 * 1024
+        // Matches Coil's own maximum clamp; see newImageLoader() KDoc.
+        private const val DISK_CACHE_MAX_BYTES = 250L * 1024 * 1024
         private const val IMAGE_CACHE_DIR = "image_cache"
     }
 }

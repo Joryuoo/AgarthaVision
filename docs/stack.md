@@ -45,7 +45,11 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 **Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
 
 The app-wide Coil `ImageLoader` is configured in `AgarthaVisionApp.newImageLoader()`: disk
-cache fixed at 100MB, memory cache at 25% of the memory class, and `respectCacheHeaders(false)`
+cache fixed at 250MB (matching Coil's own maximum clamp of ~2% of disk space, capped between
+10MB and 250MB, so devices with less storage still get the full 250MB instead of a scaled-down
+amount, while larger-storage devices aren't given more than Coil would already grant; samples
+are resized to 640x640 JPEG at ~50-150KB each, so 250MB holds several thousand images), memory
+cache at 25% of the memory class, and `respectCacheHeaders(false)`
 because sample image storage paths are stable/content-addressed (uploads `upsert` to the same
 path, so a cached response never needs revalidation). There is deliberately no OkHttp response
 cache configured on the inference client or on any Supabase-backed client: the inference API is
