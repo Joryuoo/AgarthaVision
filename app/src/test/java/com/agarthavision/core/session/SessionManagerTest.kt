@@ -7,8 +7,11 @@ import com.agarthavision.data.supabase.SessionRemoteDataSource
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -137,6 +140,75 @@ class SessionManagerTest {
             assertNull(manager.restoreActiveSession())
             assertNull(activeSessionIdStore.stored)
             assertTrue(manager.state.value is SessionState.Idle)
+        }
+
+    @Test
+    fun `restoreActiveSession is a no-op when the state is already Active`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Guards against the race introduced by calling restore from AgarthaVisionApp.onCreate
+            // off the main thread while a user-initiated startSession/resumeSession can run
+            // concurrently: a session already active must never be clobbered by a stale restore.
+            whenever(deviceIdProvider.id).thenReturn("device-1")
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+            val started = manager.startSession(label = "Smear E", patientId = "patient-1")
+
+            // A different stored id than the one already active.
+            val other = sessionEntity(sessionId = "session-other")
+            whenever(sessionDao.getSessionById("session-other")).thenReturn(other)
+            activeSessionIdStore.stored = "session-other"
+
+            val restored = manager.restoreActiveSession()
+
+            assertNull(restored)
+            val state = manager.state.value
+            assertTrue(state is SessionState.Active)
+            assertEquals(started.sessionId, (state as SessionState.Active).session.sessionId)
+        }
+
+    @Test
+    fun `restoreActiveSession loses a genuine mid-flight race to a concurrent startSession`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Unlike the "already Active" test above (where startSession finishes before
+            // restore even begins), this suspends restore's dao lookup mid-flight so a real
+            // startSession can interleave and win the race the CAS guard exists to handle.
+            val storedEntity = sessionEntity(sessionId = "stored-session")
+            val gate = CompletableDeferred<Unit>()
+            val racyDao = object : SessionDao by sessionDao {
+                override suspend fun getSessionById(sessionId: String): SessionEntity? {
+                    gate.await()
+                    return sessionDao.getSessionById(sessionId)
+                }
+            }
+            whenever(sessionDao.getSessionById("stored-session")).thenReturn(storedEntity)
+            activeSessionIdStore.stored = "stored-session"
+
+            val racyManager = SessionManager(
+                sessionDao = racyDao,
+                remoteDataSource = remoteDataSource,
+                authRepository = authRepository,
+                deviceIdProvider = deviceIdProvider,
+                activeSessionIdStore = activeSessionIdStore,
+                syncScheduler = syncScheduler,
+            )
+
+            var restoreResult: SessionEntity? = null
+            val restoreJob = launch { restoreResult = racyManager.restoreActiveSession() }
+            // Runs restoreActiveSession up to its suspension point inside getSessionById,
+            // past the initial Idle check but before it has read the entity.
+            runCurrent()
+
+            whenever(deviceIdProvider.id).thenReturn("device-1")
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+            val started = racyManager.startSession(label = "Smear F", patientId = "patient-1")
+
+            // Let the stalled restore resume: it now finds state is no longer Idle.
+            gate.complete(Unit)
+            restoreJob.join()
+
+            assertNull(restoreResult)
+            val state = racyManager.state.value
+            assertTrue(state is SessionState.Active)
+            assertEquals(started.sessionId, (state as SessionState.Active).session.sessionId)
         }
 
     private fun sessionEntity(sessionId: String) = SessionEntity(

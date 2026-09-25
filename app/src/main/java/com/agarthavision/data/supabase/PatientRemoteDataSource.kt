@@ -27,8 +27,10 @@ import kotlinx.serialization.Serializable
  * definition of visibility that could drift from the policy.
  */
 class PatientRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Writes the patient row: insert first, update on primary-key conflict.
      *

@@ -18,8 +18,10 @@ import javax.inject.Inject
  * is `id`; this data source is the translation boundary between those shapes.
  */
 class SessionRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Returns the authenticated Supabase user id, or null when no session exists.
      */

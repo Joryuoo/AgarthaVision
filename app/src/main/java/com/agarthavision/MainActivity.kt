@@ -38,7 +38,8 @@ class MainActivity : ComponentActivity() {
         // Hold the splash until the first-run gate resolves. Reading the cached identity is
         // a fast disk read, but it is not instant, and without this the Dashboard composes
         // for a frame or two behind the login screen on a fresh install — which reads as a
-        // flash of someone else's data.
+        // flash of someone else's data. This gate is DataStore-only: resolving it never
+        // constructs the Supabase client or the session graph on this path (86d4byw6p).
         splash.setKeepOnScreenCondition { mainViewModel.authGate.value == AuthGate.Loading }
 
         super.onCreate(savedInstanceState)

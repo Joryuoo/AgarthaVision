@@ -540,7 +540,7 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
 }
 
 private class NoOpReportRemoteDataSource : com.agarthavision.data.supabase.ReportRemoteDataSource(
-    supabase = org.mockito.kotlin.mock(),
+    supabaseProvider = org.mockito.kotlin.mock(),
     gson = com.google.gson.Gson(),
 ) {
     override suspend fun upsertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit

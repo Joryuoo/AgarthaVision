@@ -36,6 +36,11 @@ object InferenceModule {
     @Singleton
     fun provideGson(): Gson = Gson()
 
+    /**
+     * No HTTP response cache is configured here: `/infer` is POST (uncacheable), and `/health`
+     * is a connectivity probe that must always hit the network — a cached response could make
+     * the app falsely report "online".
+     */
     @Provides
     @Singleton
     fun provideOkHttpClient(): OkHttpClient =

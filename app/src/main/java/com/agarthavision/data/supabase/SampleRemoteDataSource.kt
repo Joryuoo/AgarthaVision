@@ -24,8 +24,10 @@ import kotlin.time.Duration.Companion.minutes
  */
 @Suppress("TooManyFunctions")
 class SampleRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Uploads the sample image and writes its `samples`, `predictions` and `detections` rows.
      *

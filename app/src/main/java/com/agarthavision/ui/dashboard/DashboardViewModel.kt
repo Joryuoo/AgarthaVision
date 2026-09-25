@@ -24,10 +24,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Duration
@@ -130,12 +132,19 @@ class DashboardViewModel @Inject constructor(
 
     // Per ADR-007, drive identity from the cached local identity (survives offline cold
     // starts) rather than the live Supabase session, so the dashboard renders signed-out.
+    // No eager null seed here: `shareIn` with no initial value means downstream flows that
+    // key off identity stay unstarted (and `uiState` stays at its `isLoading = true` initial
+    // value) until DataStore actually emits a real identity - genuinely signed-out or
+    // signed-in - instead of momentarily reporting a confident "signed-out, zero everything".
     private val localIdentityFlow = observeLocalIdentityUseCase()
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+        .distinctUntilChanged()
+        .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
 
+    // No `stateIn` wrapper: kept as a shared (not state) flow so it has no eager null value
+    // of its own either, for the same reason as `localIdentityFlow` above.
     private val userIdFlow = localIdentityFlow
         .map { it?.userId }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+        .distinctUntilChanged()
 
     // KPI State — tolerates a null identity (signed-out / offline) by showing empty stats
     // instead of stalling the dashboard. Per ADR-007.

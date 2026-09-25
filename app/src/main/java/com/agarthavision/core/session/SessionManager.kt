@@ -112,20 +112,41 @@ class SessionManager @Inject constructor(
     /**
      * Re-attaches to the session the medtech was last working in, if it is still open.
      *
-     * Called once at app start. Without it a process restart would leave the app idle while a
-     * session is still live, and the verification queue would render empty - see
-     * [ActiveSessionIdStore].
+     * Called once at app start, from `AgarthaVisionApp.onCreate`, off the main thread — the
+     * client can act on `state` (via `startSession`/`resumeSession`) concurrently while this
+     * runs, whereas previously both were serialized on main through `MainViewModel`. Every
+     * step here is written to be safe against that race:
+     *
+     * - Bails immediately unless `state` is still [SessionState.Idle], so a session already
+     *   started or resumed by the user is never disturbed.
+     * - Reads the stored pointer and looks up the entity without touching `state`.
+     * - Only clears the stored pointer for a dangling id while `state` is still `Idle` — a
+     *   concurrent `startSession` may have written a new pointer, and clearing it here would
+     *   clobber that.
+     * - Publishes the restored entity with a `compareAndSet` from `Idle`, not a plain write:
+     *   if the state moved between the checks above and here, the CAS fails and this returns
+     *   `null` rather than overwriting whatever the user's action put there.
      *
      * A stored id that no longer resolves clears itself rather than throwing: the pointer is a
      * convenience, and failing to restore it must never stop the app launching.
      */
     suspend fun restoreActiveSession(): SessionEntity? {
-        val storedId = activeSessionIdStore.read() ?: return null
-        return runCatching { resumeSession(storedId) }
-            .getOrElse {
+        val entity: SessionEntity? = if (_state.value != SessionState.Idle) {
+            null
+        } else {
+            val storedId = activeSessionIdStore.read()
+            val resolved = storedId?.let { runCatching { sessionDao.getSessionById(it) }.getOrNull() }
+            if (resolved == null && storedId != null && _state.value == SessionState.Idle) {
                 activeSessionIdStore.write(null)
-                null
             }
+            resolved
+        }
+
+        val activated = entity != null && _state.compareAndSet(
+            SessionState.Idle,
+            SessionState.Active(entity, Instant.ofEpochMilli(entity.startedAt)),
+        )
+        return if (activated) entity else null
     }
 
     /**

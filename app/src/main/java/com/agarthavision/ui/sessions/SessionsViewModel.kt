@@ -13,6 +13,7 @@ import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import android.database.sqlite.SQLiteConstraintException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
@@ -100,6 +101,7 @@ class SessionsViewModel @Inject constructor(
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
+    private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -126,6 +128,11 @@ class SessionsViewModel @Inject constructor(
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
     private val userIdFlow = observeLocalIdentityUseCase().map { it?.userId }
 
+    // Cold, per ObserveSyncInProgressUseCase's contract - no `.onStart { emit(false) }` here,
+    // since that would reintroduce a transient "not syncing" reading before the scheduler's
+    // real state is known, which is the same confident-zero bug this ticket fixes.
+    private val syncInProgressFlow = observeSyncInProgressUseCase()
+
     private val startDate = MutableStateFlow<LocalDate?>(null)
     private val endDate = MutableStateFlow<LocalDate?>(null)
     private val searchQuery = MutableStateFlow("")
@@ -133,7 +140,16 @@ class SessionsViewModel @Inject constructor(
 
     // Debounced search prevents a new Room query on every keystroke; raw searchQuery
     // is still combined into the final state so the text field reflects input immediately.
-    private val debouncedSearch = searchQuery.debounce(SEARCH_DEBOUNCE_MS)
+    // The empty/initial query is exempt from the debounce: a screen's first load must not
+    // wait for a keystroke-coalescing window that doesn't apply to it. Without this, the
+    // debounce timer delayed the very first Room query on every fresh SessionsViewModel
+    // instance (i.e. every time a medtech re-enters a patient's Sessions screen), which is
+    // what caused a skeleton flash on every navigation regardless of actual query speed.
+    // distinctUntilChanged guards against a redundant re-emission if the query is cleared
+    // and something else briefly re-triggers the same empty value.
+    private val debouncedSearch = searchQuery
+        .debounce { query -> if (query.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
+        .distinctUntilChanged()
 
     /** Bundled upstream inputs, re-emitted whenever any input changes. */
     private data class SessionsInputs(
@@ -207,10 +223,18 @@ class SessionsViewModel @Inject constructor(
                 ),
                 internalState,
                 searchQuery,
-            ) { sessions, counts, internal, rawSearch ->
+                syncInProgressFlow,
+            ) { sessions, counts, internal, rawSearch, syncing ->
+                // An empty, unfiltered result while a sync is running is "unknown" rather than
+                // settled-empty: the local DB may simply not have pulled the remote rows yet.
+                // A filtered/searched empty result is left alone - the medtech typed a query
+                // that has no matches, which is settled regardless of sync state.
+                val unfiltered = inputs.debouncedQuery.isEmpty() &&
+                    inputs.start == null && inputs.end == null
+                val awaitingRemote = syncing && unfiltered && counts.totalCount == 0
                 internal.copy(
                     sessions = sessions,
-                    isLoading = false,
+                    isLoading = awaitingRemote,
                     startDate = inputs.start,
                     endDate = inputs.end,
                     searchQuery = rawSearch,
@@ -235,6 +259,10 @@ class SessionsViewModel @Inject constructor(
      * [searchQuery] is combined from the raw (un-debounced) flow so the text field
      * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
      * only update after the debounce window.
+     *
+     * An empty, unfiltered result while [ObserveSyncInProgressUseCase] reports a sync running
+     * is treated as "unknown" rather than settled-empty, so `isLoading` stays true instead of
+     * flashing a confident zero the moment before the remote pull lands its rows.
      */
     val state: StateFlow<SessionsState> = combine(
         sessionsStateFlow,

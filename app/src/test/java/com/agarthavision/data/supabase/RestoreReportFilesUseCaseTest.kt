@@ -126,7 +126,7 @@ class RestoreReportFilesUseCaseTest {
 }
 
 private class StubRemote(private val stored: Set<String>) : ReportRemoteDataSource(
-    supabase = mock(),
+    supabaseProvider = mock(),
     gson = Gson(),
 ) {
     val downloadedPaths = mutableListOf<String>()

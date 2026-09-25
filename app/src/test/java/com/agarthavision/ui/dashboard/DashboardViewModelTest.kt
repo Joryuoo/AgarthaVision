@@ -21,6 +21,7 @@ import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -233,14 +234,11 @@ class DashboardViewModelTest {
         val vm = viewModel()
         vm.uiState.test {
             var snapshot = awaitItem()
-            // The KPI flow hangs off userIdFlow, whose stateIn seed is null, and a null
-            // identity yields KpiState() zeros by design (ADR-007). The first non-loading
-            // frame is therefore the signed-out one, so waiting only on isLoading asserts
-            // against that transient rather than against the counts.
-            while (snapshot.isLoading || snapshot.kpis.patientsCount == "0") {
+            while (snapshot.isLoading) {
                 snapshot = awaitItem()
             }
 
+            assertTrue(snapshot.isSignedIn)
             assertEquals("3", snapshot.kpis.patientsCount)
             assertEquals("4", snapshot.kpis.pendingCount)
             cancelAndIgnoreRemainingEvents()
@@ -257,6 +255,55 @@ class DashboardViewModelTest {
                     snapshot = awaitItem()
                 }
 
+                assertEquals("0", snapshot.kpis.patientsCount)
+                assertEquals("0", snapshot.kpis.sessionsCount)
+                assertEquals("0", snapshot.kpis.samplesCount)
+                assertEquals("0", snapshot.kpis.pendingCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `uiState stays loading until the identity flow emits`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val identityFlow = MutableSharedFlow<LocalIdentity?>(replay = 1)
+            whenever(observeLocalIdentityUseCase.invoke()).thenReturn(identityFlow)
+            whenever(
+                patientRepository.observePatientCount(
+                    any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                ),
+            ).thenReturn(flowOf(3))
+
+            val vm = viewModel()
+            val collectJob = launch { vm.uiState.collect { } }
+            advanceUntilIdle()
+
+            assertTrue("should stay loading until identity is known", vm.uiState.value.isLoading)
+
+            identityFlow.emit(LocalIdentity(userId = "user-1", email = "user@example.com"))
+            advanceUntilIdle()
+
+            val snapshot = vm.uiState.value
+            collectJob.cancel()
+
+            assertFalse(snapshot.isLoading)
+            assertTrue(snapshot.isSignedIn)
+            assertEquals("3", snapshot.kpis.patientsCount)
+        }
+
+    @Test
+    fun `a genuinely signed-out identity settles with isLoading false and zero KPIs`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(observeLocalIdentityUseCase.invoke()).thenReturn(flowOf(null))
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+
+                assertFalse(snapshot.isSignedIn)
                 assertEquals("0", snapshot.kpis.patientsCount)
                 assertEquals("0", snapshot.kpis.sessionsCount)
                 assertEquals("0", snapshot.kpis.samplesCount)

@@ -31,9 +31,11 @@ import kotlinx.serialization.json.put
  * compile time, and only once a report is actually generated online.
  */
 open class ReportRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
     private val gson: Gson,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Writes the report row matching `public.reports` in `0001_init.sql`, or leaves the row
      * alone when the server already has it.

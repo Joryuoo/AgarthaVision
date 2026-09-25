@@ -91,6 +91,7 @@ import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -158,8 +159,11 @@ fun SessionsScreen(
                     PatientPreviewCard(
                         patient = patient,
                         barangayName = state.barangayName,
-                        totalCount = state.totalCount,
-                        unverifiedCount = state.unverifiedCount,
+                        counts = PatientPreviewCounts(
+                            totalCount = state.totalCount,
+                            unverifiedCount = state.unverifiedCount,
+                            isLoading = state.isLoading,
+                        ),
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                     )
                 }
@@ -192,7 +196,16 @@ fun SessionsScreen(
 
                 // Sessions List
                 when {
-                    state.isLoading -> Spacer(Modifier.weight(1f))
+                    state.isLoading -> Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        repeat(3) {
+                            SessionCardSkeleton()
+                        }
+                    }
                     state.sessions.isEmpty() -> Box(
                         modifier = Modifier
                             .weight(1f)
@@ -362,12 +375,18 @@ private fun AppBar(onBack: () -> Unit) {
  * can verify they are reading smears for the correct patient without navigating back.
  * Persists while scrolling the session list below.
  */
+/** Counts + loading state for [PatientPreviewCard] — bundled since they always travel together. */
+private data class PatientPreviewCounts(
+    val totalCount: Int,
+    val unverifiedCount: Int,
+    val isLoading: Boolean,
+)
+
 @Composable
 private fun PatientPreviewCard(
     patient: Patient,
     barangayName: String?,
-    totalCount: Int,
-    unverifiedCount: Int,
+    counts: PatientPreviewCounts,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -447,21 +466,25 @@ private fun PatientPreviewCard(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(
-            text = pluralStringResource(
-                R.plurals.sessions_subtitle,
-                totalCount,
-                totalCount,
-                unverifiedCount,
-            ),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            ),
-            color = colors.onAccent.copy(alpha = 0.9f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (counts.isLoading) {
+            SkeletonBox(Modifier.width(140.dp).height(12.dp))
+        } else {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.sessions_subtitle,
+                    counts.totalCount,
+                    counts.totalCount,
+                    counts.unverifiedCount,
+                ),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                ),
+                color = colors.onAccent.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -478,6 +501,28 @@ internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueue
     totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
     unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
     else -> SessionQueueBadge.PENDING
+}
+
+/** Loading placeholder for [SessionCard], modeled on RecordsScreen's `ReportCardSkeleton`. */
+@Composable
+private fun SessionCardSkeleton(modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            SkeletonBox(modifier = Modifier.width(140.dp).height(19.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            SkeletonBox(modifier = Modifier.width(100.dp).height(13.dp))
+        }
+        SkeletonBox(modifier = Modifier.width(48.dp).height(24.dp))
+    }
 }
 
 @Composable

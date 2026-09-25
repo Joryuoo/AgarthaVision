@@ -16,7 +16,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -373,11 +372,22 @@ fun AgarthaNavHost(
  * has a name here rather than being copied by hand at each call site. A destination that is not
  * a tab (capture, a detail screen, login) is an ordinary `navigate` and must not use this:
  * restoring saved state is exactly wrong for a screen you are pushing onto the current stack.
+ *
+ * Pops to [Screen.Dashboard] specifically, never `graph.findStartDestination()`. The graph's
+ * start destination is not a fixed thing: it is `login` when the app cold-starts signed-out
+ * (see [AgarthaNavGraph]'s `startDestination` and the auth gate in `MainActivity`), and `login`
+ * is popped with `inclusive = true` the moment sign-in succeeds. From then on `popUpTo(login)`
+ * has nothing to pop to and silently no-ops — `saveState`/`restoreState` never fire, so every
+ * tab tap pushes a fresh entry (and a fresh `hiltViewModel()`) instead of restoring the saved
+ * one, and the back stack grows forever (14zcqntj1xk). Dashboard doesn't have that problem: it
+ * is always present on the back stack whenever the bottom bar — and therefore this function —
+ * is reachable, whether the process started on Dashboard directly, arrived there via sign-in
+ * replacing `login`, or via sign-out-then-sign-in again replacing the whole graph.
  */
 private fun NavHostController.navigateToTab(route: String) {
     navigate(route) {
-        // Pop back to start so each tab maintains its own stack.
-        popUpTo(graph.findStartDestination().id) { saveState = true }
+        // Pop back to the Dashboard tab root so each tab maintains its own stack.
+        popUpTo(Screen.Dashboard.route) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }

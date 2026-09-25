@@ -62,11 +62,11 @@ fun SkeletonBox(
     modifier: Modifier = Modifier,
     shape: Shape = RoundedCornerShape(8.dp),
 ) {
-    Box(modifier = Modifier.clearAndSetSemantics {}) {
-        Box(
-            modifier = modifier
-                .clip(shape)
-                .background(rememberShimmerBrush(), shape),
-        )
-    }
+    Box(
+        modifier = Modifier
+            .clearAndSetSemantics {}
+            .then(modifier)
+            .clip(shape)
+            .background(rememberShimmerBrush(), shape),
+    )
 }
