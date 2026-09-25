@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Science
@@ -127,18 +128,20 @@ internal fun ActiveSessionHero(
 }
 
 @Composable
-internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
+internal fun KpiGrid(kpis: KpiState, isLoading: Boolean, modifier: Modifier = Modifier) {
     val colors = AgarthaTheme.colors
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Sessions", kpis.sessionsCount, trend = null,
+            KpiTile(
+                data = KpiTileData("Sessions", kpis.sessionsCount, trend = null, isLoading = isLoading),
                 colors = KpiTileColors(
                     bgColor = colors.accent,
                     contentColor = colors.onAccent,
                     labelColor = colors.onAccent.copy(alpha = 0.8f),
                 ),
                 modifier = Modifier.weight(1f))
-            KpiTile("Verified", kpis.samplesCount, trend = null,
+            KpiTile(
+                data = KpiTileData("Verified", kpis.samplesCount, trend = null, isLoading = isLoading),
                 colors = KpiTileColors(
                     bgColor = AppColors.Gray700,
                     contentColor = AppColors.White,
@@ -147,7 +150,8 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Patients", kpis.patientsCount, trend = null,
+            KpiTile(
+                data = KpiTileData("Patients", kpis.patientsCount, trend = null, isLoading = isLoading),
                 colors = KpiTileColors(
                     bgColor = AppColors.Gray900,
                     contentColor = AppColors.White,
@@ -155,7 +159,8 @@ internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
                     borderColor = colors.border,
                 ),
                 modifier = Modifier.weight(1f))
-            KpiTile("To review", kpis.pendingCount, trend = null,
+            KpiTile(
+                data = KpiTileData("To review", kpis.pendingCount, trend = null, isLoading = isLoading),
                 colors = KpiTileColors(
                     bgColor = colors.gold,
                     contentColor = colors.onGold,
@@ -177,11 +182,17 @@ private data class KpiTileColors(
 /** A [KpiTile]'s trend indicator — the direction only has meaning alongside its label text. */
 private data class KpiTrend(val label: String, val isUp: Boolean)
 
+/** The data a [KpiTile] renders — bundled since label/value/trend/loading state all describe the same KPI. */
+private data class KpiTileData(
+    val label: String,
+    val value: String,
+    val trend: KpiTrend?,
+    val isLoading: Boolean = false,
+)
+
 @Composable
 private fun KpiTile(
-    label: String,
-    value: String,
-    trend: KpiTrend?,
+    data: KpiTileData,
     colors: KpiTileColors,
     modifier: Modifier = Modifier
 ) {
@@ -191,28 +202,32 @@ private fun KpiTile(
             .border(1.dp, colors.borderColor, RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
+        Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
         Spacer(Modifier.height(6.dp))
-        Text(
-            value,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.contentColor,
-            letterSpacing = (-0.7).sp,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-            lineHeight = 30.sp
-        )
-        if (trend != null) {
+        if (data.isLoading) {
+            SkeletonBox(Modifier.width(48.dp).height(30.dp))
+        } else {
+            Text(
+                data.value,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.contentColor,
+                letterSpacing = (-0.7).sp,
+                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 30.sp
+            )
+        }
+        if (data.trend != null) {
             Spacer(Modifier.height(6.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (trend.isUp) {
+                if (data.trend.isUp) {
                     Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
                 }
                 Text(
-                    trend.label,
+                    data.trend.label,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
+                    color = if (data.trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
                 )
             }

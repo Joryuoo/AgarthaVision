@@ -14,6 +14,7 @@ import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -84,6 +85,10 @@ class SessionPickerViewModelTest {
         on { observePatientById(any()) } doReturn flowOf(null)
     }
     private val psgcRepository: PsgcRepository = mock()
+    private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase =
+        mock<ObserveSyncInProgressUseCase>().also {
+            whenever(it.invoke()).thenReturn(flowOf(false))
+        }
 
     /**
      * The screen is reached at `patients/{patientId}`, so the patient a new session belongs
@@ -97,6 +102,7 @@ class SessionPickerViewModelTest {
         generateSessionLabelUseCase = generateSessionLabelUseCase,
         patientRepository = patientRepository,
         psgcRepository = psgcRepository,
+        observeSyncInProgressUseCase = observeSyncInProgressUseCase,
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),

@@ -13,6 +13,7 @@ import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import android.database.sqlite.SQLiteConstraintException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
@@ -100,6 +101,7 @@ class SessionsViewModel @Inject constructor(
     private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
+    private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -125,6 +127,11 @@ class SessionsViewModel @Inject constructor(
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
     private val userIdFlow = observeLocalIdentityUseCase().map { it?.userId }
+
+    // Cold, per ObserveSyncInProgressUseCase's contract - no `.onStart { emit(false) }` here,
+    // since that would reintroduce a transient "not syncing" reading before the scheduler's
+    // real state is known, which is the same confident-zero bug this ticket fixes.
+    private val syncInProgressFlow = observeSyncInProgressUseCase()
 
     private val startDate = MutableStateFlow<LocalDate?>(null)
     private val endDate = MutableStateFlow<LocalDate?>(null)
@@ -207,10 +214,18 @@ class SessionsViewModel @Inject constructor(
                 ),
                 internalState,
                 searchQuery,
-            ) { sessions, counts, internal, rawSearch ->
+                syncInProgressFlow,
+            ) { sessions, counts, internal, rawSearch, syncing ->
+                // An empty, unfiltered result while a sync is running is "unknown" rather than
+                // settled-empty: the local DB may simply not have pulled the remote rows yet.
+                // A filtered/searched empty result is left alone - the medtech typed a query
+                // that has no matches, which is settled regardless of sync state.
+                val unfiltered = inputs.debouncedQuery.isEmpty() &&
+                    inputs.start == null && inputs.end == null
+                val awaitingRemote = syncing && unfiltered && counts.totalCount == 0
                 internal.copy(
                     sessions = sessions,
-                    isLoading = false,
+                    isLoading = awaitingRemote,
                     startDate = inputs.start,
                     endDate = inputs.end,
                     searchQuery = rawSearch,
@@ -235,6 +250,10 @@ class SessionsViewModel @Inject constructor(
      * [searchQuery] is combined from the raw (un-debounced) flow so the text field
      * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
      * only update after the debounce window.
+     *
+     * An empty, unfiltered result while [ObserveSyncInProgressUseCase] reports a sync running
+     * is treated as "unknown" rather than settled-empty, so `isLoading` stays true instead of
+     * flashing a confident zero the moment before the remote pull lands its rows.
      */
     val state: StateFlow<SessionsState> = combine(
         sessionsStateFlow,

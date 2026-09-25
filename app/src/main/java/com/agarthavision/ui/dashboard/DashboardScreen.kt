@@ -131,6 +131,7 @@ fun DashboardScreen(
                 Spacer(Modifier.height(Spacing.sm))
                 KpiGrid(
                     kpis = state.kpis,
+                    isLoading = state.isLoading,
                     modifier = Modifier.padding(horizontal = Spacing.xl)
                 )
             }

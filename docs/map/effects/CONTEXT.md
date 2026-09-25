@@ -129,6 +129,10 @@ touches `WorkManager.getInstance()` while Hilt is still field-injecting `Agartha
 which calls back for a `HiltWorkerFactory` that the same pass has not assigned yet, and the app
 dies at launch.
 
+`ui/sessions/SessionsViewModel` reads `isSyncing` via `domain/usecase/sync/ObserveSyncInProgressUseCase`
+to hold back a zero-count Sessions display while a sync is running, so changing what counts as
+"syncing" affects the Sessions empty state.
+
 **Corrected 86d4brr1f:** this section used to say a failed row waits for "login, app start while
 authenticated, or connectivity returning". Login was real; **app start did not exist** until
 86d4brr1f added it, and **connectivity returning still does not** — nothing observes
