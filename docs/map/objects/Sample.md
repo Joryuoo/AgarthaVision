@@ -103,6 +103,8 @@ prediction cache are all absent from it.
   `:144`, `:163`.
 - The confirmed detections count, which joins samples
   (`data/local/dao/DetectionDao.kt:33-52`).
+- The Patients list Recent sort (`PatientDao.observePatients`), which reads `samples.timestamp`
+  and `samples.verified_at` (filtering `deleted_at IS NULL`) to sort active patients to the top.
 - The report generation pipeline (`domain/usecase/reports/GenerateSessionReportUseCase.kt`
   and `domain/usecase/reports/PdfReportGenerator.kt`).
 - The Room database version (`core/database/AgarthaDatabase.kt:46`) — and remember the

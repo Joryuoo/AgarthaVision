@@ -32,6 +32,8 @@ data class VerificationSheetActions(
     val onAddSpecies: () -> Unit = {},
     /** Removes an added species. Never offered on a prediction-backed row. */
     val onRemoveFinding: (Int) -> Unit = {},
+    val onExpandFinding: (Int) -> Unit = {},
+    val onCollapseFinding: (Int) -> Unit = {},
     /** Eggs of an added species in this field, the model's own boxes included. */
     val onFieldTotalChanged: (Int, String) -> Unit = { _, _ -> },
     val onAddedSpeciesSelected: (Int, EggSpecies) -> Unit = { _, _ -> },

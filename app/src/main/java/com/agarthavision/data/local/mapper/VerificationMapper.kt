@@ -7,6 +7,9 @@ import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.FindingRow
+import com.agarthavision.domain.usecase.verify.SpeciesStageKey
+import com.agarthavision.domain.usecase.verify.primaryAddedIndexBySpecies
+import com.agarthavision.domain.usecase.verify.speciesStageKey
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import java.util.UUID
@@ -57,7 +60,8 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * the same species lands on the same row rather than duplicating it.
  */
 /**
- * The id an added egg's detection row gets: its species and its slot within that species.
+ * The id an added egg's detection row gets: its species, stage, and its slot within that
+ * species+stage.
  *
  * **The slot is what this change added, and it was a data-loss bug without it.** The key used to
  * be the species alone, so two eggs of one species derived the same id and
@@ -65,12 +69,38 @@ fun computeVerdict(answers: VerificationAnswers, modelClass: String): DetectionV
  * geometry; the moment they could (86d4bk534), two hand-drawn boxes on two Ascaris eggs became
  * one box on submit, with no error anywhere.
  *
+ * **[stageKey] is what a later change added, for the same reason.** Two added cards of one
+ * species at different stages used to derive the same id too, so the second stage silently
+ * overwrote the first (14zcqnthz6e). A null [stageKey] — an unstaged card, or a species the stage
+ * question does not apply to — keeps the *old* key with no stage segment, so rows a build before
+ * this change already wrote keep resolving to the same id and are not silently duplicated.
+ *
  * Exposed so the reopen path can find the rows an added species produced without re-deriving the
  * rule in a second place — two derivations of one key is how an edit starts appending instead of
  * replacing.
  */
-fun addedDetectionIdFor(sampleId: String, species: String, slot: Int): String =
-    derive("$sampleId#finding#$species#$slot")
+
+/**
+ * The stage segment a non-primary card with NO stage gets, in place of `null`.
+ *
+ * `stageLabel` is already `null` for an unstaged card, which is the same value the *primary*
+ * card's plain id is built with — a non-primary unstaged card cannot use `null` here or its id
+ * collapses onto the primary card's, silently dropping the primary's boxes on submit
+ * (14zcqnthz6e). This sentinel gives it a distinct segment instead. It cannot collide with a real
+ * [com.agarthavision.domain.usecase.verify.VerificationAnswers.stageLabel]: every non-`OTHER`
+ * stage resolves to an [com.agarthavision.domain.model.EggStage] enum name, and `OTHER` resolves
+ * to trimmed free text a medtech would have to type verbatim, including the marker characters, to
+ * collide — a risk accepted the same way the id scheme already accepts species free text as a
+ * segment.
+ */
+const val UNSTAGED_ADDED_STAGE_KEY: String = "#_unstaged#"
+
+fun addedDetectionIdFor(sampleId: String, species: String, slot: Int, stageKey: String? = null): String =
+    if (stageKey == null) {
+        derive("$sampleId#finding#$species#$slot")
+    } else {
+        derive("$sampleId#finding#$species#$stageKey#$slot")
+    }
 
 /**
  * The id a prediction-backed detection gets, by its ordinal within the frame.
@@ -98,9 +128,9 @@ private fun derive(key: String): String =
 /**
  * Stable finding-row id, keyed to match the table's uniqueness rule.
  *
- * `sample_species_findings` is unique on `(sample_id, species)` while `stage` is null, which it
- * always is — nothing writes a stage since 86d4a6jwy was reverted. If the stage work returns,
- * this key and `sample_species_findings_unique_staged` have to move together.
+ * `sample_species_findings` is unique on `(sample_id, species, stage)` (`stage` nullable), and
+ * [row]'s own stage is written into the key here so two stages of one species land on distinct
+ * rows instead of one REPLACE-ing the other.
  */
 private fun findingId(sampleId: String, row: FindingRow): String {
     val stageKey = row.stageDisplayName ?: row.stage?.name.orEmpty()
@@ -138,19 +168,45 @@ private fun findingId(sampleId: String, row: FindingRow): String {
  * and a frame that fails it belongs in classification crops and hard-negative mining, never in
  * background sampling.
  *
- * Added rows are emitted for distinct species only. The UI merges two cards that land on one
- * species, and this is the backstop: emitting both would derive the same slot ids twice and
- * REPLACE would keep whichever came last.
+ * Added rows are emitted for distinct species+stage only. The UI merges two cards that land on
+ * one species+stage, and this is the backstop: emitting both would derive the same slot ids
+ * twice and REPLACE would keep whichever came last.
+ *
+ * **The stage segment is only derived for a species' non-primary added cards.** Old data was
+ * saved under species-only ids, before stage-aware ids existed. Deriving a stage-aware id
+ * unconditionally for every staged card meant resubmitting an *unchanged* old card wrote it
+ * under a brand-new id and deleted the old one — locally harmless, but the sync pipeline only
+ * ever upserts remotely and never deletes, so Supabase ends up holding both the old and new rows
+ * and double-counts the species on the next pull.
+ *
+ * One added card per species — its **primary**, from [Finding.primaryAddedIndexBySpecies] — keeps
+ * resolving to the old, stage-less id it always has, so an unedited resubmit writes nothing new.
+ * The stage segment switches on for every *other* added card of that species, to disambiguate —
+ * which is the case the id had to be made stage-aware for in the first place (14zcqnthz6e).
+ *
+ * **Which card is primary is decided once, on reopen, and then pinned — not re-derived from the
+ * card count on every call.** Re-deriving it from "is this species' card count currently 1"
+ * reintroduced the same orphan-row bug one step removed: a species resubmitted alone today under
+ * the plain id, then joined by a same-species sibling in a *later* reopen session, would flip
+ * that already-synced card's id from plain to stage-aware on the very next submit — deleting the
+ * synced row locally while the upsert-only server keeps it forever. See
+ * [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] for where the pin is
+ * set from what is already on disk, and [VerificationAnswers.isPrimaryAdded] for why a card
+ * pinned non-primary is never re-elected primary later, even once every sibling of its species is
+ * removed.
  */
 fun List<Finding>.toDetectionEntities(sampleId: String): List<DetectionEntity> {
-    val emitted = mutableSetOf<String>()
+    val emitted = mutableSetOf<SpeciesStageKey>()
+    val primaryIndexBySpecies = primaryAddedIndexBySpecies()
     return flatMapIndexed { ordinal, finding ->
-        val label = finding.answers.speciesLabel
+        val key = finding.answers.speciesStageKey
         when {
             finding.prediction != null -> listOf(finding.toDetectionEntity(sampleId, ordinal))
-            label == null || !emitted.add(label) -> emptyList()
-            else -> (0 until unboxedCountOf(label)).map { slot ->
-                finding.toDetectionEntity(sampleId, ordinal, slot)
+            key == null || !emitted.add(key) -> emptyList()
+            else -> {
+                val useStageSegment = primaryIndexBySpecies[key.species] != ordinal
+                (0 until unboxedCountOf(key.species, finding.answers.stage, finding.answers.otherStageText))
+                    .map { slot -> finding.toDetectionEntity(sampleId, ordinal, slot, useStageSegment) }
             }
         }
     }
@@ -165,6 +221,7 @@ private fun Finding.toDetectionEntity(
     sampleId: String,
     ordinal: Int,
     slot: Int? = null,
+    useStageSegment: Boolean = true,
 ): DetectionEntity {
     val label = answers.speciesLabel
     val modelClass = prediction?.classLabel
@@ -197,7 +254,16 @@ private fun Finding.toDetectionEntity(
         detectionId = if (slot == null) {
             detectionIdFor(sampleId, ordinal)
         } else {
-            addedDetectionIdFor(sampleId, label.orEmpty(), slot)
+            // A primary card always writes the plain id (stageKey null), whatever its own stage
+            // is. A non-primary card writes its real stage segment when it has one, or the
+            // unstaged sentinel when it doesn't — never null, which would collide with the
+            // primary's plain id.
+            val stageKey = when {
+                !useStageSegment -> null
+                answers.stageLabel != null -> answers.stageLabel
+                else -> UNSTAGED_ADDED_STAGE_KEY
+            }
+            addedDetectionIdFor(sampleId, label.orEmpty(), slot, stageKey)
         },
         sampleId = sampleId,
         classLabel = modelClass?.let { EggSpecies.fromClassLabel(it)?.canonicalClass ?: it }

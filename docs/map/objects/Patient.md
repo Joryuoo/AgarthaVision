@@ -75,7 +75,9 @@ Documented shape: `schema.ts:173-222`.
 - `PatientDao` and `PatientRepositoryImpl` — CRUD and reactive queries.
 - `SyncPatientUseCase` and `PatientRemoteDataSource` — remote upserts.
 - The New Patient form (`ui/patients/PatientFormScreen.kt`, `PatientFormViewModel.kt`).
-- The Patients list (`ui/patients/PatientsScreen.kt`, `PatientsViewModel.kt`).
+- The Patients list (`ui/patients/PatientsScreen.kt`, `PatientsViewModel.kt`). Note that
+  the Recent sort (`PatientDao.observePatients`) reads `sessions.started_at` and
+  `samples.timestamp`/`verified_at`; `updated_at` alone is only the patient's own last-edit time.
 - `barangay_prevalence()` surveillance RPC in Postgres.
 
 **Does not hit**

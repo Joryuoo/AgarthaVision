@@ -43,7 +43,7 @@ fun ScreenHeader(
         Text(
             text = title,
             style = MaterialTheme.typography.headlineSmall,
-            color = colors.textPrimary,
+            color = colors.accent,
         )
         Text(
             text = purpose,

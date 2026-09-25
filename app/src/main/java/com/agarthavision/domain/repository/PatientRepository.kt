@@ -23,7 +23,8 @@ import kotlinx.coroutines.flow.Flow
  */
 interface PatientRepository {
     /**
-     * One page of the signed-in medtech's patients, ordered by recent activity or name.
+     * One page of the signed-in medtech's patients, ordered by recent activity (patient edit,
+     * session start, or sample capture/validation) or name.
      *
      * [query] matches lastname or firstname; a blank query matches everything.
      * Barangay filtering is handled via [barangayCode], not free-text search.

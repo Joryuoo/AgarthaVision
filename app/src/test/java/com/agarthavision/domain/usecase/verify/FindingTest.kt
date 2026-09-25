@@ -6,6 +6,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -251,6 +252,38 @@ class FindingTest {
         assertTrue(emptyList<Finding>().toFindingRows().isEmpty())
     }
 
+    /**
+     * The regression a species-only key would reintroduce: an unstaged box and a staged added
+     * card of the same species are different findings now, not one double-counted row.
+     */
+    @Test
+    fun `an unstaged box and a staged added card of one species are separate rows, not one`() {
+        val unstagedBox = Finding(
+            prediction(),
+            VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+        )
+        val stagedAdded = Finding(
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 3,
+            ),
+        )
+        val findings = listOf(unstagedBox, stagedAdded)
+
+        val rows = findings.toFindingRows()
+        assertEquals(2, rows.size)
+        val noStageRow = rows.first { it.stage == null }
+        val cfRow = rows.first { it.stage == EggStage.CORTICATED_FERTILIZED }
+        assertEquals("The boxed egg, uncounted by the CF card.", 1, noStageRow.eggCount)
+        assertEquals("The CF card's own total, unaffected by the unstaged box.", 3, cfRow.eggCount)
+
+        assertEquals(1, findings.floorFor("Ascaris lumbricoides"))
+        assertEquals(0, findings.floorFor("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+        assertEquals(0, findings.unboxedCountOf("Ascaris lumbricoides"))
+        assertEquals(3, findings.unboxedCountOf("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+    }
+
     @Test
     fun `free-text species groups under its typed label`() {
         val other = VerificationAnswers(
@@ -262,5 +295,63 @@ class FindingTest {
         val rows = listOf(Finding(prediction(), other)).toFindingRows()
         assertEquals(1, rows.size)
         assertEquals("Enterobius", rows[0].species)
+    }
+
+    // ── primary-pin resolution (14zcqnthz6e) ──────────────────────────
+
+    /**
+     * Running the resolution twice on an already-resolved list must be a no-op: `onSubmit` reads
+     * the election it just wrote back on the very next submit, and if a second pass could still
+     * move the election around, the pin would not actually be stable within a session.
+     */
+    @Test
+    fun `withResolvedPrimaryPins is idempotent`() {
+        val findings = listOf(
+            Finding(
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.CORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                ),
+            ),
+            Finding(
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.DECORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                ),
+            ),
+        )
+
+        val once = findings.withResolvedPrimaryPins()
+        val twice = once.withResolvedPrimaryPins()
+
+        assertEquals(once, twice)
+        assertEquals(true, once[0].answers.isPrimaryAdded)
+        assertEquals(false, once[1].answers.isPrimaryAdded)
+    }
+
+    /** A model box is never a candidate for a pin — the election is only among added cards. */
+    @Test
+    fun `withResolvedPrimaryPins never touches a model box`() {
+        val boxed = Finding(
+            prediction(),
+            VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+        )
+        val added = Finding(
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+
+        val resolved = listOf(boxed, added).withResolvedPrimaryPins()
+
+        assertNull(
+            "A model box carries no isPrimaryAdded pin - the concept does not apply to it.",
+            resolved[0].answers.isPrimaryAdded,
+        )
+        assertEquals(true, resolved[1].answers.isPrimaryAdded)
     }
 }

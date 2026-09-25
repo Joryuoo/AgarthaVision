@@ -8,7 +8,12 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.verify.AddedCardMerge
+import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.floorFor
+import com.agarthavision.domain.usecase.verify.mergeAddedCardIntoTwin
+import com.agarthavision.domain.usecase.verify.speciesStageKeyIsSettled
 import com.agarthavision.domain.usecase.verify.totalsAreConsistent
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -16,6 +21,7 @@ import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.withResolvedPrimaryPins
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -28,8 +34,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-enum class LeaveIntent { EXIT, PREVIOUS_SAMPLE, NEXT_SAMPLE }
 
 /**
  * Immutable UI state surface for the verification flow.
@@ -78,26 +82,57 @@ data class VerificationUiState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
     val userNote: String = "",
-    val pendingLeave: LeaveIntent? = null,
-    val initialFindings: List<Finding>? = null,
-    val initialUserNote: String = "",
+    /**
+     * Species already recorded on this device that match what is being typed into a free-text
+     * "Other species" field, with the field they were fetched for and the text they answer.
+     *
+     * All three, because the screen has **two** free-text fields — Current Detection and every
+     * added species — and only one is ever being typed into. Carrying the target and the query
+     * alongside the names lets [suggestionsFor] *derive* whether a list still belongs where it
+     * is about to render, instead of the view model having to remember to clear it on every
+     * path that moves the medtech elsewhere. A suggestion list rendered under the wrong row
+     * would be worse than no suggestions at all: it invites a tap that writes one row's species
+     * into another.
+     */
     val speciesSuggestions: List<String> = emptyList(),
     val speciesSuggestionTarget: SuggestionTarget? = null,
     val speciesSuggestionQuery: String = "",
+    /**
+     * Index into [findings] of the one added species card shown as an editable form, or null when
+     * all are compact. Always >= frame.predictions.size.
+     */
+    val expandedFindingIndex: Int? = null,
+    /**
+     * The findings and remarks the sample opened with — its pre-fill, or the answers it was last
+     * submitted with — so [hasUnsavedChanges] can tell an edit from a sample merely looked at.
+     */
+    val openedFindings: List<Finding> = findings,
+    val openedNote: String = userNote,
+    /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
+    val pendingLeave: LeaveIntent? = null,
 ) {
+    /**
+     * True when leaving now would throw away something the medtech entered.
+     *
+     * Compared by value against what the sample opened with, so an answer changed and changed
+     * back reads as untouched: there is nothing to lose. The Boxes toggle and which detection is
+     * on screen are not inputs, and moving them costs nothing.
+     */
+    val hasUnsavedChanges: Boolean
+        get() = frame != null && (findings != openedFindings || userNote != openedNote)
+
+    /**
+     * The suggestions to show under [target]'s free-text field, given what it currently holds.
+     *
+     * Empty unless the last lookup was for this field *and* for this exact text, so a stale list
+     * cannot outlive the keystroke that produced it.
+     */
     fun suggestionsFor(target: SuggestionTarget, query: String): List<String> =
         if (target == speciesSuggestionTarget && query == speciesSuggestionQuery) {
             speciesSuggestions
         } else {
             emptyList()
         }
-
-    /** True if the user has modified findings or notes since opening the frame. */
-    val hasUnsavedChanges: Boolean
-        get() = initialFindings != null && (findings != initialFindings || userNote != initialUserNote)
-
-    val isDirty: Boolean
-        get() = hasUnsavedChanges
 
     /**
      * Q4 — "did the model miss any eggs in this frame?" — **derived, never asked.**
@@ -122,7 +157,8 @@ data class VerificationUiState(
             frame == null -> null
             frame.source == FrameSource.MANUAL -> null
             else -> findings.any {
-                it.prediction == null && findings.unboxedCountOf(it.answers.speciesLabel) > 0
+                it.prediction == null &&
+                    findings.unboxedCountOf(it.answers.speciesLabel, it.answers.stage, it.answers.otherStageText) > 0
             }
         }
 
@@ -155,7 +191,10 @@ data class VerificationUiState(
         get() = when {
             isSubmitting -> false
             frame == null -> false
-            else -> findings.all { it.isComplete } && findings.totalsAreConsistent()
+            else -> {
+                val consolidated = findings.consolidateAddedTwins()
+                findings.all { it.isComplete } && consolidated.totalsAreConsistent()
+            }
         }
 
     /** True while a box is being drawn, which is what dims every existing box on the frame. */
@@ -199,9 +238,32 @@ sealed interface SuggestionTarget {
     data class AddedFinding(val index: Int) : SuggestionTarget
 }
 
+/**
+ * A way off the sample that drops whatever has not been submitted.
+ *
+ * Submit and Discard are not here: one saves the edits and the other already asks first.
+ */
+enum class LeaveIntent { PREVIOUS_SAMPLE, NEXT_SAMPLE, EXIT }
+
 sealed interface VerificationEvent {
     data object Dismiss : VerificationEvent
     data class ShowError(val message: String?) : VerificationEvent
+    data object FinishCurrentSpeciesFirst : VerificationEvent
+}
+
+private fun VerificationUiState.firstUnfinishedAddedIndex(): Int? {
+    val boxCount = frame?.predictions?.size ?: 0
+    // See the matching comment in VerificationFindings.AddedFindings: two not-yet-settled cards
+    // of one species share a SpeciesStageKey, so the floor has to come from the consolidated
+    // list or it can be read off the wrong sibling's drawn boxes.
+    val findingsForFloor = findings.consolidateAddedTwins()
+    return findings.indices.firstOrNull { i ->
+        i >= boxCount && findings[i].let { f ->
+            !f.isComplete ||
+                (f.answers.fieldTotal ?: 0) <
+                findingsForFloor.floorFor(f.answers.speciesLabel, f.answers.stage, f.answers.otherStageText)
+        }
+    }
 }
 
 /**
@@ -213,6 +275,8 @@ sealed interface VerificationEvent {
  * - **Detection-level navigation** within the current frame
  *   ([onDetectionPrev], [onDetectionNext]) and per-detection answers
  *   ([onQ1Selected], [onQ2Selected], [onSpeciesSelected], [onOtherSpeciesChanged]).
+ * - **Added-species card expansion and lifecycle**
+ *   ([onAddSpecies], [onRemoveFinding], [onExpandFinding], [onCollapseFinding]).
  * - **Submit** orchestration through [SubmitVerificationUseCase] — on success
  *   the frame is removed from the store; the verdict model (per ADR-004)
  *   persists every detection regardless of mix (false positives, wrong
@@ -300,25 +364,24 @@ class VerificationViewModel @Inject constructor(
      */
     fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
         currentFrame = frame
-        val cycle = cycleFrames()
-        val initFindings = prior?.findings?.takeIf { findings -> findings.isNotEmpty() }
-            ?: frame.initialFindings()
-        val initNote = prior?.userNote.orEmpty()
+        val findings = prior?.findings?.takeIf { it.isNotEmpty() } ?: frame.initialFindings()
+        val note = prior?.userNote.orEmpty()
         _state.update {
             it.copy(
                 isVisible = true,
                 frame = frame,
                 imageSource = prior?.imageSource,
-                queueSize = cycle.size,
-                frameIndexInQueue = positionOf(frame, cycle, fallback = it.frameIndexInQueue),
+                frameIndexInQueue = positionOf(frame, fallback = it.frameIndexInQueue),
                 currentDetectionIndex = 0,
-                findings = initFindings,
-                initialFindings = initFindings,
-                initialUserNote = initNote,
+                findings = findings,
                 drawTarget = null,
                 isSubmitting = false,
                 errorMessage = null,
-                userNote = initNote,
+                userNote = note,
+                openedFindings = findings,
+                openedNote = note,
+                pendingLeave = null,
+                expandedFindingIndex = null,
             )
         }
     }
@@ -339,21 +402,19 @@ class VerificationViewModel @Inject constructor(
      * pre-filled species underneath it and hand the medtech back the work the pre-fill saved
      * them. A tap that asserts what is already asserted has changed nothing, so nothing
      * downstream of it has gone stale.
+     *
+     * **Ticking Q1 back on answers Q2 and Q3 "No", not "unanswered".** A checkbox has no third
+     * state to show for null: an unanswered Q2 rendered unticked, but without the redraw action
+     * an unticked Q2 carries, and hid Q3 entirely — so the medtech had to tick and untick both
+     * just to reach the controls. The model's claims were already disowned by unticking Q1, so
+     * the questions come back unticked for real, each with its correction under it.
      */
     fun onQ1Selected(isEgg: Boolean) {
         updateCurrentAnswer {
-            if (it.isEgg == isEgg) {
-                it
-            } else if (isEgg) {
-                it.copy(
-                    isEgg = true,
-                    isBoxCorrect = false,
-                    speciesConfirmed = false,
-                    species = null,
-                    otherSpeciesText = "",
-                )
-            } else {
-                it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
+            when {
+                it.isEgg == isEgg -> it
+                isEgg -> it.clearSpecies().copy(isEgg = true, isBoxCorrect = false, speciesConfirmed = false)
+                else -> it.clearSpecies().copy(isEgg = false, isBoxCorrect = null)
             }
         }
     }
@@ -367,14 +428,14 @@ class VerificationViewModel @Inject constructor(
      * carrying the human's geometry, which is exactly the label the drawing feature exists to
      * produce. Refused silently, because the screen does not offer the affordance on a replaced
      * row; this is the backstop.
+     *
+     * **The species answer survives a change here.** Q2 is about where the box sits, and a box in
+     * the wrong place still holds the same egg — so whatever Q3 held, the model's species
+     * confirmed or one picked from the dropdown, it still holds.
      */
     fun onQ2Selected(isBoxCorrect: Boolean) {
         updateCurrentAnswer {
-            when {
-                it.boxReplaced && isBoxCorrect -> it
-                it.isBoxCorrect == isBoxCorrect -> it
-                else -> it.copy(isBoxCorrect = isBoxCorrect)
-            }
+            if (it.boxReplaced && isBoxCorrect) it else it.copy(isBoxCorrect = isBoxCorrect)
         }
     }
 
@@ -431,17 +492,72 @@ class VerificationViewModel @Inject constructor(
      * wrong (or there was nothing to confirm), so it is a human judgement by construction.
      */
     fun onSpeciesSelected(species: EggSpecies) {
-        updateCurrentAnswer {
-            it.copy(species = species, otherSpeciesText = "")
-        }
+        updateCurrentAnswer { it.withSpecies(species) }
+    }
+
+    /**
+     * Applies a species change, keeping the current stage only when it still applies.
+     *
+     * A stage picked for one species can be meaningless for another — CF only means something on
+     * Ascaris/Trichuris/Hookworm, and Other has no stage question at all. Left in place, a stale
+     * stage would either become an invisible mismatch once stage matching is exact (a box counted
+     * under a stage the medtech never saw for this species) or silently persist a stage the
+     * screen no longer shows a control for.
+     */
+    private fun VerificationAnswers.withSpecies(species: EggSpecies): VerificationAnswers {
+        val keepsStage = stage != null && stage in EggStage.forSpecies(species)
+        val speciesChanged = species != this.species
+        return copy(
+            species = species,
+            otherSpeciesText = "",
+            stage = stage.takeIf { keepsStage },
+            otherStageText = if (keepsStage) otherStageText else "",
+            // A pin was derived for the OLD species (from persisted DB state or a prior submit).
+            // Once the species actually changes, that pin is meaningless for the new species and
+            // must be re-derived from scratch, or a stale `false` pin can block the list-order
+            // fallback from electing any primary for the new species.
+            isPrimaryAdded = if (speciesChanged) null else isPrimaryAdded,
+        )
     }
 
     fun onStageSelected(stage: EggStage) {
-        updateCurrentAnswer { it.copy(stage = stage) }
+        updateCurrentAnswer {
+            if (stage != EggStage.OTHER) {
+                it.copy(stage = stage, otherStageText = "")
+            } else {
+                it.copy(stage = stage)
+            }
+        }
     }
 
+    /**
+     * Applies a stage choice to an added card.
+     *
+     * A non-Other stage settles the card's key immediately — there is no further text to wait
+     * for — so it merges into a twin right away. An Other stage waits for [onAddedOtherStageChanged]
+     * and one of the settle points, the same as a species that resolves to Other.
+     */
     fun onAddedStageSelected(index: Int, stage: EggStage) {
-        updateAnswerAt(index) { it.copy(stage = stage) }
+        _state.update { current ->
+            val updated = current.findings.mapIndexed { i, finding ->
+                if (i != index) {
+                    finding
+                } else if (stage != EggStage.OTHER) {
+                    finding.copy(answers = finding.answers.copy(stage = stage, otherStageText = ""))
+                } else {
+                    finding.copy(answers = finding.answers.copy(stage = stage))
+                }
+            }
+            if (stage != EggStage.OTHER) {
+                current.applyMerge(updated.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = updated)
+            } else {
+                current.copy(findings = updated)
+            }
+        }
+    }
+
+    fun onOtherStageChanged(text: String) {
+        updateCurrentAnswer { it.copy(otherStageText = text) }
     }
 
     fun onOtherSpeciesChanged(text: String) {
@@ -494,8 +610,51 @@ class VerificationViewModel @Inject constructor(
      * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
     fun onAddSpecies() {
-        _state.update {
-            it.copy(findings = it.findings + Finding(answers = VerificationAnswers(fieldTotal = 1)))
+        val unfinished = _state.value.firstUnfinishedAddedIndex()
+        if (unfinished != null) {
+            _state.update { it.copy(expandedFindingIndex = unfinished) }
+            viewModelScope.launch { _events.emit(VerificationEvent.FinishCurrentSpeciesFirst) }
+        } else {
+            _state.update {
+                val consolidated = it.findings.consolidateAddedTwins()
+                val nextIndex = consolidated.size
+                it.copy(
+                    findings = consolidated + Finding(answers = VerificationAnswers(fieldTotal = 1)),
+                    expandedFindingIndex = nextIndex,
+                )
+            }
+        }
+    }
+
+    /**
+     * Expands an added finding at [index] into an editable card.
+     *
+     * Refused on a prediction-backed row (index < boxCount) or out-of-range index.
+     */
+    fun onExpandFinding(index: Int) {
+        _state.update { current ->
+            val boxCount = current.frame?.predictions?.size ?: 0
+            if (index >= boxCount && index in current.findings.indices) {
+                current.copy(expandedFindingIndex = index)
+            } else {
+                current
+            }
+        }
+    }
+
+    /**
+     * Collapses an added finding at [index] if it is currently expanded, and folds it into a
+     * twin card sharing its species+stage — the settle point for a card left without a stage, or
+     * left on an Other stage whose text now matches another card's.
+     */
+    fun onCollapseFinding(index: Int) {
+        _state.update { current ->
+            if (current.expandedFindingIndex != index) {
+                current
+            } else {
+                val collapsed = current.copy(expandedFindingIndex = null)
+                collapsed.applyMerge(collapsed.findings.mergeAddedCardIntoTwin(index)) ?: collapsed
+            }
         }
     }
 
@@ -513,7 +672,16 @@ class VerificationViewModel @Inject constructor(
             if (index < boxCount || index !in current.findings.indices) {
                 current
             } else {
-                current.copy(findings = current.findings.filterIndexed { i, _ -> i != index })
+                val newExpanded = when {
+                    current.expandedFindingIndex == index -> null
+                    current.expandedFindingIndex != null && current.expandedFindingIndex > index ->
+                        current.expandedFindingIndex - 1
+                    else -> current.expandedFindingIndex
+                }
+                current.copy(
+                    findings = current.findings.filterIndexed { i, _ -> i != index },
+                    expandedFindingIndex = newExpanded,
+                )
             }
         }
     }
@@ -532,42 +700,35 @@ class VerificationViewModel @Inject constructor(
     }
 
     /**
-     * Names the species on an added card, merging it into an existing card for the same species.
+     * Names the species on an added card, keeping its stage only when it still applies (see
+     * [VerificationAnswers.withSpecies]), and merging it into an existing card of the same
+     * species+stage once that key is settled.
      *
-     * The merge is not tidiness. `sample_species_findings` is unique on `(sample_id, species)`,
-     * the detection ids derive from the species, and the reopen path rebuilds one card per
-     * species — two cards naming one species have nowhere to be stored separately and would come
-     * back as one anyway. The card that already held the species survives; the one just renamed
-     * into it adds its total and hands over its drawn boxes, so nothing the medtech placed is
-     * dropped by renaming a card into a collision.
+     * **Merging is deferred until [speciesStageKeyIsSettled].** Right after the species is
+     * picked the stage is often still unanswered, and an unstaged Ascaris card is not yet the
+     * same finding as another unstaged Ascaris card that never gets a stage — merging here on
+     * species alone is exactly the silent-merge this ticket exists to fix. [onAddedStageSelected]
+     * and the settle points ([onAddSpecies], [onCollapseFinding], [onSubmit]) are what actually
+     * fold twins together, once the key can no longer change under them.
+     *
+     * The merge itself is not tidiness. `sample_species_findings` is unique on
+     * `(sample_id, species, stage)`, the detection ids derive from species+stage, and the reopen
+     * path rebuilds one card per species+stage — two cards naming the same one have nowhere to be
+     * stored separately and would come back as one anyway. The card that already held the key
+     * survives; the one just renamed into it adds its total and hands over its drawn boxes, so
+     * nothing the medtech placed is dropped by renaming a card into a collision.
      */
     fun onAddedSpeciesSelected(index: Int, species: EggSpecies) {
         _state.update { current ->
-            val named = current.findings.getOrNull(index)?.answers
-                ?.copy(species = species, otherSpeciesText = "")
+            val named = current.findings.getOrNull(index)?.answers?.withSpecies(species)
                 ?: return@update current
-            val twinIndex = current.findings.indexOfFirst { other ->
-                other.prediction == null && other.answers.speciesLabel == named.speciesLabel
+            val renamed = current.findings.mapIndexed { i, finding ->
+                if (i == index) finding.copy(answers = named) else finding
             }
-            if (twinIndex == -1 || twinIndex == index) {
-                current.copy(
-                    findings = current.findings.mapIndexed { i, finding ->
-                        if (i == index) finding.copy(answers = named) else finding
-                    },
-                )
+            if (!named.speciesStageKeyIsSettled) {
+                current.copy(findings = renamed)
             } else {
-                val twin = current.findings[twinIndex].answers
-                val merged = twin.copy(
-                    fieldTotal = (twin.fieldTotal ?: 0) + (named.fieldTotal ?: 0),
-                    drawnBoxes = twin.drawnBoxes + named.drawnBoxes,
-                )
-                current.copy(
-                    findings = current.findings
-                        .mapIndexed { i, finding ->
-                            if (i == twinIndex) finding.copy(answers = merged) else finding
-                        }
-                        .filterIndexed { i, _ -> i != index },
-                )
+                current.applyMerge(renamed.mergeAddedCardIntoTwin(index)) ?: current.copy(findings = renamed)
             }
         }
     }
@@ -575,6 +736,36 @@ class VerificationViewModel @Inject constructor(
     fun onAddedOtherSpeciesChanged(index: Int, text: String) {
         updateAnswerAt(index) { it.copy(otherSpeciesText = text) }
         searchSuggestions(SuggestionTarget.AddedFinding(index), text)
+    }
+
+    fun onAddedOtherStageChanged(index: Int, text: String) {
+        updateAnswerAt(index) { it.copy(otherStageText = text) }
+    }
+
+    /**
+     * Applies [merge], if any, remapping [VerificationUiState.expandedFindingIndex] and
+     * [VerificationUiState.drawTarget] so neither points at a card that just vanished or shifted.
+     *
+     * Null when [merge] is null — nothing to fold, caller keeps its own findings unchanged.
+     */
+    private fun VerificationUiState.applyMerge(merge: AddedCardMerge?): VerificationUiState? {
+        if (merge == null) return null
+        val removed = merge.removedIndex
+        val survivor = merge.survivorIndex
+        val remappedExpanded = when {
+            expandedFindingIndex == null -> null
+            expandedFindingIndex == removed -> survivor
+            expandedFindingIndex > removed -> expandedFindingIndex - 1
+            else -> expandedFindingIndex
+        }
+        // The gesture belonged to a slot on a card that just merged away, or on one that shifted
+        // underneath it. Neither address is safe to keep drawing against.
+        val remappedDrawTarget = drawTarget?.takeIf { it.findingIndex < removed }
+        return copy(
+            findings = merge.findings,
+            expandedFindingIndex = remappedExpanded,
+            drawTarget = remappedDrawTarget,
+        )
     }
 
     /**
@@ -633,38 +824,59 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onFramePrev() {
-        if (!state.value.canGoPrev) return
+    fun onFramePrev() = requestLeave(LeaveIntent.PREVIOUS_SAMPLE)
+
+    fun onFrameNext() = requestLeave(LeaveIntent.NEXT_SAMPLE)
+
+    /**
+     * Leaves the sample, or asks first when that would drop unsubmitted edits.
+     *
+     * Nothing on this screen is saved until Submit — paging to another sample or backing out
+     * re-seeds from scratch — and the cycle buttons sit right beside the frame, where a stray
+     * thumb lands. So a way off a sample with edits on it is held until the medtech confirms,
+     * and one with nothing to lose goes straight through, as it always did.
+     *
+     * A cycle button at the end of the queue does nothing and asks nothing: there is nowhere to
+     * go, so there is nothing to confirm.
+     */
+    private fun requestLeave(intent: LeaveIntent) {
+        if (intent != LeaveIntent.EXIT && neighbourFor(intent) == null) return
         if (_state.value.hasUnsavedChanges) {
-            _state.update { it.copy(pendingLeave = LeaveIntent.PREVIOUS_SAMPLE) }
+            _state.update { it.copy(pendingLeave = intent) }
         } else {
-            performFramePrev()
+            leave(intent)
         }
     }
 
-    private fun performFramePrev() {
-        val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx <= 0) return
-        setFrame(frames[idx - 1])
+    /** The medtech chose to leave and lose the edits. */
+    fun onConfirmLeave() {
+        val intent = _state.value.pendingLeave ?: return
+        _state.update { it.copy(pendingLeave = null) }
+        leave(intent)
     }
 
-    fun onFrameNext() {
-        if (!state.value.canGoNext) return
-        if (_state.value.hasUnsavedChanges) {
-            _state.update { it.copy(pendingLeave = LeaveIntent.NEXT_SAMPLE) }
-        } else {
-            performFrameNext()
+    /** The medtech chose to stay. Everything they entered is still there. */
+    fun onDismissLeave() {
+        _state.update { it.copy(pendingLeave = null) }
+    }
+
+    private fun leave(intent: LeaveIntent) {
+        when (intent) {
+            LeaveIntent.EXIT -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
+            else -> neighbourFor(intent)?.let { setFrame(it) }
         }
     }
 
-    private fun performFrameNext() {
+    /** The sample a cycle button would open, or null at either end or off the queue. */
+    private fun neighbourFor(intent: LeaveIntent): FlaggedFrame? {
         val frames = cycleFrames()
-        val current = currentFrame ?: return
-        val idx = frames.indexOfSample(current)
-        if (idx < 0 || idx >= frames.size - 1) return
-        setFrame(frames[idx + 1])
+        val idx = currentFrame?.let { frames.indexOfSample(it) } ?: -1
+        val step = when (intent) {
+            LeaveIntent.PREVIOUS_SAMPLE -> -1
+            LeaveIntent.NEXT_SAMPLE -> 1
+            LeaveIntent.EXIT -> 0
+        }
+        return if (idx < 0 || step == 0) null else frames.getOrNull(idx + step)
     }
 
     fun onDeleteFrame() {
@@ -700,7 +912,12 @@ class VerificationViewModel @Inject constructor(
         val slotIsValid = when {
             slot == null -> finding.prediction != null
             finding.prediction != null -> false
-            else -> slot in 0 until findings.unboxedCountOf(finding.answers.speciesLabel)
+            else -> slot in
+                0 until findings.unboxedCountOf(
+                    finding.answers.speciesLabel,
+                    finding.answers.stage,
+                    finding.answers.otherStageText,
+                )
         }
         if (slotIsValid) {
             _state.update { it.copy(drawTarget = DrawTarget(findingIndex, slot)) }
@@ -750,6 +967,64 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Discards a box the medtech drew on an added egg, without touching the count.
+     *
+     * The gap this closes: accepting a box committed it with no way back. Lowering the species'
+     * total is not a way back either — `totalsAreConsistent` floors it at the drawn boxes, so a
+     * badly placed box made the count it belongs to unlowerable too, and the only escape was to
+     * remove the species card and retype everything.
+     *
+     * Removing shifts the later boxes down a slot, which is what keeps drawn boxes packed at the
+     * front — the invariant that makes "lowering the count drops undrawn eggs first" true. The
+     * species still claims the same number of eggs; one of them simply goes back to unlocated,
+     * which is a complete answer.
+     *
+     * Refused on a prediction-backed row: there is no slot there, and a model box is never
+     * removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
+        _state.update { current ->
+            val finding = current.findings.getOrNull(findingIndex)
+            if (finding == null || finding.prediction != null ||
+                slot !in finding.answers.drawnBoxes.indices
+            ) {
+                return@update current
+            }
+            val boxes = finding.answers.drawnBoxes.toMutableList().apply { removeAt(slot) }
+            val updated = current.findings.toMutableList()
+            updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
+            // A draw aimed at a slot that just moved would land on the wrong egg.
+            val target = current.drawTarget
+            val keepTarget = target == null ||
+                target.findingIndex != findingIndex ||
+                (target.slot ?: 0) < slot
+            current.copy(
+                findings = updated,
+                drawTarget = if (keepTarget) target else null,
+            )
+        }
+    }
+
+    /**
+     * Takes back a box the medtech drew over one of the model's, leaving the row answering
+     * "the model misplaced this box" with no replacement — a complete answer on its own.
+     *
+     * The same undo an added egg's box has had since 86d4by5n5. Without it a replacement drawn in
+     * the wrong place was final: redrawing could move it, but nothing could say "I have no better
+     * box than the model's after all".
+     *
+     * [VerificationAnswers.boxReplaced] clears with the box. It latches Q2 because a human box
+     * sits on the row, and once none does there is nothing to protect: the medtech may now decide
+     * the model's box was right after all. Q2 itself stays unticked until they say so. The model's
+     * box is untouched either way — it is never removed, only replaced or marked wrong (C8).
+     */
+    fun onRemoveReplacementBox(findingIndex: Int) {
+        updateAnswerAt(findingIndex) {
+            if (it.boxReplaced) it.copy(drawnBox = null, boxReplaced = false) else it
+        }
+    }
+
     fun onToggleBoundingBoxes() {
         _state.update { it.copy(showBoundingBoxes = !it.showBoundingBoxes) }
     }
@@ -759,17 +1034,28 @@ class VerificationViewModel @Inject constructor(
         val snapshot = _state.value
         if (!snapshot.canSubmit) return
 
+        // Which added card is primary for each species is decided right here, the same election
+        // toDetectionEntities is about to make from this very list. Writing it back onto state
+        // now — not just using it transiently for this submit — is what stops a later in-session
+        // removal (no reopen involved) from re-electing a different card as primary on the next
+        // submit; see `Finding.withResolvedPrimaryPins`.
+        val findingsToSubmit = snapshot.findings.consolidateAddedTwins().withResolvedPrimaryPins()
+
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, errorMessage = null) }
             submitVerificationUseCase(
                 frame = frame,
-                findings = snapshot.findings,
+                findings = findingsToSubmit,
                 missedEgg = snapshot.missedEgg,
                 userNote = snapshot.userNote,
             ).fold(
                 onSuccess = {
                     currentFrame = null
-                    _state.update { it.copy(isSubmitting = false) }
+                    // Only now, once the pins this submit acted on are actually durable, does the
+                    // election they encode become the pin future in-session edits must respect.
+                    // Writing it earlier (or on failure, below) would lock in a decision nothing
+                    // was ever persisted for.
+                    _state.update { it.copy(isSubmitting = false, findings = findingsToSubmit) }
                     _events.emit(VerificationEvent.Dismiss)
                 },
                 onFailure = { throwable ->
@@ -780,62 +1066,8 @@ class VerificationViewModel @Inject constructor(
         }
     }
 
-    fun onCancel() {
-        if (_state.value.hasUnsavedChanges) {
-            _state.update { it.copy(pendingLeave = LeaveIntent.EXIT) }
-        } else {
-            viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
-        }
-    }
-
-    fun onConfirmLeave() {
-        val intent = _state.value.pendingLeave
-        _state.update { it.copy(pendingLeave = null) }
-        when (intent) {
-            LeaveIntent.PREVIOUS_SAMPLE -> performFramePrev()
-            LeaveIntent.NEXT_SAMPLE -> performFrameNext()
-            LeaveIntent.EXIT, null -> viewModelScope.launch { _events.emit(VerificationEvent.Dismiss) }
-        }
-    }
-
-    fun onDismissLeave() {
-        _state.update { it.copy(pendingLeave = null) }
-    }
-
-    fun onRemoveDrawnBox(findingIndex: Int, slot: Int) {
-        _state.update { current ->
-            val updated = current.findings.toMutableList()
-            val finding = updated.getOrNull(findingIndex) ?: return@update current
-            val boxes = finding.answers.drawnBoxes.toMutableList()
-            if (slot in boxes.indices) {
-                boxes.removeAt(slot)
-                updated[findingIndex] = finding.copy(answers = finding.answers.copy(drawnBoxes = boxes))
-            }
-            val draw = current.drawTarget
-            val nextDraw = if (draw?.findingIndex == findingIndex && draw.slot != null && draw.slot >= slot) {
-                null
-            } else {
-                draw
-            }
-            current.copy(findings = updated, drawTarget = nextDraw)
-        }
-    }
-
-    fun onRemoveReplacementBox(findingIndex: Int) {
-        _state.update { current ->
-            val updated = current.findings.toMutableList()
-            val finding = updated.getOrNull(findingIndex) ?: return@update current
-            updated[findingIndex] = finding.copy(
-                answers = finding.answers.copy(
-                    drawnBox = null,
-                    boxReplaced = false,
-                ),
-            )
-            val draw = current.drawTarget
-            val nextDraw = if (draw?.findingIndex == findingIndex) null else draw
-            current.copy(findings = updated, drawTarget = nextDraw)
-        }
-    }
+    /** The top bar's back and the hardware back gesture. Asks first when edits would be lost. */
+    fun onCancel() = requestLeave(LeaveIntent.EXIT)
 
     /**
      * Position of [frame] by sample id. Deliberately not `indexOf`: matching on identity

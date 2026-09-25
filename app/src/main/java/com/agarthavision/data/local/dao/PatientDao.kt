@@ -21,9 +21,9 @@ import kotlinx.coroutines.flow.Flow
  * than reimplementing a different rule locally. Filtering on `created_by` instead would
  * hide a patient an admin had shared with this medtech.
  *
- * None of these queries touch `samples`, so `SoftDeleteGuardTest` has nothing to enforce
- * here and this file is deliberately not in its `daoFiles` list. If a future method does
- * join `samples`, add it there in the same change.
+ * `observePatients` reads `sessions` and `samples` to compute recent activity for the
+ * Recent sort, filtering out tombstoned samples (`sa.deleted_at IS NULL`), so this file is
+ * included in `SoftDeleteGuardTest.daoFiles`.
  *
  * `TooManyFunctions` is suppressed for the same reason [SessionDao] suppresses it: one
  * table's queries belong in one `@Dao`, and splitting them across two interfaces to satisfy
@@ -34,7 +34,8 @@ import kotlinx.coroutines.flow.Flow
 interface PatientDao {
 
     /**
-     * One page of the signed-in medtech's patients, by name, optionally filtered.
+     * One page of the signed-in medtech's patients, ordered by recent activity (patient edit,
+     * session start, or sample capture/validation) or name, optionally filtered.
      *
      * [query] matches lastname or firstname. A blank query matches everything — the
      * `:query = ''` short-circuit keeps the plan simple rather than relying on `LIKE '%%'`.
@@ -57,7 +58,14 @@ interface PatientDao {
           AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
           AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
         ORDER BY
-          CASE WHEN :sort = 'RECENT' THEN p.updated_at END DESC,
+          CASE WHEN :sort = 'RECENT' THEN MAX(
+              p.updated_at,
+              COALESCE((SELECT MAX(se.started_at) FROM sessions se
+                        WHERE se.patient_id = p.patient_id), 0),
+              COALESCE((SELECT MAX(MAX(sa.timestamp, sa.verified_at)) FROM samples sa
+                        INNER JOIN sessions se2 ON se2.session_id = sa.session_id
+                        WHERE se2.patient_id = p.patient_id AND sa.deleted_at IS NULL), 0)
+          ) END DESC,
           CASE WHEN :sort = 'LAST_NAME' THEN p.lastname END ASC,
           CASE WHEN :sort = 'FIRST_NAME' THEN p.firstname END ASC,
           p.lastname ASC, p.firstname ASC

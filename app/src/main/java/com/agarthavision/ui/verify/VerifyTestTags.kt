@@ -8,6 +8,7 @@ package com.agarthavision.ui.verify
  * reason. Anything here is a contract with `src/test/java/.../ui/verify/` — renaming
  * a tag means updating the tests in the same change.
  */
+@Suppress("TooManyFunctions")
 internal object VerifyTestTags {
     /** [SheetActionRow]'s confirm button — "Submit" at both sheet call sites. */
     const val SHEET_PRIMARY_ACTION = "sheet_primary_action"
@@ -135,8 +136,6 @@ internal object VerifyTestTags {
      */
     const val LOCATE_TOGGLE = "locate_toggle"
 
-    /** The live per-species summary of what submitting would write. */
-    const val FINDINGS_SUMMARY = "findings_summary"
 
     /**
      * The species already on this device, offered under whichever "Other species" field is
@@ -167,6 +166,22 @@ internal object VerifyTestTags {
 
     /** Species picker on the added finding at [index]. */
     fun addedSpeciesDropdown(index: Int): String = "added_species_dropdown_" + index
+
+    fun addedSpeciesSummary(index: Int): String = "added_species_summary_" + index
+    fun addedSpeciesForm(index: Int): String = "added_species_form_" + index
+    fun saveFinding(index: Int): String = "save_finding_" + index
+
+    /** Wraps the left-side name/stage/warning column on the summary card at [index]. */
+    fun addedSpeciesSummaryText(index: Int): String = "added_species_summary_text_" + index
+
+    /** The species name line on the summary card at [index]. */
+    fun addedSpeciesSummaryName(index: Int): String = "added_species_summary_name_" + index
+
+    /** The stage line on the summary card at [index], present only when a stage is shown. */
+    fun addedSpeciesSummaryStage(index: Int): String = "added_species_summary_stage_" + index
+
+    /** The egg-count text on the summary card at [index]. */
+    fun addedSpeciesSummaryCount(index: Int): String = "added_species_summary_count_" + index
 
     /** Stage picker on the added finding at [index]. */
     fun addedStageDropdown(index: Int): String = "added_stage_dropdown_" + index

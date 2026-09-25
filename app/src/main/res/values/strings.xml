@@ -52,14 +52,23 @@
     <!-- Polyparasitism: one field can hold eggs of more than one species (86d4ab4tq). -->
     <string name="verify_species_you_added">SPECIES YOU ADDED</string>
     <string name="verify_add_species">+ Add species</string>
-    <string name="verify_remove_species">Remove</string>
-    <string name="verify_field_total_label">Eggs of this species in this field</string>
+    <string name="verify_remove_species">Discard</string>
+    <string name="verify_save_species">Save</string>
+    <string name="verify_field_total_label">Egg count</string>
     <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>
     <string name="verify_field_total_floor">Cannot be below %1$d — that many are already boxed or drawn</string>
+    <string name="verify_locate_eggs_section">LOCATE EGGS</string>
     <string name="verify_locate_eggs">Locate eggs · %1$d of %2$d located</string>
     <string name="verify_locate_eggs_note">Optional. Drawing where they are improves future results.</string>
     <string name="verify_locate_egg_row">%1$s · egg %2$d of %3$d</string>
-    <string name="verify_will_be_saved">WILL BE SAVED</string>
+    <string name="verify_add_species_blocked">Finish the species above first: choose a species and enter its egg count.</string>
+    <string name="verify_added_species_not_chosen">Species not chosen</string>
+    <string name="verify_added_species_unfinished">Not finished. Tap to complete.</string>
+    <string name="verify_added_species_edit">Edit species</string>
+    <plurals name="verify_added_species_eggs">
+        <item quantity="one">%1$d egg</item>
+        <item quantity="other">%1$d eggs</item>
+    </plurals>
     <string name="verify_model_output">MODEL OUTPUT</string>
     <!--
       Kept distinct on purpose: "no signal was collected" and "the model looked and found
@@ -103,14 +112,14 @@
     <string name="verify_detection_counter">Detection %1$d of %2$d</string>
     <string name="verify_boxes_toggle">Boxes</string>
     <string name="verify_draw_accept">Save box</string>
-    <string name="verify_draw_box">Draw box</string>
+    <string name="verify_draw_box">Draw Box</string>
     <string name="verify_redraw_box">Redraw</string>
     <string name="verify_box_replaced">You replaced this box, so the model\'s placement stays recorded as wrong.</string>
     <string name="verify_draw_cancel">Cancel</string>
     <string name="verify_draw_hint">Drag across the egg to draw a box around it.</string>
-    <string name="verify_leave_title">Discard your changes?</string>
+    <string name="verify_leave_title">Discard changes?</string>
     <string name="verify_leave_body">Your answers on this sample have not been submitted. Leaving now loses them.</string>
-    <string name="verify_leave_confirm">Discard changes</string>
+    <string name="verify_leave_confirm">Discard</string>
     <string name="verify_leave_dismiss">Keep editing</string>
     <string name="verify_draw_target_box">Redrawing detection %1$d of %2$d</string>
     <string name="verify_remove_box">Remove</string>
