@@ -196,17 +196,22 @@ private fun KpiTile(
     colors: KpiTileColors,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .background(colors.bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.borderColor, RoundedCornerShape(12.dp))
-            .padding(14.dp)
-    ) {
-        Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
-        Spacer(Modifier.height(6.dp))
-        if (data.isLoading) {
-            SkeletonBox(Modifier.width(48.dp).height(30.dp))
-        } else {
+    if (data.isLoading) {
+        SkeletonBox(
+            modifier = modifier
+                .fillMaxWidth()
+                .height(76.dp),
+            shape = RoundedCornerShape(12.dp)
+        )
+    } else {
+        Column(
+            modifier = modifier
+                .background(colors.bgColor, RoundedCornerShape(12.dp))
+                .border(1.dp, colors.borderColor, RoundedCornerShape(12.dp))
+                .padding(14.dp)
+        ) {
+            Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
+            Spacer(Modifier.height(6.dp))
             Text(
                 data.value,
                 fontSize = 28.sp,
@@ -216,20 +221,20 @@ private fun KpiTile(
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 30.sp
             )
-        }
-        if (data.trend != null) {
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (data.trend.isUp) {
-                    Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
+            if (data.trend != null) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (data.trend.isUp) {
+                        Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
+                    }
+                    Text(
+                        data.trend.label,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (data.trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    )
                 }
-                Text(
-                    data.trend.label,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (data.trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                )
             }
         }
     }
