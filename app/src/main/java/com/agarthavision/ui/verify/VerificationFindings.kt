@@ -391,7 +391,7 @@ private fun AddedFindingCard(
  * Only shown for species that actually have stages (`EggStage.forSpecies` non-empty) — a stale
  * stage value left over from an earlier species selection never surfaces here.
  */
-private fun VerificationAnswers.summaryStageText(): String? =
+internal fun VerificationAnswers.summaryStageText(): String? =
     stageDisplayName?.takeIf { species != null && EggStage.forSpecies(species).isNotEmpty() }
 
 @Composable
@@ -593,18 +593,26 @@ private fun LocateEggsSection(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(
-                            text = stringResource(
-                                R.string.verify_locate_egg_row,
-                                slot.species,
-                                slot.ordinalInField,
-                                slot.fieldTotal,
-                            ),
-                            color = if (isDrawn) colors.onGold else colors.textPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.weight(1f),
-                        )
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp),
+                        ) {
+                            Text(
+                                text = locateEggTitleText(slot.species, slot.ordinalInField, slot.fieldTotal),
+                                color = if (isDrawn) colors.onGold else colors.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                            )
+                            if (slot.stage != null) {
+                                Text(
+                                    text = slot.stage,
+                                    color = if (isDrawn) colors.onGold.copy(alpha = 0.8f) else colors.textSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 14.sp,
+                                )
+                            }
+                        }
                         if (isDrawn) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 DrawBoxAction(
@@ -636,16 +644,36 @@ private fun LocateEggsSection(
 }
 
 /**
+ * Renders the locate-eggs row title: species and which egg of the field's total.
+ */
+@Composable
+internal fun locateEggTitleText(species: String, ordinal: Int, total: Int): String =
+    stringResource(R.string.verify_locate_egg_title, species, ordinal, total)
+
+/**
+ * Renders the locate-eggs row/caption text: species, an optional developmental stage in
+ * parentheses, then which egg of the field's total.
+ */
+@Composable
+internal fun locateEggRowText(species: String, stage: String?, ordinal: Int, total: Int): String =
+    if (stage == null) stringResource(R.string.verify_locate_egg_row, species, ordinal, total)
+    else stringResource(R.string.verify_locate_egg_row_staged, species, stage, ordinal, total)
+
+/**
  * One egg of an added species that has no box from the model — drawn or still to draw.
  *
  * [ordinalInField] counts within the species across the whole frame, so the eggs the model boxed
  * take the first numbers and these carry on from there: "egg 10 of 23" means what it says to
  * someone looking down a microscope, where "unboxed egg 1" would not.
+ *
+ * [stage] is the display stage shown in the row, or null when the row shows none (mirrors
+ * [VerificationAnswers.summaryStageText] so the row and the summary card always agree).
  */
 private data class LocatableSlot(
     val findingIndex: Int,
     val slot: Int,
     val species: String,
+    val stage: String?,
     val ordinalInField: Int,
     val fieldTotal: Int,
     val box: ImageBox?,
@@ -657,12 +685,14 @@ private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
         val species = answers.speciesLabel ?: return@flatMap emptyList<LocatableSlot>()
         val stage = answers.stage
         val otherStageText = answers.otherStageText
+        val stageText = answers.summaryStageText()
         val boxed = boxedCountOf(species, stage, otherStageText)
         (0 until unboxedCountOf(species, stage, otherStageText)).map { slot ->
             LocatableSlot(
                 findingIndex = index,
                 slot = slot,
                 species = species,
+                stage = stageText,
                 ordinalInField = boxed + slot + 1,
                 fieldTotal = fieldTotalOf(species, stage, otherStageText),
                 box = answers.drawnBoxes.getOrNull(slot),
