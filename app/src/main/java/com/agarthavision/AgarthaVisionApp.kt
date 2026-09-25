@@ -6,6 +6,8 @@ import androidx.work.Configuration
 import android.util.Log
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import coil.disk.DiskCache
+import coil.memory.MemoryCache
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.data.local.psgc.PsgcSeeder
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
@@ -110,6 +112,11 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
     /**
      * App-wide ImageLoader. Coil calls this once (lazily, before the first load), at which
      * point Hilt field injection is already complete, so [sampleImageRepository] is ready.
+     *
+     * Disk cache is fixed at 100MB (vs Coil's default of ~2% of disk space, clamped between
+     * 10MB and 250MB) and the memory cache is sized at 25% of the memory class (vs Coil's
+     * default 20%), both sized up because the records and verification queue screens are
+     * image-heavy.
      */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
@@ -117,6 +124,21 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
                 add(SampleImageKeyer())
                 add(SampleImageFetcher.Factory(sampleImageRepository))
             }
+            .memoryCache {
+                MemoryCache.Builder(this).maxSizePercent(MEMORY_CACHE_PERCENT).build()
+            }
+            .diskCache {
+                DiskCache.Builder()
+                    .directory(cacheDir.resolve(IMAGE_CACHE_DIR))
+                    .maxSizeBytes(DISK_CACHE_MAX_BYTES)
+                    .build()
+            }
+            // Sample images are content-stable under their storage-path key: uploads use
+            // upsert = true to the same path, so a disk cache hit never needs revalidation.
+            .respectCacheHeaders(false)
+            // Intentionally not reusing the app's other OkHttpClient (used for the inference
+            // API): it carries a bearer-token interceptor that must never be sent to the
+            // Supabase Storage host. Coil's own default lazy OkHttpClient is correct here.
             .build()
 
     override val workManagerConfiguration: Configuration
@@ -126,5 +148,8 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
 
     private companion object {
         private const val TAG = "AgarthaVisionApp"
+        private const val MEMORY_CACHE_PERCENT = 0.25
+        private const val DISK_CACHE_MAX_BYTES = 100L * 1024 * 1024
+        private const val IMAGE_CACHE_DIR = "image_cache"
     }
 }

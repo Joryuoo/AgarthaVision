@@ -43,6 +43,16 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
 
 **Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
+
+The app-wide Coil `ImageLoader` is configured in `AgarthaVisionApp.newImageLoader()`: disk
+cache fixed at 100MB, memory cache at 25% of the memory class, and `respectCacheHeaders(false)`
+because sample image storage paths are stable/content-addressed (uploads `upsert` to the same
+path, so a cached response never needs revalidation). There is deliberately no OkHttp response
+cache configured on the inference client or on any Supabase-backed client: the inference API is
+POST-only and its `/health` check must always hit the network rather than serve a stale cached
+"online" result, and caching Supabase responses would mean writing patient PII to unencrypted
+disk (see `docs/patient-pii-position.md`, Position 4, on at-rest encryption being out of scope
+for Phase 1).
 - Version 10 added `sessions.psgc_barangay_code` and the `psgc_barangays` reference table.
 - **Version 11 is deliberately left free** for the reverted egg-stage ticket (86d4a6jwy), so that when it returns it does not collide with existing builds carrying that version.
 - Version 12 added `sample_species_findings`, `detections.species_touched`, and `samples.deleted_at`.
