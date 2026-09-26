@@ -209,4 +209,21 @@ class SessionRepositoryImpl @Inject constructor(
         excludeSessionId: String?,
     ): Flow<Int> =
         sessionDao.observeEmptySessionCount(userId, excludeSessionId)
+
+    override fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> =
+        sessionDao.observeSessionOutcomesBetween(userId, fromMillis, toMillis).map { rows ->
+            rows.map {
+                com.agarthavision.domain.model.SessionOutcome(
+                    sessionId = it.sessionId,
+                    patientId = it.patientId,
+                    startedAt = it.startedAt,
+                    examined = it.examined,
+                    positive = it.positive,
+                )
+            }
+        }
 }

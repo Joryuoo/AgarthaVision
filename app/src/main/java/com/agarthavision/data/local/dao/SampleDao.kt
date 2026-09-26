@@ -322,7 +322,27 @@ interface SampleDao {
         """,
     )
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
+
+    @Query(
+        """
+        SELECT sample_id AS sampleId, status, timestamp AS capturedAt, verified_at AS verifiedAt
+        FROM samples WHERE user_id = :userId AND deleted_at is null
+          AND ((timestamp >= :fromMillis AND timestamp < :toMillis) OR (verified_at >= :fromMillis AND verified_at < :toMillis))
+        """,
+    )
+    fun observeSampleTimesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<SampleTimeRow>>
 }
+
+data class SampleTimeRow(
+    val sampleId: String,
+    val status: String,
+    val capturedAt: Long,
+    val verifiedAt: Long,
+)
 
 // QueueSampleRow is gone with the union query above. It existed to carry a correlated
 // count of confirmed detections alongside each sample, which only ever meant anything for a

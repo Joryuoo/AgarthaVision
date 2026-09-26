@@ -8,9 +8,13 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.domain.model.AgreementBreakdown
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.model.windows
 import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientRepository
@@ -43,6 +47,8 @@ data class DashboardUiState(
     val isLoading: Boolean = true,
     val activeSession: ActiveSessionState? = null,
     val kpis: KpiState = KpiState(),
+    val kpiTiles: List<KpiTileUi> = emptyList(),
+    val aiBreakdown: AgreementBreakdown = AgreementBreakdown(0, 0, 0, 0),
     val topSpecies: List<SpeciesData> = emptyList(),
     val pendingReviewCount: Int = 0,
     val oldestPendingAt: Long? = null,
@@ -92,6 +98,14 @@ data class PendingAndSync(
     val initialFetchDone: Boolean = true,
 )
 
+private data class ContentBundle(
+    val kpis: KpiState,
+    val tiles: List<KpiTileUi>,
+    val aiBreakdown: AgreementBreakdown,
+    val topSpecies: List<SpeciesData>,
+    val selectedPeriod: HomePeriod,
+)
+
 private data class SessionAndSyncBundle(
     val pendingSync: PendingAndSync,
     val activeSession: ActiveSessionState?,
@@ -118,6 +132,7 @@ class DashboardViewModel @Inject constructor(
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
     observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
+    private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
@@ -271,12 +286,114 @@ class DashboardViewModel @Inject constructor(
         Triple(identity != null, !online, syncing)
     }
 
+    private val homeKpisFlow = combine(
+        userIdFlow,
+        period,
+    ) { userId, p ->
+        userId to p
+    }.flatMapLatest { (userId, p) ->
+        if (userId == null) {
+            flowOf(null)
+        } else {
+            val windows = p.windows(clock.instant(), CLINICAL_ZONE)
+            observeHomeKpisUseCase(userId, windows)
+        }
+    }
+
+    private val kpiTilesFlow = combine(
+        homeKpisFlow,
+        period,
+    ) { kpis, p ->
+        if (kpis == null) {
+            emptyList()
+        } else {
+            listOf(
+                KpiTileUi(
+                    kind = KpiKind.SESSIONS,
+                    label = "Sessions",
+                    value = kpis.sessions.current.toString(),
+                    subtitle = if (kpis.patientsInSessions == 1) {
+                        "1 patient"
+                    } else {
+                        "${kpis.patientsInSessions} patients"
+                    },
+                    spokenDescription = "Sessions, ${kpis.sessions.current}, " +
+                        "${kpis.patientsInSessions} patients. Opens sessions.",
+                ),
+                KpiTileUi(
+                    kind = KpiKind.POSITIVE_RATE,
+                    label = "Positive rate",
+                    value = if (kpis.positiveRate.current.denominator == 0) {
+                        "—"
+                    } else {
+                        "${(kpis.positiveRate.current.value!! * 100).toInt()}%"
+                    },
+                    subtitle = if (kpis.positiveRate.current.denominator == 0) {
+                        "No smears examined yet"
+                    } else {
+                        "${kpis.positiveRate.current.numerator} of ${kpis.positiveRate.current.denominator} smears"
+                    },
+                    spokenDescription = if (kpis.positiveRate.current.denominator == 0) {
+                        "Positive rate, no smears examined yet. Opens examined smears."
+                    } else {
+                        val pct = (kpis.positiveRate.current.value!! * 100).toInt()
+                        val num = kpis.positiveRate.current.numerator
+                        val den = kpis.positiveRate.current.denominator
+                        "Positive rate, $pct percent, $num of $den smears. Opens examined smears."
+                    },
+                ),
+                KpiTileUi(
+                    kind = KpiKind.TO_REVIEW,
+                    label = "To review",
+                    value = kpis.toReview.current.toString(),
+                    subtitle = if (p == HomePeriod.TODAY) {
+                        "${kpis.verifiedInPeriod} verified today"
+                    } else {
+                        "${kpis.verifiedInPeriod} verified in period"
+                    },
+                    spokenDescription = "To review, ${kpis.toReview.current} frames. Opens frames to review.",
+                ),
+                KpiTileUi(
+                    kind = KpiKind.AI_AGREEMENT,
+                    label = "AI agreement",
+                    value = if (kpis.aiAgreement.current.denominator == 0) {
+                        "—"
+                    } else {
+                        "${(kpis.aiAgreement.current.value!! * 100).toInt()}%"
+                    },
+                    subtitle = if (kpis.aiAgreement.current.denominator == 0) {
+                        "No AI results reviewed yet"
+                    } else {
+                        "${kpis.aiBreakdown.corrected} of ${kpis.aiAgreement.current.denominator} corrected by you"
+                    },
+                    spokenDescription = if (kpis.aiAgreement.current.denominator == 0) {
+                        "AI agreement, no AI results reviewed yet. Opens AI agreement details."
+                    } else {
+                        val pct = (kpis.aiAgreement.current.value!! * 100).toInt()
+                        val corrected = kpis.aiBreakdown.corrected
+                        val den = kpis.aiAgreement.current.denominator
+                        "AI agreement, $pct percent, $corrected of $den corrected by you. " +
+                            "Opens AI agreement details."
+                    },
+                ),
+            )
+        }
+    }
+
     private val contentFlow = combine(
         kpiStateFlow,
+        kpiTilesFlow,
+        homeKpisFlow,
         topSpeciesFlow,
         period,
-    ) { kpis, topSpecies, selectedPeriod ->
-        Triple(kpis, topSpecies, selectedPeriod)
+    ) { kpis, tiles, homeKpis, topSpecies, selectedPeriod ->
+        ContentBundle(
+            kpis = kpis,
+            tiles = tiles,
+            aiBreakdown = homeKpis?.aiBreakdown ?: AgreementBreakdown(0, 0, 0, 0),
+            topSpecies = topSpecies,
+            selectedPeriod = selectedPeriod,
+        )
     }
 
     private val sessionAndSyncFlow = combine(
@@ -293,7 +410,6 @@ class DashboardViewModel @Inject constructor(
         sessionAndSyncFlow,
         themeModeFlow,
     ) { content, sessionAndSync, themeMode ->
-        val (kpis, topSpecies, selectedPeriod) = content
         val pendingSync = sessionAndSync.pendingSync
         val activeSession = sessionAndSync.activeSession
         val accountSync = sessionAndSync.accountSync
@@ -301,20 +417,22 @@ class DashboardViewModel @Inject constructor(
         val (isSignedIn, isOffline, isSyncing) = accountSync
         DashboardUiState(
             isLoading = false,
-            kpis = kpis,
+            kpis = content.kpis,
+            kpiTiles = content.tiles,
+            aiBreakdown = content.aiBreakdown,
             pendingReviewCount = pendingSync.pendingCount,
             oldestPendingAt = pendingSync.oldestPendingAt,
             allSynced = pendingSync.allSynced,
             lastSyncedAt = pendingSync.lastSyncedAt,
             syncedSamplesCount = pendingSync.syncedSamplesCount,
             activeSession = activeSession,
-            topSpecies = topSpecies,
+            topSpecies = content.topSpecies,
             isDarkMode = themeMode == ThemeMode.DARK,
             isSignedIn = isSignedIn,
             isOffline = isOffline,
             pendingUploadCount = pendingSync.pendingCount,
             isSyncing = isSyncing,
-            period = selectedPeriod,
+            period = content.selectedPeriod,
             needsAttention = needsAttention,
         )
     }.stateIn(

@@ -401,6 +401,22 @@ interface SessionDao {
         """,
     )
     fun observeEmptySessionCount(userId: String, excludeSessionId: String?): Flow<Int>
+
+    @Query(
+        """
+        SELECT s.session_id AS sessionId, s.patient_id AS patientId, s.started_at AS startedAt,
+          EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged') AS examined,
+          EXISTS (SELECT 1 FROM samples sa JOIN detections d ON d.sample_id = sa.sample_id
+                  WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged'
+                    AND d.verdict != 'false_positive') AS positive
+        FROM sessions s WHERE s.user_id = :userId AND s.started_at >= :fromMillis AND s.started_at < :toMillis
+        """,
+    )
+    fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<SessionOutcomeRow>>
 }
 
 /**
@@ -504,4 +520,12 @@ data class SessionSummaryRow(
     val unverifiedSamples: Int,
     val isPositive: Boolean,
     val lastActivityAt: Long,
+)
+
+data class SessionOutcomeRow(
+    val sessionId: String,
+    val patientId: String,
+    val startedAt: Long,
+    val examined: Boolean,
+    val positive: Boolean,
 )

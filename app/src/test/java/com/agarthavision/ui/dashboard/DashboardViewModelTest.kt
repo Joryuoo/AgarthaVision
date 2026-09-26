@@ -6,9 +6,13 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
 import androidx.lifecycle.SavedStateHandle
+import com.agarthavision.domain.model.AgreementBreakdown
 import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.domain.model.HomeKpis
 import com.agarthavision.domain.model.HomePeriod
+import com.agarthavision.domain.model.KpiMetric
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.Ratio
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientRepository
@@ -20,6 +24,7 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
@@ -99,6 +104,18 @@ class DashboardViewModelTest {
     private val observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase = mock<ObserveNeedsAttentionUseCase>().also {
         whenever(it.invoke(any(), anyOrNull())).thenReturn(flowOf(NeedsAttention(0, 0, 0)))
     }
+    private val defaultKpis = HomeKpis(
+        sessions = KpiMetric(0, 0, emptyList()),
+        patientsInSessions = 0,
+        positiveRate = KpiMetric(Ratio(0, 0), Ratio(0, 0), emptyList()),
+        toReview = KpiMetric(0, 0, emptyList()),
+        verifiedInPeriod = 0,
+        aiAgreement = KpiMetric(Ratio(0, 0), Ratio(0, 0), emptyList()),
+        aiBreakdown = AgreementBreakdown(0, 0, 0, 0),
+    )
+    private val observeHomeKpisUseCase: ObserveHomeKpisUseCase = mock<ObserveHomeKpisUseCase>().also {
+        whenever(it.invoke(any(), any())).thenReturn(flowOf(defaultKpis))
+    }
 
     private fun viewModel(
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -118,6 +135,7 @@ class DashboardViewModelTest {
         observeThemeModeUseCase = observeThemeModeUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
         observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
+        observeHomeKpisUseCase = observeHomeKpisUseCase,
     )
 
     @Test
@@ -338,6 +356,54 @@ class DashboardViewModelTest {
                     snapshot = awaitItem()
                 }
                 assertEquals(HomePeriod.LAST_30_DAYS, snapshot.period)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `kpiTiles formats HomeKpis metrics correctly`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val sampleKpis = HomeKpis(
+                sessions = KpiMetric(10, 5, emptyList()),
+                patientsInSessions = 4,
+                positiveRate = KpiMetric(Ratio(2, 8), Ratio(1, 4), emptyList()),
+                toReview = KpiMetric(3, 1, emptyList()),
+                verifiedInPeriod = 15,
+                aiAgreement = KpiMetric(Ratio(18, 20), Ratio(9, 10), emptyList()),
+                aiBreakdown = AgreementBreakdown(
+                    confirmed = 18,
+                    wrongClass = 1,
+                    boxIncorrect = 1,
+                    falsePositive = 0,
+                ),
+            )
+            whenever(observeHomeKpisUseCase.invoke(any(), any())).thenReturn(flowOf(sampleKpis))
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading || snapshot.kpiTiles.isEmpty()) {
+                    snapshot = awaitItem()
+                }
+
+                val tiles = snapshot.kpiTiles
+                assertEquals(4, tiles.size)
+
+                assertEquals("10", tiles[0].value)
+                assertEquals("4 patients", tiles[0].subtitle)
+
+                assertEquals("25%", tiles[1].value)
+                assertEquals("2 of 8 smears", tiles[1].subtitle)
+
+                assertEquals("3", tiles[2].value)
+                assertEquals("15 verified today", tiles[2].subtitle)
+
+                assertEquals("90%", tiles[3].value)
+                assertEquals("2 of 20 corrected by you", tiles[3].subtitle)
+
+                assertEquals(18, snapshot.aiBreakdown.confirmed)
+                assertEquals(2, snapshot.aiBreakdown.corrected)
+
                 cancelAndIgnoreRemainingEvents()
             }
         }

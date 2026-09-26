@@ -164,4 +164,13 @@ interface SessionRepository {
         userId: String,
         excludeSessionId: String?,
     ): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes sessions with basic outcome metrics within a time range for KPI calculations.
+     */
+    fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> = kotlinx.coroutines.flow.emptyFlow()
 }

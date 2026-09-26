@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
+import com.agarthavision.data.local.mapper.isPredictionBacked
+import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.ModelRuling
+
 class DetectionRepositoryImpl @Inject constructor(
     private val detectionDao: DetectionDao,
 ) : DetectionRepository {
@@ -35,4 +39,20 @@ class DetectionRepositoryImpl @Inject constructor(
     ): Map<String, List<String>> =
         detectionDao.getSpeciesLabelsForSessions(sessionIds)
             .groupBy({ it.sessionId }, { it.species })
+
+    override fun observeModelRulingsBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<ModelRuling>> =
+        detectionDao.observeRulingsBetween(userId, fromMillis, toMillis).map { rows ->
+            rows.filter { row ->
+                isPredictionBacked(row.detectionId, row.sampleId, row.detectionsInSample)
+            }.map { row ->
+                ModelRuling(
+                    verifiedAt = row.verifiedAt,
+                    verdict = DetectionVerdict.fromValue(row.verdict),
+                )
+            }
+        }
 }

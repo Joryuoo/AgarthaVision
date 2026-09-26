@@ -12,6 +12,7 @@ import javax.inject.Inject
 /**
  * Room-backed implementation of [SampleRepository].
  */
+@Suppress("TooManyFunctions")
 class SampleRepositoryImpl @Inject constructor(
     private val sampleDao: SampleDao,
 ) : SampleRepository {
@@ -56,4 +57,20 @@ class SampleRepositoryImpl @Inject constructor(
 
     override fun observeFlaggedCount(userId: String): Flow<Int> =
         sampleDao.observeFlaggedCount(userId)
+
+    override fun observeSampleTimesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SampleTime>> =
+        sampleDao.observeSampleTimesBetween(userId, fromMillis, toMillis).map { rows ->
+            rows.map {
+                com.agarthavision.domain.model.SampleTime(
+                    sampleId = it.sampleId,
+                    status = it.status,
+                    capturedAt = it.capturedAt,
+                    verifiedAt = it.verifiedAt,
+                )
+            }
+        }
 }

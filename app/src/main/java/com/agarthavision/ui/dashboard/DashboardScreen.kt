@@ -14,7 +14,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -75,6 +78,7 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showAiAgreementSheet by rememberSaveable { mutableStateOf(false) }
     // Rate-limit the sync button so rapid taps can't fire a burst of sync passes (or toasts).
     val lastSyncTapMs = remember { longArrayOf(0L) }
     val syncToastHolder = remember { arrayOfNulls<Toast>(1) }
@@ -148,8 +152,13 @@ fun DashboardScreen(
             item {
                 Spacer(Modifier.height(Spacing.sm))
                 KpiGrid(
-                    kpis = state.kpis,
+                    tiles = state.kpiTiles,
                     isLoading = state.isLoading,
+                    onTileClick = { kind ->
+                        if (kind == KpiKind.AI_AGREEMENT) {
+                            showAiAgreementSheet = true
+                        }
+                    },
                     modifier = Modifier.padding(horizontal = Spacing.xl)
                 )
             }
@@ -169,6 +178,13 @@ fun DashboardScreen(
                     )
                 }
             }
+        }
+
+        if (showAiAgreementSheet) {
+            AiAgreementSheet(
+                breakdown = state.aiBreakdown,
+                onDismiss = { showAiAgreementSheet = false },
+            )
         }
     }
 }

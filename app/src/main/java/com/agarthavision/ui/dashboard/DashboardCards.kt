@@ -36,9 +36,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.ui.components.SkeletonBox
@@ -47,7 +52,6 @@ import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 
 // ─── Sub-composables ─────────────────────────────────────────────────────────
@@ -135,46 +139,131 @@ internal fun ActiveSessionHero(
     }
 }
 
+enum class KpiKind {
+    SESSIONS,
+    POSITIVE_RATE,
+    TO_REVIEW,
+    AI_AGREEMENT,
+}
+
+data class KpiTileUi(
+    val kind: KpiKind,
+    val label: String,
+    val value: String,
+    val subtitle: String,
+    val spokenDescription: String = "",
+)
+
 @Composable
-internal fun KpiGrid(kpis: KpiState, isLoading: Boolean, modifier: Modifier = Modifier) {
+internal fun KpiGrid(
+    tiles: List<KpiTileUi>,
+    isLoading: Boolean,
+    onTileClick: (KpiKind) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val colors = AgarthaTheme.colors
+    val colorForKind = { kind: KpiKind ->
+        when (kind) {
+            KpiKind.SESSIONS -> KpiTileColors(
+                bgColor = colors.accent,
+                contentColor = colors.onAccent,
+                labelColor = colors.onAccent.copy(alpha = 0.8f),
+                subtitleColor = colors.onAccent.copy(alpha = 0.85f),
+            )
+            KpiKind.POSITIVE_RATE -> KpiTileColors(
+                bgColor = colors.surface,
+                contentColor = colors.textPrimary,
+                labelColor = colors.textSecondary,
+                subtitleColor = colors.textSecondary,
+                borderColor = colors.border,
+            )
+            KpiKind.TO_REVIEW -> KpiTileColors(
+                bgColor = colors.gold,
+                contentColor = colors.onGold,
+                labelColor = colors.onGold.copy(alpha = 0.8f),
+                subtitleColor = colors.onGold.copy(alpha = 0.85f),
+            )
+            KpiKind.AI_AGREEMENT -> KpiTileColors(
+                bgColor = colors.surfaceVariant,
+                contentColor = colors.textPrimary,
+                labelColor = colors.textSecondary,
+                subtitleColor = colors.textSecondary,
+                borderColor = colors.border,
+            )
+        }
+    }
+
+    val displayTiles = if (tiles.size >= 4) {
+        tiles.take(4)
+    } else {
+        listOf(
+            KpiTileUi(
+                KpiKind.SESSIONS,
+                "Sessions",
+                "0",
+                "0 patients",
+                "Sessions, 0, 0 patients. Opens sessions.",
+            ),
+            KpiTileUi(
+                KpiKind.POSITIVE_RATE,
+                "Positive rate",
+                "—",
+                "No smears examined yet",
+                "Positive rate, no smears examined yet. Opens examined smears.",
+            ),
+            KpiTileUi(
+                KpiKind.TO_REVIEW,
+                "To review",
+                "0",
+                "0 verified today",
+                "To review, 0 frames. Opens frames to review.",
+            ),
+            KpiTileUi(
+                KpiKind.AI_AGREEMENT,
+                "AI agreement",
+                "—",
+                "No AI results reviewed yet",
+                "AI agreement, no AI results reviewed yet. Opens AI agreement details.",
+            ),
+        )
+    }
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            val tile0 = displayTiles[0]
             KpiTile(
-                data = KpiTileData("Sessions", kpis.sessionsCount, trend = null, isLoading = isLoading),
-                colors = KpiTileColors(
-                    bgColor = colors.accent,
-                    contentColor = colors.onAccent,
-                    labelColor = colors.onAccent.copy(alpha = 0.8f),
-                ),
-                modifier = Modifier.weight(1f))
+                tile = tile0,
+                colors = colorForKind(tile0.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile0.kind) },
+                modifier = Modifier.weight(1f),
+            )
+            val tile1 = displayTiles[1]
             KpiTile(
-                data = KpiTileData("Verified", kpis.samplesCount, trend = null, isLoading = isLoading),
-                colors = KpiTileColors(
-                    bgColor = AppColors.Gray700,
-                    contentColor = AppColors.White,
-                    labelColor = AppColors.White.copy(alpha = 0.8f),
-                ),
-                modifier = Modifier.weight(1f))
+                tile = tile1,
+                colors = colorForKind(tile1.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile1.kind) },
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+            val tile2 = displayTiles[2]
             KpiTile(
-                data = KpiTileData("Patients", kpis.patientsCount, trend = null, isLoading = isLoading),
-                colors = KpiTileColors(
-                    bgColor = AppColors.Gray900,
-                    contentColor = AppColors.White,
-                    labelColor = AppColors.White.copy(alpha = 0.8f),
-                    borderColor = colors.border,
-                ),
-                modifier = Modifier.weight(1f))
+                tile = tile2,
+                colors = colorForKind(tile2.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile2.kind) },
+                modifier = Modifier.weight(1f),
+            )
+            val tile3 = displayTiles[3]
             KpiTile(
-                data = KpiTileData("To review", kpis.pendingCount, trend = null, isLoading = isLoading),
-                colors = KpiTileColors(
-                    bgColor = colors.gold,
-                    contentColor = colors.onGold,
-                    labelColor = colors.onGold.copy(alpha = 0.75f),
-                ),
-                modifier = Modifier.weight(1f))
+                tile = tile3,
+                colors = colorForKind(tile3.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile3.kind) },
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -184,76 +273,73 @@ private data class KpiTileColors(
     val bgColor: Color,
     val contentColor: Color,
     val labelColor: Color,
+    val subtitleColor: Color,
     val borderColor: Color = Color.Transparent,
-)
-
-/** A [KpiTile]'s trend indicator — the direction only has meaning alongside its label text. */
-private data class KpiTrend(val label: String, val isUp: Boolean)
-
-/** The data a [KpiTile] renders — bundled since label/value/trend/loading state all describe the same KPI. */
-private data class KpiTileData(
-    val label: String,
-    val value: String,
-    val trend: KpiTrend?,
-    val isLoading: Boolean = false,
 )
 
 @Composable
 private fun KpiTile(
-    data: KpiTileData,
+    tile: KpiTileUi,
     colors: KpiTileColors,
-    modifier: Modifier = Modifier
+    isLoading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(12.dp)
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
-                .testTag("kpiTile_${data.label}")
+                .testTag("kpiTile_${tile.label}")
                 .fillMaxWidth()
-                .background(if (data.isLoading) Color.Transparent else colors.bgColor, shape)
-                .border(1.dp, if (data.isLoading) Color.Transparent else colors.borderColor, shape)
+                .clip(shape)
+                .background(if (isLoading) Color.Transparent else colors.bgColor, shape)
+                .border(1.dp, if (isLoading) Color.Transparent else colors.borderColor, shape)
+                .clickable(
+                    enabled = !isLoading,
+                    onClickLabel = "Open ${tile.label.lowercase()}",
+                    onClick = onClick,
+                )
                 .padding(14.dp)
                 .then(
-                    if (data.isLoading) {
+                    if (isLoading) {
                         Modifier
                             .alpha(0f)
                             .clearAndSetSemantics {}
                     } else {
-                        Modifier
+                        Modifier.semantics(mergeDescendants = true) {
+                            role = Role.Button
+                            if (tile.spokenDescription.isNotEmpty()) {
+                                contentDescription = tile.spokenDescription
+                            }
+                        }
                     }
                 )
         ) {
-            Text(data.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
+            Text(tile.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
             Spacer(Modifier.height(6.dp))
             Text(
-                data.value,
+                tile.value,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.contentColor,
                 letterSpacing = (-0.7).sp,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                lineHeight = 30.sp
+                lineHeight = 30.sp,
             )
-            if (data.trend != null) {
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (data.trend.isUp) {
-                        Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
-                    }
-                    Text(
-                        data.trend.label,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = if (data.trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
-                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
-                    )
-                }
-            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                tile.subtitle,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+                color = colors.subtitleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        if (data.isLoading) {
+        if (isLoading) {
             SkeletonBox(
                 modifier = Modifier.matchParentSize(),
-                shape = shape
+                shape = shape,
             )
         }
     }

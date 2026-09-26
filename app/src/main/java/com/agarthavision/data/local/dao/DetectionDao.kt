@@ -114,6 +114,21 @@ interface DetectionDao {
         """,
     )
     suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): List<SessionSpeciesRow>
+
+    @Query(
+        """
+        SELECT d.detection_id AS detectionId, d.sample_id AS sampleId, d.verdict AS verdict, s.verified_at AS verifiedAt,
+          (SELECT COUNT(*) FROM detections d2 WHERE d2.sample_id = d.sample_id) AS detectionsInSample
+        FROM detections d JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.user_id = :userId AND s.deleted_at is null AND s.status != 'flagged' AND s.is_manual = 0
+          AND s.verified_at >= :fromMillis AND s.verified_at < :toMillis
+        """,
+    )
+    fun observeRulingsBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<RulingRow>>
 }
 
 /**
@@ -131,3 +146,11 @@ data class SessionEggCountRow(
  * [species] resolves to `expert_class` when set, otherwise `class_label`.
  */
 data class SessionSpeciesRow(val sessionId: String, val species: String)
+
+data class RulingRow(
+    val detectionId: String,
+    val sampleId: String,
+    val verdict: String,
+    val verifiedAt: Long,
+    val detectionsInSample: Int,
+)

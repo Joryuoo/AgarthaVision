@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 /**
  * Repository contract for captured sample persistence.
  */
+@Suppress("TooManyFunctions")
 interface SampleRepository {
     /**
      * Saves a captured sample locally.
@@ -59,4 +60,13 @@ interface SampleRepository {
      * Live count of flagged samples owned by the medtech awaiting review.
      */
     fun observeFlaggedCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes samples with capture and verification timestamps within a time range for KPI calculations.
+     */
+    fun observeSampleTimesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SampleTime>> = kotlinx.coroutines.flow.emptyFlow()
 }
