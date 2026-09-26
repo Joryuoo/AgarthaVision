@@ -106,6 +106,10 @@ android {
             test.forkEvery = 100 // Recycles test JVM worker process every 100 tests to prevent Robolectric OOM
         }
     }
+
+    lint {
+        error += "HardcodedText"
+    }
 }
 
 ksp {

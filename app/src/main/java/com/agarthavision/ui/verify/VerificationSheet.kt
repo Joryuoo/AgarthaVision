@@ -413,8 +413,8 @@ internal fun VerificationSheetContent(
             AlertDialog(
                 onDismissRequest = { showDiscardConfirm.value = false },
                 shape = DialogShape,
-                title = { Text("Discard this frame?") },
-                text = { Text("This will remove the current frame from the verification queue.") },
+                title = { Text(stringResource(R.string.verify_discard_frame_title)) },
+                text = { Text(stringResource(R.string.verify_discard_frame_body)) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -424,7 +424,7 @@ internal fun VerificationSheetContent(
                         enabled = !state.isSubmitting,
                         modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_CONFIRM),
                     ) {
-                        Text("Discard", color = AgarthaTheme.colors.danger)
+                        Text(stringResource(R.string.verify_discard_frame_confirm), color = AgarthaTheme.colors.danger)
                     }
                 },
                 dismissButton = {
@@ -432,7 +432,7 @@ internal fun VerificationSheetContent(
                         onClick = { showDiscardConfirm.value = false },
                         modifier = Modifier.testTag(VerifyTestTags.DISCARD_DIALOG_DISMISS),
                     ) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.verify_cancel))
                     }
                 },
             )
