@@ -3,6 +3,7 @@ package com.agarthavision.data.repository
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.data.local.mapper.toEntity
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.flow.Flow
@@ -70,6 +71,36 @@ class SampleRepositoryImpl @Inject constructor(
                     status = it.status,
                     capturedAt = it.capturedAt,
                     verifiedAt = it.verifiedAt,
+                )
+            }
+        }
+
+    override fun observeCaptureActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesCaptured>> =
+        sampleDao.observeCaptureActivity(userId, limit).map { rows ->
+            rows.map {
+                ActivityItem.FramesCaptured(
+                    sessionId = it.sessionId,
+                    sessionLabel = it.sessionLabel,
+                    count = it.frameCount,
+                    occurredAt = it.occurredAt,
+                )
+            }
+        }
+
+    override fun observeVerifyActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesVerified>> =
+        sampleDao.observeVerifyActivity(userId, limit).map { rows ->
+            rows.map {
+                ActivityItem.FramesVerified(
+                    sessionId = it.sessionId,
+                    sessionLabel = it.sessionLabel,
+                    count = it.frameCount,
+                    occurredAt = it.occurredAt,
                 )
             }
         }

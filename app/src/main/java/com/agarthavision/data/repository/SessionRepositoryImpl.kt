@@ -2,6 +2,7 @@ package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.mapper.toDomain
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
@@ -223,6 +224,20 @@ class SessionRepositoryImpl @Inject constructor(
                     startedAt = it.startedAt,
                     examined = it.examined,
                     positive = it.positive,
+                )
+            }
+        }
+
+    override fun observeStartedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.SessionStarted>> =
+        sessionDao.observeStartedActivity(userId, limit).map { rows ->
+            rows.map {
+                ActivityItem.SessionStarted(
+                    sessionId = it.sessionId,
+                    sessionLabel = it.sessionLabel,
+                    occurredAt = it.occurredAt,
                 )
             }
         }

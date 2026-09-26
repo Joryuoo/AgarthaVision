@@ -1,7 +1,9 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Sample
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for captured sample persistence.
@@ -69,4 +71,14 @@ interface SampleRepository {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<com.agarthavision.domain.model.SampleTime>> = kotlinx.coroutines.flow.emptyFlow()
+
+    fun observeCaptureActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesCaptured>> = emptyFlow()
+
+    fun observeVerifyActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesVerified>> = emptyFlow()
 }

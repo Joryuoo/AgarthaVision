@@ -25,6 +25,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.ui.activity.ActivityScreen
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.components.AgarthaBottomBar
 import com.agarthavision.ui.components.bottomBarRoutes
@@ -80,6 +81,7 @@ sealed class Screen(val route: String) {
     }
     data object VerificationQueue : Screen("verification_queue")
     data object Settings : Screen("settings")
+    data object Activity : Screen("activity")
 }
 
 @Composable
@@ -388,6 +390,40 @@ fun AgarthaNavHost(
             SessionListScreen(
                 onBack = { navController.popBackStack() },
                 onNavigate = { route -> navController.navigate(route) },
+            )
+        }
+
+        composable(
+            route = Screen.Activity.route,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(220),
+                )
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(280),
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(220),
+                )
+            },
+        ) {
+            ActivityScreen(
+                onBack = { navController.popBackStack() },
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateToTab = { tabRoute -> navController.navigateToTab(tabRoute) },
             )
         }
 

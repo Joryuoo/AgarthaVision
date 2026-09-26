@@ -8,6 +8,7 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.AgreementBreakdown
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.FindingsResult
@@ -20,6 +21,7 @@ import com.agarthavision.domain.usecase.home.NeedsAttention
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.home.ObserveRecentActivityUseCase
 import com.agarthavision.domain.usecase.home.badgeText
 import com.agarthavision.domain.usecase.home.countChange
 import com.agarthavision.domain.usecase.home.ratioChange
@@ -75,6 +77,7 @@ data class DashboardUiState(
     val needsAttention: NeedsAttention = NeedsAttention(0, 0, 0),
     val recentSessions: List<SessionSummary> = emptyList(),
     val hasAnySession: Boolean = false,
+    val recentActivity: List<ActivityItem> = emptyList(),
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -129,6 +132,7 @@ private data class SessionAndSyncBundle(
     val needsAttention: NeedsAttention,
     val recentSessions: List<SessionSummary>,
     val hasAnySession: Boolean,
+    val recentActivity: List<ActivityItem>,
 )
 
 @Suppress("LongParameterList")
@@ -152,6 +156,7 @@ class DashboardViewModel @Inject constructor(
     private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
     private val observeFindingsUseCase: ObserveFindingsUseCase,
     private val observeSessionListUseCase: ObserveSessionListUseCase,
+    private val observeRecentActivityUseCase: ObserveRecentActivityUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
@@ -310,6 +315,14 @@ class DashboardViewModel @Inject constructor(
                 val hasAny = result.totalCount > 0 || activeSessionId != null
                 filtered to hasAny
             }
+        }
+    }
+
+    private val recentActivityFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(emptyList<ActivityItem>())
+        } else {
+            observeRecentActivityUseCase(userId, RECENT_ACTIVITY_QUERY_LIMIT)
         }
     }
 
@@ -475,20 +488,26 @@ class DashboardViewModel @Inject constructor(
     }
 
     private val sessionAndSyncFlow = combine(
-        pendingAndSyncFlow,
-        activeSessionStateFlow,
-        accountSyncFlow,
-        needsAttentionFlow,
-        recentSessionsFlow,
-    ) { pendingSync, activeSession, accountSync, needsAttention, recentData ->
-        SessionAndSyncBundle(
-            pendingSync = pendingSync,
-            activeSession = activeSession,
-            accountSync = accountSync,
-            needsAttention = needsAttention,
-            recentSessions = recentData.first,
-            hasAnySession = recentData.second,
-        )
+        combine(
+            pendingAndSyncFlow,
+            activeSessionStateFlow,
+            accountSyncFlow,
+            needsAttentionFlow,
+            recentSessionsFlow,
+        ) { pendingSync, activeSession, accountSync, needsAttention, recentData ->
+            SessionAndSyncBundle(
+                pendingSync = pendingSync,
+                activeSession = activeSession,
+                accountSync = accountSync,
+                needsAttention = needsAttention,
+                recentSessions = recentData.first,
+                hasAnySession = recentData.second,
+                recentActivity = emptyList(),
+            )
+        },
+        recentActivityFlow,
+    ) { bundle, recentActivity ->
+        bundle.copy(recentActivity = recentActivity)
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -524,6 +543,7 @@ class DashboardViewModel @Inject constructor(
             needsAttention = needsAttention,
             recentSessions = sessionAndSync.recentSessions,
             hasAnySession = sessionAndSync.hasAnySession,
+            recentActivity = sessionAndSync.recentActivity,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -561,5 +581,6 @@ class DashboardViewModel @Inject constructor(
         const val PERCENT_FACTOR = 100
         const val RECENT_SESSIONS_QUERY_LIMIT = 6
         const val MAX_RECENT_SESSIONS = 5
+        const val RECENT_ACTIVITY_QUERY_LIMIT = 5
     }
 }

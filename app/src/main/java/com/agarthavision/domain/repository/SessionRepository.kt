@@ -1,10 +1,12 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for locally persisted recording sessions.
@@ -173,4 +175,9 @@ interface SessionRepository {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> = kotlinx.coroutines.flow.emptyFlow()
+
+    fun observeStartedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.SessionStarted>> = emptyFlow()
 }

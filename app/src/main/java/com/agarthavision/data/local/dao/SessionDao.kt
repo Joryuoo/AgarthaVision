@@ -417,7 +417,23 @@ interface SessionDao {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<SessionOutcomeRow>>
+
+    @Query(
+        """
+        SELECT session_id AS sessionId, label AS sessionLabel, started_at AS occurredAt
+        FROM sessions
+        WHERE user_id = :userId
+        ORDER BY started_at DESC LIMIT :limit
+        """,
+    )
+    fun observeStartedActivity(userId: String, limit: Int): Flow<List<SessionStartedActivityRow>>
 }
+
+data class SessionStartedActivityRow(
+    val sessionId: String,
+    val sessionLabel: String?,
+    val occurredAt: Long,
+)
 
 /**
  * Shared WHERE predicate for the Records paginated page and totals queries.

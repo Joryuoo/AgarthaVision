@@ -298,4 +298,23 @@ interface PatientDao {
         """,
     )
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
+
+    @Query(
+        """
+        SELECT DISTINCT p.patient_id AS patientId, p.lastname AS lastname, p.firstname AS firstname, p.middle_name AS middleName, p.created_at AS occurredAt
+        FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId AND p.created_by = :userId
+        ORDER BY p.created_at DESC LIMIT :limit
+        """,
+    )
+    fun observeAddedActivity(userId: String, limit: Int): Flow<List<PatientAddedActivityRow>>
 }
+
+data class PatientAddedActivityRow(
+    val patientId: String,
+    val lastname: String,
+    val firstname: String,
+    val middleName: String?,
+    val occurredAt: Long,
+)

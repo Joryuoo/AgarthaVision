@@ -6,6 +6,7 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
 import androidx.lifecycle.SavedStateHandle
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.AgreementBreakdown
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.FindingsResult
@@ -33,6 +34,7 @@ import com.agarthavision.domain.usecase.home.NeedsAttention
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.home.ObserveRecentActivityUseCase
 import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
 import com.agarthavision.domain.usecase.home.SessionListResult
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
@@ -147,6 +149,10 @@ class DashboardViewModelTest {
             flowOf(SessionListResult(emptyList(), 0)),
         )
     }
+    private val observeRecentActivityUseCase: ObserveRecentActivityUseCase =
+        mock<ObserveRecentActivityUseCase>().also {
+            whenever(it.invoke(any(), any())).thenReturn(flowOf(emptyList()))
+        }
 
     private fun samplePatient(id: String) = Patient(
         id = id,
@@ -199,6 +205,7 @@ class DashboardViewModelTest {
         observeHomeKpisUseCase = observeHomeKpisUseCase,
         observeFindingsUseCase = observeFindingsUseCase,
         observeSessionListUseCase = observeSessionListUseCase,
+        observeRecentActivityUseCase = observeRecentActivityUseCase,
     )
 
     @Test
@@ -575,6 +582,29 @@ class DashboardViewModelTest {
                 }
                 assertTrue(snapshot.recentSessions.isEmpty())
                 assertTrue(snapshot.hasAnySession)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `uiState recentActivity reflects what the use case emits`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val activity = listOf(
+                ActivityItem.PatientAdded(
+                    patientId = "p-1",
+                    maskedName = "R.*, J*.",
+                    occurredAt = 5_000L,
+                ),
+            )
+            whenever(observeRecentActivityUseCase.invoke(any(), any())).thenReturn(flowOf(activity))
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading || snapshot.recentActivity.isEmpty()) {
+                    snapshot = awaitItem()
+                }
+                assertEquals(activity, snapshot.recentActivity)
                 cancelAndIgnoreRemainingEvents()
             }
         }

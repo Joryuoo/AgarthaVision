@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
@@ -198,6 +199,18 @@ fun DashboardScreen(
                     )
                 }
             }
+
+            // 5. Recent activity feed
+            item {
+                Spacer(Modifier.height(Spacing.lg))
+                RecentActivityCard(
+                    items = state.recentActivity,
+                    nowMillis = remember { System.currentTimeMillis() },
+                    onItemClick = { activityItem -> onActivityItemClick(activityItem, onNavigate, onNavigateToTab) },
+                    onSeeAllClick = { onNavigate(Screen.Activity.route) },
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
+                )
+            }
         }
 
         if (showAiAgreementSheet) {
@@ -206,6 +219,21 @@ fun DashboardScreen(
                 onDismiss = { showAiAgreementSheet = false },
             )
         }
+    }
+}
+
+/** Routes a recent-activity row tap to whatever screen best explains that item. */
+internal fun onActivityItemClick(
+    activityItem: ActivityItem,
+    onNavigate: (String) -> Unit,
+    onNavigateToTab: (String) -> Unit,
+) {
+    when (activityItem) {
+        is ActivityItem.FramesVerified -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.FramesCaptured -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.SessionStarted -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.PatientAdded -> onNavigate(Screen.PatientSessions.createRoute(activityItem.patientId))
+        is ActivityItem.SyncFinished -> onNavigateToTab(Screen.Settings.route)
     }
 }
 

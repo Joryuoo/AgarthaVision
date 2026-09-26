@@ -37,6 +37,24 @@
     <string name="dashboard_sync_toast_started">Syncing your records…</string>
     <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
 
+    <!-- Recent activity -->
+    <plurals name="activity_verified_frames">
+        <item quantity="one">Verified %1$d frame</item>
+        <item quantity="other">Verified %1$d frames</item>
+    </plurals>
+    <plurals name="activity_captured_frames">
+        <item quantity="one">Captured %1$d frame</item>
+        <item quantity="other">Captured %1$d frames</item>
+    </plurals>
+    <string name="activity_added_patient">Added patient %1$s</string>
+    <plurals name="activity_synced_items">
+        <item quantity="one">Synced %1$d item</item>
+        <item quantity="other">Synced %1$d items</item>
+    </plurals>
+    <string name="activity_started_session">Started a session</string>
+    <string name="activity_empty">No activity yet</string>
+    <string name="activity_title">Recent activity</string>
+
     <!-- Relative time -->
     <string name="time_just_now">Just now</string>
     <plurals name="time_minutes_ago">

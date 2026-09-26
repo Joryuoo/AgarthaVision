@@ -335,7 +335,36 @@ interface SampleDao {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<SampleTimeRow>>
+
+    @Query(
+        """
+        SELECT sa.session_id AS sessionId, se.label AS sessionLabel, COUNT(*) AS frameCount, MAX(sa.timestamp) AS occurredAt
+        FROM samples sa JOIN sessions se ON se.session_id = sa.session_id
+        WHERE sa.user_id = :userId AND sa.deleted_at is null
+        GROUP BY sa.session_id, strftime('%Y-%m-%d', sa.timestamp/1000, 'unixepoch', '+8 hours')
+        ORDER BY occurredAt DESC LIMIT :limit
+        """,
+    )
+    fun observeCaptureActivity(userId: String, limit: Int): Flow<List<SessionSampleActivityRow>>
+
+    @Query(
+        """
+        SELECT sa.session_id AS sessionId, se.label AS sessionLabel, COUNT(*) AS frameCount, MAX(sa.verified_at) AS occurredAt
+        FROM samples sa JOIN sessions se ON se.session_id = sa.session_id
+        WHERE sa.user_id = :userId AND sa.deleted_at is null AND sa.status != 'flagged' AND sa.verified_at > 0
+        GROUP BY sa.session_id, strftime('%Y-%m-%d', sa.verified_at/1000, 'unixepoch', '+8 hours')
+        ORDER BY occurredAt DESC LIMIT :limit
+        """,
+    )
+    fun observeVerifyActivity(userId: String, limit: Int): Flow<List<SessionSampleActivityRow>>
 }
+
+data class SessionSampleActivityRow(
+    val sessionId: String,
+    val sessionLabel: String?,
+    val frameCount: Int,
+    val occurredAt: Long,
+)
 
 data class SampleTimeRow(
     val sampleId: String,

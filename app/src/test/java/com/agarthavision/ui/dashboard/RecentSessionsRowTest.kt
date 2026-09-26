@@ -30,6 +30,7 @@ import com.agarthavision.domain.usecase.home.NeedsAttention
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.home.ObserveRecentActivityUseCase
 import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
 import com.agarthavision.domain.usecase.home.SessionListResult
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
@@ -146,6 +147,10 @@ class RecentSessionsRowTest {
                 flowOf(FindingsResult(emptyList(), 0)),
             )
         }
+        val observeRecentActivityUseCase: ObserveRecentActivityUseCase =
+            mock<ObserveRecentActivityUseCase>().also {
+                whenever(it.invoke(any(), any())).thenReturn(flowOf(emptyList()))
+            }
 
         return DashboardViewModel(
             savedStateHandle = SavedStateHandle(),
@@ -165,6 +170,7 @@ class RecentSessionsRowTest {
             observeHomeKpisUseCase = observeHomeKpisUseCase,
             observeFindingsUseCase = observeFindingsUseCase,
             observeSessionListUseCase = observeSessionListUseCase,
+            observeRecentActivityUseCase = observeRecentActivityUseCase,
         )
     }
 

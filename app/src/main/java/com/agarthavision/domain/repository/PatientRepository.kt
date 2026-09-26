@@ -1,10 +1,12 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.patients.PatientSort
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for locally persisted patients.
@@ -106,4 +108,9 @@ interface PatientRepository {
      * Returns existing patient codenames matching [prefix] (e.g. "M24") visible to [userId].
      */
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
+
+    fun observeAddedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.PatientAdded>> = emptyFlow()
 }
