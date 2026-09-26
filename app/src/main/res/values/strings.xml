@@ -123,6 +123,9 @@
     <string name="verify_leave_body">Your answers on this sample have not been submitted. Leaving now loses them.</string>
     <string name="verify_leave_confirm">Discard</string>
     <string name="verify_leave_dismiss">Keep editing</string>
+    <string name="verify_edit_discard_title">Discard edits?</string>
+    <string name="verify_edit_discard_body">Discarding will drop your in-flight edits. The sample\'s existing verification remains unchanged.</string>
+    <string name="verify_edit_discard_confirm">Discard edits</string>
     <string name="verify_draw_target_box">Redrawing detection %1$d of %2$d</string>
     <string name="verify_remove_box">Remove</string>
     <string name="verify_prev_egg">Previous egg</string>
