@@ -1,10 +1,13 @@
 package com.agarthavision.data.repository
 
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -93,6 +96,37 @@ class BoundaryRepositoryImplTest {
         val repository = BoundaryRepositoryImpl(context)
 
         assertEquals(null, repository.townsOf("9999999999"))
+    }
+
+    @Test
+    fun `concurrent provinces() calls on a fresh instance all resolve to the same single parse`() = runTest {
+        val repository = BoundaryRepositoryImpl(context)
+
+        // 20 concurrent callers racing the first, uncached parse. If loadProvincesIfNeeded's
+        // check-lock-check were not actually guarded by the Mutex (e.g. a bare nullable var),
+        // several of these could interleave inside the parse and either crash or produce
+        // distinct BoundarySet instances.
+        val results = (1..20).map { async { repository.provinces() } }.awaitAll()
+
+        val first = results.first()
+        results.forEach { assertSame("every concurrent caller must observe the same parsed instance", first, it) }
+        assertTrue("sanity: the parse actually produced areas", first.areas.isNotEmpty())
+    }
+
+    @Test
+    fun `concurrent townsOf calls for distinct provinces do not crash or corrupt the LRU`() = runTest {
+        val repository = BoundaryRepositoryImpl(context)
+
+        val results = PROVINCE_KEYS.map { key -> key to async { repository.townsOf(key) } }
+            .map { (key, deferred) -> key to deferred.await() }
+
+        results.forEach { (key, set) -> assertNotNull("expected geometry for $key", set) }
+
+        // A second round for the same keys should still work and be internally consistent
+        // (no crash, no null where geometry previously loaded) after the concurrent first round.
+        PROVINCE_KEYS.forEach { key ->
+            assertNotNull("expected geometry for $key on second pass", repository.townsOf(key))
+        }
     }
 
     private companion object {

@@ -144,6 +144,110 @@ class BoundaryBinaryReaderTest {
         assertEquals(ring.size * 2, decodedCoords.size)
     }
 
+    @Test
+    fun `decoded points exactly match the quantized-then-projected input, not just the count`() {
+        // Unlike the size-only assertions above, this proves the actual coordinate *values*
+        // survive quantize -> encode -> decode -> project, for every point in the ring.
+        val ring = listOf(
+            120.0 to 10.0,
+            120.5 to 10.2,
+            120.3 to 10.5,
+            120.1 to 10.1,
+            120.6 to 10.05,
+        )
+
+        val builder = Builder(lonMin, latMin, lonMax, latMax)
+        builder.provincesHeader(vintage)
+        builder.u16(0)
+        builder.u16(1)
+        builder.areaRecord(code = 1700000000, parentCode = 1700000000, name = "x", rings = listOf(ring))
+
+        val (set, _) = BoundaryBinaryReader.readProvinces(builder.build(), vintage)
+        val decoded = set.areas.single().rings.single()
+
+        val quantStep = (lonMax - lonMin) / 65535.0
+        val latQuantStep = (latMax - latMin) / 65535.0
+        ring.forEachIndexed { i, (lon, lat) ->
+            val expectedX = com.agarthavision.domain.geo.GeoProjection.x(lon)
+            val expectedY = com.agarthavision.domain.geo.GeoProjection.y(lat)
+            assertEquals("point $i x", expectedX, decoded[i * 2], quantStep.toFloat() * 2)
+            assertEquals("point $i y", expectedY, decoded[i * 2 + 1], latQuantStep.toFloat() * 2)
+        }
+    }
+
+    @Test
+    fun `a ring with 600 points exercises multi-byte varints in both delta directions`() {
+        // At this scale, deltas between consecutive quantized points routinely exceed the
+        // single-varint-byte range (+-63), forcing the multi-byte continuation path on both
+        // positive and negative zigzag deltas.
+        val ring = (0 until 600).map { i ->
+            val angle = 2 * Math.PI * i / 600
+            val lon = 121.0 + 3.0 * kotlin.math.cos(angle)
+            val lat = 11.0 + 3.0 * kotlin.math.sin(angle)
+            lon to lat
+        }
+
+        val builder = Builder(lonMin, latMin, lonMax, latMax)
+        builder.provincesHeader(vintage)
+        builder.u16(0)
+        builder.u16(1)
+        builder.areaRecord(code = 1700000000, parentCode = 1700000000, name = "circle", rings = listOf(ring))
+
+        val (set, _) = BoundaryBinaryReader.readProvinces(builder.build(), vintage)
+        val decoded = set.areas.single().rings.single()
+
+        assertEquals(ring.size * 2, decoded.size)
+        val quantStep = ((lonMax - lonMin) / 65535.0).toFloat() * 2
+        val latQuantStep = ((latMax - latMin) / 65535.0).toFloat() * 2
+        ring.forEachIndexed { i, (lon, lat) ->
+            val expectedX = com.agarthavision.domain.geo.GeoProjection.x(lon)
+            val expectedY = com.agarthavision.domain.geo.GeoProjection.y(lat)
+            assertEquals("point $i x", expectedX, decoded[i * 2], quantStep)
+            assertEquals("point $i y", expectedY, decoded[i * 2 + 1], latQuantStep)
+        }
+    }
+
+    @Test
+    fun `truncated file throws rather than silently returning wrong data`() {
+        val builder = Builder(lonMin, latMin, lonMax, latMax)
+        builder.provincesHeader(vintage)
+        builder.u16(0) // no towns
+        val ring = listOf(120.0 to 10.0, 121.0 to 10.0, 121.0 to 11.0, 120.0 to 11.0)
+        builder.u16(1)
+        builder.areaRecord(code = 1804500000, parentCode = 1800000000, name = "Negros Occidental", rings = listOf(ring))
+        val fullBytes = builder.build()
+
+        // Cut the file off mid-record, well past the header, so the reader must fail inside
+        // the ring/point decoding path rather than at the header check.
+        val truncated = fullBytes.copyOfRange(0, fullBytes.size - 6)
+
+        assertThrows(Exception::class.java) {
+            BoundaryBinaryReader.readProvinces(truncated, vintage)
+        }
+    }
+
+    @Test
+    fun `truncating the real committed provinces asset mid-record throws instead of returning wrong data`() {
+        val realFile = java.io.File("src/main/assets/geo/ph-provinces-q2_2026.bin")
+        val realBytes = realFile.readBytes()
+
+        // Cut well inside the file (past the header and first records) so decoding is
+        // guaranteed to be mid-record, not mid-header.
+        val truncated = realBytes.copyOfRange(0, realBytes.size / 2)
+
+        val ex = assertThrows(Exception::class.java) {
+            BoundaryBinaryReader.readProvinces(truncated, vintage)
+        }
+        // Whatever throws, it must not be a silently-returned partial result - it has to
+        // actually propagate out of readProvinces. An ArrayIndexOutOfBoundsException is
+        // acceptable in that it still throws, but is worth flagging as unhelpful if that is
+        // what surfaces here (no context about *why* the file is bad).
+        assertTrue(
+            "expected a Throwable to propagate out of readProvinces on truncated input, got none usable: $ex",
+            ex is Exception,
+        )
+    }
+
     /** Minimal little-endian byte builder mirroring `build-geo-asset.py`'s writer functions. */
     private class Builder(lonMin: Float, latMin: Float, lonMax: Float, latMax: Float) {
         var magicBytes = "AVGE".toByteArray(Charsets.US_ASCII)
