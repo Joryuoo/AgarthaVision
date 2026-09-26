@@ -296,6 +296,62 @@ class MyCoverageViewModelTest {
     }
 
     @Test
+    fun `onMapTap only surfaces town counts belonging to the tapped province`() = runTest {
+        // Three provinces' worth of towns mixed in one directory and one observeTownCoverage
+        // result — tapping Cebu must only show Cebu's towns, not Davao's or Bohol's.
+        val mixedDirectory = AreaDirectory(
+            towns = mapOf(
+                "TOWN-CEB-1" to TownRef("TOWN-CEB-1", "Cebu City", "CEB", true),
+                "TOWN-CEB-2" to TownRef("TOWN-CEB-2", "Mandaue", "CEB", true),
+                "TOWN-DAV-1" to TownRef("TOWN-DAV-1", "Digos", "DAV", true),
+                "TOWN-BOH-1" to TownRef("TOWN-BOH-1", "Tagbilaran", "BOH", true),
+            ),
+            provinces = mapOf(
+                "CEB" to ProvinceRef("CEB", "Cebu", "0700000000", IslandGroup.VISAYAS),
+                "DAV" to ProvinceRef("DAV", "Davao del Sur", "1100000000", IslandGroup.MINDANAO),
+                "BOH" to ProvinceRef("BOH", "Bohol", "0700000001", IslandGroup.VISAYAS),
+            ),
+        )
+        val loadAreaDirectoryUseCase: LoadAreaDirectoryUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadAreaDirectoryUseCase.invoke()).thenReturn(Result.success(mixedDirectory))
+        }
+        val mixedTownRows = listOf(
+            com.agarthavision.domain.model.TownCoverage("TOWN-CEB-1", smearCount = 10, positiveCount = 4),
+            com.agarthavision.domain.model.TownCoverage("TOWN-CEB-2", smearCount = 8, positiveCount = 1),
+            com.agarthavision.domain.model.TownCoverage("TOWN-DAV-1", smearCount = 20, positiveCount = 9),
+            com.agarthavision.domain.model.TownCoverage("TOWN-BOH-1", smearCount = 6, positiveCount = 2),
+        )
+        val coverageRepository: CoverageRepository = mock<CoverageRepository>().also {
+            whenever(it.observeTownCoverage(any(), any())).thenReturn(flowOf(mixedTownRows))
+        }
+        val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadTownBoundariesUseCase.invoke(eq("CEB"))).thenReturn(Result.success(null))
+        }
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(18, 5))
+        val vm = buildViewModel(
+            observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
+                whenever(it.invoke(any(), any(), any())).thenReturn(
+                    flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+                )
+            },
+            loadAreaDirectoryUseCase = loadAreaDirectoryUseCase,
+            coverageRepository = coverageRepository,
+            loadTownBoundariesUseCase = loadTownBoundariesUseCase,
+        )
+        advanceUntilIdle()
+
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu
+        advanceUntilIdle()
+
+        val townCounts = vm.uiState.value.selected?.townCounts
+        assertEquals(setOf("TOWN-CEB-1", "TOWN-CEB-2"), townCounts?.keys)
+        assertEquals(AreaCount(10, 4), townCounts?.get("TOWN-CEB-1"))
+        assertEquals(AreaCount(8, 1), townCounts?.get("TOWN-CEB-2"))
+    }
+
+    @Test
     fun `onShowAllTowns and onDismissSheet transition state as expected`() = runTest {
         val vm = buildViewModel()
         advanceUntilIdle()

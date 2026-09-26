@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
@@ -247,13 +248,20 @@ private fun CoverageMap(
             .background(colors.surfaceMuted)
             .onSizeChanged { size -> canvasSize = size.width.toFloat() to size.height.toFloat() }
             .pointerInput(Unit) {
-                detectTransformGestures { _, pan, zoom, _ ->
+                detectTransformGestures { centroid, pan, zoom, _ ->
                     val minScale = baseScale * MIN_SCALE_FACTOR
                     val maxScale = baseScale * MAX_SCALE_FACTOR
-                    val newScale = (camera.scale.value * zoom).coerceIn(minScale, maxScale)
-                    val newTx = clampTranslation(camera.tx.value + pan.x, canvasSize.first)
-                    val newTy = clampTranslation(camera.ty.value + pan.y, canvasSize.second)
-                    coroutineScope.launch { camera.scale.snapTo(newScale) }
+                    val next = nextCameraTransform(
+                        current = camera.transform,
+                        centroid = centroid,
+                        pan = pan,
+                        zoom = zoom,
+                        minScale = minScale,
+                        maxScale = maxScale,
+                    )
+                    val newTx = clampTranslation(next.tx, canvasSize.first)
+                    val newTy = clampTranslation(next.ty, canvasSize.second)
+                    coroutineScope.launch { camera.scale.snapTo(next.scale) }
                     coroutineScope.launch { camera.tx.snapTo(newTx) }
                     coroutineScope.launch { camera.ty.snapTo(newTy) }
                 }
@@ -284,4 +292,34 @@ private fun clampTranslation(value: Float, viewportSpan: Float): Float {
     if (viewportSpan <= 0f) return value
     val slack = viewportSpan
     return value.coerceIn(-slack, slack)
+}
+
+/**
+ * Given the [current] camera transform and one [detectTransformGestures] callback's [centroid],
+ * [pan] and [zoom], returns the transform that keeps the map point under [centroid] fixed on
+ * screen as it scales — i.e. zooms toward the pinch center rather than the transform's origin.
+ *
+ * `screen = map * scale + t` ([ViewTransform]), so holding `(centroid - t) / scale` constant
+ * across a scale change from `oldScale` to `newScale` requires
+ * `t' = centroid * (1 - appliedZoom) + t * appliedZoom`, using the *applied* zoom ratio
+ * (`newScale / oldScale`) rather than the raw gesture [zoom] — those differ once [minScale]/
+ * [maxScale] clamps the requested scale, and using the raw value there would still drag the
+ * translation as if the clamped-away zoom had happened, drifting the map on every frame the
+ * pinch is held past a scale limit. [pan] (the centroid's own screen-space movement) is added
+ * on top, unscaled, since [ViewTransform]'s translation is already in screen pixels.
+ */
+@Suppress("LongParameterList") // Every parameter is a distinct, independent gesture-math input.
+internal fun nextCameraTransform(
+    current: ViewTransform,
+    centroid: Offset,
+    pan: Offset,
+    zoom: Float,
+    minScale: Float,
+    maxScale: Float,
+): ViewTransform {
+    val newScale = (current.scale * zoom).coerceIn(minScale, maxScale)
+    val appliedZoom = if (current.scale == 0f) 1f else newScale / current.scale
+    val newTx = centroid.x * (1 - appliedZoom) + current.tx * appliedZoom + pan.x
+    val newTy = centroid.y * (1 - appliedZoom) + current.ty * appliedZoom + pan.y
+    return ViewTransform(newScale, newTx, newTy)
 }
