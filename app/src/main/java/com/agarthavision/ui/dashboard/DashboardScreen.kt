@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
@@ -155,8 +156,19 @@ fun DashboardScreen(
                     tiles = state.kpiTiles,
                     isLoading = state.isLoading,
                     onTileClick = { kind ->
-                        if (kind == KpiKind.AI_AGREEMENT) {
-                            showAiAgreementSheet = true
+                        when (kind) {
+                            KpiKind.SESSIONS -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.ALL, state.period)
+                            )
+                            KpiKind.POSITIVE_RATE -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.EXAMINED, state.period)
+                            )
+                            KpiKind.TO_REVIEW -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.TO_REVIEW, state.period)
+                            )
+                            KpiKind.AI_AGREEMENT -> {
+                                showAiAgreementSheet = true
+                            }
                         }
                     },
                     modifier = Modifier.padding(horizontal = Spacing.xl)

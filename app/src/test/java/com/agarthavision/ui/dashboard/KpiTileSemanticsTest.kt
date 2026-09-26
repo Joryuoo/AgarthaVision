@@ -6,6 +6,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.agarthavision.domain.model.HomePeriod
+import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -128,5 +131,22 @@ class KpiTileSemanticsTest {
 
         composeRule.onNodeWithText("No smears examined yet").assertIsDisplayed()
         composeRule.onNodeWithText("No AI results reviewed yet").assertIsDisplayed()
+    }
+
+    @Test
+    fun `tile clicks navigate to expected SessionList filtered routes`() {
+        val period = HomePeriod.TODAY
+        assertEquals(
+            "sessions?filter=ALL&period=TODAY",
+            Screen.SessionList.createRoute(SessionListFilter.ALL, period),
+        )
+        assertEquals(
+            "sessions?filter=EXAMINED&period=TODAY",
+            Screen.SessionList.createRoute(SessionListFilter.EXAMINED, period),
+        )
+        assertEquals(
+            "sessions?filter=TO_REVIEW&period=TODAY",
+            Screen.SessionList.createRoute(SessionListFilter.TO_REVIEW, period),
+        )
     }
 }
