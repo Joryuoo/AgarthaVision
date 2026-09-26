@@ -222,6 +222,48 @@ class CoverageDaoTest {
     }
 
     @Test
+    fun `a session with one flagged sample and one verified positive sample still counts once`() = runTest {
+        seedPatient(PATIENT_ID, UNRECOGNIZED_CODE)
+        seedSession("s1", PATIENT_ID, userId = "user-a", startedAt = 1_000L)
+        seedSample("smp-flagged", "s1", status = "flagged")
+        seedSample("smp-verified", "s1", status = "synced")
+        seedDetection("d-flagged", "smp-flagged", verdict = "confirmed")
+        seedDetection("d-verified", "smp-verified", verdict = "confirmed")
+
+        val rows = coverageDao.observeTownCoverage("user-a", 0L, 10_000L).first()
+        assertEquals(1, rows.sumOf { it.smearCount })
+        assertEquals(1, rows.sumOf { it.positiveCount })
+    }
+
+    @Test
+    fun `multiple sessions for the same patient and town aggregate into that town's smearCount`() = runTest {
+        seedPatient(PATIENT_ID, UNRECOGNIZED_CODE)
+        seedSession("s1", PATIENT_ID, userId = "user-a", startedAt = 1_000L)
+        seedSession("s2", PATIENT_ID, userId = "user-a", startedAt = 2_000L)
+        seedSample("smp-1", "s1")
+        seedSample("smp-2", "s2")
+        seedDetection("d1", "smp-1", verdict = "confirmed")
+        seedDetection("d2", "smp-2", verdict = "false_positive")
+
+        val rows = coverageDao.observeTownCoverage("user-a", 0L, 10_000L).first()
+        assertEquals(1, rows.size)
+        assertEquals(2, rows.first().smearCount)
+        assertEquals(1, rows.first().positiveCount)
+    }
+
+    @Test
+    fun `a blank psgc_barangay_code yields a null townCode without crashing`() = runTest {
+        seedPatient(PATIENT_ID, "")
+        seedSession("s1", PATIENT_ID, userId = "user-a", startedAt = 1_000L)
+        seedSample("smp-1", "s1")
+        seedDetection("d1", "smp-1")
+
+        val rows = coverageDao.observeTownCoverage("user-a", 0L, 10_000L).first()
+        assertEquals(1, rows.size)
+        assertNull(rows.first().townCode)
+    }
+
+    @Test
     fun `a Manila barangay code resolves to Manila's real city_muni_code`() = runTest {
         val bundled = readBundledBarangays(ctx)
         val manilaBarangay = bundled.first { it.cityMuniName.contains("Manila", ignoreCase = true) }

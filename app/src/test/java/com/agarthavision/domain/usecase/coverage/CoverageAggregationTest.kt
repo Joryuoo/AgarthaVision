@@ -118,6 +118,45 @@ class CoverageAggregationTest {
     }
 
     @Test
+    fun `identical rate and identical smear count tie-break to name ascending, deterministically`() {
+        val cebu = province("CEB", "Cebu", IslandGroup.VISAYAS)
+        val bohol = province("BOH", "Bohol", IslandGroup.VISAYAS)
+        val directory = directoryOf(
+            cebu to listOf("t-ceb"),
+            bohol to listOf("t-boh"),
+        )
+
+        // Same rate (0.5), same smear count (10) for both — only name should decide order.
+        val rows = listOf(
+            TownCoverage("t-ceb", smearCount = 10, positiveCount = 5),
+            TownCoverage("t-boh", smearCount = 10, positiveCount = 5),
+        )
+
+        // Run repeatedly with input order swapped to rule out hash map / input-order dependence.
+        val forward = aggregateCoverage(HomePeriod.TODAY, rows, directory)
+        val reversed = aggregateCoverage(HomePeriod.TODAY, rows.reversed(), directory)
+
+        assertEquals(listOf("BOH", "CEB"), forward.provinces.map { it.code })
+        assertEquals(listOf("BOH", "CEB"), reversed.provinces.map { it.code })
+    }
+
+    @Test
+    fun `a townCode with a provinceKey missing from the directory doesn't crash`() {
+        // Simulates a directory/asset mismatch: the town resolves to a provinceKey that has no
+        // corresponding ProvinceRef. Phase 8's join guarantees this won't happen in practice, but
+        // aggregation shouldn't blow up if it ever did.
+        val orphanTown = TownRef(code = "t-orphan", name = "Orphan town", provinceKey = "GHOST", hasGeometry = true)
+        val directory = AreaDirectory(towns = mapOf("t-orphan" to orphanTown), provinces = emptyMap())
+
+        val rows = listOf(TownCoverage("t-orphan", smearCount = 10, positiveCount = 3))
+        val coverage = aggregateCoverage(HomePeriod.TODAY, rows, directory)
+
+        assertTrue(coverage.provinces.isEmpty())
+        assertEquals(10, coverage.totals.smears)
+        assertEquals(0, coverage.unlocatedSmears)
+    }
+
+    @Test
     fun `unlocated smears - null and unrecognized townCode both land in unlocatedSmears`() {
         val cebu = province("CEB", "Cebu", IslandGroup.VISAYAS)
         val directory = directoryOf(cebu to listOf("t-ceb"))
