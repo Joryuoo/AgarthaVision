@@ -127,7 +127,7 @@ class FetchRemoteDataUseCaseTest {
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
         verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any())
+        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
     }
 
     @Test
@@ -141,7 +141,7 @@ class FetchRemoteDataUseCaseTest {
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
         verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any())
+        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
     }
 
     @Test
@@ -155,7 +155,7 @@ class FetchRemoteDataUseCaseTest {
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
         verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any())
+        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
     }
 
     // ── Happy path ───────────────────────────────────────────────────────────
@@ -422,7 +422,7 @@ class FetchRemoteDataUseCaseTest {
 
         // samples and reports must still be attempted even though sessions threw
         verify(sampleRemoteDataSource).fetchSamples(any(), any(), any())
-        verify(reportRemoteDataSource).fetchReports(any())
+        verify(reportRemoteDataSource).fetchReports(any(), any(), any())
     }
 
     // ── E4 skip-guard ────────────────────────────────────────────────────────
@@ -926,6 +926,63 @@ class FetchRemoteDataUseCaseTest {
         useCase.invoke()
 
         verify(sampleRemoteDataSource, times(1)).fetchSamples(any(), any(), any())
+    }
+
+    @Test
+    fun `paginates patients - full page (500 rows) triggers a second fetch`() = runTest {
+        setupOnlineSignedIn()
+        val page1 = (1..500).map { fakePatient("pat-$it") }
+        whenever(patientRemoteDataSource.fetchPatients(0L, 500L)).thenReturn(page1)
+        whenever(patientRemoteDataSource.fetchPatients(500L, 500L)).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks(0L, 500L)).thenReturn(emptyList())
+        page1.forEach { whenever(patientDao.getPatientById(it.patientId)).thenReturn(null) }
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals(500, summary.patientsFetched)
+        verify(patientRemoteDataSource, times(2)).fetchPatients(any(), any())
+    }
+
+    @Test
+    fun `paginates sessions - full page (500 rows) triggers a second fetch`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
+        val page1 = (1..500).map { fakeSession("sess-$it", "pat-1") }
+        whenever(sessionRemoteDataSource.fetchSessions("user-1", 0L, 500L)).thenReturn(page1)
+        whenever(sessionRemoteDataSource.fetchSessions("user-1", 500L, 500L)).thenReturn(emptyList())
+        page1.forEach { whenever(sessionDao.getSessionById(it.sessionId)).thenReturn(null) }
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+
+        val result = useCase.invoke()
+
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals(500, summary.sessionsFetched)
+        verify(sessionRemoteDataSource, times(2)).fetchSessions(any(), any(), any())
+    }
+
+    @Test
+    fun `paginates reports - full page (500 rows) triggers a second fetch`() = runTest {
+        setupOnlineSignedIn()
+        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        val page1 = (1..500).map { fakeReport("rep-$it", "sess-1") }
+        whenever(reportRemoteDataSource.fetchReports("user-1", 0L, 500L)).thenReturn(page1)
+        whenever(reportRemoteDataSource.fetchReports("user-1", 500L, 500L)).thenReturn(emptyList())
+        page1.forEach { whenever(reportDao.getReportById(it.reportId)).thenReturn(null) }
+
+        val result = useCase.invoke()
+
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals(500, summary.reportsFetched)
+        verify(reportRemoteDataSource, times(2)).fetchReports(any(), any(), any())
     }
 
     @Test

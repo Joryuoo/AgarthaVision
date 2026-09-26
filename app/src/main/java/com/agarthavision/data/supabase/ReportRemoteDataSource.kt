@@ -113,12 +113,14 @@ open class ReportRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     /**
-     * Fetches all reports owned by [userId], ordered by generated_at ascending.
+     * Fetches a page of reports owned by [userId], ordered by generated_at ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
      */
-    open suspend fun fetchReports(userId: String): List<ReportEntity> =
+    open suspend fun fetchReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
         }.decodeList<ReportRow>().map { it.toEntity() }
 
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
