@@ -74,7 +74,11 @@ follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<Fram
 
 `@Singleton` is for the database, OkHttp, Retrofit, Gson, the Supabase client, and the
 app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `CameraManager`,
-`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
+`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped, with one
+exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
+~25-40k quantized points out of the bundled offline boundary assets once per process. An
+unscoped or lifecycle-scoped alternative would repeat that parse on every screen that touches
+province/town geometry.
 
 **Enforcement:** review only. The scoped set is visible at
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,

@@ -100,18 +100,22 @@ both serve **9-digit** codes against this dataset's 10-digit form, and both were
 pre-NIR at 17 regions. A 9-digit list is a different code system, not a newer vintage: the
 two join at essentially nothing and zero-padding does not reconcile them.
 
-### The boundary half is still outstanding
+### The boundary half — resolved for province/town level
 
-The Admin Website's choropleth joins on these codes, so its boundary GeoJSON has to come from
-the same vintage — and as of 2026-09-11 **no published boundary set exists newer than 4Q
-2023**: `faeldon/philippines-json-maps` derives from the retired `altcoder` shapefiles, and
-HDX's COD-AB is likewise 2023.
+As of task `14zcqntj3bv` (Phase 8 of the Home-redesign plan), offline province- and town-level
+boundary geometry exists, bundled at `app/src/main/assets/geo/ph-provinces-q2_2026.bin` and
+`ph-towns-q2_2026.bin`, matched to this exact q2_2026 vintage. No newer published boundary set
+existed at the time (`faeldon/philippines-json-maps` and HDX's COD-AB both derive from the
+retired 4Q 2023 `altcoder` shapefiles), so the pipeline under `tools/geo/` reverses the same
+Negros Island Region and Sulu renumbering this file documents to join that 2023-vintage
+shapefile onto the current 1,642-town, 85-province-unit dataset — see `tools/geo/README.md`
+for the full derivation. This resolves the "remapping the 2023 set is a leading-prefix change
+on the four affected units" prediction two paragraphs up: that is exactly what
+`build-town-keys.py`'s `REVERSE_REGION_REMAP` does.
 
-That is a constraint on task `86d43e3vu`, not on this repo, and it is not blocking: **the map
-has not been built yet**, so there is no existing choropleth for this move to break. Moving
-the code list now is the cheap moment. Whoever builds the map has to source or derive 2026
-boundaries; because PSA retained the lower digits, remapping the 2023 set is a leading-prefix
-change on the four affected units rather than a re-survey.
+**Barangay-level geometry is not part of this**, and neither is any map UI or "my coverage"
+feature — those consume `BoundaryRepository` in later phases of the same ticket. What this
+phase adds is the offline data and the pure-Kotlin/Room plumbing to read it.
 
 **Changing the vintage again** is a dataset swap plus four constants, with no migration: see
 `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
