@@ -4,15 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.geo.BoundarySet
 import com.agarthavision.domain.geo.GeoBounds
-import com.agarthavision.domain.geo.fitBounds
 import com.agarthavision.domain.model.CLINICAL_ZONE
-import com.agarthavision.domain.model.CoverageFraming
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.MyCoverage
 import com.agarthavision.domain.model.windows
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.coverage.LoadProvinceBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.ObserveMyCoverageUseCase
+import com.agarthavision.domain.usecase.coverage.resolveCoverageFitBounds
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,7 +93,7 @@ class MyCoverageCardViewModel @Inject constructor(
                         MyCoverageCardUiState.Ready(
                             coverage = coverage,
                             provinces = provinces,
-                            fitBounds = resolveFitBounds(coverage, provinces),
+                            fitBounds = resolveCoverageFitBounds(coverage, provinces),
                         )
                     },
                     onFailure = { error ->
@@ -104,13 +103,4 @@ class MyCoverageCardViewModel @Inject constructor(
             }
         },
     )
-
-    private fun resolveFitBounds(coverage: MyCoverage, provinces: BoundarySet): GeoBounds {
-        val framing = coverage.framing
-        if (framing is CoverageFraming.SingleProvince) {
-            provinces.byCode[framing.code]?.bounds?.let { return it }
-        }
-        val withData = coverage.provinces.mapNotNull { provinces.byCode[it.code]?.bounds }
-        return withData.reduceOrNull(GeoBounds::union) ?: provinces.bounds
-    }
 }

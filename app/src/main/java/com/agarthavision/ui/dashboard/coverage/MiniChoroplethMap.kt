@@ -25,6 +25,7 @@ private const val MAP_PADDING_PX = 8f
 private const val POSITIVE_RATE_BIN_COUNT = 4f
 private const val HATCH_LINE_SPACING_PX = 6f
 private const val STROKE_WIDTH_PX = 1.2f
+private const val HIGHLIGHT_STROKE_WIDTH_PX = 2.5f
 
 /**
  * A minimal, static (no gestures) province choropleth for the My coverage card. Gestures and
@@ -46,9 +47,35 @@ internal fun MiniChoroplethMap(
             heightPx = size.height,
             paddingPx = MAP_PADDING_PX,
         )
-        provinces.areas.forEach { area ->
-            val stat = coverageByCode[area.code]?.count?.stat
-            drawArea(area, transform, stat, colors)
+        drawProvinces(provinces, coverageByCode, transform, colors)
+    }
+}
+
+/**
+ * Draws every [AreaShape] in [provinces], shaded by [coverageByCode]'s stat, under an
+ * already-computed [transform].
+ *
+ * Extracted so the full-screen coverage map (live pan/zoom, an externally-driven
+ * [ViewTransform]) and this static card preview (a [fitBounds]-computed one) share exactly the
+ * same path-building/shading logic without sharing a top-level composable signature — the two
+ * screens need different transform-sourcing but must render identically.
+ */
+@Suppress("LongParameterList") // Every parameter is a distinct, independent rendering input.
+internal fun DrawScope.drawProvinces(
+    provinces: BoundarySet,
+    coverageByCode: Map<String, ProvinceCoverage>,
+    transform: ViewTransform,
+    colors: AgarthaColors,
+    highlightCode: String? = null,
+    highlightColor: Color? = null,
+) {
+    provinces.areas.forEach { area ->
+        val stat = coverageByCode[area.code]?.count?.stat
+        drawArea(area, transform, stat, colors)
+    }
+    if (highlightCode != null && highlightColor != null) {
+        provinces.byCode[highlightCode]?.let { area ->
+            drawPath(pathFor(area, transform), color = highlightColor, style = Stroke(HIGHLIGHT_STROKE_WIDTH_PX))
         }
     }
 }
@@ -77,7 +104,7 @@ private fun DrawScope.drawArea(
     }
 }
 
-private fun pathFor(area: AreaShape, transform: ViewTransform): Path {
+internal fun pathFor(area: AreaShape, transform: ViewTransform): Path {
     val path = Path().apply { fillType = PathFillType.EvenOdd }
     area.rings.forEach { ring ->
         var i = 0

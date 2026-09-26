@@ -41,6 +41,7 @@ import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.sessionlist.SessionListScreen
+import com.agarthavision.ui.coverage.MyCoverageScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
@@ -82,6 +83,11 @@ sealed class Screen(val route: String) {
     data object VerificationQueue : Screen("verification_queue")
     data object Settings : Screen("settings")
     data object Activity : Screen("activity")
+
+    /** The full-screen My coverage map drill-down from the Home coverage card. */
+    data object MyCoverage : Screen("coverage?period={period}") {
+        fun createRoute(period: HomePeriod) = "coverage?period=${period.name}"
+    }
 }
 
 @Composable
@@ -391,6 +397,42 @@ fun AgarthaNavHost(
                 onBack = { navController.popBackStack() },
                 onNavigate = { route -> navController.navigate(route) },
             )
+        }
+
+        composable(
+            route = Screen.MyCoverage.route,
+            arguments = listOf(
+                navArgument("period") {
+                    type = NavType.StringType
+                    defaultValue = HomePeriod.TODAY.name
+                },
+            ),
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(220),
+                )
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(280),
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(220),
+                )
+            },
+        ) {
+            MyCoverageScreen(onBack = { navController.popBackStack() })
         }
 
         composable(
