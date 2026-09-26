@@ -165,9 +165,10 @@ fun DashboardScreen(
             }
             item {
                 Spacer(Modifier.height(Spacing.sm))
-                KpiGrid(
+                KpiPager(
                     tiles = state.kpiTiles,
                     isLoading = state.isLoading,
+                    period = state.period,
                     onTileClick = { kind ->
                         when (kind) {
                             KpiKind.SESSIONS -> onNavigate(
@@ -184,7 +185,7 @@ fun DashboardScreen(
                             }
                         }
                     },
-                    modifier = Modifier.padding(horizontal = Spacing.xl)
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
 
