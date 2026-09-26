@@ -3,10 +3,13 @@ package com.agarthavision.ui.dashboard
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -18,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -145,10 +149,19 @@ fun DashboardScreen(
                 item { Spacer(Modifier.height(Spacing.lg)) }
             }
             item {
-                SectionLabel(
-                    "Today's activity",
-                    modifier = Modifier.padding(horizontal = Spacing.xl)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.xl),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SectionLabel("Activity")
+                    PeriodToggle(
+                        selected = state.period,
+                        onSelect = viewModel::onPeriodSelected,
+                    )
+                }
             }
             item {
                 Spacer(Modifier.height(Spacing.sm))
@@ -185,8 +198,10 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(Spacing.lg))
                     SpeciesMixCard(
+                        title = state.findingsTitle,
+                        positiveSmearsCount = state.positiveSmearsCount,
                         speciesData = state.topSpecies,
-                        modifier    = Modifier.padding(horizontal = Spacing.xl)
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
                     )
                 }
             }

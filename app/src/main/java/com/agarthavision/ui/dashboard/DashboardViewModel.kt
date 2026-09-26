@@ -10,13 +10,20 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.AgreementBreakdown
 import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.domain.model.FindingsResult
+import com.agarthavision.domain.model.HomeKpis
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.model.windows
+import com.agarthavision.domain.usecase.home.Change
 import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
-import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.usecase.home.badgeText
+import com.agarthavision.domain.usecase.home.countChange
+import com.agarthavision.domain.usecase.home.ratioChange
+import com.agarthavision.domain.usecase.home.spokenText
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -40,7 +47,6 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Clock
-import java.time.Duration
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -50,6 +56,8 @@ data class DashboardUiState(
     val kpiTiles: List<KpiTileUi> = emptyList(),
     val aiBreakdown: AgreementBreakdown = AgreementBreakdown(0, 0, 0, 0),
     val topSpecies: List<SpeciesData> = emptyList(),
+    val findingsTitle: String = "Findings · today",
+    val positiveSmearsCount: Int = 0,
     val pendingReviewCount: Int = 0,
     val oldestPendingAt: Long? = null,
     val allSynced: Boolean = true,
@@ -103,6 +111,8 @@ private data class ContentBundle(
     val tiles: List<KpiTileUi>,
     val aiBreakdown: AgreementBreakdown,
     val topSpecies: List<SpeciesData>,
+    val findingsTitle: String,
+    val positiveSmearsCount: Int,
     val selectedPeriod: HomePeriod,
 )
 
@@ -128,11 +138,11 @@ class DashboardViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
     private val patientRepository: PatientRepository,
-    private val detectionRepository: DetectionRepository,
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
     observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
     private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
+    private val observeFindingsUseCase: ObserveFindingsUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
@@ -242,24 +252,17 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    private val topSpeciesFlow = userIdFlow.flatMapLatest { userId ->
+    private val findingsFlow = combine(
+        userIdFlow,
+        period,
+    ) { userId, p ->
+        userId to p
+    }.flatMapLatest { (userId, p) ->
         if (userId == null) {
-            flowOf(emptyList())
+            flowOf(FindingsResult(emptyList(), 0))
         } else {
-            val sevenDaysAgo = clock.instant()
-                .minus(Duration.ofDays(HISTORICAL_DAYS.toLong()))
-                .toEpochMilli()
-            detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo).map { eggCounts ->
-                val totalEggs = eggCounts.sumOf { it.count }.coerceAtLeast(1)
-                eggCounts.take(TOP_SPECIES_COUNT).map {
-                    val ratio = it.count.toFloat() / totalEggs
-                    SpeciesData(
-                        name = it.species,
-                        ratio = ratio,
-                        formattedPercentage = "${(ratio * 100).toInt()}%",
-                    )
-                }
-            }
+            val windows = p.windows(clock.instant(), CLINICAL_ZONE)
+            observeFindingsUseCase(userId, windows.current)
         }
     }
 
@@ -300,6 +303,104 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    private fun createKpiTiles(kpis: HomeKpis, p: HomePeriod): List<KpiTileUi> {
+        val sessionsChange = countChange(kpis.sessions.current, kpis.sessions.previous)
+        val positiveRateChange = ratioChange(kpis.positiveRate.current, kpis.positiveRate.previous)
+        val toReviewChange = countChange(kpis.toReview.current, kpis.toReview.previous)
+        val aiAgreementChange = ratioChange(kpis.aiAgreement.current, kpis.aiAgreement.previous)
+
+        val sessionsSpoken = sessionsChange.spokenText(p)
+        val sessionsTrend = if (sessionsSpoken.isNotEmpty()) ", $sessionsSpoken" else ""
+        val toReviewSpoken = toReviewChange.spokenText(p)
+        val toReviewTrend = if (toReviewSpoken.isNotEmpty()) ", $toReviewSpoken" else ""
+
+        return listOf(
+            KpiTileUi(
+                kind = KpiKind.SESSIONS,
+                label = "Sessions",
+                value = kpis.sessions.current.toString(),
+                subtitle = if (kpis.patientsInSessions == 1) "1 patient" else "${kpis.patientsInSessions} patients",
+                changeText = sessionsChange.badgeText(p),
+                sparkline = kpis.sessions.sparkline,
+                spokenDescription = "Sessions, ${kpis.sessions.current}, " +
+                    "${kpis.patientsInSessions} patients$sessionsTrend. Opens sessions.",
+            ),
+            buildPositiveRateTile(kpis, p, positiveRateChange),
+            KpiTileUi(
+                kind = KpiKind.TO_REVIEW,
+                label = "To review",
+                value = kpis.toReview.current.toString(),
+                subtitle = if (p == HomePeriod.TODAY) {
+                    "${kpis.verifiedInPeriod} verified today"
+                } else {
+                    "${kpis.verifiedInPeriod} verified in period"
+                },
+                changeText = toReviewChange.badgeText(p),
+                sparkline = kpis.toReview.sparkline,
+                spokenDescription = "To review, ${kpis.toReview.current} frames$toReviewTrend. Opens frames to review.",
+            ),
+            buildAiAgreementTile(kpis, p, aiAgreementChange),
+        )
+    }
+
+    private fun buildPositiveRateTile(kpis: HomeKpis, p: HomePeriod, change: Change): KpiTileUi {
+        val isZero = kpis.positiveRate.current.denominator == 0
+        val value = if (isZero) "—" else "${(kpis.positiveRate.current.value!! * PERCENT_FACTOR).toInt()}%"
+        val subtitle = if (isZero) {
+            "No smears examined yet"
+        } else {
+            "${kpis.positiveRate.current.numerator} of ${kpis.positiveRate.current.denominator} smears"
+        }
+        val spoken = if (isZero) {
+            "Positive rate, no smears examined yet. Opens examined smears."
+        } else {
+            val pct = (kpis.positiveRate.current.value!! * PERCENT_FACTOR).toInt()
+            val num = kpis.positiveRate.current.numerator
+            val den = kpis.positiveRate.current.denominator
+            val prSpoken = change.spokenText(p)
+            val prTrend = if (prSpoken.isNotEmpty()) ", $prSpoken" else ""
+            "Positive rate, $pct percent, $num of $den smears$prTrend. Opens examined smears."
+        }
+        return KpiTileUi(
+            kind = KpiKind.POSITIVE_RATE,
+            label = "Positive rate",
+            value = value,
+            subtitle = subtitle,
+            changeText = change.badgeText(p),
+            sparkline = kpis.positiveRate.sparkline,
+            spokenDescription = spoken,
+        )
+    }
+
+    private fun buildAiAgreementTile(kpis: HomeKpis, p: HomePeriod, change: Change): KpiTileUi {
+        val isZero = kpis.aiAgreement.current.denominator == 0
+        val value = if (isZero) "—" else "${(kpis.aiAgreement.current.value!! * PERCENT_FACTOR).toInt()}%"
+        val subtitle = if (isZero) {
+            "No AI results reviewed yet"
+        } else {
+            "${kpis.aiBreakdown.corrected} of ${kpis.aiAgreement.current.denominator} corrected by you"
+        }
+        val spoken = if (isZero) {
+            "AI agreement, no AI results reviewed yet. Opens AI agreement details."
+        } else {
+            val pct = (kpis.aiAgreement.current.value!! * PERCENT_FACTOR).toInt()
+            val corrected = kpis.aiBreakdown.corrected
+            val den = kpis.aiAgreement.current.denominator
+            val aiSpoken = change.spokenText(p)
+            val aiTrend = if (aiSpoken.isNotEmpty()) ", $aiSpoken" else ""
+            "AI agreement, $pct percent, $corrected of $den corrected by you$aiTrend. Opens AI agreement details."
+        }
+        return KpiTileUi(
+            kind = KpiKind.AI_AGREEMENT,
+            label = "AI agreement",
+            value = value,
+            subtitle = subtitle,
+            changeText = change.badgeText(p),
+            sparkline = kpis.aiAgreement.sparkline,
+            spokenDescription = spoken,
+        )
+    }
+
     private val kpiTilesFlow = combine(
         homeKpisFlow,
         period,
@@ -307,76 +408,7 @@ class DashboardViewModel @Inject constructor(
         if (kpis == null) {
             emptyList()
         } else {
-            listOf(
-                KpiTileUi(
-                    kind = KpiKind.SESSIONS,
-                    label = "Sessions",
-                    value = kpis.sessions.current.toString(),
-                    subtitle = if (kpis.patientsInSessions == 1) {
-                        "1 patient"
-                    } else {
-                        "${kpis.patientsInSessions} patients"
-                    },
-                    spokenDescription = "Sessions, ${kpis.sessions.current}, " +
-                        "${kpis.patientsInSessions} patients. Opens sessions.",
-                ),
-                KpiTileUi(
-                    kind = KpiKind.POSITIVE_RATE,
-                    label = "Positive rate",
-                    value = if (kpis.positiveRate.current.denominator == 0) {
-                        "—"
-                    } else {
-                        "${(kpis.positiveRate.current.value!! * 100).toInt()}%"
-                    },
-                    subtitle = if (kpis.positiveRate.current.denominator == 0) {
-                        "No smears examined yet"
-                    } else {
-                        "${kpis.positiveRate.current.numerator} of ${kpis.positiveRate.current.denominator} smears"
-                    },
-                    spokenDescription = if (kpis.positiveRate.current.denominator == 0) {
-                        "Positive rate, no smears examined yet. Opens examined smears."
-                    } else {
-                        val pct = (kpis.positiveRate.current.value!! * 100).toInt()
-                        val num = kpis.positiveRate.current.numerator
-                        val den = kpis.positiveRate.current.denominator
-                        "Positive rate, $pct percent, $num of $den smears. Opens examined smears."
-                    },
-                ),
-                KpiTileUi(
-                    kind = KpiKind.TO_REVIEW,
-                    label = "To review",
-                    value = kpis.toReview.current.toString(),
-                    subtitle = if (p == HomePeriod.TODAY) {
-                        "${kpis.verifiedInPeriod} verified today"
-                    } else {
-                        "${kpis.verifiedInPeriod} verified in period"
-                    },
-                    spokenDescription = "To review, ${kpis.toReview.current} frames. Opens frames to review.",
-                ),
-                KpiTileUi(
-                    kind = KpiKind.AI_AGREEMENT,
-                    label = "AI agreement",
-                    value = if (kpis.aiAgreement.current.denominator == 0) {
-                        "—"
-                    } else {
-                        "${(kpis.aiAgreement.current.value!! * 100).toInt()}%"
-                    },
-                    subtitle = if (kpis.aiAgreement.current.denominator == 0) {
-                        "No AI results reviewed yet"
-                    } else {
-                        "${kpis.aiBreakdown.corrected} of ${kpis.aiAgreement.current.denominator} corrected by you"
-                    },
-                    spokenDescription = if (kpis.aiAgreement.current.denominator == 0) {
-                        "AI agreement, no AI results reviewed yet. Opens AI agreement details."
-                    } else {
-                        val pct = (kpis.aiAgreement.current.value!! * 100).toInt()
-                        val corrected = kpis.aiBreakdown.corrected
-                        val den = kpis.aiAgreement.current.denominator
-                        "AI agreement, $pct percent, $corrected of $den corrected by you. " +
-                            "Opens AI agreement details."
-                    },
-                ),
-            )
+            createKpiTiles(kpis, p)
         }
     }
 
@@ -384,14 +416,28 @@ class DashboardViewModel @Inject constructor(
         kpiStateFlow,
         kpiTilesFlow,
         homeKpisFlow,
-        topSpeciesFlow,
+        findingsFlow,
         period,
-    ) { kpis, tiles, homeKpis, topSpecies, selectedPeriod ->
+    ) { kpis, tiles, homeKpis, findings, selectedPeriod ->
+        val findingsTitle = when (selectedPeriod) {
+            HomePeriod.TODAY -> "Findings · today"
+            HomePeriod.LAST_7_DAYS -> "Findings · last 7 days"
+            HomePeriod.LAST_30_DAYS -> "Findings · last 30 days"
+        }
+        val topSpecies = findings.species.take(TOP_SPECIES_COUNT).map {
+            SpeciesData(
+                name = it.name,
+                ratio = it.ratio,
+                formattedPercentage = it.formattedPercentage,
+            )
+        }
         ContentBundle(
             kpis = kpis,
             tiles = tiles,
             aiBreakdown = homeKpis?.aiBreakdown ?: AgreementBreakdown(0, 0, 0, 0),
             topSpecies = topSpecies,
+            findingsTitle = findingsTitle,
+            positiveSmearsCount = findings.positiveSmearsCount,
             selectedPeriod = selectedPeriod,
         )
     }
@@ -427,6 +473,8 @@ class DashboardViewModel @Inject constructor(
             syncedSamplesCount = pendingSync.syncedSamplesCount,
             activeSession = activeSession,
             topSpecies = content.topSpecies,
+            findingsTitle = content.findingsTitle,
+            positiveSmearsCount = content.positiveSmearsCount,
             isDarkMode = themeMode == ThemeMode.DARK,
             isSignedIn = isSignedIn,
             isOffline = isOffline,
@@ -466,8 +514,8 @@ class DashboardViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "DashboardViewModel"
-        const val HISTORICAL_DAYS = 7
         const val TOP_SPECIES_COUNT = 3
         const val KEY_PERIOD = "dashboard_period"
+        const val PERCENT_FACTOR = 100
     }
 }

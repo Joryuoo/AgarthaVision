@@ -8,29 +8,36 @@ import com.agarthavision.core.sync.InitialFetchStateStore
 import androidx.lifecycle.SavedStateHandle
 import com.agarthavision.domain.model.AgreementBreakdown
 import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.domain.model.FindingsResult
 import com.agarthavision.domain.model.HomeKpis
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.KpiMetric
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Ratio
+import com.agarthavision.domain.model.SpeciesFinding
 import com.agarthavision.domain.model.ThemeMode
-import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.model.windows
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import java.time.Clock
 import java.time.Instant
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
-import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
-import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
+import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncSummary
 import com.agarthavision.util.MainDispatcherRule
+import org.mockito.kotlin.argThat
+import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.eq
+import org.mockito.kotlin.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -87,9 +94,6 @@ class DashboardViewModelTest {
         whenever(it.observePendingCount(any())).thenReturn(flowOf(0))
         runBlocking { whenever(it.getSamplesPendingSyncIncludingDeleted(any())).thenReturn(emptyList()) }
     }
-    private val detectionRepository: DetectionRepository = mock<DetectionRepository>().also {
-        whenever(it.observeConfirmedEggCountsSince(any(), any())).thenReturn(flowOf(emptyList()))
-    }
     private val patientRepository: PatientRepository = mock<PatientRepository>().also {
         whenever(
             it.observePatientCount(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()),
@@ -116,6 +120,20 @@ class DashboardViewModelTest {
     private val observeHomeKpisUseCase: ObserveHomeKpisUseCase = mock<ObserveHomeKpisUseCase>().also {
         whenever(it.invoke(any(), any())).thenReturn(flowOf(defaultKpis))
     }
+    private val defaultFindings = FindingsResult(
+        species = listOf(
+            SpeciesFinding(
+                name = "Ascaris lumbricoides",
+                count = 5,
+                ratio = 0.5f,
+                formattedPercentage = "50%",
+            ),
+        ),
+        positiveSmearsCount = 3,
+    )
+    private val observeFindingsUseCase: ObserveFindingsUseCase = mock<ObserveFindingsUseCase>().also {
+        whenever(it.invoke(any(), any(), anyOrNull())).thenReturn(flowOf(defaultFindings))
+    }
 
     private fun viewModel(
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -131,11 +149,11 @@ class DashboardViewModelTest {
         sessionRepository = sessionRepository,
         sampleRepository = sampleRepository,
         patientRepository = patientRepository,
-        detectionRepository = detectionRepository,
         observeThemeModeUseCase = observeThemeModeUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
         observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
         observeHomeKpisUseCase = observeHomeKpisUseCase,
+        observeFindingsUseCase = observeFindingsUseCase,
     )
 
     @Test
@@ -361,15 +379,15 @@ class DashboardViewModelTest {
         }
 
     @Test
-    fun `kpiTiles formats HomeKpis metrics correctly`() =
+    fun `kpiTiles formats HomeKpis metrics and trends correctly`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val sampleKpis = HomeKpis(
-                sessions = KpiMetric(10, 5, emptyList()),
+                sessions = KpiMetric(10, 5, listOf(1.0, 2.0)),
                 patientsInSessions = 4,
-                positiveRate = KpiMetric(Ratio(2, 8), Ratio(1, 4), emptyList()),
-                toReview = KpiMetric(3, 1, emptyList()),
+                positiveRate = KpiMetric(Ratio(2, 8), Ratio(1, 4), listOf(0.25)),
+                toReview = KpiMetric(3, 1, listOf(3.0)),
                 verifiedInPeriod = 15,
-                aiAgreement = KpiMetric(Ratio(18, 20), Ratio(9, 10), emptyList()),
+                aiAgreement = KpiMetric(Ratio(18, 20), Ratio(9, 10), listOf(0.9)),
                 aiBreakdown = AgreementBreakdown(
                     confirmed = 18,
                     wrongClass = 1,
@@ -391,19 +409,61 @@ class DashboardViewModelTest {
 
                 assertEquals("10", tiles[0].value)
                 assertEquals("4 patients", tiles[0].subtitle)
+                assertEquals("+5 day", tiles[0].changeText)
+                assertEquals(listOf(1.0, 2.0), tiles[0].sparkline)
 
                 assertEquals("25%", tiles[1].value)
                 assertEquals("2 of 8 smears", tiles[1].subtitle)
+                assertEquals("Flat", tiles[1].changeText)
 
                 assertEquals("3", tiles[2].value)
                 assertEquals("15 verified today", tiles[2].subtitle)
+                assertEquals("+2 day", tiles[2].changeText)
 
                 assertEquals("90%", tiles[3].value)
                 assertEquals("2 of 20 corrected by you", tiles[3].subtitle)
+                assertEquals("Flat", tiles[3].changeText)
 
                 assertEquals(18, snapshot.aiBreakdown.confirmed)
                 assertEquals(2, snapshot.aiBreakdown.corrected)
+                assertEquals("Findings · today", snapshot.findingsTitle)
+                assertEquals(3, snapshot.positiveSmearsCount)
+                assertEquals(1, snapshot.topSpecies.size)
+                assertEquals("Ascaris lumbricoides", snapshot.topSpecies[0].name)
 
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onPeriodSelected re-invokes use cases with 30-day windows`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+
+                vm.onPeriodSelected(HomePeriod.LAST_30_DAYS)
+                snapshot = awaitItem()
+                while (snapshot.period != HomePeriod.LAST_30_DAYS) {
+                    snapshot = awaitItem()
+                }
+
+                assertEquals(HomePeriod.LAST_30_DAYS, snapshot.period)
+                assertEquals("Findings · last 30 days", snapshot.findingsTitle)
+
+                val expectedWindow = HomePeriod.LAST_30_DAYS.windows(clock.instant(), CLINICAL_ZONE)
+                verify(observeHomeKpisUseCase, atLeastOnce()).invoke(
+                    eq("user-1"),
+                    argThat { current.startMillis == expectedWindow.current.startMillis },
+                )
+                verify(observeFindingsUseCase, atLeastOnce()).invoke(
+                    eq("user-1"),
+                    argThat { startMillis == expectedWindow.current.startMillis },
+                    anyOrNull(),
+                )
                 cancelAndIgnoreRemainingEvents()
             }
         }

@@ -149,4 +149,22 @@ class KpiTileSemanticsTest {
             Screen.SessionList.createRoute(SessionListFilter.TO_REVIEW, period),
         )
     }
+
+    @Test
+    fun `change badge is displayed when changeText is present`() {
+        val tilesWithChange = sampleTiles.mapIndexed { index, tile ->
+            if (index == 0) tile.copy(changeText = "+8 wk") else tile
+        }
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                KpiGrid(
+                    tiles = tilesWithChange,
+                    isLoading = false,
+                    onTileClick = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("+8 wk").assertIsDisplayed()
+    }
 }

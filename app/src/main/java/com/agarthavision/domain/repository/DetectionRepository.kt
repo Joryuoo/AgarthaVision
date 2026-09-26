@@ -33,4 +33,13 @@ interface DetectionRepository {
         fromMillis: Long,
         toMillis: Long,
     ): Flow<List<com.agarthavision.domain.model.ModelRuling>> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes session-species detection rows for findings within a time window.
+     */
+    fun observeSessionFindingsBetween(
+        userId: String,
+        startMillis: Long,
+        endMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionFinding>> = kotlinx.coroutines.flow.emptyFlow()
 }

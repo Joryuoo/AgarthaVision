@@ -52,3 +52,21 @@ data class HomeKpis(
     val aiAgreement: KpiMetric<Ratio>,
     val aiBreakdown: AgreementBreakdown,
 )
+
+data class SessionFinding(
+    val sessionId: String,
+    val rawSpecies: String,
+    val townCode: String?,
+)
+
+data class SpeciesFinding(
+    val name: String,
+    val count: Int,
+    val ratio: Float,
+    val formattedPercentage: String,
+)
+
+data class FindingsResult(
+    val species: List<SpeciesFinding>,
+    val positiveSmearsCount: Int,
+)

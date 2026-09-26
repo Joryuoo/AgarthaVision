@@ -151,6 +151,8 @@ data class KpiTileUi(
     val label: String,
     val value: String,
     val subtitle: String,
+    val changeText: String = "",
+    val sparkline: List<Double?> = emptyList(),
     val spokenDescription: String = "",
 )
 
@@ -315,17 +317,47 @@ private fun KpiTile(
                     }
                 )
         ) {
-            Text(tile.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(tile.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
+                if (tile.changeText.isNotEmpty()) {
+                    Text(
+                        tile.changeText,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.labelColor,
+                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                    )
+                }
+            }
             Spacer(Modifier.height(6.dp))
-            Text(
-                tile.value,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.contentColor,
-                letterSpacing = (-0.7).sp,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                lineHeight = 30.sp,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    tile.value,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.contentColor,
+                    letterSpacing = (-0.7).sp,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                    lineHeight = 30.sp,
+                )
+                if (tile.sparkline.isNotEmpty()) {
+                    Sparkline(
+                        points = tile.sparkline,
+                        lineColor = colors.contentColor.copy(alpha = 0.7f),
+                        modifier = Modifier
+                            .width(48.dp)
+                            .height(24.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 tile.subtitle,
@@ -356,12 +388,23 @@ private fun KpiTile(
 
 @Composable
 internal fun SpeciesMixCard(
+    title: String,
+    positiveSmearsCount: Int,
     speciesData: List<SpeciesData>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val theme = AgarthaTheme.colors
     // Categorical series colors — brand tokens only (labels carry the meaning)
     val colors = listOf(theme.accent, theme.gold, theme.success)
+
+    val speciesCount = speciesData.size
+    val speciesPart = if (speciesCount == 1) "1 species" else "$speciesCount species"
+    val smearPart = if (positiveSmearsCount == 1) {
+        "1 positive smear"
+    } else {
+        "$positiveSmearsCount positive smears"
+    }
+    val summaryText = "$speciesPart · $smearPart"
 
     Column(
         modifier = modifier
@@ -370,9 +413,9 @@ internal fun SpeciesMixCard(
             .border(1.dp, theme.border, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
-        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
         Text(
-            "${speciesData.size} species detected",
+            summaryText,
             fontSize = 11.sp,
             color = theme.textSecondary,
             modifier = Modifier.padding(top = 2.dp)

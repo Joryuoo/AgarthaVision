@@ -55,4 +55,19 @@ class DetectionRepositoryImpl @Inject constructor(
                 )
             }
         }
+
+    override fun observeSessionFindingsBetween(
+        userId: String,
+        startMillis: Long,
+        endMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionFinding>> =
+        detectionDao.observeSessionFindingsBetween(userId, startMillis, endMillis).map { rows ->
+            rows.map { row ->
+                com.agarthavision.domain.model.SessionFinding(
+                    sessionId = row.sessionId,
+                    rawSpecies = row.rawSpecies,
+                    townCode = row.townCode,
+                )
+            }
+        }
 }
