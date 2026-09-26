@@ -22,7 +22,14 @@
     <string name="dashboard_sign_in">Sign in</string>
     <string name="dashboard_sync_now">Sync now</string>
     <string name="dashboard_syncing">Syncing…</string>
-    <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
+    <plurals name="dashboard_pending_upload">
+        <item quantity="one">%1$d item pending upload</item>
+        <item quantity="other">%1$d items pending upload</item>
+    </plurals>
+    <plurals name="dashboard_frame_count">
+        <item quantity="one">%1$d frame</item>
+        <item quantity="other">%1$d frames</item>
+    </plurals>
     <string name="dashboard_all_synced">All records synced</string>
     <!-- Toasts for the header sync button -->
     <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>

@@ -29,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import com.agarthavision.R
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
@@ -92,10 +94,13 @@ internal fun ActiveSessionHero(
                     fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
                 Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
-                Text(frameCount.toString(),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text(" frames", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.85f))
+                Text(
+                    pluralStringResource(R.plurals.dashboard_frame_count, frameCount, frameCount),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onAccent,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                )
             }
         }
 
@@ -376,8 +381,13 @@ internal fun VerifyAlertRow(
         }
         Spacer(Modifier.width(Spacing.md))
         Column(Modifier.weight(1f)) {
+            val frameCountText = pluralStringResource(
+                R.plurals.dashboard_frame_count,
+                pendingCount,
+                pendingCount,
+            )
             Text(
-                "$pendingCount frames awaiting verification",
+                "$frameCountText awaiting verification",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = colors.textPrimary
