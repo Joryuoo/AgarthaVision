@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.PsgcBarangayDao
@@ -16,6 +17,7 @@ import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import com.agarthavision.data.repository.AndroidReportPdfRenderer
 import com.agarthavision.data.repository.BoundaryRepositoryImpl
+import com.agarthavision.data.repository.CoverageRepositoryImpl
 import com.agarthavision.data.repository.DetectionRepositoryImpl
 import com.agarthavision.data.repository.DocumentsReportFileStore
 import com.agarthavision.data.repository.LocalReportRepository
@@ -27,6 +29,7 @@ import com.agarthavision.data.repository.SupabaseAuthRepository
 import com.agarthavision.data.repository.SupabaseSampleImageRepository
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BoundaryRepository
+import com.agarthavision.domain.repository.CoverageRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
@@ -113,6 +116,9 @@ object DatabaseModule {
     fun provideSampleSpeciesFindingDao(
         database: AgarthaDatabase,
     ): SampleSpeciesFindingDao = database.sampleSpeciesFindingDao()
+
+    @Provides
+    fun provideCoverageDao(database: AgarthaDatabase): CoverageDao = database.coverageDao()
 }
 
 /**
@@ -146,6 +152,11 @@ abstract class RepositoryModule {
     abstract fun bindPatientRepository(
         implementation: PatientRepositoryImpl,
     ): PatientRepository
+
+    @Binds
+    abstract fun bindCoverageRepository(
+        implementation: CoverageRepositoryImpl,
+    ): CoverageRepository
 
     @Binds
     abstract fun bindReportRepository(

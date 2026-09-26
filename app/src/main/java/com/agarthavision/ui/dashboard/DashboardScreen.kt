@@ -178,6 +178,7 @@ fun DashboardScreen(
                             }
                         }
                     },
+                    onOpenCoverage = { /* TODO: wire in Phase 10 */ },
                     modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }

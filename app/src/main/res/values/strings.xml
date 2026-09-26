@@ -52,6 +52,10 @@
         <item quantity="other">Synced %1$d items</item>
     </plurals>
     <string name="activity_started_session">Started a session</string>
+    <plurals name="coverage_unlocated_smears">
+        <item quantity="one">%1$d smear has a location not in the bundled map data</item>
+        <item quantity="other">%1$d smears have a location not in the bundled map data</item>
+    </plurals>
     <string name="activity_empty">No activity yet</string>
     <string name="activity_title">Recent activity</string>
 

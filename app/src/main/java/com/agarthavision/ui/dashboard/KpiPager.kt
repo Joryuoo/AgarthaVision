@@ -30,16 +30,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.domain.model.HomePeriod
+import com.agarthavision.ui.dashboard.coverage.MyCoverageCard
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import kotlinx.coroutines.launch
 
+@Suppress("LongParameterList") // Mirrors the sibling KpiPager tile-click callback; each param is an independent slot.
 @Composable
 internal fun KpiPager(
     tiles: List<KpiTileUi>,
     isLoading: Boolean,
     period: HomePeriod,
     onTileClick: (KpiKind) -> Unit = {},
+    onOpenCoverage: (HomePeriod) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val pagerState = rememberPagerState(pageCount = { 2 })
@@ -50,7 +53,7 @@ internal fun KpiPager(
     Column(modifier = modifier) {
         HorizontalPager(
             state = pagerState,
-            beyondViewportPageCount = 1,
+            beyondViewportPageCount = 0,
             pageSpacing = Spacing.sm,
             modifier = Modifier
                 .testTag("kpiPager")
@@ -93,8 +96,9 @@ internal fun KpiPager(
                             .fillMaxWidth()
                             .heightIn(min = 220.dp)
                     }
-                    CoveragePlaceholderCard(
+                    MyCoverageCard(
                         period = period,
+                        onOpen = onOpenCoverage,
                         modifier = page1Modifier,
                     )
                 }

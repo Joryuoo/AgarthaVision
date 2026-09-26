@@ -114,7 +114,8 @@ sensitive code in the repo.
 **The non-obvious break:** verdicts are lowercase in Room and uppercase in Postgres
 (`domain/model/DetectionVerdict.kt:13-16`). Adding a value means the enum, the Postgres CHECK,
 **and** every raw SQL string that names a verdict — `data/local/dao/DetectionDao.kt:43`, `:66`,
-`:87`. Those three query strings do not agree with each other today.
+`:87`, and `data/local/dao/CoverageDao.kt`'s `observeTownCoverage` (the My coverage card's
+examined/positive smear query). Those do not agree with each other today.
 
 ## Changing sync
 
