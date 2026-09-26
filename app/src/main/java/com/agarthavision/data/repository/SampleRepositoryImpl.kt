@@ -53,4 +53,7 @@ class SampleRepositoryImpl @Inject constructor(
 
     override fun observePendingCount(userId: String): Flow<Int> =
         sampleDao.observePendingCount(userId)
+
+    override fun observeFlaggedCount(userId: String): Flow<Int> =
+        sampleDao.observeFlaggedCount(userId)
 }

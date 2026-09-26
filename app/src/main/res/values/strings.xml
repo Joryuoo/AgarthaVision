@@ -57,6 +57,20 @@
     <string name="period_7_days">7 days</string>
     <string name="period_30_days">30 days</string>
 
+    <!-- Needs attention strip -->
+    <plurals name="attention_unsynced">
+        <item quantity="one">%1$d unsynced item</item>
+        <item quantity="other">%1$d unsynced items</item>
+    </plurals>
+    <plurals name="attention_to_review">
+        <item quantity="one">%1$d frame to review</item>
+        <item quantity="other">%1$d frames to review</item>
+    </plurals>
+    <plurals name="attention_empty_sessions">
+        <item quantity="one">%1$d session with no frames</item>
+        <item quantity="other">%1$d sessions with no frames</item>
+    </plurals>
+
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
 
     <string name="verify_title">Flagged Frame · %1$s</string>

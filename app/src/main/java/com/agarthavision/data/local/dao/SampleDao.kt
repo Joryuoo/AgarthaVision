@@ -304,6 +304,12 @@ interface SampleDao {
     )
     fun observeFailedCount(userId: String): Flow<Int>
 
+    @Query(
+        "SELECT COUNT(*) FROM samples " +
+            "WHERE user_id = :userId AND status = 'flagged' AND deleted_at is null",
+    )
+    fun observeFlaggedCount(userId: String): Flow<Int>
+
     /**
      * Claims samples belonging to the given sessions for [userId]. Only touches
      * currently-unowned rows so it is idempotent. Per ADR-007.

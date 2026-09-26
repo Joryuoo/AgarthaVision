@@ -70,7 +70,8 @@ private fun handleSyncTap(
 @Composable
 fun DashboardScreen(
     onNavigate: (String) -> Unit = {},
-    viewModel: DashboardViewModel = hiltViewModel()
+    onNavigateToTab: (String) -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -101,6 +102,22 @@ fun DashboardScreen(
                         }
                     }
                 )
+            }
+
+            // 1b. Needs Attention strip
+            if (!state.needsAttention.isEmpty) {
+                item {
+                    Spacer(Modifier.height(Spacing.xs))
+                    NeedsAttentionStrip(
+                        needsAttention = state.needsAttention,
+                        onNavigateToTab = onNavigateToTab,
+                        onOpenSessionList = { filter ->
+                            onNavigate(Screen.SessionList.createRoute(filter))
+                        },
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
+                    )
+                    Spacer(Modifier.height(Spacing.sm))
+                }
             }
 
             // 2. Recent Session Hero (only when a session is active/recent)
@@ -152,24 +169,6 @@ fun DashboardScreen(
                     )
                 }
             }
-
-            // 6. Verify alert row
-            if (state.pendingReviewCount > 0) {
-                item {
-                    val nowMillis = remember { System.currentTimeMillis() }
-                    val oldestAgo = state.oldestPendingAt?.let {
-                        relativeTimeText(it, nowMillis)
-                    } ?: ""
-                    Spacer(Modifier.height(Spacing.lg))
-                    VerifyAlertRow(
-                        pendingCount = state.pendingReviewCount,
-                        oldestAgo    = oldestAgo,
-                        onClick      = { onNavigate(Screen.VerificationQueue.route) },
-                        modifier     = Modifier.padding(horizontal = Spacing.xl)
-                    )
-                }
-            }
-
         }
     }
 }

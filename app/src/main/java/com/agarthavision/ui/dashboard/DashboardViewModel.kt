@@ -10,6 +10,8 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
@@ -53,6 +55,7 @@ data class DashboardUiState(
     val pendingUploadCount: Int = 0,
     val isSyncing: Boolean = false,
     val period: HomePeriod = HomePeriod.TODAY,
+    val needsAttention: NeedsAttention = NeedsAttention(0, 0, 0),
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -89,6 +92,13 @@ data class PendingAndSync(
     val initialFetchDone: Boolean = true,
 )
 
+private data class SessionAndSyncBundle(
+    val pendingSync: PendingAndSync,
+    val activeSession: ActiveSessionState?,
+    val accountSync: Triple<Boolean, Boolean, Boolean>,
+    val needsAttention: NeedsAttention,
+)
+
 @Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -107,6 +117,7 @@ class DashboardViewModel @Inject constructor(
     private val detectionRepository: DetectionRepository,
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
+    observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
@@ -239,6 +250,19 @@ class DashboardViewModel @Inject constructor(
 
     private val isSyncingFlow = MutableStateFlow(false)
 
+    private val needsAttentionFlow = combine(
+        userIdFlow,
+        sessionManager.state,
+    ) { userId, sessionState ->
+        userId to (sessionState as? SessionState.Active)?.session?.sessionId
+    }.flatMapLatest { (userId, activeSessionId) ->
+        if (userId == null) {
+            flowOf(NeedsAttention(0, 0, 0))
+        } else {
+            observeNeedsAttentionUseCase(userId, activeSessionId)
+        }
+    }
+
     private val accountSyncFlow = combine(
         localIdentityFlow,
         connectivityObserver.isOnline,
@@ -259,8 +283,9 @@ class DashboardViewModel @Inject constructor(
         pendingAndSyncFlow,
         activeSessionStateFlow,
         accountSyncFlow,
-    ) { pendingSync, activeSession, accountSync ->
-        Triple(pendingSync, activeSession, accountSync)
+        needsAttentionFlow,
+    ) { pendingSync, activeSession, accountSync, needsAttention ->
+        SessionAndSyncBundle(pendingSync, activeSession, accountSync, needsAttention)
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -269,7 +294,10 @@ class DashboardViewModel @Inject constructor(
         themeModeFlow,
     ) { content, sessionAndSync, themeMode ->
         val (kpis, topSpecies, selectedPeriod) = content
-        val (pendingSync, activeSession, accountSync) = sessionAndSync
+        val pendingSync = sessionAndSync.pendingSync
+        val activeSession = sessionAndSync.activeSession
+        val accountSync = sessionAndSync.accountSync
+        val needsAttention = sessionAndSync.needsAttention
         val (isSignedIn, isOffline, isSyncing) = accountSync
         DashboardUiState(
             isLoading = false,
@@ -287,6 +315,7 @@ class DashboardViewModel @Inject constructor(
             pendingUploadCount = pendingSync.pendingCount,
             isSyncing = isSyncing,
             period = selectedPeriod,
+            needsAttention = needsAttention,
         )
     }.stateIn(
         scope = viewModelScope,

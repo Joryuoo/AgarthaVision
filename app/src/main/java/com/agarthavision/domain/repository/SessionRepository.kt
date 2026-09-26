@@ -137,4 +137,31 @@ interface SessionRepository {
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts>
+
+    /**
+     * Observes filtered cross-patient session summaries.
+     */
+    fun observeSessionSummaries(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+        limit: Int,
+    ): Flow<List<com.agarthavision.domain.model.SessionSummary>> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes total count for cross-patient filtered sessions.
+     */
+    fun observeSessionSummaryCount(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+    ): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes count of empty sessions (zero samples), optionally excluding [excludeSessionId].
+     */
+    fun observeEmptySessionCount(
+        userId: String,
+        excludeSessionId: String?,
+    ): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
 }

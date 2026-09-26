@@ -19,6 +19,8 @@ import java.time.Instant
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
+import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -94,6 +96,9 @@ class DashboardViewModelTest {
     }
     private val setThemeModeUseCase: SetThemeModeUseCase = mock()
     private val clock: Clock = Clock.fixed(Instant.parse("2026-09-27T10:00:00Z"), CLINICAL_ZONE)
+    private val observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase = mock<ObserveNeedsAttentionUseCase>().also {
+        whenever(it.invoke(any(), anyOrNull())).thenReturn(flowOf(NeedsAttention(0, 0, 0)))
+    }
 
     private fun viewModel(
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -112,6 +117,7 @@ class DashboardViewModelTest {
         detectionRepository = detectionRepository,
         observeThemeModeUseCase = observeThemeModeUseCase,
         setThemeModeUseCase = setThemeModeUseCase,
+        observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
     )
 
     @Test

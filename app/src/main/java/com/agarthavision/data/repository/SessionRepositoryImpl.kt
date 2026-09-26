@@ -166,4 +166,47 @@ class SessionRepositoryImpl @Inject constructor(
                 SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)
             }
     }
+
+    override fun observeSessionSummaries(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+        limit: Int,
+    ): Flow<List<com.agarthavision.domain.model.SessionSummary>> =
+        sessionDao.observeSessionSummaries(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+            limit = limit,
+        ).map { rows ->
+            rows.map { row ->
+                com.agarthavision.domain.model.SessionSummary(
+                    session = row.session.toDomain(),
+                    patient = row.patient.toDomain(),
+                    totalFrames = row.totalSamples,
+                    framesToReview = row.unverifiedSamples,
+                    isPositive = row.isPositive,
+                    lastActivityAt = row.lastActivityAt,
+                )
+            }
+        }
+
+    override fun observeSessionSummaryCount(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+    ): Flow<Int> =
+        sessionDao.observeSessionSummaryCount(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+        )
+
+    override fun observeEmptySessionCount(
+        userId: String,
+        excludeSessionId: String?,
+    ): Flow<Int> =
+        sessionDao.observeEmptySessionCount(userId, excludeSessionId)
 }

@@ -54,4 +54,9 @@ interface SampleRepository {
      * Live count of owned samples still awaiting cloud upload (`verified` only).
      */
     fun observePendingCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Live count of flagged samples owned by the medtech awaiting review.
+     */
+    fun observeFlaggedCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
 }
