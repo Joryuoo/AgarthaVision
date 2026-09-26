@@ -27,6 +27,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import com.agarthavision.R
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -91,11 +94,16 @@ internal fun ActiveSessionHero(
                 Text(elapsed,
                     fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
+                // Non-prose glyph separator exempt from strings.xml localization (C11).
                 Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
                 Text(frameCount.toString(),
                     fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
                     style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text(" frames", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.85f))
+                Text(
+                    text = pluralStringResource(R.plurals.dashboard_frames_count, frameCount),
+                    fontSize = 12.sp,
+                    color = colors.onAccent.copy(alpha = 0.85f),
+                )
             }
         }
 
@@ -233,6 +241,7 @@ private fun KpiTile(
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (data.trend.isUp) {
+                        // Non-prose arrow glyph exempt from strings.xml localization (C11).
                         Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
                     }
                     Text(
@@ -279,9 +288,18 @@ internal fun SpeciesMixCard(
             .border(1.dp, theme.border, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
-        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
         Text(
-            "${speciesData.size} species detected",
+            stringResource(R.string.dashboard_todays_findings),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = theme.textPrimary,
+        )
+        Text(
+            pluralStringResource(
+                R.plurals.dashboard_species_detected_count,
+                speciesData.size,
+                speciesData.size,
+            ),
             fontSize = 11.sp,
             color = theme.textSecondary,
             modifier = Modifier.padding(top = 2.dp)

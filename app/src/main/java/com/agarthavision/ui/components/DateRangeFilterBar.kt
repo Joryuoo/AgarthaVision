@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import com.agarthavision.R
 import androidx.compose.ui.unit.dp
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.DateRange
@@ -181,10 +183,10 @@ private fun SingleDatePickerDialog(
                         ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
                         ?.let(onConfirm)
                 },
-            ) { Text("OK") }
+            ) { Text(stringResource(R.string.date_range_picker_ok)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.date_range_picker_cancel)) }
         },
     ) {
         DatePicker(state = pickerState)

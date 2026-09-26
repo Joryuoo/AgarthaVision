@@ -24,6 +24,15 @@
     <string name="dashboard_syncing">Syncing…</string>
     <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
     <string name="dashboard_all_synced">All records synced</string>
+    <string name="dashboard_todays_findings">Today\'s findings</string>
+    <plurals name="dashboard_frames_count">
+        <item quantity="one"> frame</item>
+        <item quantity="other"> frames</item>
+    </plurals>
+    <plurals name="dashboard_species_detected_count">
+        <item quantity="one">%1$d species detected</item>
+        <item quantity="other">%1$d species detected</item>
+    </plurals>
     <!-- Toasts for the header sync button -->
     <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>
     <string name="dashboard_sync_toast_offline">You\'re offline — sync will resume when you reconnect</string>
@@ -136,6 +145,9 @@
     <string name="verify_delete_frame">Delete</string>
     <string name="verify_delete_confirm_title">Delete this flagged frame?</string>
     <string name="verify_delete_confirm_body">It will be removed from the queue and cannot be recovered. Use this only for duplicates of frames you have already verified.</string>
+    <string name="verify_discard_frame_title">Discard this frame?</string>
+    <string name="verify_discard_frame_body">This will remove the current frame from the verification queue.</string>
+    <string name="verify_discard_frame_confirm">Discard</string>
 
     <string name="verify_sheet_kebab_desc">Sample actions</string>
     <string name="verify_user_note_label">Notes (optional)</string>
@@ -236,6 +248,8 @@
     <string name="records_filter_hint">YYYY-MM-DD</string>
     <string name="records_filter_apply">Apply</string>
     <string name="records_filter_clear">Clear</string>
+    <string name="date_range_picker_ok">OK</string>
+    <string name="date_range_picker_cancel">Cancel</string>
     <string name="records_species_all">All species</string>
     <string name="records_species_modal_title">Filter by species</string>
     <string name="records_species_others">Others</string>
@@ -332,6 +346,10 @@
     <string name="lpf_descriptor_numerous">numerous</string>
     <string name="session_detail_eggs_total_label">Total eggs: %1$d</string>
     <string name="session_detail_eggs_empty">No confirmed eggs yet</string>
+    <plurals name="session_detail_no_confirmed_eggs_fields">
+        <item quantity="one">No confirmed eggs in %1$d field</item>
+        <item quantity="other">No confirmed eggs in %1$d fields</item>
+    </plurals>
     <string name="session_detail_species_detected">Detected</string>
     <string name="session_detail_species_more">+%1$d more</string>
 
@@ -472,6 +490,12 @@
     <string name="session_picker_dialog_notes">Notes (optional)</string>
     <string name="session_picker_dialog_notes_placeholder">Slide condition, prep quality, anything unusual</string>
     <string name="session_picker_dialog_create">Create</string>
+    <string name="session_picker_dialog_cancel">Cancel</string>
+    <string name="session_picker_dialog_start">Start session</string>
+    <plurals name="sessions_eggs_count">
+        <item quantity="one">%1$d egg</item>
+        <item quantity="other">%1$d eggs</item>
+    </plurals>
 
     <string name="manual_sheet_title">Manual Capture · %1$s</string>
     <string name="manual_sheet_close_desc">Close manual capture sheet</string>
