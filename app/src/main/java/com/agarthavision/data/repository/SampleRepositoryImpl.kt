@@ -50,4 +50,7 @@ class SampleRepositoryImpl @Inject constructor(
         sampleDao.observeFlaggedSamplesForSession(sessionId, userId).map { entities ->
             entities.map { it.toDomain() }
         }
+
+    override fun observePendingCount(userId: String): Flow<Int> =
+        sampleDao.observePendingCount(userId)
 }

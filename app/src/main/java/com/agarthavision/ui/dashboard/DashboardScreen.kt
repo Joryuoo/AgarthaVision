@@ -106,10 +106,11 @@ fun DashboardScreen(
             // 2. Recent Session Hero (only when a session is active/recent)
             state.activeSession?.let { session ->
                 item {
+                    val nowMillis = remember { System.currentTimeMillis() }
                     ActiveSessionHero(
                         sessionId    = session.label,
-                        elapsed      = session.updatedAtAgo,
-                        frameCount   = session.totalFrames.toIntOrNull() ?: 0,
+                        elapsed      = relativeTimeText(session.lastActivityAt, nowMillis),
+                        frameCount   = session.totalFrames,
                         onResume     = { onNavigate(Screen.Capture.route) },
                         modifier     = Modifier.padding(horizontal = Spacing.xl)
                     )
@@ -155,10 +156,14 @@ fun DashboardScreen(
             // 6. Verify alert row
             if (state.pendingReviewCount > 0) {
                 item {
+                    val nowMillis = remember { System.currentTimeMillis() }
+                    val oldestAgo = state.oldestPendingAt?.let {
+                        relativeTimeText(it, nowMillis)
+                    } ?: ""
                     Spacer(Modifier.height(Spacing.lg))
                     VerifyAlertRow(
                         pendingCount = state.pendingReviewCount,
-                        oldestAgo    = state.oldestPendingAgo,
+                        oldestAgo    = oldestAgo,
                         onClick      = { onNavigate(Screen.VerificationQueue.route) },
                         modifier     = Modifier.padding(horizontal = Spacing.xl)
                     )

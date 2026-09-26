@@ -49,4 +49,9 @@ interface SampleRepository {
      * A concrete owner sees their own rows plus unowned ones; a null owner sees unowned only.
      */
     fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
+
+    /**
+     * Live count of owned samples still awaiting cloud upload (`verified` only).
+     */
+    fun observePendingCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
 }

@@ -37,6 +37,26 @@
     <string name="dashboard_sync_toast_started">Syncing your records…</string>
     <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
 
+    <!-- Relative time -->
+    <string name="time_just_now">Just now</string>
+    <plurals name="time_minutes_ago">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="time_hours_ago">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="time_days_ago">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+
+    <!-- Periods -->
+    <string name="period_today">Today</string>
+    <string name="period_7_days">7 days</string>
+    <string name="period_30_days">30 days</string>
+
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
 
     <string name="verify_title">Flagged Frame · %1$s</string>

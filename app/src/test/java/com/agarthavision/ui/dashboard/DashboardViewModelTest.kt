@@ -5,13 +5,17 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
+import androidx.lifecycle.SavedStateHandle
+import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.ThemeMode
-import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import java.time.Clock
+import java.time.Instant
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
@@ -73,13 +77,11 @@ class DashboardViewModelTest {
     private val sampleRepository: SampleRepository = mock<SampleRepository>().also {
         whenever(it.observeAllSamples(any())).thenReturn(flowOf(emptyList()))
         whenever(it.observeSamplesForSession(any(), any())).thenReturn(flowOf(emptyList()))
+        whenever(it.observePendingCount(any())).thenReturn(flowOf(0))
         runBlocking { whenever(it.getSamplesPendingSyncIncludingDeleted(any())).thenReturn(emptyList()) }
     }
     private val detectionRepository: DetectionRepository = mock<DetectionRepository>().also {
         whenever(it.observeConfirmedEggCountsSince(any(), any())).thenReturn(flowOf(emptyList()))
-    }
-    private val sampleDao: SampleDao = mock<SampleDao>().also {
-        whenever(it.observePendingCount(any())).thenReturn(flowOf(0))
     }
     private val patientRepository: PatientRepository = mock<PatientRepository>().also {
         whenever(
@@ -91,8 +93,13 @@ class DashboardViewModelTest {
         whenever(it.invoke()).thenReturn(themeModeFlow)
     }
     private val setThemeModeUseCase: SetThemeModeUseCase = mock()
+    private val clock: Clock = Clock.fixed(Instant.parse("2026-09-27T10:00:00Z"), CLINICAL_ZONE)
 
-    private fun viewModel() = DashboardViewModel(
+    private fun viewModel(
+        savedStateHandle: SavedStateHandle = SavedStateHandle(),
+    ) = DashboardViewModel(
+        savedStateHandle = savedStateHandle,
+        clock = clock,
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
         connectivityObserver = connectivityObserver,
         syncPendingDataUseCase = syncPendingDataUseCase,
@@ -101,7 +108,6 @@ class DashboardViewModelTest {
         sessionManager = sessionManager,
         sessionRepository = sessionRepository,
         sampleRepository = sampleRepository,
-        sampleDao = sampleDao,
         patientRepository = patientRepository,
         detectionRepository = detectionRepository,
         observeThemeModeUseCase = observeThemeModeUseCase,
@@ -229,7 +235,7 @@ class DashboardViewModelTest {
                 any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
             ),
         ).thenReturn(flowOf(3))
-        whenever(sampleDao.observePendingCount(any())).thenReturn(flowOf(4))
+        whenever(sampleRepository.observePendingCount(any())).thenReturn(flowOf(4))
 
         val vm = viewModel()
         vm.uiState.test {
@@ -308,6 +314,24 @@ class DashboardViewModelTest {
                 assertEquals("0", snapshot.kpis.sessionsCount)
                 assertEquals("0", snapshot.kpis.samplesCount)
                 assertEquals("0", snapshot.kpis.pendingCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `period selection survives on same SavedStateHandle`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val savedStateHandle = SavedStateHandle()
+            val vm1 = viewModel(savedStateHandle)
+            vm1.onPeriodSelected(HomePeriod.LAST_30_DAYS)
+
+            val vm2 = viewModel(savedStateHandle)
+            vm2.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                assertEquals(HomePeriod.LAST_30_DAYS, snapshot.period)
                 cancelAndIgnoreRemainingEvents()
             }
         }
