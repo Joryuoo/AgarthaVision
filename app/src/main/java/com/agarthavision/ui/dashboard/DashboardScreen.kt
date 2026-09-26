@@ -13,7 +13,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -30,6 +34,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
@@ -129,25 +138,8 @@ fun DashboardScreen(
                 }
             }
 
-            // 2. Recent Session Hero (only when a session is active/recent)
-            state.activeSession?.let { session ->
-                item {
-                    val nowMillis = remember { System.currentTimeMillis() }
-                    ActiveSessionHero(
-                        sessionId    = session.label,
-                        elapsed      = relativeTimeText(session.lastActivityAt, nowMillis),
-                        frameCount   = session.totalFrames,
-                        onResume     = { onNavigate(Screen.Capture.route) },
-                        modifier     = Modifier.padding(horizontal = Spacing.xl)
-                    )
-                    Spacer(Modifier.height(Spacing.lg))
-                }
-            }
-
-            // 3. Today's Activity KPI Grid
-            if (state.activeSession == null) {
-                item { Spacer(Modifier.height(Spacing.lg)) }
-            }
+            // 2. Recent Sessions section
+            recentSessionsSection(state, onNavigate, onNavigateToTab)
             item {
                 Row(
                     modifier = Modifier
@@ -229,4 +221,105 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         letterSpacing = 1.1.sp,
         modifier = modifier
     )
+}
+
+private fun LazyListScope.recentSessionsSection(
+    state: DashboardUiState,
+    onNavigate: (String) -> Unit,
+    onNavigateToTab: (String) -> Unit,
+) {
+    item {
+        Spacer(Modifier.height(Spacing.xs))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.xl),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SectionLabel("Recent sessions")
+            if (state.hasAnySession || state.activeSession != null) {
+                Text(
+                    text = "See all",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AgarthaTheme.colors.accent,
+                    modifier = Modifier
+                        .clickable {
+                            onNavigate(Screen.SessionList.createRoute(SessionListFilter.ALL))
+                        }
+                        .padding(vertical = Spacing.xs),
+                )
+            }
+        }
+        Spacer(Modifier.height(Spacing.sm))
+    }
+
+    if (!state.hasAnySession && state.activeSession == null) {
+        item {
+            EmptyState(
+                icon = AgarthaIcons.Science,
+                title = "No sessions yet",
+                body = "Start a session from a patient's page",
+                modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+                action = {
+                    AgarthaButton(
+                        onClick = { onNavigateToTab("patients") },
+                        variant = AgarthaButtonVariant.Primary,
+                    ) {
+                        Text("Go to Patients")
+                    }
+                },
+            )
+            Spacer(Modifier.height(Spacing.lg))
+        }
+    } else {
+        renderActiveAndRecentSessions(state, onNavigate)
+    }
+}
+
+private fun LazyListScope.renderActiveAndRecentSessions(
+    state: DashboardUiState,
+    onNavigate: (String) -> Unit,
+) {
+    state.activeSession?.let { session ->
+        item {
+            val nowMillis = remember { System.currentTimeMillis() }
+            ActiveSessionHero(
+                sessionId = session.label,
+                elapsed = relativeTimeText(session.lastActivityAt, nowMillis),
+                frameCount = session.totalFrames,
+                onResume = { onNavigate(Screen.Capture.route) },
+                modifier = Modifier.padding(horizontal = Spacing.xl),
+            )
+            Spacer(Modifier.height(Spacing.sm))
+        }
+    }
+
+    if (state.recentSessions.isNotEmpty()) {
+        item {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = Spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                items(
+                    items = state.recentSessions,
+                    key = { it.session.id },
+                ) { sessionSummary ->
+                    RecentSessionCard(
+                        sessionSummary = sessionSummary,
+                        onClick = {
+                            onNavigate(Screen.SessionDetail.createRoute(sessionSummary.session.id))
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(Spacing.lg))
+        }
+    } else if (state.activeSession != null) {
+        item {
+            Spacer(Modifier.height(Spacing.md))
+        }
+    }
 }

@@ -47,6 +47,9 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Clock
+import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.domain.model.SessionSummary
+import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -70,6 +73,8 @@ data class DashboardUiState(
     val isSyncing: Boolean = false,
     val period: HomePeriod = HomePeriod.TODAY,
     val needsAttention: NeedsAttention = NeedsAttention(0, 0, 0),
+    val recentSessions: List<SessionSummary> = emptyList(),
+    val hasAnySession: Boolean = false,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -116,11 +121,14 @@ private data class ContentBundle(
     val selectedPeriod: HomePeriod,
 )
 
+@Suppress("LongParameterList")
 private data class SessionAndSyncBundle(
     val pendingSync: PendingAndSync,
     val activeSession: ActiveSessionState?,
     val accountSync: Triple<Boolean, Boolean, Boolean>,
     val needsAttention: NeedsAttention,
+    val recentSessions: List<SessionSummary>,
+    val hasAnySession: Boolean,
 )
 
 @Suppress("LongParameterList")
@@ -143,6 +151,7 @@ class DashboardViewModel @Inject constructor(
     observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
     private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
     private val observeFindingsUseCase: ObserveFindingsUseCase,
+    private val observeSessionListUseCase: ObserveSessionListUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
@@ -278,6 +287,29 @@ class DashboardViewModel @Inject constructor(
             flowOf(NeedsAttention(0, 0, 0))
         } else {
             observeNeedsAttentionUseCase(userId, activeSessionId)
+        }
+    }
+
+    private val recentSessionsFlow = combine(
+        userIdFlow,
+        sessionManager.state,
+    ) { userId, sessionState ->
+        userId to (sessionState as? SessionState.Active)?.session?.sessionId
+    }.flatMapLatest { (userId, activeSessionId) ->
+        if (userId == null) {
+            flowOf(emptyList<SessionSummary>() to false)
+        } else {
+            observeSessionListUseCase(
+                filter = SessionListFilter.ALL,
+                window = null,
+                limit = RECENT_SESSIONS_QUERY_LIMIT,
+            ).map { result ->
+                val filtered = result.items
+                    .filterNot { it.session.id == activeSessionId }
+                    .take(MAX_RECENT_SESSIONS)
+                val hasAny = result.totalCount > 0 || activeSessionId != null
+                filtered to hasAny
+            }
         }
     }
 
@@ -447,8 +479,16 @@ class DashboardViewModel @Inject constructor(
         activeSessionStateFlow,
         accountSyncFlow,
         needsAttentionFlow,
-    ) { pendingSync, activeSession, accountSync, needsAttention ->
-        SessionAndSyncBundle(pendingSync, activeSession, accountSync, needsAttention)
+        recentSessionsFlow,
+    ) { pendingSync, activeSession, accountSync, needsAttention, recentData ->
+        SessionAndSyncBundle(
+            pendingSync = pendingSync,
+            activeSession = activeSession,
+            accountSync = accountSync,
+            needsAttention = needsAttention,
+            recentSessions = recentData.first,
+            hasAnySession = recentData.second,
+        )
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -482,6 +522,8 @@ class DashboardViewModel @Inject constructor(
             isSyncing = isSyncing,
             period = content.selectedPeriod,
             needsAttention = needsAttention,
+            recentSessions = sessionAndSync.recentSessions,
+            hasAnySession = sessionAndSync.hasAnySession,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -517,5 +559,7 @@ class DashboardViewModel @Inject constructor(
         const val TOP_SPECIES_COUNT = 3
         const val KEY_PERIOD = "dashboard_period"
         const val PERCENT_FACTOR = 100
+        const val RECENT_SESSIONS_QUERY_LIMIT = 6
+        const val MAX_RECENT_SESSIONS = 5
     }
 }

@@ -17,16 +17,24 @@ import com.agarthavision.domain.model.Ratio
 import com.agarthavision.domain.model.SpeciesFinding
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.model.windows
+import com.agarthavision.data.local.entity.SessionEntity
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.SessionSummary
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.home.NeedsAttention
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
 import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
+import com.agarthavision.domain.usecase.home.SessionListResult
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
@@ -134,6 +142,42 @@ class DashboardViewModelTest {
     private val observeFindingsUseCase: ObserveFindingsUseCase = mock<ObserveFindingsUseCase>().also {
         whenever(it.invoke(any(), any(), anyOrNull())).thenReturn(flowOf(defaultFindings))
     }
+    private val observeSessionListUseCase: ObserveSessionListUseCase = mock<ObserveSessionListUseCase>().also {
+        whenever(it.invoke(any(), anyOrNull(), any())).thenReturn(
+            flowOf(SessionListResult(emptyList(), 0)),
+        )
+    }
+
+    private fun samplePatient(id: String) = Patient(
+        id = id,
+        lastname = "Rizal",
+        firstname = "Jose",
+        middleName = null,
+        sex = Sex.MALE,
+        birthdate = LocalDate.of(1990, 1, 1),
+        psgcBarangayCode = "0102801001",
+        createdBy = "user-1",
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+    )
+
+    private fun sampleSession(id: String) = Session(
+        id = id,
+        patientId = "patient-1",
+        userId = "user-1",
+        deviceId = "dev-1",
+        startedAt = 0L,
+        label = "Smear 1",
+    )
+
+    private fun sampleSummary(sessionId: String) = SessionSummary(
+        session = sampleSession(sessionId),
+        patient = samplePatient("patient-1"),
+        totalFrames = 10,
+        framesToReview = 2,
+        isPositive = false,
+        lastActivityAt = 1_000L,
+    )
 
     private fun viewModel(
         savedStateHandle: SavedStateHandle = SavedStateHandle(),
@@ -154,6 +198,7 @@ class DashboardViewModelTest {
         observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
         observeHomeKpisUseCase = observeHomeKpisUseCase,
         observeFindingsUseCase = observeFindingsUseCase,
+        observeSessionListUseCase = observeSessionListUseCase,
     )
 
     @Test
@@ -464,6 +509,92 @@ class DashboardViewModelTest {
                     argThat { startMillis == expectedWindow.current.startMillis },
                     anyOrNull(),
                 )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `active session is excluded from recentSessions and list is capped at 5`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val activeEntity = SessionEntity(
+                sessionId = "s-active",
+                userId = "user-1",
+                patientId = "p-1",
+                deviceId = "d-1",
+                startedAt = 1000L,
+                label = "Active Session",
+            )
+            whenever(sessionManager.state).thenReturn(
+                MutableStateFlow(SessionState.Active(activeEntity, Instant.ofEpochMilli(1000L))),
+            )
+            val summaries = (1..6).map { sampleSummary("s-$it") } + sampleSummary("s-active")
+            whenever(observeSessionListUseCase(any(), anyOrNull(), any())).thenReturn(
+                flowOf(SessionListResult(summaries, 7)),
+            )
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading || snapshot.recentSessions.isEmpty()) {
+                    snapshot = awaitItem()
+                }
+                assertEquals(5, snapshot.recentSessions.size)
+                assertFalse(snapshot.recentSessions.any { it.session.id == "s-active" })
+                assertEquals(
+                    listOf("s-1", "s-2", "s-3", "s-4", "s-5"),
+                    snapshot.recentSessions.map { it.session.id },
+                )
+                assertTrue(snapshot.hasAnySession)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `single active session gives empty recentSessions row and hasAnySession is true`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val activeEntity = SessionEntity(
+                sessionId = "s-active",
+                userId = "user-1",
+                patientId = "p-1",
+                deviceId = "d-1",
+                startedAt = 1000L,
+                label = "Active Session",
+            )
+            whenever(sessionManager.state).thenReturn(
+                MutableStateFlow(SessionState.Active(activeEntity, Instant.ofEpochMilli(1000L))),
+            )
+            whenever(observeSessionListUseCase(any(), anyOrNull(), any())).thenReturn(
+                flowOf(SessionListResult(listOf(sampleSummary("s-active")), 1)),
+            )
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                assertTrue(snapshot.recentSessions.isEmpty())
+                assertTrue(snapshot.hasAnySession)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `no sessions gives empty recentSessions and hasAnySession is false`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sessionManager.state).thenReturn(MutableStateFlow(SessionState.Idle))
+            whenever(observeSessionListUseCase(any(), anyOrNull(), any())).thenReturn(
+                flowOf(SessionListResult(emptyList(), 0)),
+            )
+
+            val vm = viewModel()
+            vm.uiState.test {
+                var snapshot = awaitItem()
+                while (snapshot.isLoading) {
+                    snapshot = awaitItem()
+                }
+                assertTrue(snapshot.recentSessions.isEmpty())
+                assertFalse(snapshot.hasAnySession)
                 cancelAndIgnoreRemainingEvents()
             }
         }

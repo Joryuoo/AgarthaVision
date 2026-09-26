@@ -62,7 +62,7 @@ internal fun ActiveSessionHero(
     elapsed: String,
     frameCount: Int,
     onResume: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
     Row(
@@ -72,15 +72,15 @@ internal fun ActiveSessionHero(
             .clip(RoundedCornerShape(16.dp))
             .background(colors.accent)
             .clickable(onClick = onResume)
-            .padding(18.dp)
+            .padding(18.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "RECENT SESSION",
+                "CONTINUE",
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.onAccent.copy(alpha = 0.92f),
-                letterSpacing = 1.2.sp
+                letterSpacing = 1.2.sp,
             )
             Spacer(Modifier.height(8.dp))
             Text(
@@ -90,13 +90,17 @@ internal fun ActiveSessionHero(
                 color = colors.onAccent,
                 letterSpacing = (-0.7).sp,
                 style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                lineHeight = 30.sp
+                lineHeight = 30.sp,
             )
             Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(elapsed,
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
+                Text(
+                    "Updated $elapsed",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onAccent,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                )
                 Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
                 Text(
                     pluralStringResource(R.plurals.dashboard_frame_count, frameCount, frameCount),
@@ -108,32 +112,19 @@ internal fun ActiveSessionHero(
             }
         }
 
-        // Idle "breathing" scale so the recent-session affordance feels alive without the
-        // old blinking dot, which read as a still-live recording indicator.
-        val idleTransition = rememberInfiniteTransition(label = "recentSessionIdle")
-        val iconScale by idleTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "recentSessionIdleScale"
-        )
         Box(
             modifier = Modifier
-                .size(56.dp)
-                .background(colors.surface, CircleShape)
-                .clickable(onClick = onResume),
-            contentAlignment = Alignment.Center
+                .clip(RoundedCornerShape(999.dp))
+                .background(colors.surface)
+                .clickable(onClick = onResume)
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = AgarthaIcons.Science,
-                contentDescription = "Open session",
-                tint = colors.accent,
-                modifier = Modifier
-                    .size(22.dp)
-                    .scale(iconScale)
+            Text(
+                "Resume",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.accent,
             )
         }
     }
