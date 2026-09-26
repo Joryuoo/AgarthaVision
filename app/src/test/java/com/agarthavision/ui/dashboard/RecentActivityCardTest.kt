@@ -72,6 +72,30 @@ class RecentActivityCardTest {
     }
 
     @Test
+    fun `more than 5 items shows only the first 5 rows`() {
+        val sixItems = (0 until 6).map { i ->
+            ActivityItem.SessionStarted(
+                sessionId = "s-$i",
+                sessionLabel = "Smear $i",
+                occurredAt = nowMillis - i * 1_000L,
+            )
+        }
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                RecentActivityCard(
+                    items = sixItems,
+                    nowMillis = nowMillis,
+                    onItemClick = {},
+                    onSeeAllClick = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("activityRow_4").assertIsDisplayed()
+        composeRule.onNodeWithTag("activityRow_5").assertDoesNotExist()
+    }
+
+    @Test
     fun `empty list shows EmptyState`() {
         composeRule.setContent {
             AgarthaVisionTheme {
