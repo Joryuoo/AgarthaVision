@@ -329,7 +329,7 @@ private fun LazyListScope.renderActiveAndRecentSessions(
         item {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = Spacing.md),
+                contentPadding = PaddingValues(horizontal = Spacing.xl),
                 horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
             ) {
                 items(
