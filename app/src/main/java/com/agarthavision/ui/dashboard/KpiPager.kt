@@ -21,9 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,10 +56,14 @@ internal fun KpiPager(
     onOpenCoverage: (HomePeriod) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    var savedPage by rememberSaveable { mutableIntStateOf(0) }
+    val pagerState = rememberPagerState(initialPage = savedPage, pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
     var page0HeightDp by remember { mutableStateOf<Dp?>(null) }
+
+    // Persist the current page so it survives navigation away and back.
+    savedPage = pagerState.currentPage
 
     Column(modifier = modifier) {
         HorizontalPager(
