@@ -406,7 +406,7 @@ private fun PatientPreviewCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(colors.accent)
+            .background(colors.brandFill)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -422,7 +422,7 @@ private fun PatientPreviewCard(
                     lineHeight = 30.sp,
                     fontWeight = FontWeight.Bold,
                 ),
-                color = colors.onAccent,
+                color = colors.onBrandFill,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -441,7 +441,7 @@ private fun PatientPreviewCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = stringResource(descRes),
-                        tint = colors.onAccent,
+                        tint = colors.onBrandFill,
                     )
                 }
             }
@@ -452,7 +452,7 @@ private fun PatientPreviewCard(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
             ),
-            color = colors.onAccent.copy(alpha = 0.9f),
+            color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -462,7 +462,7 @@ private fun PatientPreviewCard(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
             ),
-            color = colors.onAccent.copy(alpha = 0.9f),
+            color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -583,7 +583,7 @@ private fun SessionCard(
                 val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
                 val hasPending = unverified > 0
                 val (badgeBg, badgeTextColor) = if (hasPending) {
-                    colors.accent to colors.onAccent
+                    colors.accentTint to colors.onAccentTint
                 } else {
                     colors.surfaceMuted to colors.textSecondary
                 }
@@ -654,7 +654,7 @@ fun LiveDot() {
     Box(
         modifier = Modifier
             .size(6.dp)
-            .background(AgarthaTheme.colors.onAccent.copy(alpha = alpha), CircleShape)
+            .background(AgarthaTheme.colors.onAccentTint.copy(alpha = alpha), CircleShape)
     )
 }
 

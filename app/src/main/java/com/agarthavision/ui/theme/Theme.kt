@@ -51,7 +51,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary          = AppColors.Maroon,
+    primary          = AppColors.DarkMaroon,
     onPrimary        = AppColors.White,
     secondary        = AppColors.Gold,
     onSecondary      = AppColors.Gray900,

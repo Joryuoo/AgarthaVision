@@ -479,7 +479,7 @@ private fun SexSelector(
                         .weight(1f)
                         .height(48.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (active) colors.accent else colors.surface)
+                        .background(if (active) colors.brandFill else colors.surface)
                         .border(
                             1.dp,
                             if (isError && selected == null) colors.danger else colors.border,
@@ -493,7 +493,7 @@ private fun SexSelector(
                             if (sex == Sex.MALE) R.string.patients_sex_male
                             else R.string.patients_sex_female,
                         ),
-                        color = if (active) colors.onAccent else colors.textPrimary,
+                        color = if (active) colors.onBrandFill else colors.textPrimary,
                         fontSize = 14.sp,
                         fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                     )

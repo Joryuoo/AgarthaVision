@@ -115,14 +115,14 @@ fun AppHeader(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(colors.accent)
+                        .background(colors.brandFill)
                         .clickable(onClick = onSync),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = AgarthaIcons.Sync,
                         contentDescription = stringResource(R.string.dashboard_sync_now),
-                        tint = colors.onAccent,
+                        tint = colors.onBrandFill,
                         modifier = Modifier
                             .size(17.dp)
                             .rotate(if (isSyncing) spin else 0f),

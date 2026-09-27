@@ -208,14 +208,14 @@ private fun RateLine(stat: AreaStat?) {
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
-                        .background(colors.accent)
+                        .background(colors.brandFill)
                         .padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
                     Text(
                         text = "${(stat.positiveRate * PERCENT_FACTOR).toInt()}% positive",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White,
+                        color = colors.onBrandFill,
                     )
                 }
                 Box(

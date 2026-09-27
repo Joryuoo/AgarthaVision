@@ -278,9 +278,9 @@ private fun StatsRow(
                 .weight(STATS_REPORTS_WEIGHT)
                 .fillMaxHeight(),
             colors = StatTileColors(
-                bgColor = colors.accent,
-                contentColor = colors.onAccent,
-                labelColor = colors.onAccent.copy(alpha = 0.8f),
+                bgColor = colors.brandFill,
+                contentColor = colors.onBrandFill,
+                labelColor = colors.onBrandFill.copy(alpha = 0.8f),
             ),
             valueFontSize = STATS_REPORT_NUMBER_FONT_SIZE,
         )

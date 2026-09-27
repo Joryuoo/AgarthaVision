@@ -21,12 +21,13 @@ object AppColors {
     val MaroonTint    = Color(0xFFF9E8EA)
     val MaroonTint2   = Color(0xFFFCF3F4)
 
-    /** Dark-mode brand pressed state — lightens in dark mode instead of darkening (White text 7.0:1). */
-    val DarkMaroonPressed = Color(0xFFA01C29)
+    /** Main maroon in dark mode — vibrant maroon with 7.0:1 contrast against white text. */
+    val DarkMaroon        = Color(0xFFA01C29)
+    val DarkMaroonPressed = Color(0xFFB82030)
+    val MaroonBright      = DarkMaroon // Alias for backward compatibility
 
-    /** Dark-mode accent — brighter rose from same 354° hue family holding ≥5.0:1 on surface. Replaces #D9707A. */
+    /** Dark-mode accent — brighter rose from same 354° hue family holding ≥5.0:1 on surface. */
     val RoseBright        = Color(0xFFF06B78)
-    val MaroonBright      = RoseBright // Alias for backward compatibility
     val DarkAccentTint    = Color(0xFFF06B78).copy(alpha = 0.12f)
     val DarkAccentTint2   = Color(0xFFF06B78).copy(alpha = 0.08f)
     val DarkOnAccentTint  = Color(0xFFF58592)

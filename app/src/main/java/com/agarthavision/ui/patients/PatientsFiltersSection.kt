@@ -226,8 +226,8 @@ internal fun PatientsFilterSheet(
                     .height(49.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accent,
-                    contentColor = colors.onAccent,
+                    containerColor = colors.brandFill,
+                    contentColor = colors.onBrandFill,
                 ),
             ) {
                 Text(
@@ -339,9 +339,9 @@ private fun FilterSexSegmentedRow(
             )
             for ((sex, label) in options) {
                 val isSelected = selectedSex == sex
-                val bg = if (isSelected) colors.accent else colors.surface
-                val border = if (isSelected) colors.accent else colors.borderStrong
-                val text = if (isSelected) colors.onAccent else colors.textPrimary
+                val bg = if (isSelected) colors.brandFill else colors.surface
+                val border = if (isSelected) colors.brandFill else colors.borderStrong
+                val text = if (isSelected) colors.onBrandFill else colors.textPrimary
 
                 Row(
                     modifier = Modifier

@@ -299,12 +299,12 @@ private fun SessionSummaryRowItem(
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(colors.accent)
+                        .background(colors.brandFill)
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                 ) {
                     Text(
                         text = "Positive",
-                        color = colors.onAccent,
+                        color = colors.onBrandFill,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                     )
