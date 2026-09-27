@@ -1,7 +1,6 @@
 package com.agarthavision.ui.capture
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -20,12 +19,11 @@ import org.robolectric.annotation.Config
  * [Shutter] is `internal` so we can reach it from test scope without crossing a module boundary.
  * The production [CaptureScreen] is not instantiated here — no camera, no Hilt graph.
  *
- * Four properties are verified:
- * 1. Idle state: correct accessibility label; click fires `onClick` exactly once.
- * 2. Busy state: busy label present; idle label absent; click does NOT fire `onClick`.
- * 3. No-session (disabled, not busy): click does not fire `onClick`.
- * 4. Rendering sanity: busy composition survives multiple clock frames without throwing
- *    (guards the infinite arc transition under Robolectric).
+ * The shutter has no busy state any more (14zcqntj6nz): a tap saves the frame and returns, and
+ * the model output arrives later from the background queue. What is left to verify:
+ * 1. It carries its accessibility label, and a click fires `onClick` exactly once.
+ * 2. Taps in quick succession each fire, because nothing locks it between them.
+ * 3. With no active session it swallows taps.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -39,14 +37,12 @@ class ShutterTest {
     // --- helpers ----------------------------------------------------------
 
     private fun setShutter(
-        isBusy: Boolean,
         enabled: Boolean,
         onClickCapture: () -> Unit,
     ) {
         composeRule.setContent {
             AgarthaVisionTheme {
                 Shutter(
-                    isBusy = isBusy,
                     enabled = enabled,
                     onClick = onClickCapture,
                 )
@@ -56,101 +52,52 @@ class ShutterTest {
 
     // --- tests -----------------------------------------------------------
 
-    /**
-     * Idle shutter must carry the idle content description and fire `onClick` on tap.
-     */
     @Test
-    fun `idle shutter node exists with idle content description`() {
-        setShutter(isBusy = false, enabled = true, onClickCapture = {})
+    fun `shutter node exists with its content description`() {
+        setShutter(enabled = true, onClickCapture = {})
 
-        val idleDesc = context.getString(R.string.capture_shutter_desc)
-        composeRule.onNodeWithContentDescription(idleDesc).assertExists()
+        val description = context.getString(R.string.capture_shutter_desc)
+        composeRule.onNodeWithContentDescription(description).assertExists()
     }
 
-    /**
-     * When the shutter is idle and enabled a click must fire `onClick` exactly once.
-     */
     @Test
-    fun `clicking an idle enabled shutter invokes onClick once`() {
+    fun `clicking an enabled shutter invokes onClick once`() {
         var clicks = 0
-        setShutter(isBusy = false, enabled = true, onClickCapture = { clicks++ })
+        setShutter(enabled = true, onClickCapture = { clicks++ })
 
-        val idleDesc = context.getString(R.string.capture_shutter_desc)
-        composeRule.onNodeWithContentDescription(idleDesc).performClick()
+        val description = context.getString(R.string.capture_shutter_desc)
+        composeRule.onNodeWithContentDescription(description).performClick()
 
         assertEquals("expected one click, got $clicks", 1, clicks)
     }
 
     /**
-     * While a capture is in flight (`isBusy = true, enabled = false`) the busy description
-     * must be present, the idle description must be absent, and tapping must not fire `onClick`.
+     * Several fields in a row is the core loop of the screen. Nothing may hold the shutter
+     * between taps waiting on a model.
      */
     @Test
-    fun `busy shutter shows busy description and idle description is absent`() {
-        // Disable auto-advance so the infinite arc transition does not hang waitForIdle.
-        composeRule.mainClock.autoAdvance = false
-
-        setShutter(isBusy = true, enabled = false, onClickCapture = {})
-        composeRule.mainClock.advanceTimeBy(16)
-
-        val busyDesc = context.getString(R.string.capture_shutter_busy_desc)
-        val idleDesc = context.getString(R.string.capture_shutter_desc)
-
-        composeRule.onNodeWithContentDescription(busyDesc).assertExists()
-        assertEquals(
-            "idle description must not be present while busy",
-            0,
-            composeRule.onAllNodesWithContentDescription(idleDesc).fetchSemanticsNodes().size,
-        )
-    }
-
-    /**
-     * While a capture is in flight (`isBusy = true, enabled = false`) tapping the shutter
-     * must not fire `onClick`.
-     */
-    @Test
-    fun `busy shutter does not fire onClick on tap`() {
-        composeRule.mainClock.autoAdvance = false
-
+    fun `taps in quick succession each fire`() {
         var clicks = 0
-        setShutter(isBusy = true, enabled = false, onClickCapture = { clicks++ })
-        composeRule.mainClock.advanceTimeBy(16)
+        setShutter(enabled = true, onClickCapture = { clicks++ })
 
-        val busyDesc = context.getString(R.string.capture_shutter_busy_desc)
-        composeRule.onNodeWithContentDescription(busyDesc).performClick()
+        val description = context.getString(R.string.capture_shutter_desc)
+        repeat(3) { composeRule.onNodeWithContentDescription(description).performClick() }
 
-        assertEquals("busy shutter must not fire onClick, got $clicks click(s)", 0, clicks)
+        assertEquals("expected three clicks, got $clicks", 3, clicks)
     }
 
     /**
-     * When there is no active session (`isBusy = false, enabled = false`) the shutter must
-     * carry the idle label but swallow taps without firing `onClick`.
+     * When there is no active session the shutter must carry its label but swallow taps without
+     * firing `onClick`.
      */
     @Test
     fun `no-session shutter does not fire onClick`() {
         var clicks = 0
-        setShutter(isBusy = false, enabled = false, onClickCapture = { clicks++ })
+        setShutter(enabled = false, onClickCapture = { clicks++ })
 
-        val idleDesc = context.getString(R.string.capture_shutter_desc)
-        composeRule.onNodeWithContentDescription(idleDesc).performClick()
+        val description = context.getString(R.string.capture_shutter_desc)
+        composeRule.onNodeWithContentDescription(description).performClick()
 
         assertEquals("disabled shutter must not fire onClick, got $clicks click(s)", 0, clicks)
-    }
-
-    /**
-     * Busy composition must survive multiple clock frames without throwing.
-     * The infinite arc transition must not crash or hang under Robolectric.
-     */
-    @Test
-    fun `busy shutter renders across multiple clock frames without crashing`() {
-        composeRule.mainClock.autoAdvance = false
-
-        setShutter(isBusy = true, enabled = false, onClickCapture = {})
-
-        // Advance across two rotation cycles (1100 ms each) in 600 ms steps.
-        repeat(4) { composeRule.mainClock.advanceTimeBy(600) }
-
-        val busyDesc = context.getString(R.string.capture_shutter_busy_desc)
-        composeRule.onNodeWithContentDescription(busyDesc).assertExists()
     }
 }

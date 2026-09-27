@@ -4,11 +4,9 @@ package com.agarthavision.ui.capture
 
 import android.Manifest
 import android.content.pm.PackageManager
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.EaseInOut
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -54,7 +52,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.Modifier
@@ -69,11 +66,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -82,7 +75,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
-import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonSize
 import com.agarthavision.ui.components.AgarthaButtonVariant
@@ -133,62 +125,25 @@ private fun PulsingDot() {
 private val GlassFill = Color(28, 20, 18, (0.55f * 255).toInt())
 
 private val ShutterSize = 100.dp
-private val ShutterArcStroke = 3.dp
-private const val SHUTTER_BUSY_ALPHA = 0.6f
-private const val SHUTTER_ARC_SWEEP_DEGREES = 100f
-private const val SHUTTER_ARC_ROTATION_MS = 1_100
-private const val FULL_TURN_DEGREES = 360f
 
 /**
- * The 100dp shutter. While a capture is in flight it shows that in its own bounds - dimmed,
- * with an indeterminate arc travelling its circumference - instead of the app floating a
- * spinner over the live field. The medtech keeps seeing the smear for the whole round
- * trip, which on a slow link can be the full inference timeout.
+ * The 100dp shutter. **It has no busy state, and must not grow one.** A tap saves the frame
+ * and returns in milliseconds, and the model output arrives later from the background
+ * inference queue (14zcqntj6nz). A spinner here would ask the medtech to wait for something the
+ * tap no longer waits on. Inference progress is shown in the Verification Queue and on the
+ * Verification Screen, where the result is read.
  */
 @Composable
 internal fun Shutter(
-    isBusy: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    val description = stringResource(
-        if (isBusy) R.string.capture_shutter_busy_desc else R.string.capture_shutter_desc,
-    )
-    val arcStart = if (isBusy) {
-        rememberInfiniteTransition(label = "shutterArc").animateFloat(
-            initialValue = 0f,
-            targetValue = FULL_TURN_DEGREES,
-            animationSpec = infiniteRepeatable(
-                animation = tween(SHUTTER_ARC_ROTATION_MS, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-            label = "shutterArcStart",
-        ).value
-    } else {
-        0f
-    }
+    val description = stringResource(R.string.capture_shutter_desc)
     Box(
         modifier = Modifier
             .size(ShutterSize)
             .shadow(28.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.25f))
-            // alpha only dims what follows it in the chain: keep it ahead of the fill and arc.
-            .alpha(if (isBusy) SHUTTER_BUSY_ALPHA else 1f)
             .background(Color.White, CircleShape)
-            .drawBehind {
-                // Maroon reads on the white disc even dimmed; a white arc would vanish into it.
-                if (isBusy) {
-                    val stroke = ShutterArcStroke.toPx()
-                    drawArc(
-                        color = AppColors.Maroon,
-                        startAngle = arcStart,
-                        sweepAngle = SHUTTER_ARC_SWEEP_DEGREES,
-                        useCenter = false,
-                        topLeft = Offset(stroke / 2, stroke / 2),
-                        size = Size(size.width - stroke, size.height - stroke),
-                        style = Stroke(width = stroke, cap = StrokeCap.Round),
-                    )
-                }
-            }
             .semantics {
                 contentDescription = description
                 role = Role.Button
@@ -285,7 +240,6 @@ fun CaptureScreen(
     val view = LocalView.current
     val detectionView = stringResource(R.string.capture_detection_view)
     val frameCapturedMessage = stringResource(R.string.capture_frame_captured_message)
-    val frameCapturedNoModelMessage = stringResource(R.string.capture_frame_captured_no_model_message)
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
@@ -330,14 +284,10 @@ fun CaptureScreen(
                 is CaptureEvent.FrameCaptured -> {
                     val outcome = event.outcome
                     toastState.show(
-                        // Not Destructive, and deliberately: an unreachable container still
-                        // recorded the field, and the medtech's next action is the same either
-                        // way. It is named, because ten identical confirmations would otherwise
-                        // be the only sign that no model ran on any of them.
-                        message = when (outcome.source) {
-                            FrameSource.MODEL -> frameCapturedMessage
-                            FrameSource.MANUAL -> frameCapturedNoModelMessage
-                        },
+                        // One message for every tap: the frame is saved, and whether a model
+                        // answers is decided later by the inference queue. Each tap replaces
+                        // the last toast, so a quick series of captures confirms each one.
+                        message = frameCapturedMessage,
                         variant = AgarthaToastVariant.Default,
                         actionLabel = detectionView,
                         onAction = { viewModel.onCapturedFrameToastTap(outcome.sampleId) },
@@ -363,11 +313,6 @@ fun CaptureScreen(
                 viewModel.clearErrorMessage()
             }
     }
-
-    // A capture runs on viewModelScope, so leaving the screen mid-inference would cancel it
-    // and drop the frame before it is persisted. Swallow system back while a tap is in flight;
-    // the back button and shutter are already disabled via isBusy.
-    BackHandler(enabled = state.isBusy) { /* intentionally consume back during capture */ }
 
     // Collapsed offline banner state, hoisted so the compact pill can live in the header row
     // (level with the back button and session pill) while the full banner sits below. Resets
@@ -412,7 +357,6 @@ fun CaptureScreen(
                 icon = AgarthaIcons.ArrowBackIosNew,
                 contentDescription = stringResource(R.string.capture_back_desc),
                 onClick = onNavigateBack,
-                enabled = !state.isBusy,
             )
 
             // Session pill
@@ -509,8 +453,7 @@ fun CaptureScreen(
 
             // Center: shutter
             Shutter(
-                isBusy = state.isBusy,
-                enabled = state.activeSessionId != null && !state.isBusy,
+                enabled = state.activeSessionId != null,
                 onClick = viewModel::onCapture,
             )
 

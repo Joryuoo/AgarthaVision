@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -29,7 +31,8 @@ import javax.inject.Inject
  * Start/Stop control any more; the picker creates sessions, and only [endSession]
  * closes one. Capture is medtech-triggered (Track 2.13): there is no auto-timer or
  * inference pause/resume sub-state any more — [onCapture] snapshots the cached frame
- * and runs inference exactly once per tap.
+ * and saves it, queued for the background inference queue. Nothing on this screen waits on
+ * a model, so there is no busy state (14zcqntj6nz).
  *
  * **Upstream collectors** (wired in `init`):
  * - [sessionManager].state → updates the active-session mirror in [CaptureState].
@@ -153,13 +156,15 @@ class CaptureViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            _state.update { it.copy(isBusy = true, errorMessage = null) }
-            captureFieldUseCase(sessionId, cached.jpegBytes)
+            _state.update { it.copy(errorMessage = null) }
+            // The save takes milliseconds, so the screen no longer locks around it. It must
+            // still finish if the medtech leaves in those milliseconds: a cancelled save would
+            // drop a frame they saw the shutter take. Only the confirmation is skipped then.
+            withContext(NonCancellable) { captureFieldUseCase(sessionId, cached.jpegBytes) }
                 .onSuccess { outcome -> _events.emit(CaptureEvent.FrameCaptured(outcome)) }
                 .onFailure { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
-            _state.update { it.copy(isBusy = false) }
         }
     }
 
@@ -209,8 +214,6 @@ class CaptureViewModel @Inject constructor(
  * @property activeSessionId Room sessionId of the active smear (null when idle).
  * @property activeSessionLabel the smear label entered in the picker, shown in
  *   the top app bar / REC badge area for orientation.
- * @property isBusy true while End Session or a capture is in flight; hides the
- *   action button behind a progress spinner and blocks duplicate taps.
  * @property errorMessage transient error surfaced as a toast, then cleared via
  *   [CaptureViewModel.clearErrorMessage].
  * @property flaggedFrames mirror of [FlaggedFrameStore.state].
@@ -224,7 +227,6 @@ class CaptureViewModel @Inject constructor(
 data class CaptureState(
     val activeSessionId: String? = null,
     val activeSessionLabel: String? = null,
-    val isBusy: Boolean = false,
     val errorMessage: String? = null,
     val flaggedFrames: List<FlaggedFrame> = emptyList(),
     val isConnectionLost: Boolean = false,

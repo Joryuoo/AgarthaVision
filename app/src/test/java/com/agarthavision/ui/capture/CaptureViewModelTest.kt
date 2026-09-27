@@ -10,7 +10,6 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
-import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
 import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import com.agarthavision.util.MainDispatcherRule
@@ -27,6 +26,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
@@ -252,7 +252,7 @@ class CaptureViewModelTest {
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)))
+                .thenReturn(Result.success(CaptureOutcome("sample-1")))
             advanceUntilIdle()
 
             vm.onCapture()
@@ -260,7 +260,6 @@ class CaptureViewModelTest {
 
             verify(captureFieldUseCase).invoke("session-1", bytes)
             assertNull(vm.state.value.errorMessage)
-            assertEquals(false, vm.state.value.isBusy)
         }
 
     /**
@@ -298,7 +297,7 @@ class CaptureViewModelTest {
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)))
+                .thenReturn(Result.success(CaptureOutcome("sample-1")))
             advanceUntilIdle()
 
             now += MAX_FRAME_AGE_MS
@@ -323,7 +322,7 @@ class CaptureViewModelTest {
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome("sample-7", FrameSource.MODEL)))
+                .thenReturn(Result.success(CaptureOutcome("sample-7")))
             advanceUntilIdle()
 
             vm.events.test {
@@ -331,7 +330,7 @@ class CaptureViewModelTest {
                 advanceUntilIdle()
 
                 assertEquals(
-                    CaptureEvent.FrameCaptured(CaptureOutcome("sample-7", FrameSource.MODEL)),
+                    CaptureEvent.FrameCaptured(CaptureOutcome("sample-7")),
                     awaitItem(),
                 )
                 expectNoEvents()
@@ -339,28 +338,32 @@ class CaptureViewModelTest {
         }
 
     /**
-     * A field the inference container never saw is still a capture, and is confirmed as one.
-     *
-     * The medtech gets the same reassurance the tap landed; only the wording differs, so ten
-     * captures taken with the container down do not read as ten ordinary ones.
+     * Capture no longer waits on a model, so nothing holds the shutter between taps
+     * (14zcqntj6nz). Two taps in quick succession are two saved frames, each confirmed with its
+     * own id, and neither waits for the other's confirmation.
      */
     @Test
-    fun `a capture taken with the container unreachable is still confirmed`() =
+    fun `captures in quick succession each confirm with their own sample`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
-            whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(CaptureOutcome("sample-8", FrameSource.MANUAL)))
+            whenever(captureFieldUseCase.invoke("session-1", bytes)).thenReturn(
+                Result.success(CaptureOutcome("sample-1")),
+                Result.success(CaptureOutcome("sample-2")),
+            )
             advanceUntilIdle()
 
             vm.events.test {
                 vm.onCapture()
+                vm.onCapture()
                 advanceUntilIdle()
 
-                val event = awaitItem() as CaptureEvent.FrameCaptured
-                assertEquals(FrameSource.MANUAL, event.outcome.source)
+                assertEquals(CaptureEvent.FrameCaptured(CaptureOutcome("sample-1")), awaitItem())
+                assertEquals(CaptureEvent.FrameCaptured(CaptureOutcome("sample-2")), awaitItem())
+                expectNoEvents()
             }
+            verify(captureFieldUseCase, times(2)).invoke("session-1", bytes)
         }
 
     /**

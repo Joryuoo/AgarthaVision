@@ -55,7 +55,7 @@ class CaptureFieldUseCase @Inject constructor(
             // After the write, never before: the queue reads the row, so waking it first could
             // find nothing and go back to sleep with this frame unseen.
             inferenceQueue.notifyQueued()
-            CaptureOutcome(sampleId, FrameSource.MODEL)
+            CaptureOutcome(sampleId)
         }
 }
 
@@ -68,11 +68,11 @@ class CaptureFieldUseCase @Inject constructor(
  * A confirmation that reads the head is therefore a confirmation about an arbitrary frame, which
  * is exactly the bug this return value exists to make impossible.
  *
+ * There is no source on it any more. Every tap is queued for a model output, and whether one
+ * arrives is decided later by the inference queue, not by the tap (14zcqntj6nz).
+ *
  * @property sampleId primary key of the row this tap wrote.
- * @property source always [FrameSource.MODEL] now: every capture is queued for a model output.
- *   Whether one arrives is the inference queue's business, not the tap's.
  */
 data class CaptureOutcome(
     val sampleId: String,
-    val source: FrameSource,
 )

@@ -47,7 +47,7 @@ class CaptureFieldUseCaseTest {
 
             val result = useCase(sessionId = "session-1", jpegBytes = ByteArray(5))
 
-            assertEquals(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)), result)
+            assertEquals(Result.success(CaptureOutcome("sample-1")), result)
 
             val frameCaptor = argumentCaptor<FlaggedFrame>()
             verify(flaggedFrameStore).add(frameCaptor.capture())
