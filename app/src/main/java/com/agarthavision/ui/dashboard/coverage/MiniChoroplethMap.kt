@@ -30,7 +30,6 @@ import com.agarthavision.domain.model.ProvinceCoverage
 import com.agarthavision.ui.theme.AgarthaColors
 
 private const val MAP_PADDING_PX = 12f
-private const val POSITIVE_RATE_BIN_COUNT = 4f
 private const val HATCH_LINE_SPACING_PX = 6f
 private const val STROKE_WIDTH_PX = 1.2f
 private const val HIGHLIGHT_STROKE_WIDTH_PX = 2.5f
@@ -110,7 +109,7 @@ internal fun MiniChoroplethMap(
                 } else {
                     val dotColor = if (stat is AreaStat.Reported) {
                         val bin = PositiveRateBin.of(stat.positiveRate)
-                        lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
+                        colors.coverageBinColor(bin)
                     } else {
                         colors.border
                     }
@@ -175,20 +174,21 @@ private fun DrawScope.drawArea(
     stat: AreaStat?,
     colors: AgarthaColors,
 ) {
+    val outlineColor = if (colors.isDark) colors.border else Color.White
     when (stat) {
         is AreaStat.Reported -> {
             val bin = PositiveRateBin.of(stat.positiveRate)
-            val fill = lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
+            val fill = colors.coverageBinColor(bin)
             drawPath(path, color = fill)
-            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = outlineColor, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.TooFew -> {
-            drawPath(path, color = colors.surfaceMuted)
+            drawPath(path, color = colors.coverageTooFew)
             drawHatching(path, colors.accent)
-            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = outlineColor, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.NoData, null -> {
-            drawPath(path, color = Color.White)
+            drawPath(path, color = colors.coverageNoData)
             drawPath(path, color = colors.border, style = Stroke(STROKE_WIDTH_PX))
         }
     }

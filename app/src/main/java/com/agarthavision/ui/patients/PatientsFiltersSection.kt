@@ -135,7 +135,7 @@ internal fun PatientsFilterSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier

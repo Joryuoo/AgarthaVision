@@ -83,7 +83,7 @@ private fun Chip(
     }
     val textColor = when {
         !isEnabled -> colors.textTertiary
-        isSelected -> colors.accent
+        isSelected -> colors.onAccentTint
         else -> colors.textSecondary
     }
     Box(

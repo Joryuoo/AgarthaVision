@@ -48,7 +48,6 @@ import com.agarthavision.ui.theme.AgarthaTheme
 private const val TOP_TOWNS_SHOWN = 5
 private const val PERCENT_FACTOR = 100
 private const val PROVINCE_MAP_PADDING_PX = 6f
-private const val POSITIVE_RATE_BIN_COUNT = 4f
 
 @Suppress("LongParameterList") // Every parameter is a distinct, independent sheet slot.
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,7 +65,7 @@ fun ProvinceSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -169,12 +168,8 @@ private fun ProvinceMiniMap(selected: SelectedProvince) {
                     val stat = coverageByCode[area.code]
                     val path = townPaths.getOrPut(area.code) { pathFor(area, transform) }
                     val fill = when (stat) {
-                        is AreaStat.Reported -> lerp(
-                            colors.accentTint,
-                            colors.accent,
-                            PositiveRateBin.of(stat.positiveRate) / POSITIVE_RATE_BIN_COUNT,
-                        )
-                        else -> colors.surfaceVariant
+                        is AreaStat.Reported -> colors.coverageBinColor(PositiveRateBin.of(stat.positiveRate))
+                        else -> colors.coverageNoData
                     }
                     drawPath(path, color = fill)
                 }

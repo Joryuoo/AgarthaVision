@@ -67,7 +67,6 @@ private const val MAP_PADDING_PX = 16f
 private const val MIN_SCALE_FACTOR = 0.8f
 private const val MAX_SCALE_FACTOR = 40f
 private const val CAMERA_ANIM_MS = 350
-private const val POSITIVE_RATE_BIN_COUNT = 4f
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,13 +182,13 @@ fun MyCoverageScreen(
 private fun CoverageLegend(modifier: Modifier = Modifier) {
     val colors = AgarthaTheme.colors
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val bins = listOf("0%", "<10%", "<20%", "<40%", "40%+")
+        val bins = listOf("0-10%", "10-20%", "20-30%", "30-40%", "40%+")
         bins.forEachIndexed { index, label ->
-            val fill = lerp(colors.accentTint, colors.accent, index / POSITIVE_RATE_BIN_COUNT)
+            val fill = colors.coverageBinColor(index)
             LegendSwatch(fill, label)
         }
-        LegendSwatch(colors.surfaceMuted, "Too few")
-        LegendSwatch(Color.White, "No data")
+        LegendSwatch(colors.coverageTooFew, "Too few")
+        LegendSwatch(colors.coverageNoData, "No data")
     }
 }
 

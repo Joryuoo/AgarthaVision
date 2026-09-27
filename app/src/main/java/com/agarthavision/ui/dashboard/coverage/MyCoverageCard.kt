@@ -525,7 +525,7 @@ private fun CoverageCardLegend(
             color = colors.textTertiary,
         )
         for (bin in 0..4) {
-            val color = lerp(colors.accentTint, colors.accent, bin / 4f)
+            val color = colors.coverageBinColor(bin)
             Box(
                 modifier = Modifier
                     .size(width = 6.dp, height = 6.dp)

@@ -239,7 +239,7 @@ private fun SessionSummaryRowItem(
     val (badgeBg, badgeColor) = when (queueBadge) {
         SessionQueueBadge.NO_ITEMS -> colors.surfaceMuted to colors.textSecondary
         SessionQueueBadge.ALL_VERIFIED -> colors.surfaceMuted to colors.textSecondary
-        SessionQueueBadge.PENDING -> colors.accent to colors.onAccent
+        SessionQueueBadge.PENDING -> colors.accentTint to colors.onAccentTint
     }
 
     val destHint = if (filter == SessionListFilter.TO_REVIEW) {

@@ -295,8 +295,8 @@ internal fun QueueEmptyState(
                 onClick = onViewRecords,
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accent,
-                    contentColor = colors.onAccent,
+                    containerColor = colors.brandFill,
+                    contentColor = colors.onBrandFill,
                 ),
             ) {
                 Text(
@@ -463,7 +463,7 @@ private fun FrameRow(
                         ),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isAI) colors.accent else colors.warningText,
+                        color = if (isAI) colors.onAccentTint else colors.warningText,
                         style = InterBaseStyle,
                     )
                 }

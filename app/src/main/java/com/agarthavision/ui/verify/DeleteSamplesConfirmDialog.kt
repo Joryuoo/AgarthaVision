@@ -42,7 +42,7 @@ internal fun DeleteSamplesConfirmDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         textContentColor = AgarthaTheme.colors.textPrimary,
         title = {

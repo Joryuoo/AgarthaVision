@@ -43,14 +43,16 @@ private val LightColorScheme = lightColorScheme(
     onSurface        = AppColors.Gray900,
     surfaceVariant   = AppColors.Gray50,
     onSurfaceVariant = AppColors.Gray500,
+    surfaceContainer = AppColors.White,
     outline          = AppColors.Gray100,
+    outlineVariant   = AppColors.Gray200,
     error            = AppColors.Red,
     onError          = AppColors.White,
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary          = AppColors.MaroonBright,
-    onPrimary        = AppColors.Gray900,
+    primary          = AppColors.Maroon,
+    onPrimary        = AppColors.White,
     secondary        = AppColors.Gold,
     onSecondary      = AppColors.Gray900,
     background       = AppColors.DarkBackground,
@@ -59,9 +61,11 @@ private val DarkColorScheme = darkColorScheme(
     onSurface        = AppColors.DarkTextPrimary,
     surfaceVariant   = AppColors.DarkSurfaceAlt,
     onSurfaceVariant = AppColors.DarkTextSecondary,
+    surfaceContainer = AppColors.DarkSurfaceHigh,
     outline          = AppColors.DarkBorder,
+    outlineVariant   = AppColors.DarkBorderStrong,
     error            = AppColors.RedBright,
-    onError          = AppColors.Gray900,
+    onError          = AppColors.DarkBackground,
 )
 
 /**

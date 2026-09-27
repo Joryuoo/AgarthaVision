@@ -452,7 +452,7 @@ internal fun VerificationSheetContent(
                     actions.onDismissLeave()
                 },
                 shape = DialogShape,
-                containerColor = AgarthaTheme.colors.surface,
+                containerColor = AgarthaTheme.colors.surfaceHigh,
                 titleContentColor = AgarthaTheme.colors.textPrimary,
                 textContentColor = AgarthaTheme.colors.textPrimary,
                 title = { Text(stringResource(R.string.verify_discard_changes_title)) },

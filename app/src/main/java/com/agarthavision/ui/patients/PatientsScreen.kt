@@ -259,14 +259,14 @@ private fun NewPatientButton(
         modifier = modifier.height(49.dp),
         shape = CircleShape,
         colors = ButtonDefaults.buttonColors(
-            containerColor = colors.accent,
-            contentColor = colors.onAccent,
+            containerColor = colors.brandFill,
+            contentColor = colors.onBrandFill,
         ),
     ) {
         Icon(
             imageVector = Icons.Outlined.Add,
             contentDescription = null,
-            tint = colors.onAccent,
+            tint = colors.onBrandFill,
             modifier = Modifier.size(18.dp),
         )
         Spacer(modifier = Modifier.width(8.dp))

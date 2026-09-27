@@ -36,7 +36,7 @@ fun AiAgreementSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
     ) {
         Column(
             modifier = Modifier

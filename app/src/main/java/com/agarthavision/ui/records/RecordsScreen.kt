@@ -394,7 +394,7 @@ private fun SpeciesFilterDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         title = {
             Text(

@@ -297,10 +297,10 @@ private fun LoginForm(
             enabled = state.canSubmit,
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = themeColors.accent,
-                contentColor = themeColors.onAccent,
-                disabledContainerColor = themeColors.accent.copy(alpha = 0.5f),
-                disabledContentColor = themeColors.onAccent.copy(alpha = 0.5f)
+                containerColor = themeColors.brandFill,
+                contentColor = themeColors.onBrandFill,
+                disabledContainerColor = themeColors.brandFill.copy(alpha = 0.5f),
+                disabledContentColor = themeColors.onBrandFill.copy(alpha = 0.5f)
             ),
             contentPadding = PaddingValues(vertical = 14.dp),
             modifier = Modifier.fillMaxWidth()

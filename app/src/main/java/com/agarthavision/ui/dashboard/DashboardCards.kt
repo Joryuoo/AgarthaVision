@@ -73,7 +73,7 @@ internal fun ActiveSessionHero(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(colors.accent)
+            .background(colors.brandFill)
             .clickable(onClick = onResume)
             .padding(horizontal = 18.dp, vertical = 14.dp),
     ) {
@@ -82,7 +82,7 @@ internal fun ActiveSessionHero(
                 text = "CONTINUE",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.onAccent.copy(alpha = 0.85f),
+                color = colors.onBrandFill.copy(alpha = 0.85f),
                 letterSpacing = 1.2.sp,
                 lineHeight = 13.sp,
             )
@@ -91,7 +91,7 @@ internal fun ActiveSessionHero(
                 text = sessionId,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.onAccent,
+                color = colors.onBrandFill,
                 letterSpacing = (-0.3).sp,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 24.sp,
@@ -103,7 +103,7 @@ internal fun ActiveSessionHero(
                 text = "Updated $elapsed · $frameCountText",
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Normal,
-                color = colors.onAccent.copy(alpha = 0.9f),
+                color = colors.onBrandFill.copy(alpha = 0.9f),
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 16.sp,
                 maxLines = 1,
@@ -159,13 +159,13 @@ internal fun KpiGrid(
     val colorForKind = { kind: KpiKind ->
         when (kind) {
             KpiKind.SESSIONS -> KpiTileColors(
-                bgColor = colors.accent,
-                contentColor = colors.onAccent,
-                labelColor = colors.onAccent,
-                subtitleColor = colors.onAccent.copy(alpha = 0.85f),
-                badgeBg = colors.onAccent.copy(alpha = 0.2f),
-                badgeTextColor = colors.onAccent,
-                sparklineColor = colors.onAccent.copy(alpha = 0.65f),
+                bgColor = colors.brandFill,
+                contentColor = colors.onBrandFill,
+                labelColor = colors.onBrandFill,
+                subtitleColor = colors.onBrandFill.copy(alpha = 0.85f),
+                badgeBg = colors.onBrandFill.copy(alpha = 0.2f),
+                badgeTextColor = colors.onBrandFill,
+                sparklineColor = colors.onBrandFill.copy(alpha = 0.65f),
             )
             KpiKind.POSITIVE_RATE -> KpiTileColors(
                 bgColor = AppColors.Gray900,

@@ -130,7 +130,7 @@ fun PatientFormSheet(
     ModalBottomSheet(
         onDismissRequest = viewModel::onCancel,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -382,8 +382,8 @@ fun PatientFormSheet(
                             .height(49.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.accent,
-                            contentColor = colors.onAccent,
+                            containerColor = colors.brandFill,
+                            contentColor = colors.onBrandFill,
                         ),
                     ) {
                         Text(

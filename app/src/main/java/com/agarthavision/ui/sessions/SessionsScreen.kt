@@ -288,8 +288,8 @@ fun SessionsScreen(
                             .height(49.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.accent,
-                            contentColor = colors.onAccent
+                            containerColor = colors.brandFill,
+                            contentColor = colors.onBrandFill,
                         )
                     ) {
                         Icon(
@@ -297,7 +297,7 @@ fun SessionsScreen(
                             // The button's own "New session" label says it; repeating it
                             // makes TalkBack read the control twice.
                             contentDescription = null,
-                            tint = colors.onAccent,
+                            tint = colors.onBrandFill,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
@@ -681,7 +681,7 @@ private fun NewSessionSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -845,11 +845,14 @@ private fun NewSessionSheet(
                     enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandFill,
+                        contentColor = colors.onBrandFill,
+                    ),
                 ) {
                     if (state.isCreating) {
                         CircularProgressIndicator(
-                            color = colors.onAccent,
+                            color = colors.onBrandFill,
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
@@ -859,7 +862,7 @@ private fun NewSessionSheet(
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
                             contentDescription = null,
-                            tint = colors.onAccent,
+                            tint = colors.onBrandFill,
                             modifier = Modifier.size(16.dp)
                         )
                     }
