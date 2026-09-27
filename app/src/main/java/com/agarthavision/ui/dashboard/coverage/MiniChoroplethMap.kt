@@ -2,6 +2,10 @@ package com.agarthavision.ui.dashboard.coverage
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -47,6 +51,10 @@ internal fun MiniChoroplethMap(
     townCounts: Map<String, AreaCount> = emptyMap(),
     showCentroidDots: Boolean = false,
 ) {
+    val pathCache = remember(provinces) { mutableMapOf<String, Path>() }
+    val townPathCache = remember(towns) { mutableMapOf<String, Path>() }
+    var lastTransform by remember { mutableStateOf<ViewTransform?>(null) }
+
     Canvas(modifier = modifier) {
         val transform = fitBounds(
             bounds = fitBounds,
@@ -54,9 +62,14 @@ internal fun MiniChoroplethMap(
             heightPx = size.height,
             paddingPx = MAP_PADDING_PX,
         )
+        if (lastTransform != transform) {
+            pathCache.clear()
+            townPathCache.clear()
+            lastTransform = transform
+        }
         if (showCentroidDots) {
             provinces.areas.forEach { area ->
-                val path = pathFor(area, transform)
+                val path = pathCache.getOrPut(area.code) { pathFor(area, transform) }
                 drawArea(path, null, colors)
             }
             val maxSmears = coverageByCode.values.maxOfOrNull { it.count.smears }?.coerceAtLeast(1) ?: 1
@@ -114,16 +127,16 @@ internal fun MiniChoroplethMap(
             }
         } else if (towns != null) {
             provinces.areas.forEach { area ->
-                val path = pathFor(area, transform)
+                val path = pathCache.getOrPut(area.code) { pathFor(area, transform) }
                 drawArea(path, null, colors)
             }
             towns.areas.forEach { town ->
-                val path = pathFor(town, transform)
+                val path = townPathCache.getOrPut(town.code) { pathFor(town, transform) }
                 val stat = townCounts[town.code]?.stat
                 drawArea(path, stat, colors)
             }
         } else {
-            drawProvinces(provinces, coverageByCode, transform, colors)
+            drawProvinces(provinces, coverageByCode, transform, colors, pathCache = pathCache)
         }
     }
 }
@@ -170,14 +183,16 @@ private fun DrawScope.drawArea(
             val bin = PositiveRateBin.of(stat.positiveRate)
             val fill = lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
             drawPath(path, color = fill)
+            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.TooFew -> {
             drawPath(path, color = colors.surfaceMuted)
-            drawHatching(path, colors.border)
+            drawHatching(path, colors.borderStrong)
+            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.NoData, null -> {
             drawPath(path, color = colors.surfaceMuted)
-            drawPath(path, color = colors.border, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
     }
 }

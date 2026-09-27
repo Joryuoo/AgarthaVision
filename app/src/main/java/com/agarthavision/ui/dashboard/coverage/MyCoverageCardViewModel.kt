@@ -63,6 +63,10 @@ class MyCoverageCardViewModel @Inject constructor(
         .map { it?.userId }
         .distinctUntilChanged()
 
+    private var cachedProvinces: BoundarySet? = loadProvinceBoundariesUseCase.cachedOrNull()
+    private val townsCache = mutableMapOf<String, BoundarySet?>()
+    private val findingsCache = mutableMapOf<String, List<SpeciesFinding>>()
+
     fun setPeriod(period: HomePeriod) {
         periodFlow.value = period
     }
@@ -93,6 +97,23 @@ class MyCoverageCardViewModel @Inject constructor(
         initialValue = MyCoverageCardUiState.Loading,
     )
 
+    private suspend fun getProvinces(): BoundarySet? {
+        val cached = cachedProvinces ?: loadProvinceBoundariesUseCase.cachedOrNull()
+        if (cached != null) {
+            cachedProvinces = cached
+            return cached
+        }
+        return loadProvinceBoundariesUseCase().getOrNull()?.also { cachedProvinces = it }
+    }
+
+    private suspend fun getTowns(code: String): BoundarySet? {
+        if (townsCache.containsKey(code)) return townsCache[code]
+        val cached = loadTownBoundariesUseCase.cachedOrNull(code)
+        val result = cached ?: runCatching { loadTownBoundariesUseCase(code).getOrNull() }.getOrNull()
+        townsCache[code] = result
+        return result
+    }
+
     private fun toReadyOrEmptyFlow(
         userId: String,
         windows: PeriodWindows,
@@ -102,30 +123,30 @@ class MyCoverageCardViewModel @Inject constructor(
             emit(MyCoverageCardUiState.Empty(coverage.period))
             return@flow
         }
-        val provincesResult = loadProvinceBoundariesUseCase()
-        val provinces = provincesResult.getOrNull()
+        val provinces = getProvinces()
         if (provinces == null) {
-            val err = provincesResult.exceptionOrNull()?.message ?: "Couldn't load the map"
-            emit(MyCoverageCardUiState.Error(err))
+            emit(MyCoverageCardUiState.Error("Couldn't load the map"))
             return@flow
         }
         val fitBounds = resolveCoverageFitBounds(coverage, provinces)
         val framing = coverage.framing
         if (framing is CoverageFraming.SingleProvince) {
-            val towns = runCatching { loadTownBoundariesUseCase(framing.code).getOrNull() }.getOrNull()
+            val towns = getTowns(framing.code)
+            val cachedSpecies = findingsCache[userId] ?: emptyList()
             emit(
                 MyCoverageCardUiState.Ready(
                     coverage = coverage,
                     provinces = provinces,
                     fitBounds = fitBounds,
                     singleProvinceTowns = towns,
-                    species = emptyList(),
+                    species = cachedSpecies,
                 ),
             )
             val findingsFlow = runCatching { observeFindingsUseCase(userId, windows.current, null) }.getOrNull()
             if (findingsFlow != null) {
                 emitAll(
                     findingsFlow.map { findings ->
+                        findingsCache[userId] = findings.species
                         MyCoverageCardUiState.Ready(
                             coverage = coverage,
                             provinces = provinces,

@@ -110,7 +110,7 @@ fun MyCoverageCard(
                 )
             }
             Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (val s = state) {
                     is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
                     is MyCoverageCardUiState.Empty -> EmptyState(
@@ -140,7 +140,10 @@ private fun ReadyContent(state: MyCoverageCardUiState.Ready) {
     val isCountry = framing is CoverageFraming.Country
     val singleProvinceTowns = (framing as? CoverageFraming.SingleProvince)?.let { state.singleProvinceTowns }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         MiniChoroplethMap(
             provinces = state.provinces,
             coverageByCode = coverageByCode,
