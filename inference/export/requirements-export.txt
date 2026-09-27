@@ -1,0 +1,30 @@
+# Export-only dependencies. Deliberately separate from ../requirements.txt: the container
+# serving /infer needs none of the TensorFlow stack, and installing it there would roughly
+# double the image size for no benefit.
+#
+#   pip install -r inference/export/requirements-export.txt
+#
+# The fork is pinned to the same commit the container uses. Export MUST run against it —
+# stock ultralytics does not know what an EfficientNetV2Backbone is and will fail to
+# reconstruct best.pt.
+git+https://github.com/DMKuZu/ultralytics@c2b156345e2e1468f6113b60813ddb7eeab969d1
+timm
+torchvision
+
+# TFLite path: torch -> ONNX -> TF SavedModel -> TFLite. Versions as last verified working.
+# onnx2tf's [tensorflow] extra brings tf_keras, which its tf_converter backend needs; that
+# backend is what produces standard fp16 (see export_mobile.py's docstring).
+onnx
+onnx2tf[tensorflow]==2.6.8
+onnxslim
+onnxruntime
+sng4onnx
+onnx_graphsurgeon
+tensorflow==2.21.0
+# The same runtime the phone uses, for reading exported files back and verifying them.
+ai-edge-litert
+
+# Reporting
+numpy
+pillow
+pyyaml

@@ -125,7 +125,7 @@ no longer declares. `bun install` from the current `package.json` installs nothi
   (`inference/Dockerfile:10-11`). Endpoints `GET /health` and `POST /infer`
   (`inference/server.py:29`, `:34`). Bearer-token auth (`inference/server.py:24-27`).
   Weights baked in at `inference/weights/best.pt`; default model version string
-  `yolov26-efficientnetv2-v1` (`inference/server.py:11`).
+  `yolo12n-effv2s-v1-cloud-fp32` (`inference/server.py:12`).
 
 ## Build-time configuration
 

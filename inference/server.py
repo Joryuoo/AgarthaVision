@@ -9,7 +9,7 @@ from ultralytics import YOLO
 
 API_KEY = os.environ["INFERENCE_API_KEY"]
 WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/best.pt")
-MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolov26-efficientnetv2-v1")
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolo12n-effv2s-v1-cloud-fp32")
 
 app = FastAPI()
 security = HTTPBearer()

@@ -1,0 +1,24 @@
+{
+  "model_version": "yolo12n-effv2s-v1-tflite-int8",
+  "model_file": "yolo12n-effv2s-v1-tflite-int8.tflite",
+  "precision": "int8",
+  "input_width": 640,
+  "input_height": 640,
+  "output_shape": [
+    1,
+    7,
+    8400
+  ],
+  "output_layout": "xywh_cls",
+  "box_coordinates": "normalized",
+  "normalization_scale": 255.0,
+  "letterbox": true,
+  "class_names": [
+    "Ascaris lumbricoides",
+    "Hookworm",
+    "Trichuris trichiura"
+  ],
+  "conf_threshold": 0.25,
+  "iou_threshold": 0.7,
+  "max_detections": 300
+}
