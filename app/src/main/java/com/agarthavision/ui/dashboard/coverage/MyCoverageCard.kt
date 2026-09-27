@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -60,6 +61,8 @@ import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaColors
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
+import com.agarthavision.ui.theme.LightAgarthaColors
+import com.agarthavision.ui.theme.LocalAgarthaColors
 
 private const val TOP_PROVINCES_SHOWN = 3
 private const val PERCENT_FACTOR = 100
@@ -74,59 +77,60 @@ fun MyCoverageCard(
     LaunchedEffect(period) { viewModel.setPeriod(period) }
     val state by viewModel.uiState.collectAsState()
 
-    val theme = AgarthaTheme.colors
-    val shape = RoundedCornerShape(12.dp)
-    val cardBg = if (theme.isDark) AppColors.Gray700 else theme.surface
+    CompositionLocalProvider(LocalAgarthaColors provides LightAgarthaColors) {
+        val theme = AgarthaTheme.colors
+        val shape = RoundedCornerShape(12.dp)
 
-    Box(
-        modifier = modifier
-            .testTag("myCoverageCard")
-            .clip(shape)
-            .background(cardBg, shape)
-            .border(1.dp, theme.border, shape)
-            .clickable { onOpen(period) }
-            .semantics(mergeDescendants = true) {
-                role = Role.Button
-                contentDescription = contentDescriptionFor(state)
-            }
-            .padding(16.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "MY COVERAGE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (theme.isDark) AppColors.White else theme.textSecondary,
-                    letterSpacing = 1.2.sp,
-                )
-                Text(
-                    text = periodLabel(period),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (theme.isDark) AppColors.White.copy(alpha = 0.8f) else theme.textSecondary,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                when (val s = state) {
-                    is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
-                    is MyCoverageCardUiState.Empty -> EmptyState(
-                        icon = Icons.Outlined.Map,
-                        title = "No smears in this period",
-                        body = "Smears you examine will appear here by province.",
-                        modifier = Modifier.fillMaxWidth(),
+        Box(
+            modifier = modifier
+                .testTag("myCoverageCard")
+                .clip(shape)
+                .background(AppColors.White, shape)
+                .border(1.dp, theme.border, shape)
+                .clickable { onOpen(period) }
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = contentDescriptionFor(state)
+                }
+                .padding(16.dp),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "MY COVERAGE",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.textSecondary,
+                        letterSpacing = 1.2.sp,
                     )
-                    is MyCoverageCardUiState.Error -> Text(
-                        text = s.message,
-                        fontSize = 12.sp,
+                    Text(
+                        text = periodLabel(period),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
                         color = theme.textSecondary,
                     )
-                    is MyCoverageCardUiState.Ready -> ReadyContent(s)
+                }
+                Spacer(Modifier.height(8.dp))
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    when (val s = state) {
+                        is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
+                        is MyCoverageCardUiState.Empty -> EmptyState(
+                            icon = Icons.Outlined.Map,
+                            title = "No smears in this period",
+                            body = "Smears you examine will appear here by province.",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        is MyCoverageCardUiState.Error -> Text(
+                            text = s.message,
+                            fontSize = 12.sp,
+                            color = theme.textSecondary,
+                        )
+                        is MyCoverageCardUiState.Ready -> ReadyContent(s)
+                    }
                 }
             }
         }
