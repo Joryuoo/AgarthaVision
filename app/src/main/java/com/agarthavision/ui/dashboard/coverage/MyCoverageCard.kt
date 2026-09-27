@@ -59,6 +59,7 @@ import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaColors
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 
 private const val TOP_PROVINCES_SHOWN = 3
 private const val PERCENT_FACTOR = 100
@@ -75,12 +76,13 @@ fun MyCoverageCard(
 
     val theme = AgarthaTheme.colors
     val shape = RoundedCornerShape(12.dp)
+    val cardBg = if (theme.isDark) AppColors.Gray700 else theme.surface
 
     Box(
         modifier = modifier
             .testTag("myCoverageCard")
             .clip(shape)
-            .background(theme.surface, shape)
+            .background(cardBg, shape)
             .border(1.dp, theme.border, shape)
             .clickable { onOpen(period) }
             .semantics(mergeDescendants = true) {
@@ -99,14 +101,14 @@ fun MyCoverageCard(
                     text = "MY COVERAGE",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
-                    color = theme.textSecondary,
+                    color = if (theme.isDark) AppColors.White else theme.textSecondary,
                     letterSpacing = 1.2.sp,
                 )
                 Text(
                     text = periodLabel(period),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = theme.textSecondary,
+                    color = if (theme.isDark) AppColors.White.copy(alpha = 0.8f) else theme.textSecondary,
                 )
             }
             Spacer(Modifier.height(8.dp))
