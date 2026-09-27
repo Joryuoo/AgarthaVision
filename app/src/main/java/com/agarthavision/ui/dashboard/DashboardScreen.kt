@@ -270,8 +270,8 @@ private fun LazyListScope.recentSessionsSection(
             if (state.hasAnySession || state.activeSession != null) {
                 Text(
                     text = "See all",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
                     color = AgarthaTheme.colors.accent,
                     modifier = Modifier
                         .clickable {

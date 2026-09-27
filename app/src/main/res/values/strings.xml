@@ -73,6 +73,9 @@
         <item quantity="one">%1$d day ago</item>
         <item quantity="other">%1$d days ago</item>
     </plurals>
+    <string name="time_short_minutes_ago">%1$d m ago</string>
+    <string name="time_short_hours_ago">%1$d h ago</string>
+    <string name="time_short_days_ago">%1$d d ago</string>
 
     <!-- Periods -->
     <string name="period_today">Today</string>
@@ -80,6 +83,15 @@
     <string name="period_30_days">30 days</string>
 
     <!-- Needs attention strip -->
+    <string name="attention_title">Needs attention</string>
+    <plurals name="attention_unsynced_summary">
+        <item quantity="one">%1$d unsynced</item>
+        <item quantity="other">%1$d unsynced</item>
+    </plurals>
+    <plurals name="attention_to_review_summary">
+        <item quantity="one">%1$d to review</item>
+        <item quantity="other">%1$d to review</item>
+    </plurals>
     <plurals name="attention_unsynced">
         <item quantity="one">%1$d unsynced item</item>
         <item quantity="other">%1$d unsynced items</item>

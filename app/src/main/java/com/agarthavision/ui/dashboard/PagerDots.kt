@@ -5,9 +5,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -32,7 +36,7 @@ fun PagerDots(
 
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         for (page in 0 until pageCount) {
@@ -44,7 +48,6 @@ fun PagerDots(
             }
             Box(
                 modifier = Modifier
-                    .size(48.dp)
                     .semantics {
                         this.role = Role.Tab
                         this.selected = isSelected
@@ -54,14 +57,25 @@ fun PagerDots(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = { onSelect(page) },
-                    ),
+                    )
+                    .padding(vertical = 10.dp, horizontal = 3.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(
                     modifier = Modifier
-                        .size(if (isSelected) 8.dp else 6.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) colors.accent else colors.border),
+                        .then(
+                            if (isSelected) {
+                                Modifier
+                                    .width(18.dp)
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(999.dp))
+                            } else {
+                                Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                            }
+                        )
+                        .background(if (isSelected) colors.accent else colors.borderStrong),
                 )
             }
         }

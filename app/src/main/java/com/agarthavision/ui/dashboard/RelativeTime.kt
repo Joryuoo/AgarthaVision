@@ -46,3 +46,33 @@ fun relativeTimeText(epochMillis: Long, nowMillis: Long): String {
         }
     }
 }
+
+/**
+ * Formats [epochMillis] relative to [nowMillis] in compact notation (e.g. "2 h ago", "15 m ago", "1 d ago").
+ */
+@Composable
+fun shortRelativeTimeText(epochMillis: Long, nowMillis: Long): String {
+    val diff = (nowMillis - epochMillis).coerceAtLeast(0L)
+    return when {
+        diff < MILLIS_PER_MINUTE -> stringResource(R.string.time_just_now)
+        diff < MILLIS_PER_HOUR -> {
+            val minutes = (diff / MILLIS_PER_MINUTE).toInt().coerceAtLeast(1)
+            stringResource(R.string.time_short_minutes_ago, minutes)
+        }
+        diff < MILLIS_PER_DAY -> {
+            val hours = (diff / MILLIS_PER_HOUR).toInt().coerceAtLeast(1)
+            stringResource(R.string.time_short_hours_ago, hours)
+        }
+        diff < SEVEN_DAYS_MILLIS -> {
+            val days = (diff / MILLIS_PER_DAY).toInt().coerceAtLeast(1)
+            stringResource(R.string.time_short_days_ago, days)
+        }
+        else -> {
+            val instant = Instant.ofEpochMilli(epochMillis)
+            val formatter = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault())
+                .withZone(CLINICAL_ZONE)
+            formatter.format(instant)
+        }
+    }
+}
+

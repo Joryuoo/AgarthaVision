@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
@@ -104,10 +105,10 @@ internal fun KpiPager(
                 }
             }
         }
-        Spacer(Modifier.height(Spacing.xs))
+        Spacer(Modifier.height(Spacing.md))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PagerDots(
@@ -118,9 +119,10 @@ internal fun KpiPager(
                 },
             )
             if (pagerState.currentPage == 0) {
+                Spacer(Modifier.width(Spacing.sm))
                 Text(
                     text = "Swipe for My coverage →",
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = AgarthaTheme.colors.textSecondary,
                     modifier = Modifier

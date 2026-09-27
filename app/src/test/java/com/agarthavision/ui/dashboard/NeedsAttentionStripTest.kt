@@ -10,6 +10,7 @@ import com.agarthavision.domain.usecase.home.NeedsAttention
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,11 +36,11 @@ class NeedsAttentionStripTest {
             }
         }
 
-        composeRule.onNodeWithText("NEEDS ATTENTION").assertDoesNotExist()
+        composeRule.onNodeWithText("Needs attention").assertDoesNotExist()
     }
 
     @Test
-    fun `renders non-zero chips only and supports TalkBack`() {
+    fun `renders summary with non-zero items and routes to review by priority`() {
         var clickedTab: String? = null
         var clickedFilter: SessionListFilter? = null
 
@@ -57,26 +58,72 @@ class NeedsAttentionStripTest {
             }
         }
 
-        composeRule.onNodeWithText("NEEDS ATTENTION").assertIsDisplayed()
+        composeRule.onNodeWithText("Needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("1 unsynced · 3 to review").assertIsDisplayed()
 
-        val unsyncedDesc = "1 unsynced item. Opens settings."
-        composeRule.onNodeWithContentDescription(unsyncedDesc)
+        // Clicking the unified card triggers the priority action (TO_REVIEW when framesToReview > 0)
+        composeRule.onNodeWithContentDescription("Needs attention: 1 unsynced · 3 to review")
             .assertIsDisplayed()
             .performClick()
-        assertEquals(Screen.Settings.route, clickedTab)
 
-        val reviewDesc = "3 frames to review. Opens frames to review."
-        composeRule.onNodeWithContentDescription(reviewDesc)
-            .assertIsDisplayed()
-            .performClick()
         assertEquals(SessionListFilter.TO_REVIEW, clickedFilter)
-
-        val emptyDesc = "0 sessions with no frames. Opens sessions with no frames."
-        composeRule.onNodeWithContentDescription(emptyDesc).assertDoesNotExist()
+        assertNull(clickedTab)
     }
 
     @Test
-    fun `clicking empty sessions chip opens no frames filter`() {
+    fun `renders full summary matching mockup text`() {
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                NeedsAttentionStrip(
+                    needsAttention = NeedsAttention(
+                        unsyncedItems = 3,
+                        framesToReview = 2,
+                        emptySessions = 1,
+                    ),
+                    onNavigateToTab = {},
+                    onOpenSessionList = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("3 unsynced · 2 to review · 1 session with no frames")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun `clicking when only unsynced routes to settings`() {
+        var clickedTab: String? = null
+        var clickedFilter: SessionListFilter? = null
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                NeedsAttentionStrip(
+                    needsAttention = NeedsAttention(
+                        unsyncedItems = 2,
+                        framesToReview = 0,
+                        emptySessions = 0,
+                    ),
+                    onNavigateToTab = { clickedTab = it },
+                    onOpenSessionList = { clickedFilter = it },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("2 unsynced").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("Needs attention: 2 unsynced")
+            .assertIsDisplayed()
+            .performClick()
+
+        assertEquals(Screen.Settings.route, clickedTab)
+        assertNull(clickedFilter)
+    }
+
+    @Test
+    fun `clicking when only empty sessions routes to no frames filter`() {
+        var clickedTab: String? = null
         var clickedFilter: SessionListFilter? = null
 
         composeRule.setContent {
@@ -87,16 +134,20 @@ class NeedsAttentionStripTest {
                         framesToReview = 0,
                         emptySessions = 2,
                     ),
-                    onNavigateToTab = {},
+                    onNavigateToTab = { clickedTab = it },
                     onOpenSessionList = { clickedFilter = it },
                 )
             }
         }
 
-        val emptyDesc = "2 sessions with no frames. Opens sessions with no frames."
-        composeRule.onNodeWithContentDescription(emptyDesc)
+        composeRule.onNodeWithText("Needs attention").assertIsDisplayed()
+        composeRule.onNodeWithText("2 sessions with no frames").assertIsDisplayed()
+
+        composeRule.onNodeWithContentDescription("Needs attention: 2 sessions with no frames")
             .assertIsDisplayed()
             .performClick()
+
         assertEquals(SessionListFilter.NO_FRAMES, clickedFilter)
+        assertNull(clickedTab)
     }
 }

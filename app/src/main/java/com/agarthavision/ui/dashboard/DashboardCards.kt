@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +53,7 @@ import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.icons.Warning
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 
 // ─── Sub-composables ─────────────────────────────────────────────────────────
@@ -65,64 +67,63 @@ internal fun ActiveSessionHero(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    val frameCountText = pluralStringResource(R.plurals.dashboard_frame_count, frameCount, frameCount)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(20.dp))
             .background(colors.accent)
             .clickable(onClick = onResume)
-            .padding(18.dp),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "CONTINUE",
-                fontSize = 10.sp,
+                text = "CONTINUE",
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.onAccent.copy(alpha = 0.92f),
+                color = colors.onAccent.copy(alpha = 0.85f),
                 letterSpacing = 1.2.sp,
+                lineHeight = 13.sp,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
-                sessionId,
-                fontSize = 28.sp,
+                text = sessionId,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.onAccent,
-                letterSpacing = (-0.7).sp,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                lineHeight = 30.sp,
+                letterSpacing = (-0.3).sp,
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 24.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Updated $elapsed",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                )
-                Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
-                Text(
-                    pluralStringResource(R.plurals.dashboard_frame_count, frameCount, frameCount),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                )
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Updated $elapsed · $frameCountText",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                color = colors.onAccent.copy(alpha = 0.9f),
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+
+        Spacer(Modifier.width(12.dp))
 
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
                 .background(colors.surface)
                 .clickable(onClick = onResume)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 18.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                "Resume",
-                fontSize = 13.sp,
+                text = "Resume",
+                fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.accent,
             )
@@ -160,28 +161,40 @@ internal fun KpiGrid(
             KpiKind.SESSIONS -> KpiTileColors(
                 bgColor = colors.accent,
                 contentColor = colors.onAccent,
-                labelColor = colors.onAccent.copy(alpha = 0.8f),
+                labelColor = colors.onAccent,
                 subtitleColor = colors.onAccent.copy(alpha = 0.85f),
+                badgeBg = colors.onAccent.copy(alpha = 0.2f),
+                badgeTextColor = colors.onAccent,
+                sparklineColor = colors.onAccent.copy(alpha = 0.65f),
             )
             KpiKind.POSITIVE_RATE -> KpiTileColors(
-                bgColor = colors.surface,
-                contentColor = colors.textPrimary,
-                labelColor = colors.textSecondary,
-                subtitleColor = colors.textSecondary,
-                borderColor = colors.border,
+                bgColor = AppColors.Gray900,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White,
+                subtitleColor = AppColors.White.copy(alpha = 0.8f),
+                badgeBg = AppColors.White.copy(alpha = 0.16f),
+                badgeTextColor = AppColors.White,
+                sparklineColor = AppColors.White.copy(alpha = 0.65f),
+                borderColor = if (colors.isDark) colors.border else Color.Transparent,
             )
             KpiKind.TO_REVIEW -> KpiTileColors(
                 bgColor = colors.gold,
-                contentColor = colors.onGold,
-                labelColor = colors.onGold.copy(alpha = 0.8f),
-                subtitleColor = colors.onGold.copy(alpha = 0.85f),
+                contentColor = AppColors.Gray900,
+                labelColor = AppColors.Gray900,
+                subtitleColor = AppColors.Gray900.copy(alpha = 0.85f),
+                badgeBg = AppColors.Gray900.copy(alpha = 0.14f),
+                badgeTextColor = AppColors.Gray900,
+                sparklineColor = Color(0xFF6B4E00),
             )
             KpiKind.AI_AGREEMENT -> KpiTileColors(
-                bgColor = colors.surfaceVariant,
-                contentColor = colors.textPrimary,
-                labelColor = colors.textSecondary,
-                subtitleColor = colors.textSecondary,
-                borderColor = colors.border,
+                bgColor = AppColors.Gray700,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White,
+                subtitleColor = AppColors.White.copy(alpha = 0.8f),
+                badgeBg = AppColors.White.copy(alpha = 0.16f),
+                badgeTextColor = AppColors.White,
+                sparklineColor = AppColors.White.copy(alpha = 0.65f),
+                borderColor = if (colors.isDark) colors.border else Color.Transparent,
             )
         }
     }
@@ -195,28 +208,32 @@ internal fun KpiGrid(
                 "Sessions",
                 "0",
                 "0 patients",
-                "Sessions, 0, 0 patients. Opens sessions.",
+                changeText = "",
+                spokenDescription = "Sessions, 0, 0 patients. Opens sessions.",
             ),
             KpiTileUi(
                 KpiKind.POSITIVE_RATE,
                 "Positive rate",
                 "—",
                 "No smears examined yet",
-                "Positive rate, no smears examined yet. Opens examined smears.",
+                changeText = "",
+                spokenDescription = "Positive rate, no smears examined yet. Opens examined smears.",
             ),
             KpiTileUi(
                 KpiKind.TO_REVIEW,
                 "To review",
                 "0",
                 "0 verified today",
-                "To review, 0 frames. Opens frames to review.",
+                changeText = "",
+                spokenDescription = "To review, 0 frames. Opens frames to review.",
             ),
             KpiTileUi(
                 KpiKind.AI_AGREEMENT,
                 "AI agreement",
                 "—",
                 "No AI results reviewed yet",
-                "AI agreement, no AI results reviewed yet. Opens AI agreement details.",
+                changeText = "",
+                spokenDescription = "AI agreement, no AI results reviewed yet. Opens AI agreement details.",
             ),
         )
     }
@@ -267,6 +284,9 @@ private data class KpiTileColors(
     val contentColor: Color,
     val labelColor: Color,
     val subtitleColor: Color,
+    val badgeBg: Color,
+    val badgeTextColor: Color,
+    val sparklineColor: Color,
     val borderColor: Color = Color.Transparent,
 )
 
@@ -278,7 +298,13 @@ private fun KpiTile(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(12.dp)
+    val shape = RoundedCornerShape(16.dp)
+    val badgeText = when {
+        tile.changeText.isNotEmpty() -> tile.changeText
+        tile.kind == KpiKind.TO_REVIEW && tile.value != "0" && tile.value != "—" -> "tap"
+        else -> ""
+    }
+
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -292,7 +318,7 @@ private fun KpiTile(
                     onClickLabel = "Open ${tile.label.lowercase()}",
                     onClick = onClick,
                 )
-                .padding(14.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp)
                 .then(
                     if (isLoading) {
                         Modifier
@@ -313,51 +339,59 @@ private fun KpiTile(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(tile.label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
-                if (tile.changeText.isNotEmpty()) {
-                    Text(
-                        tile.changeText,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.labelColor,
-                        style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                    )
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
                 Text(
-                    tile.value,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = colors.contentColor,
-                    letterSpacing = (-0.7).sp,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                    lineHeight = 30.sp,
+                    text = tile.label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.labelColor,
                 )
-                if (tile.sparkline.isNotEmpty()) {
-                    Sparkline(
-                        points = tile.sparkline,
-                        lineColor = colors.contentColor.copy(alpha = 0.7f),
+                if (badgeText.isNotEmpty()) {
+                    Box(
                         modifier = Modifier
-                            .width(48.dp)
-                            .height(24.dp),
-                    )
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.badgeBg)
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = badgeText,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.badgeTextColor,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                        )
+                    }
                 }
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             Text(
-                tile.subtitle,
-                fontSize = 11.sp,
+                text = tile.value,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.contentColor,
+                letterSpacing = (-0.5).sp,
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 30.sp,
+            )
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = tile.subtitle,
+                fontSize = 11.5.sp,
                 fontWeight = FontWeight.Normal,
                 color = colors.subtitleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+            if (tile.sparkline.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Sparkline(
+                    points = tile.sparkline,
+                    lineColor = colors.sparklineColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp),
+                )
+            }
         }
         if (isLoading) {
             SkeletonBox(
