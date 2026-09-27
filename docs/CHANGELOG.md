@@ -19,6 +19,9 @@ the background inference queue, so there is nothing left for the shutter to wait
 - **No busy state.** `CaptureState.isBusy` is gone, and with it the shutter's dimmed
   travelling arc, the "Capturing sample" description, the back button's disabled state and the
   system-back lock. The medtech can capture field after field without pausing.
+- **A double tap saves one sample.** The busy state was also what stopped a second tap from
+  saving the same cached frame again. `CaptureViewModel` now saves each cached frame once, by
+  identity; the next tap takes the analyzer's next frame. A failed save can be retried.
 - **The save still survives leaving the screen.** It runs under `NonCancellable`, so a medtech
   who leaves in the milliseconds it takes loses only the confirmation, not the frame.
 - **One confirmation for every tap.** `CaptureOutcome` no longer carries a source. Whether a

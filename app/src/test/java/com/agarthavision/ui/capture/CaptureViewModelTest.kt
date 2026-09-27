@@ -347,15 +347,17 @@ class CaptureViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
-            val bytes = publishFrame()
-            whenever(captureFieldUseCase.invoke("session-1", bytes)).thenReturn(
-                Result.success(CaptureOutcome("sample-1")),
-                Result.success(CaptureOutcome("sample-2")),
-            )
+            val first = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", first))
+                .thenReturn(Result.success(CaptureOutcome("sample-1")))
             advanceUntilIdle()
 
             vm.events.test {
                 vm.onCapture()
+                // Different bytes, not only a different frame: Mockito matches arrays by content.
+                val second = publishFrame(byteArrayOf(1, 2, 3, 4))
+                whenever(captureFieldUseCase.invoke("session-1", second))
+                    .thenReturn(Result.success(CaptureOutcome("sample-2")))
                 vm.onCapture()
                 advanceUntilIdle()
 
@@ -363,6 +365,47 @@ class CaptureViewModelTest {
                 assertEquals(CaptureEvent.FrameCaptured(CaptureOutcome("sample-2")), awaitItem())
                 expectNoEvents()
             }
+        }
+
+    /**
+     * With no busy lock on the shutter, a double tap lands before the analyzer has replaced the
+     * cached frame. Saving it twice would put one field in the queue as two samples.
+     */
+    @Test
+    fun `a double tap on one cached frame saves it once`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", bytes))
+                .thenReturn(Result.success(CaptureOutcome("sample-1")))
+            advanceUntilIdle()
+
+            vm.onCapture()
+            vm.onCapture()
+            advanceUntilIdle()
+
+            verify(captureFieldUseCase, times(1)).invoke("session-1", bytes)
+        }
+
+    /** A save that failed wrote nothing, so tapping again on the same frame must retry it. */
+    @Test
+    fun `a failed save lets the same frame be tried again`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", bytes)).thenReturn(
+                Result.failure(IllegalStateException("disk full")),
+                Result.success(CaptureOutcome("sample-1")),
+            )
+            advanceUntilIdle()
+
+            vm.onCapture()
+            advanceUntilIdle()
+            vm.onCapture()
+            advanceUntilIdle()
+
             verify(captureFieldUseCase, times(2)).invoke("session-1", bytes)
         }
 
