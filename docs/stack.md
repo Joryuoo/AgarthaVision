@@ -43,7 +43,9 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
 | On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `libs.versions.toml:34` |
 
-**Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
+**Room is at schema version 23** (`core/database/AgarthaDatabase.kt`), reached from 22 by the
+project's first hand-written migration (`core/database/Migrations.kt`). Older installs still fall
+back to a destructive rebuild.
 
 The app-wide Coil `ImageLoader` is configured in `AgarthaVisionApp.newImageLoader()`: disk
 cache fixed at 250MB (matching Coil's own maximum clamp of ~2% of disk space, capped between

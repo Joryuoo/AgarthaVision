@@ -49,7 +49,7 @@ app/
 |---|---|
 | `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` caches every analyzed frame as time-stamped JPEG bytes — no timer, no dispatch to inference (the shutter does that) |
 | `connectivity/` | `NetworkMonitor` polls inference `/health`; `ConnectivityObserver` reports device network state |
-| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v16) |
+| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v23); `Migrations.kt` — the hand-written migrations, from 22 → 23 on |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
 | `session/` | `SessionManager` + `SessionState` + `ActiveSessionIdStore`. The app-scoped record of which smear is open, and the pointer that survives process death |
 | `sync/` | `WorkManagerSyncScheduler` implementing the pure `domain/sync/SyncScheduler` port |
@@ -61,11 +61,12 @@ app/
 |---|---|
 | `model/` | Domain models and the enums that define the vocabulary: `Patient`, `Sex`, `QueueSample`, `SampleStatus`, `DetectionVerdict`, `EggSpecies`, `FrameSource`, `ReportType`, `ReportSyncStatus`, `SessionSyncStatus` |
 | `repository/` | Interfaces only. Implementations live in `data/` |
+| `inference/` | `InferenceEngine` and its result types, `InferenceState`, and the background queue: `InferenceQueueProcessor` (the one consumer) and `CloudCircuitBreaker` |
 | `usecase/auth` | Sign in, sign out, observe identity |
 | `usecase/patients` | Create, update, search, and observe patients |
 | `usecase/sessions` | Start session, observe active session, picker, search barangays |
-| `usecase/capture` | Infer a frame, persist a flagged frame, delete one |
-| `usecase/inference` | Connection exception type and network error mapping |
+| `usecase/capture` | Save a captured frame queued for inference, persist a flagged frame, delete one |
+| `usecase/inference` | Cancel a sample's inference; connection and pending-inference exception types; network error mapping |
 | `usecase/verify` | Submit verification, open target, answer model, derived Q4, Add Egg |
 | `usecase/sync` | The trigger-based catch-up pass in FK-safe order |
 | `usecase/records` | Records list, session samples, sample detail, image source resolution, report generation, PDF building |
@@ -85,6 +86,7 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `local/species/` | `SpeciesSuggestionSeeder` and repository for offline autocomplete index |
 | `local/` | `SampleImageStore` — on-device JPEG files under `users/{owner}/samples/` |
 | `inference/` | `RemoteInferenceEngine` (the cloud container) and `PredictionMapper` |
+| `inference/queue/` | `InProcessInferenceQueue` — runs the inference queue's one consumer on an app-scoped coroutine |
 | `inference/ondevice/` | `OnDeviceInferenceEngine` and its parts: `ModelStore` compiles a bundled model with LiteRT, `FramePreprocessor` letterboxes, `YoloOutputDecoder` decodes and runs NMS |
 | `remote/` | Retrofit interface to the inference container, and its DTOs |
 | `supabase/` | Remote data sources and per-entity sync use cases (`PatientRemoteDataSource`, `SyncPatientUseCase`, etc.) |

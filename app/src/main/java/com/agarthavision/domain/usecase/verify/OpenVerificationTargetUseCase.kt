@@ -9,6 +9,7 @@ import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.mapper.UNSTAGED_ADDED_STAGE_KEY
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.data.local.mapper.toDomain
 import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
@@ -65,6 +66,7 @@ class OpenVerificationTargetUseCase @Inject constructor(
             inferenceModelVersion = entity.inferenceModelVersion,
             imageWidth = entity.imageWidth,
             imageHeight = entity.imageHeight,
+            inferenceState = entity.effectiveInferenceState(),
         )
 
         val detections = storedById

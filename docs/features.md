@@ -61,12 +61,14 @@ as working.
   and frame cache; tapping the shutter triggers `CaptureFieldUseCase` once for that field
   (`core/camera/CameraManager.kt`, `core/camera/FrameSampler.kt`, `ui/capture/CaptureViewModel.kt`).
   Continuous/timed auto-sampling is removed.
-- **AI-vs-Manual by outcome.** A successful response from the inference container (even with zero
-  detections) records an **AI Capture** (`FrameSource.MODEL`). A transport failure
-  (`InferenceConnectionException`) records a **Manual Capture** (`FrameSource.MANUAL`), so network
-  disconnections never drop a capture.
-- **Synchronous cloud inference** against the self-hosted FastAPI container
-  (`data/remote/InferenceApi.kt`, `data/inference/RemoteInferenceEngine.kt`).
+- **Capture saves at once; inference runs in the background.** The tap saves the frame queued for
+  a model and returns. `InferenceQueueProcessor` gives it a model output later, one frame at a
+  time: the self-hosted FastAPI container first (`data/inference/RemoteInferenceEngine.kt`), the
+  bundled on-device model when the container cannot be reached
+  (`data/inference/ondevice/OnDeviceInferenceEngine.kt`), with a circuit breaker so a dead
+  server is not retried on every frame. Any model answer, zero detections included, makes an
+  **AI Capture** (`FrameSource.MODEL`); a cancel, or both engines failing five times, makes a
+  **Manual Capture** (`FrameSource.MANUAL`).
 - **Connection-loss detection.** Regular `/health` checks while capture is mounted flip to
   disconnected on two consecutive failures and surface `ui/capture/ConnectionLossBanner.kt`.
 

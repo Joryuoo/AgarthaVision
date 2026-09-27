@@ -68,13 +68,18 @@ returns `Result<T>` so the caller handles both branches. Never swallow an except
 files under `domain/usecase/` never mention `Result<` — for example
 `domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat
 C4 as the target shape for new code, not a description of the existing code. Newer capture code
-follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<FrameSource>`.
+follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<CaptureOutcome>`.
 
 ## C5 — `@Singleton` is a closed list
 
 `@Singleton` is for the database, OkHttp, Retrofit, Gson, the Supabase client, and the
 app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `CameraManager`,
-`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
+`NetworkMonitor`, `SampleImageStore`. The inference side adds the two engines
+(`RemoteInferenceEngine`, and `OnDeviceInferenceEngine` with its `ModelStore`,
+`FramePreprocessor` and `YoloOutputDecoder`), which hold a compiled model or a client and are
+expensive to build, and `InProcessInferenceQueue`, which must own the queue's one consumer.
+Repositories and use cases are unscoped, and so is `InferenceQueueProcessor`: the queue is its
+only holder.
 
 **Enforcement:** review only. The scoped set is visible at
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
@@ -93,7 +98,14 @@ the dev and prod projects. Do not change schema behaviour without updating both 
 **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in the Supabase
 dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:2`).
 Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
-(`core/database/AgarthaDatabase.kt:105`).
+(`core/database/AgarthaDatabase.kt`).
+
+**From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
+to a destructive rebuild, which was acceptable while the local database held nothing Supabase
+did not. Version 23 added the inference queue: frames that are captured, waiting on a model
+and not yet verified exist on the phone only. `MIGRATION_22_23` (`core/database/Migrations.kt`)
+is the first. Add the next one to `ALL_MIGRATIONS` and export its schema JSON beside it.
+Destructive fallback remains only for installs older than 22.
 
 **Enforcement:** review only. There is no migration runner and no schema-diff test.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).

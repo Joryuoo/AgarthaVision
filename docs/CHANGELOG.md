@@ -9,6 +9,44 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/background-inference-queue — capture saves at once, and the model answers later · 2026-09-27
+
+`14zcqntj6ny`.
+
+**Capture waits on nothing.** `CaptureFieldUseCase` saves the frame as `queued` and returns. It
+used to run inference first, so every tap waited on the network (up to 40 s against a dead
+server), and an unreachable server turned the frame into a Manual Capture that could never get a
+model output.
+
+**A queue in Room, with one consumer.** `samples.inference_state` holds `queued` →
+`in_inference` → `ready`, or `manual`. `InferenceQueueProcessor` takes one frame at a time,
+oldest first: the cloud first, the on-device model when the cloud fails for any reason, a `503`
+included. `CloudCircuitBreaker` skips the cloud for 60 s after three failures in a row, doubling
+per failed probe up to 10 minutes. It runs on one app-scoped coroutine (`InProcessInferenceQueue`),
+started at app launch and woken by each capture. A frame interrupted by a killed process is put
+back in the queue on the next pass.
+
+**When both engines fail**, the frame waits 30 s, then twice as long each time up to 5 minutes,
+and becomes manual after 5 attempts (`samples.inference_attempts`). Other frames keep moving.
+
+**Cancel is atomic and final.** Every transition is one conditional UPDATE. A result is written
+only if the row is still `in_inference`, so a cancel or delete that lands first discards it.
+`CancelInferenceUseCase` records the sample manual (`inference_model_version = 'manual'`). The
+Verification Screen's UI for it is a separate ticket.
+
+**A pending sample is never a clean field.** It shows as `ModelOutput.InProgress`,
+`isCleanField` is false, and `SubmitVerificationUseCase` refuses it. Counts, reports, the dashboard
+and sync already skip it because it is still `flagged`.
+
+**Room 23, the first hand-written migration.** `MIGRATION_22_23` adds the two columns and marks
+existing manual rows `manual`. From here the phone holds frames that exist nowhere else, so every
+bump ships a `Migration` (C6). Destructive fallback stays only for installs older than 22.
+
+**Connect timeout 10 s → 5 s.** Nobody waits on the call now, and the phone answers when the
+cloud cannot.
+
+---
+
 ## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27
 
 `14zcqntj6nw` with `14zcqntj6nx`.

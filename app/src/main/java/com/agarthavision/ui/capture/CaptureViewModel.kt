@@ -129,12 +129,9 @@ class CaptureViewModel @Inject constructor(
     }
 
     /**
-     * Snapshots the cached frame and runs inference once. A server response records a
-     * [com.agarthavision.domain.model.FrameSource.MODEL] frame (predictions may be
-     * empty — a clean field is a normal negative result and is still recorded); an
-     * [com.agarthavision.domain.usecase.inference.InferenceConnectionException]
-     * records a [com.agarthavision.domain.model.FrameSource.MANUAL] frame instead.
-     * See [CaptureFieldUseCase].
+     * Snapshots the cached frame and saves it, queued for a model output that the background
+     * inference queue produces later: cloud first, the on-device model as the fallback. Nothing
+     * here waits on a model. See [CaptureFieldUseCase].
      *
      * The cached frame must be **fresh**, not merely present. `FrameSampler` is process-
      * scoped and its cache survives a session change, a screen exit and a camera rebind, so

@@ -1,5 +1,6 @@
 package com.agarthavision.domain.model
 
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.inference.Prediction
 import java.time.Instant
 
@@ -13,6 +14,15 @@ data class FlaggedFrame(
     val inferenceModelVersion: String? = null,
     val imageWidth: Int? = null,
     val imageHeight: Int? = null,
+    /**
+     * Whether [predictions] are a model's answer yet. Only [InferenceState.READY] means they
+     * are: a pending frame also has none, and must not read as a clean field.
+     *
+     * Defaults from [source] so a frame built without it is ready, or manual when manual, which
+     * is what every frame was before inference moved to the background queue.
+     */
+    val inferenceState: InferenceState =
+        if (source == FrameSource.MANUAL) InferenceState.MANUAL else InferenceState.READY,
 ) {
     /**
      * Compares every property **except [jpegBytes]** — do not replace this with the
@@ -44,7 +54,8 @@ data class FlaggedFrame(
             source == other.source &&
             inferenceModelVersion == other.inferenceModelVersion &&
             imageWidth == other.imageWidth &&
-            imageHeight == other.imageHeight
+            imageHeight == other.imageHeight &&
+            inferenceState == other.inferenceState
     }
 
     override fun hashCode(): Int {
@@ -56,6 +67,7 @@ data class FlaggedFrame(
         result = 31 * result + (inferenceModelVersion?.hashCode() ?: 0)
         result = 31 * result + (imageWidth ?: 0)
         result = 31 * result + (imageHeight ?: 0)
+        result = 31 * result + inferenceState.hashCode()
         return result
     }
 }

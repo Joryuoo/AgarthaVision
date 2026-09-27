@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.inference.ImageBox
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
@@ -148,14 +149,15 @@ data class VerificationUiState(
      * model's boxes *and* adds an egg it missed nets out to the same count while both things
      * are true.
      *
-     * Null on a frame with no model output. There is no model claim there to have missed
-     * anything, so the question does not apply — which is also why it is never rendered for one.
-     * `samples.needs_reannotation` is nullable for exactly this.
+     * Null on a frame with no model output, or none yet. There is no model claim there to have
+     * missed anything, so the question does not apply — which is also why it is never rendered
+     * for one. `samples.needs_reannotation` is nullable for exactly this.
      */
     val missedEgg: Boolean?
         get() = when {
             frame == null -> null
             frame.source == FrameSource.MANUAL -> null
+            frame.inferenceState.isPending -> null
             else -> findings.any {
                 it.prediction == null &&
                     findings.unboxedCountOf(it.answers.speciesLabel, it.answers.stage, it.answers.otherStageText) > 0
@@ -165,9 +167,16 @@ data class VerificationUiState(
     val isManual: Boolean
         get() = frame?.source == FrameSource.MANUAL
 
-    /** An AI capture the model returned no detections for: a real negative result. */
+    /**
+     * An AI capture the model returned no detections for: a real negative result.
+     *
+     * Only once the model has answered. A frame still in the inference queue has no detections
+     * either, and calling that a clean field would record "no eggs" on a frame nothing has read.
+     */
     val isCleanField: Boolean
-        get() = frame?.source == FrameSource.MODEL && frame.predictions.isEmpty()
+        get() = frame?.source == FrameSource.MODEL &&
+            frame.inferenceState == InferenceState.READY &&
+            frame.predictions.isEmpty()
 
     /**
      * Submit unlocks when every row the medtech is asserting is finished.

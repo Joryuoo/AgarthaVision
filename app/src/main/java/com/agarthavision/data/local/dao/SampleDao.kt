@@ -316,6 +316,140 @@ interface SampleDao {
         """,
     )
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
+
+    // ── The background inference queue ──────────────────────────────────────────────────
+    //
+    // Every transition below is a single UPDATE that names the state it expects to find, and
+    // returns how many rows it changed. That is the whole concurrency model: the queue, a cancel
+    // and a delete can race on one row, and whichever writes second finds the row already moved
+    // and changes nothing. `status = 'flagged'` rides along on each one because a verified sample
+    // is past the point a model output may be written onto it.
+
+    /**
+     * Puts interrupted frames back in the queue. Only the queue's own consumer calls this, at the
+     * start of a pass, when nothing of its own is in flight.
+     */
+    @Query("UPDATE samples SET inference_state = 'queued' WHERE inference_state = 'in_inference'")
+    suspend fun requeueInterruptedInference(): Int
+
+    /** The inference queue, oldest capture first. */
+    @Query(
+        """
+        SELECT sample_id FROM samples
+        WHERE inference_state = 'queued'
+          AND is_manual = 0
+          AND status = 'flagged'
+          AND deleted_at is null
+        ORDER BY timestamp ASC, sample_id ASC
+        """,
+    )
+    suspend fun getQueuedInferenceSampleIds(): List<String>
+
+    /** Queued → in inference. Returns 0 when the frame is no longer queued. */
+    @Query(
+        """
+        UPDATE samples
+        SET inference_state = 'in_inference'
+        WHERE sample_id = :sampleId
+          AND inference_state = 'queued'
+          AND is_manual = 0
+          AND status = 'flagged'
+          AND deleted_at IS NULL
+        """,
+    )
+    suspend fun claimForInference(sampleId: String): Int
+
+    /** Where the frame being inferred is on disk. */
+    @Query("SELECT image_path FROM samples WHERE sample_id = :sampleId AND deleted_at is null LIMIT 1")
+    suspend fun getImagePath(sampleId: String): String?
+
+    /**
+     * In inference → ready, carrying the model output. Returns 0 when the frame was cancelled or
+     * deleted while it ran, in which case the output is not written anywhere.
+     */
+    @Suppress("LongParameterList")
+    @Query(
+        """
+        UPDATE samples
+        SET inference_state = 'ready',
+            predictions_json = :predictionsJson,
+            inference_model_version = :modelVersion,
+            image_width = :imageWidth,
+            image_height = :imageHeight
+        WHERE sample_id = :sampleId
+          AND inference_state = 'in_inference'
+          AND is_manual = 0
+          AND status = 'flagged'
+        """,
+    )
+    suspend fun completeInference(
+        sampleId: String,
+        predictionsJson: String?,
+        modelVersion: String,
+        imageWidth: Int?,
+        imageHeight: Int?,
+    ): Int
+
+    /**
+     * Counts one failure of both engines on an in-inference frame. Below [maxAttempts] the frame
+     * goes back to the queue; at [maxAttempts] it becomes manual, exactly as a cancel would leave
+     * it. One statement, so the count and the state cannot disagree. SQLite evaluates every SET
+     * expression against the row as it was before the update.
+     */
+    @Query(
+        """
+        UPDATE samples
+        SET inference_attempts = inference_attempts + 1,
+            inference_state = CASE
+                WHEN inference_attempts + 1 >= :maxAttempts THEN 'manual' ELSE 'queued' END,
+            is_manual = CASE
+                WHEN inference_attempts + 1 >= :maxAttempts THEN 1 ELSE is_manual END,
+            inference_model_version = CASE
+                WHEN inference_attempts + 1 >= :maxAttempts THEN 'manual'
+                ELSE inference_model_version END
+        WHERE sample_id = :sampleId
+          AND inference_state = 'in_inference'
+          AND is_manual = 0
+          AND status = 'flagged'
+        """,
+    )
+    suspend fun recordInferenceFailure(sampleId: String, maxAttempts: Int): Int
+
+    /**
+     * A sample's inference state with `is_manual` taken into account, the same rule as
+     * `SampleEntity.effectiveInferenceState()`. Null when the sample is gone.
+     */
+    @Query(
+        """
+        SELECT CASE WHEN is_manual = 1 THEN 'manual' ELSE inference_state END
+        FROM samples
+        WHERE sample_id = :sampleId AND deleted_at is null
+        LIMIT 1
+        """,
+    )
+    suspend fun getEffectiveInferenceState(sampleId: String): String?
+
+    /**
+     * Queued or in inference → manual, for good. Returns 0 when there was nothing pending to
+     * cancel, most often because the result landed first. A result arriving after this finds
+     * the row manual and is refused by [completeInference].
+     *
+     * `inference_model_version = 'manual'` is what keeps the retraining corpus honest: a frame a
+     * human annotated alone never carries a model's name.
+     */
+    @Query(
+        """
+        UPDATE samples
+        SET inference_state = 'manual',
+            is_manual = 1,
+            inference_model_version = 'manual'
+        WHERE sample_id = :sampleId
+          AND inference_state IN ('queued', 'in_inference')
+          AND is_manual = 0
+          AND status = 'flagged'
+        """,
+    )
+    suspend fun cancelInference(sampleId: String): Int
 }
 
 // QueueSampleRow is gone with the union query above. It existed to carry a correlated
