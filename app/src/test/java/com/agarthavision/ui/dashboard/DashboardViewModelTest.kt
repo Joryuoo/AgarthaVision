@@ -151,7 +151,7 @@ class DashboardViewModelTest {
     }
     private val observeRecentActivityUseCase: ObserveRecentActivityUseCase =
         mock<ObserveRecentActivityUseCase>().also {
-            whenever(it.invoke(any(), any())).thenReturn(flowOf(emptyList()))
+            whenever(it.invoke(any(), any(), anyOrNull())).thenReturn(flowOf(emptyList()))
         }
 
     private fun samplePatient(id: String) = Patient(
@@ -596,7 +596,7 @@ class DashboardViewModelTest {
                     occurredAt = 5_000L,
                 ),
             )
-            whenever(observeRecentActivityUseCase.invoke(any(), any())).thenReturn(flowOf(activity))
+            whenever(observeRecentActivityUseCase.invoke(any(), any(), anyOrNull())).thenReturn(flowOf(activity))
 
             val vm = viewModel()
             vm.uiState.test {

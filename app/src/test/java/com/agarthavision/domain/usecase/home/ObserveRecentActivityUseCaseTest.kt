@@ -131,4 +131,22 @@ class ObserveRecentActivityUseCaseTest {
 
         assertEquals(emptyList<ActivityItem>(), result)
     }
+
+    @Test
+    fun `filters out items older than sinceMillis when sinceMillis is provided`() = runTest {
+        stubSources(
+            captured = listOf(
+                ActivityItem.FramesCaptured("s-1", "Smear 1", 1, occurredAt = 10_000L),
+                ActivityItem.FramesCaptured("s-1", "Smear 1", 1, occurredAt = 4_000L),
+            ),
+            started = listOf(
+                ActivityItem.SessionStarted("s-2", "Smear 2", occurredAt = 2_000L),
+            ),
+        )
+
+        val result = useCase("user-a", limit = 10, sinceMillis = 5_000L).first()
+
+        assertEquals(1, result.size)
+        assertEquals(10_000L, result.first().occurredAt)
+    }
 }

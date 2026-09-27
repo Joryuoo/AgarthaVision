@@ -15,6 +15,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -48,7 +49,7 @@ class ActivityViewModelTest {
     @Test
     fun `loads items from the use case`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
         val items = listOf(activityItem(1_000L), activityItem(2_000L))
-        whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any())).thenReturn(flowOf(items))
+        whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any(), anyOrNull())).thenReturn(flowOf(items))
 
         val vm = viewModel()
         vm.uiState.test {
@@ -63,7 +64,7 @@ class ActivityViewModelTest {
 
     @Test
     fun `onLoadMore increases the limit and re-queries`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
-        whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any())).thenReturn(
+        whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any(), anyOrNull())).thenReturn(
             flowOf((1..50).map { activityItem(it.toLong()) }),
         )
 
@@ -80,7 +81,7 @@ class ActivityViewModelTest {
         vm.onLoadMore()
         advanceUntilIdle()
 
-        verify(observeRecentActivityUseCase).invoke("user-1", 70)
+        verify(observeRecentActivityUseCase).invoke(eq("user-1"), eq(70), anyOrNull())
     }
 
     @Test
@@ -88,7 +89,7 @@ class ActivityViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Limit-dependent stub: unlike a single flowOf(...) for any limit, this proves the
             // observed item count truly grows when the use case is re-queried with a bigger limit.
-            whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any())).thenAnswer { invocation ->
+            whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any(), anyOrNull())).thenAnswer { invocation ->
                 val limit = invocation.getArgument<Int>(1)
                 flowOf((1..limit).map { activityItem(it.toLong()) })
             }
@@ -116,7 +117,7 @@ class ActivityViewModelTest {
     fun `canLoadMore is false once the use case returns fewer items than the current limit`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // Only 3 items total ever exist, well under the initial limit of 50.
-            whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any())).thenReturn(
+            whenever(observeRecentActivityUseCase.invoke(eq("user-1"), any(), anyOrNull())).thenReturn(
                 flowOf(listOf(activityItem(1L), activityItem(2L), activityItem(3L))),
             )
 

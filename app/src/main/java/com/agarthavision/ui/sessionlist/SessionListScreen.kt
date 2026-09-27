@@ -23,7 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -48,10 +48,10 @@ import com.agarthavision.R
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.domain.model.SessionSummary
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.dashboard.relativeTimeText
 import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.sessions.sessionQueueBadge
@@ -59,19 +59,64 @@ import com.agarthavision.ui.sessions.SessionQueueBadge
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
-fun sessionListTitle(filter: SessionListFilter, period: HomePeriod?): String {
-    val periodSuffix = when (period) {
-        HomePeriod.TODAY -> " · today"
-        HomePeriod.LAST_7_DAYS -> " · last 7 days"
-        HomePeriod.LAST_30_DAYS -> " · last 30 days"
-        null -> ""
+fun sessionListTitle(filter: SessionListFilter): String = when (filter) {
+    SessionListFilter.TO_REVIEW -> "Frames to review"
+    SessionListFilter.NO_FRAMES -> "Sessions with no frames"
+    SessionListFilter.EXAMINED -> "Examined smears"
+    SessionListFilter.POSITIVE -> "Positive smears"
+    SessionListFilter.ALL -> "Recent sessions"
+}
+
+fun sessionListSubtitle(filter: SessionListFilter, period: HomePeriod?): String {
+    val periodText = when (period) {
+        HomePeriod.TODAY -> "today"
+        HomePeriod.LAST_7_DAYS -> "the past 7 days"
+        HomePeriod.LAST_30_DAYS -> "the past 30 days"
+        null -> null
     }
-    return when (filter) {
-        SessionListFilter.TO_REVIEW -> "Frames to review"
-        SessionListFilter.NO_FRAMES -> "Sessions with no frames"
-        SessionListFilter.EXAMINED -> "Examined smears$periodSuffix"
-        SessionListFilter.POSITIVE -> "Positive smears$periodSuffix"
-        SessionListFilter.ALL -> "Sessions$periodSuffix"
+    return when {
+        periodText != null -> "Testing sessions from $periodText"
+        filter == SessionListFilter.TO_REVIEW -> "Unverified frames awaiting review"
+        filter == SessionListFilter.NO_FRAMES -> "Testing sessions without captured frames"
+        else -> "Testing sessions from the past 7 days"
+    }
+}
+
+@Composable
+private fun SessionListAppBar(
+    title: String,
+    subtitle: String?,
+    onBack: () -> Unit,
+) {
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .statusBarsPadding()
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+    ) {
+        BackArrow(onBack = onBack)
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -111,38 +156,17 @@ fun SessionListScreen(
     }
 
     val colors = AgarthaTheme.colors
-    val title = sessionListTitle(state.filter, state.period)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding(),
+            .background(colors.background),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = AgarthaIcons.ArrowBackIosNew,
-                    contentDescription = "Back",
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(Spacing.xs))
-            Text(
-                text = title,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        SessionListAppBar(
+            title = sessionListTitle(state.filter),
+            subtitle = sessionListSubtitle(state.filter, state.period),
+            onBack = onBack,
+        )
 
         if (state.isLoading && state.sessions.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

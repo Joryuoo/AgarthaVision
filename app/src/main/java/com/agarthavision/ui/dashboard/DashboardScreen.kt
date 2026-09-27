@@ -34,6 +34,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.ActivityItem
+import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
@@ -275,7 +276,9 @@ private fun LazyListScope.recentSessionsSection(
                     color = AgarthaTheme.colors.accent,
                     modifier = Modifier
                         .clickable {
-                            onNavigate(Screen.SessionList.createRoute(SessionListFilter.ALL))
+                            onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.ALL, HomePeriod.LAST_7_DAYS)
+                            )
                         }
                         .padding(vertical = Spacing.xs),
                 )

@@ -49,6 +49,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.Clock
+import java.time.Duration
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.domain.model.SessionSummary
 import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
@@ -304,9 +305,10 @@ class DashboardViewModel @Inject constructor(
         if (userId == null) {
             flowOf(emptyList<SessionSummary>() to false)
         } else {
+            val window = HomePeriod.LAST_7_DAYS.windows(clock.instant(), CLINICAL_ZONE).current
             observeSessionListUseCase(
                 filter = SessionListFilter.ALL,
-                window = null,
+                window = window,
                 limit = RECENT_SESSIONS_QUERY_LIMIT,
             ).map { result ->
                 val filtered = result.items
@@ -322,7 +324,8 @@ class DashboardViewModel @Inject constructor(
         if (userId == null) {
             flowOf(emptyList<ActivityItem>())
         } else {
-            observeRecentActivityUseCase(userId, RECENT_ACTIVITY_QUERY_LIMIT)
+            val sinceMillis = clock.instant().minus(Duration.ofDays(RECENT_ACTIVITY_WINDOW_DAYS)).toEpochMilli()
+            observeRecentActivityUseCase(userId, RECENT_ACTIVITY_QUERY_LIMIT, sinceMillis)
         }
     }
 
@@ -582,5 +585,6 @@ class DashboardViewModel @Inject constructor(
         const val RECENT_SESSIONS_QUERY_LIMIT = 6
         const val MAX_RECENT_SESSIONS = 5
         const val RECENT_ACTIVITY_QUERY_LIMIT = 5
+        const val RECENT_ACTIVITY_WINDOW_DAYS = 7L
     }
 }

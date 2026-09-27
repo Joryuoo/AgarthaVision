@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import java.time.Clock
+import java.time.Duration
 import javax.inject.Inject
 
 data class ActivityUiState(
@@ -29,6 +31,7 @@ data class ActivityUiState(
 class ActivityViewModel @Inject constructor(
     observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val observeRecentActivityUseCase: ObserveRecentActivityUseCase,
+    private val clock: Clock = Clock.systemDefaultZone(),
 ) : ViewModel() {
 
     private val userIdFlow = observeLocalIdentityUseCase()
@@ -46,7 +49,8 @@ class ActivityViewModel @Inject constructor(
         if (userId == null) {
             flowOf(emptyList<ActivityItem>())
         } else {
-            observeRecentActivityUseCase(userId, limit)
+            val sinceMillis = clock.instant().minus(Duration.ofDays(DAYS_WINDOW)).toEpochMilli()
+            observeRecentActivityUseCase(userId, limit, sinceMillis)
         }
     }.combine(limitFlow) { items, limit ->
         ActivityUiState(
@@ -67,6 +71,7 @@ class ActivityViewModel @Inject constructor(
     }
 
     private companion object {
+        const val DAYS_WINDOW = 7L
         const val INITIAL_LIMIT = 50
         const val PAGE_INCREMENT = 20
     }

@@ -19,8 +19,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,14 +36,45 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.dashboard.ActivityRow
 import com.agarthavision.ui.dashboard.onActivityItemClick
-import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
+
+@Composable
+private fun ActivityAppBar(onBack: () -> Unit) {
+    val colors = AgarthaTheme.colors
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colors.background)
+            .statusBarsPadding()
+            .padding(start = Spacing.xs, end = Spacing.sm, top = 14.dp, bottom = 12.dp),
+    ) {
+        BackArrow(onBack = onBack)
+        Column(Modifier.weight(1f).padding(start = Spacing.sm)) {
+            Text(
+                text = stringResource(R.string.activity_title),
+                style = MaterialTheme.typography.headlineSmall,
+                color = colors.accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "Recent activity for the past 7 days",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(top = 2.dp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
 
 @Composable
 fun ActivityScreen(
@@ -74,33 +104,9 @@ fun ActivityScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(colors.background)
-            .statusBarsPadding(),
+            .background(colors.background),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = AgarthaIcons.ArrowBackIosNew,
-                    contentDescription = "Back",
-                    tint = colors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            Spacer(Modifier.width(Spacing.xs))
-            Text(
-                text = stringResource(R.string.activity_title),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
+        ActivityAppBar(onBack = onBack)
 
         if (state.isLoading && state.items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

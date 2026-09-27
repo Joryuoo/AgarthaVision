@@ -15,7 +15,11 @@ class ObserveRecentActivityUseCase @Inject constructor(
     private val patientRepository: PatientRepository,
     private val lastSyncStore: LastSyncStore,
 ) {
-    operator fun invoke(userId: String, limit: Int): Flow<List<ActivityItem>> = combine(
+    operator fun invoke(
+        userId: String,
+        limit: Int,
+        sinceMillis: Long? = null,
+    ): Flow<List<ActivityItem>> = combine(
         sampleRepository.observeCaptureActivity(userId, limit),
         sampleRepository.observeVerifyActivity(userId, limit),
         sessionRepository.observeStartedActivity(userId, limit),
@@ -28,6 +32,11 @@ class ObserveRecentActivityUseCase @Inject constructor(
             emptyList()
         }
         val all = captured + verified + started + added + syncItems
-        all.sortedByDescending { it.occurredAt }.take(limit)
+        val filtered = if (sinceMillis != null) {
+            all.filter { it.occurredAt >= sinceMillis }
+        } else {
+            all
+        }
+        filtered.sortedByDescending { it.occurredAt }.take(limit)
     }
 }

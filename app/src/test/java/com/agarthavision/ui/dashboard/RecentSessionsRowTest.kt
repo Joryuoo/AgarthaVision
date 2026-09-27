@@ -149,7 +149,7 @@ class RecentSessionsRowTest {
         }
         val observeRecentActivityUseCase: ObserveRecentActivityUseCase =
             mock<ObserveRecentActivityUseCase>().also {
-                whenever(it.invoke(any(), any())).thenReturn(flowOf(emptyList()))
+                whenever(it.invoke(any(), any(), anyOrNull())).thenReturn(flowOf(emptyList()))
             }
 
         return DashboardViewModel(
