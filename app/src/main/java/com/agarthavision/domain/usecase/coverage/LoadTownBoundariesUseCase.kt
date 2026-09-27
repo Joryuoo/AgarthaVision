@@ -9,6 +9,8 @@ import javax.inject.Inject
 class LoadTownBoundariesUseCase @Inject constructor(
     private val boundaryRepository: BoundaryRepository,
 ) {
+    fun cachedOrNull(provinceKey: String): BoundarySet? = boundaryRepository.cachedTownsOfOrNull(provinceKey)
+
     suspend operator fun invoke(provinceKey: String): Result<BoundarySet?> =
         runCatching {
             boundaryRepository.townsOf(provinceKey)

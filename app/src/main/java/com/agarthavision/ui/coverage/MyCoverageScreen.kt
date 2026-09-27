@@ -39,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -242,6 +243,12 @@ private fun CoverageMap(
         onCameraTargetConsumed()
     }
 
+    val coverageByCode = remember(state.coverage) {
+        state.coverage?.provinces?.associateBy { it.code } ?: emptyMap()
+    }
+    val pathCache = remember { mutableMapOf<String, Path>() }
+    var lastTransform by remember { mutableStateOf<ViewTransform?>(null) }
+
     Canvas(
         modifier = modifier
             .clip(RoundedCornerShape(8.dp))
@@ -273,13 +280,19 @@ private fun CoverageMap(
                 }
             },
     ) {
+        val currentTransform = camera.transform
+        if (lastTransform != currentTransform) {
+            pathCache.clear()
+            lastTransform = currentTransform
+        }
         drawProvinces(
             provinces = provinces,
-            coverageByCode = state.coverage?.provinces?.associateBy { it.code } ?: emptyMap(),
-            transform = camera.transform,
+            coverageByCode = coverageByCode,
+            transform = currentTransform,
             colors = colors,
             highlightCode = state.selected?.code,
             highlightColor = colors.gold,
+            pathCache = pathCache,
         )
     }
 }

@@ -50,14 +50,21 @@ class BoundaryRepositoryImpl @Inject constructor(
         return cachedProvinces!!
     }
 
+    override fun cachedProvincesOrNull(): BoundarySet? = cachedProvinces
+
+    override fun cachedDirectoryOrNull(): AreaDirectory? = cachedDirectory
+
     override suspend fun directory(): AreaDirectory {
         loadProvincesIfNeeded()
         return cachedDirectory!!
     }
 
+    override fun cachedTownsOfOrNull(provinceKey: String): BoundarySet? =
+        synchronized(townCache) { townCache[provinceKey] }
+
     override suspend fun townsOf(provinceKey: String): BoundarySet? =
         townsMutex.withLock {
-            val cached = townCache[provinceKey]
+            val cached = synchronized(townCache) { townCache[provinceKey] }
             if (cached != null) return@withLock cached
 
             val index = cachedTownsIndex ?: loadTownsIndex().also { cachedTownsIndex = it }

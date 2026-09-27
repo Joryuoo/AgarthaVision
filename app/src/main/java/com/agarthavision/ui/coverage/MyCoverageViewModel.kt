@@ -110,14 +110,23 @@ class MyCoverageViewModel @Inject constructor(
         .map { it?.userId }
         .distinctUntilChanged()
 
-    private val provincesState = MutableStateFlow<BoundarySet?>(null)
+    private val initialProvinces = loadProvinceBoundariesUseCase.cachedOrNull()
+    private val provincesState = MutableStateFlow<BoundarySet?>(initialProvinces)
     private val coverageResultState = MutableStateFlow<Result<MyCoverage>?>(null)
 
-    private val _uiState = MutableStateFlow(MyCoverageUiState(period = initialPeriod))
+    private val _uiState = MutableStateFlow(
+        MyCoverageUiState(
+            period = initialPeriod,
+            provinces = initialProvinces,
+        ),
+    )
     val uiState: StateFlow<MyCoverageUiState> = _uiState.asStateFlow()
 
-    private var directory: AreaDirectory? = null
+    private var directory: AreaDirectory? = loadAreaDirectoryUseCase.cachedOrNull()
     private var currentUserId: String? = null
+
+    private val coverageCache = mutableMapOf<HomePeriod, MyCoverage>()
+    private val cachedProvinceDetails = mutableMapOf<String, SelectedProvince>()
 
     init {
         viewModelScope.launch {
@@ -155,6 +164,7 @@ class MyCoverageViewModel @Inject constructor(
                         coverageResult == null -> current.copy(period = period, provinces = provinces)
                         coverageResult.isSuccess -> {
                             val coverage = coverageResult.getOrThrow()
+                            coverageCache[period] = coverage
                             current.copy(
                                 period = period,
                                 isLoading = false,
@@ -179,6 +189,17 @@ class MyCoverageViewModel @Inject constructor(
     fun onPeriodChange(period: HomePeriod) {
         // Local to this screen only — does not write back to Home's period (D13).
         periodFlow.value = period
+        cachedProvinceDetails.clear()
+        coverageCache[period]?.let { cachedCoverage ->
+            _uiState.update { current ->
+                current.copy(
+                    period = period,
+                    coverage = cachedCoverage,
+                    initialFit = current.provinces?.let { resolveCoverageFitBounds(cachedCoverage, it) }
+                        ?: current.initialFit,
+                )
+            }
+        }
     }
 
     fun onIslandFilter(group: IslandGroup?) {
@@ -208,24 +229,37 @@ class MyCoverageViewModel @Inject constructor(
         val provinces = _uiState.value.provinces ?: return
         val hitArea = hitTest(provinces, mapX, mapY) ?: return
 
-        val coverage = _uiState.value.coverage
-        val provinceCoverage = coverage?.provinces?.firstOrNull { it.code == hitArea.code }
-        val townCodes = directory?.towns
-            ?.filterValues { it.provinceKey == hitArea.code }
-            ?.keys
-            ?: emptySet()
+        val cached = cachedProvinceDetails[hitArea.code]
+        if (cached != null) {
+            _uiState.update { it.copy(selected = cached) }
+        } else {
+            val coverage = _uiState.value.coverage
+            val provinceCoverage = coverage?.provinces?.firstOrNull { it.code == hitArea.code }
+            val townCodes = directory?.towns
+                ?.filterValues { it.provinceKey == hitArea.code }
+                ?.keys
+                ?: emptySet()
 
-        _uiState.update {
-            it.copy(
-                selected = SelectedProvince(
-                    code = hitArea.code,
-                    name = hitArea.name,
-                    coverage = provinceCoverage,
-                ),
-            )
+            val cachedTowns = loadTownBoundariesUseCase.cachedOrNull(hitArea.code)
+            val initialGeometry = if (cachedTowns != null) {
+                TownGeometry.Available(cachedTowns)
+            } else {
+                TownGeometry.Loading
+            }
+
+            _uiState.update {
+                it.copy(
+                    selected = SelectedProvince(
+                        code = hitArea.code,
+                        name = hitArea.name,
+                        coverage = provinceCoverage,
+                        towns = initialGeometry,
+                    ),
+                )
+            }
+
+            loadSelectedProvinceDetails(hitArea.code, provinceCoverage, townCodes)
         }
-
-        loadSelectedProvinceDetails(hitArea.code, provinceCoverage, townCodes)
     }
 
     private fun loadSelectedProvinceDetails(
@@ -278,7 +312,9 @@ class MyCoverageViewModel @Inject constructor(
         _uiState.update { state ->
             val selected = state.selected
             if (selected != null && selected.code == provinceCode) {
-                state.copy(selected = transform(selected))
+                val updated = transform(selected)
+                cachedProvinceDetails[provinceCode] = updated
+                state.copy(selected = updated)
             } else {
                 state
             }

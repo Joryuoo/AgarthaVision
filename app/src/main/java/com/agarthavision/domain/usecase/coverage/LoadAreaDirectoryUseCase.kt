@@ -9,6 +9,8 @@ import javax.inject.Inject
 class LoadAreaDirectoryUseCase @Inject constructor(
     private val boundaryRepository: BoundaryRepository,
 ) {
+    fun cachedOrNull(): AreaDirectory? = boundaryRepository.cachedDirectoryOrNull()
+
     suspend operator fun invoke(): Result<AreaDirectory> =
         runCatching {
             boundaryRepository.directory()

@@ -31,6 +31,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -366,5 +367,37 @@ class MyCoverageViewModelTest {
         vm.onDismissSheet()
         assertNull(vm.uiState.value.selected)
         assertEquals(false, vm.uiState.value.showAllTowns)
+    }
+
+    @Test
+    fun `tapping an already loaded province reuses cached province details`() = runTest {
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
+        val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadTownBoundariesUseCase.invoke(eq("CEB"))).thenReturn(Result.success(null))
+        }
+        val vm = buildViewModel(
+            observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
+                whenever(it.invoke(any(), any(), any())).thenReturn(
+                    flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+                )
+            },
+            loadTownBoundariesUseCase = loadTownBoundariesUseCase,
+        )
+        advanceUntilIdle()
+
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu
+        advanceUntilIdle()
+
+        val firstSelected = vm.uiState.value.selected
+        assertNotNull(firstSelected)
+
+        vm.onDismissSheet()
+        assertNull(vm.uiState.value.selected)
+
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu again
+        advanceUntilIdle()
+
+        assertSame(firstSelected, vm.uiState.value.selected)
     }
 }

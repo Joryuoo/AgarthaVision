@@ -23,20 +23,25 @@ import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.domain.geo.AreaShape
 import com.agarthavision.domain.geo.PositiveRateBin
 import com.agarthavision.domain.geo.fitBounds
 import com.agarthavision.domain.model.AreaCount
 import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.domain.model.SpeciesFinding
-import com.agarthavision.domain.geo.AreaShape
 import com.agarthavision.ui.dashboard.coverage.pathFor
 import com.agarthavision.ui.theme.AgarthaTheme
-import androidx.compose.ui.graphics.lerp
 
 private const val TOP_TOWNS_SHOWN = 5
 private const val PERCENT_FACTOR = 100
@@ -60,6 +65,15 @@ fun ProvinceSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = colors.surface,
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(colors.borderStrong, RoundedCornerShape(2.dp)),
+            )
+        },
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
         modifier = modifier,
     ) {
         ProvinceSheetContent(
@@ -130,20 +144,28 @@ private fun ProvinceMiniMap(selected: SelectedProvince) {
             .background(colors.surfaceMuted),
     ) {
         if (towns != null) {
+            val townPaths = remember(towns) { mutableMapOf<String, Path>() }
+            var cachedSize by remember { mutableStateOf(Pair(0f, 0f)) }
+            val coverageByCode = remember(towns, selected.townCounts) {
+                towns.areas.associate { area ->
+                    val stat = selected.townCounts[area.code]?.stat
+                    area.code to stat
+                }
+            }
             Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+                if (size.width != cachedSize.first || size.height != cachedSize.second) {
+                    townPaths.clear()
+                    cachedSize = size.width to size.height
+                }
                 val transform = fitBounds(
                     bounds = towns.bounds,
                     widthPx = size.width,
                     heightPx = size.height,
                     paddingPx = PROVINCE_MAP_PADDING_PX,
                 )
-                val coverageByCode = towns.areas.associate { area ->
-                    val stat = selected.townCounts[area.code]?.stat
-                    area.code to stat
-                }
                 towns.areas.forEach { area ->
                     val stat = coverageByCode[area.code]
-                    val path = pathFor(area, transform)
+                    val path = townPaths.getOrPut(area.code) { pathFor(area, transform) }
                     val fill = when (stat) {
                         is AreaStat.Reported -> lerp(
                             colors.accentTint,

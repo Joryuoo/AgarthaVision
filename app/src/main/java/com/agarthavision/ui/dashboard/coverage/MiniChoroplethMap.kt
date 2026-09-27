@@ -68,25 +68,26 @@ internal fun DrawScope.drawProvinces(
     colors: AgarthaColors,
     highlightCode: String? = null,
     highlightColor: Color? = null,
+    pathCache: MutableMap<String, Path>? = null,
 ) {
     provinces.areas.forEach { area ->
         val stat = coverageByCode[area.code]?.count?.stat
-        drawArea(area, transform, stat, colors)
+        val path = pathCache?.getOrPut(area.code) { pathFor(area, transform) } ?: pathFor(area, transform)
+        drawArea(path, stat, colors)
     }
     if (highlightCode != null && highlightColor != null) {
         provinces.byCode[highlightCode]?.let { area ->
-            drawPath(pathFor(area, transform), color = highlightColor, style = Stroke(HIGHLIGHT_STROKE_WIDTH_PX))
+            val path = pathCache?.getOrPut(area.code) { pathFor(area, transform) } ?: pathFor(area, transform)
+            drawPath(path, color = highlightColor, style = Stroke(HIGHLIGHT_STROKE_WIDTH_PX))
         }
     }
 }
 
 private fun DrawScope.drawArea(
-    area: AreaShape,
-    transform: ViewTransform,
+    path: Path,
     stat: AreaStat?,
     colors: AgarthaColors,
 ) {
-    val path = pathFor(area, transform)
     when (stat) {
         is AreaStat.Reported -> {
             val bin = PositiveRateBin.of(stat.positiveRate)

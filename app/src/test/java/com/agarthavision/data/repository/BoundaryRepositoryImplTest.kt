@@ -41,6 +41,23 @@ class BoundaryRepositoryImplTest {
     }
 
     @Test
+    fun `cached accessors return null before loading and the cached instances after`() = runTest {
+        val repository = BoundaryRepositoryImpl(context)
+
+        assertEquals(null, repository.cachedProvincesOrNull())
+        assertEquals(null, repository.cachedDirectoryOrNull())
+        assertEquals(null, repository.cachedTownsOfOrNull(PROVINCE_KEYS[0]))
+
+        val provinces = repository.provinces()
+        val directory = repository.directory()
+        val towns = repository.townsOf(PROVINCE_KEYS[0])
+
+        assertSame(provinces, repository.cachedProvincesOrNull())
+        assertSame(directory, repository.cachedDirectoryOrNull())
+        assertSame(towns, repository.cachedTownsOfOrNull(PROVINCE_KEYS[0]))
+    }
+
+    @Test
     fun `second directory call returns the same cached instance`() = runTest {
         val repository = BoundaryRepositoryImpl(context)
 
