@@ -95,13 +95,20 @@ fun MyCoverageCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "MY COVERAGE",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = theme.textSecondary,
-                    letterSpacing = 1.2.sp,
-                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(theme.gold)
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = "MY COVERAGE",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = theme.onGold,
+                        letterSpacing = 1.1.sp,
+                    )
+                }
                 Text(
                     text = periodLabel(period),
                     fontSize = 11.sp,
@@ -150,17 +157,18 @@ private fun ReadyContent(state: MyCoverageCardUiState.Ready) {
             fitBounds = state.fitBounds,
             colors = theme,
             modifier = Modifier
-                .weight(0.44f)
+                .weight(0.42f)
                 .fillMaxHeight(),
             towns = singleProvinceTowns,
             townCounts = coverage.townCounts,
             showCentroidDots = isCountry,
         )
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(18.dp))
         Box(
             modifier = Modifier
-                .weight(0.56f)
-                .fillMaxHeight(),
+                .weight(0.58f)
+                .fillMaxHeight()
+                .padding(start = 6.dp),
         ) {
             when (framing) {
                 is CoverageFraming.SingleProvince -> SingleProvinceContent(
