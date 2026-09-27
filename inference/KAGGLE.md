@@ -53,10 +53,36 @@ also avoids the Android cleartext-traffic restriction.
   keep the notebook tab open and interact occasionally during a demo.
 - **Weights path 404.** If the assert in the config cell fails, check the left **Input** panel
   for the real folder name and update `WEIGHTS_PATH`.
-- **First `/infer` is slow** (model warm-up); later calls are fast. A T4 runs this YOLO in
-  tens of ms — far faster than the 1 frame / 2 s the app sends.
+- **Start-up takes longer than one model load.** The server loads and warms up one model per
+  GPU before it answers, so the first `/infer` is not slow any more. The launch cell waits 20 s.
 - **Keep `server.py` in sync.** The notebook's `%%writefile` cell is a verbatim copy of
   [`server.py`](server.py); if the server changes, update both.
+
+## Checking the queue
+
+The server queues requests and runs them in batches, one worker per GPU (README.md, "Queue and
+batching"). These checks need the real model, so they run here, not in `tests/`:
+
+1. **Both GPUs load.** The GPU cell prints `cuda:0` and `cuda:1`, and the server's start-up log
+   ends with `serving … on cuda:0, cuda:1`.
+2. **`/health` answers during inference.** In a notebook cell, fire a burst and probe health
+   while it runs:
+   ```python
+   import concurrent.futures, requests, time
+   jpg = open("/kaggle/input/<a-sample-dataset>/sample.jpg", "rb").read()
+   H = {"Authorization": f"Bearer {os.environ['INFERENCE_API_KEY']}", "Content-Type": "image/jpeg"}
+   post = lambda _: requests.post("http://localhost:6767/infer", data=jpg, headers=H)
+   with concurrent.futures.ThreadPoolExecutor(24) as pool:
+       burst = pool.map(post, range(24))
+       t = time.time(); requests.get("http://localhost:6767/health"); print("health", time.time() - t, "s")
+       responses = list(burst)
+   ```
+3. **Batching and both GPUs.** For the same burst, print
+   `[(r.status_code, r.headers.get("X-Inference-Batch-Size"), r.headers.get("X-Inference-Device")) for r in responses]`.
+   Batch sizes above 1 show batching, and both `cuda:0` and `cuda:1` should appear. The log shows
+   one `batch of N on cuda:K` line per batch, and `!nvidia-smi` during a burst shows both T4s busy.
+4. **A full queue answers `503`.** Restart the server with `QUEUE_SIZE=2` and repeat the burst:
+   some responses are `503` with a `Retry-After` header, and none hang.
 
 ## Optional: stable URL with your custom domain (Cloudflare Tunnels)
 

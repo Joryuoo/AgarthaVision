@@ -1,7 +1,8 @@
 # Agartha Inference Container
 
-FastAPI server wrapping the custom Ultralytics fork (YOLOv26 + EfficientNetV2) for
-egg detection. Runs on a DigitalOcean MI300X AMD GPU droplet.
+FastAPI server wrapping the custom Ultralytics fork (EfficientNetV2-S backbone with a
+YOLOv12-nano neck and head) for egg detection. Runs on a DigitalOcean MI300X AMD GPU droplet,
+or on a free Kaggle T4 x2 ([`KAGGLE.md`](KAGGLE.md)).
 
 > **Cost reminder:** The MI300X droplet bills ~$1.99/hr while running.
 > **Destroy the droplet immediately after every test or demo session.**
@@ -142,9 +143,64 @@ docker run \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `INFERENCE_API_KEY` | Yes | — | Bearer token checked on every `POST /infer` |
-| `CONFIDENCE_THRESHOLD` | No | `0.4` | Minimum confidence to include a detection in the response |
 | `WEIGHTS_PATH` | No | `weights/best.pt` | Path to the model weights file |
 | `MODEL_VERSION` | No | `yolo12n-effv2s-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
+| `MAX_BATCH_SIZE` | No | `8` | Most frames in one forward pass |
+| `MAX_QUEUE_DELAY_MS` | No | `15` | How long a worker waits for more frames after the first of a batch |
+| `QUEUE_SIZE` | No | `32` | Frames waiting for a GPU. When full, `POST /infer` answers `503` at once |
+| `REQUEST_TIMEOUT_S` | No | `25` | Longest a request waits for its result before `503`. Keep it below the app's 30 s read timeout |
+| `RETRY_AFTER_S` | No | `2` | `Retry-After` sent with every `503` |
+| `INFERENCE_DEVICES` | No | every visible GPU, else `cpu` | Comma-separated torch devices, one worker each, e.g. `cuda:0,cuda:1` |
+
+There is no confidence threshold, on purpose: the server returns every box the model produced
+and the medtech is the threshold (`docs/constraints.md` C7).
+
+---
+
+## Queue and batching
+
+`POST /infer` never runs the model on the request itself:
+
+1. The JPEG is decoded off the event loop and put on a **bounded queue** (`QUEUE_SIZE`). A full
+   queue answers **`503` with `Retry-After`** at once, instead of letting requests pile up.
+2. **One worker per GPU** (`INFERENCE_DEVICES`) pulls from that one queue. Each has its own copy
+   of the model, loaded and warmed up at start-up.
+3. A worker takes the first waiting frame, waits up to `MAX_QUEUE_DELAY_MS` for more, and runs up
+   to `MAX_BATCH_SIZE` of them as **one batched forward pass**. This is Triton's
+   `max_batch_size` / `max_queue_delay` pattern. Ultralytics letterboxes each image itself.
+4. The forward pass runs on a worker thread, so the event loop is free: **`/health` answers
+   during inference**, and new requests are still accepted or refused promptly.
+5. A request waits at most `REQUEST_TIMEOUT_S` for its result, then gets `503` too. That is well
+   under Cloudflare's ~100 s `524`.
+
+The app treats any failure, a `503` included, as "the cloud cannot answer right now": its circuit
+breaker counts it and the frame goes to the on-device model. The server's queue is in memory and
+dies with the process. That is fine, because the phone's queue is the durable one and it retries.
+
+At a few phones sending frames seconds apart, most batches have one frame. What helps now is the
+unblocked event loop, the fast `503` and the second GPU. Batching pays off as usage grows. If a
+T4 runs out of memory at batch 8, lower `MAX_BATCH_SIZE`. If `503`s appear under normal load,
+raise `QUEUE_SIZE`, but not so far that `QUEUE_SIZE / MAX_BATCH_SIZE` batches take longer than
+`REQUEST_TIMEOUT_S`.
+
+Every successful response carries two headers, so batching can be seen from outside with
+`curl -i`: `X-Inference-Batch-Size` (how many frames rode in its batch) and
+`X-Inference-Device` (which GPU ran it). The server also logs a `batch of N on cuda:K in X ms`
+line per batch.
+
+### Tests
+
+`tests/` runs the server against a fake model, so no GPU or Ultralytics fork is needed:
+
+```bash
+cd inference
+pip install -r requirements-test.txt
+pytest tests
+```
+
+They cover the response shape, `/health` answering mid-inference, batching, both GPUs being
+used, the `503`s and a failed batch. How the real model behaves on two T4s is checked on Kaggle
+(`KAGGLE.md`, "Checking the queue").
 
 ---
 
@@ -152,8 +208,8 @@ docker run \
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `GET` | `/health` | None | Returns `{"status": "ok"}` — use for monitoring |
-| `POST` | `/infer` | Bearer token | Send raw JPEG bytes; returns detections JSON |
+| `GET` | `/health` | None | Returns `{"status": "ok"}`, promptly even during inference. Use for monitoring |
+| `POST` | `/infer` | Bearer token | Send raw JPEG bytes; returns detections JSON. `400` for an empty or unreadable body, `401` for a wrong key, `503` + `Retry-After` when the queue is full or the wait times out |
 
 ### `POST /infer` request
 
