@@ -6,6 +6,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -166,8 +167,8 @@ private fun CoverageLegend(modifier: Modifier = Modifier) {
             val fill = lerp(colors.goldTint, colors.gold, index / POSITIVE_RATE_BIN_COUNT)
             LegendSwatch(fill, label)
         }
-        LegendSwatch(colors.accent, "Too few")
-        LegendSwatch(colors.accent, "No data")
+        LegendSwatch(Color.White, "Too few")
+        LegendSwatch(Color.White, "No data")
     }
 }
 
@@ -179,7 +180,8 @@ private fun LegendSwatch(color: Color, label: String) {
             modifier = Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(color),
+                .background(color)
+                .border(0.5.dp, colors.borderStrong, CircleShape),
         )
         Spacer(Modifier.width(4.dp))
         Text(label, fontSize = 9.sp, color = colors.textSecondary)

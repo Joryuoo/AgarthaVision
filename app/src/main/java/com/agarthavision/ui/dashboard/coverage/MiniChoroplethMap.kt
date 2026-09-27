@@ -86,12 +86,12 @@ internal fun MiniChoroplethMap(
                 val stat = province.count.stat
                 if (stat is AreaStat.TooFew) {
                     drawCircle(
-                        color = Color.White,
+                        color = colors.accent,
                         radius = radius + 1.2f.dp.toPx(),
                         center = Offset(sx, sy),
                     )
                     drawCircle(
-                        color = colors.accent,
+                        color = colors.goldTint,
                         radius = radius,
                         center = Offset(sx, sy),
                     )
@@ -112,10 +112,10 @@ internal fun MiniChoroplethMap(
                         val bin = PositiveRateBin.of(stat.positiveRate)
                         lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
                     } else {
-                        colors.border
+                        colors.gold
                     }
                     drawCircle(
-                        color = Color.White,
+                        color = colors.accent,
                         radius = radius + 1.2f.dp.toPx(),
                         center = Offset(sx, sy),
                     )
@@ -184,16 +184,16 @@ private fun DrawScope.drawArea(
             val bin = PositiveRateBin.of(stat.positiveRate)
             val fill = lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
             drawPath(path, color = fill)
-            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.TooFew -> {
-            drawPath(path, color = colors.accent)
+            drawPath(path, color = Color.White)
             drawHatching(path, colors.gold)
-            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.NoData, null -> {
-            drawPath(path, color = colors.accent)
-            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = Color.White)
+            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
         }
     }
 }
