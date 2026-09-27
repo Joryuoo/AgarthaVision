@@ -1,5 +1,11 @@
 package com.agarthavision.ui.dashboard
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,6 +19,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -119,6 +126,25 @@ internal fun KpiPager(
                 },
             )
             if (pagerState.currentPage == 0) {
+                val infiniteTransition = rememberInfiniteTransition(label = "swipeHint")
+                val nudgeOffset by infiniteTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 5f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "nudgeOffset",
+                )
+                val hintAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.65f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse,
+                    ),
+                    label = "hintAlpha",
+                )
                 Spacer(Modifier.width(Spacing.sm))
                 Text(
                     text = "Swipe for My coverage →",
@@ -127,6 +153,10 @@ internal fun KpiPager(
                     color = AgarthaTheme.colors.textSecondary,
                     modifier = Modifier
                         .testTag("pagerCoverageHint")
+                        .graphicsLayer {
+                            translationX = nudgeOffset * density.density
+                            alpha = hintAlpha
+                        }
                         .clickable {
                             coroutineScope.launch { pagerState.animateScrollToPage(1) }
                         },

@@ -20,9 +20,11 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PersonAdd
-import androidx.compose.material.icons.outlined.PlayArrow
-import androidx.compose.material.icons.outlined.Verified
 import androidx.compose.material3.Icon
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.PlayArrow
+import com.agarthavision.ui.icons.Verified
+import com.agarthavision.ui.theme.AppColors
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -115,10 +117,10 @@ internal fun RecentActivityCard(
 
 /** Icon shown for [item]'s type, tinted inside a small circle. */
 private fun activityIconFor(item: ActivityItem): ImageVector = when (item) {
-    is ActivityItem.FramesVerified -> Icons.Outlined.Verified
+    is ActivityItem.FramesVerified -> AgarthaIcons.Verified
     is ActivityItem.FramesCaptured -> Icons.Outlined.CameraAlt
     is ActivityItem.PatientAdded -> Icons.Outlined.PersonAdd
-    is ActivityItem.SessionStarted -> Icons.Outlined.PlayArrow
+    is ActivityItem.SessionStarted -> AgarthaIcons.PlayArrow
     is ActivityItem.SyncFinished -> Icons.Outlined.CloudDone
 }
 
@@ -171,6 +173,14 @@ internal fun ActivityRow(
     val subtitle = activitySubtitleFor(item, nowMillis)
     val description = "$title, $subtitle."
 
+    val (iconBg, iconTint) = when (item) {
+        is ActivityItem.SessionStarted -> colors.gold to AppColors.White
+        is ActivityItem.FramesCaptured -> colors.accent to AppColors.White
+        is ActivityItem.FramesVerified -> colors.success to AppColors.White
+        is ActivityItem.PatientAdded -> colors.surfaceMuted to colors.accent
+        is ActivityItem.SyncFinished -> colors.surfaceMuted to colors.accent
+    }
+
     Row(
         modifier = modifier
             .semantics(mergeDescendants = true) {
@@ -185,13 +195,13 @@ internal fun ActivityRow(
             modifier = Modifier
                 .size(36.dp)
                 .clip(CircleShape)
-                .background(colors.surfaceMuted),
+                .background(iconBg),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = activityIconFor(item),
                 contentDescription = null,
-                tint = colors.accent,
+                tint = iconTint,
                 modifier = Modifier.size(18.dp),
             )
         }
