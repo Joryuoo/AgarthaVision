@@ -480,7 +480,7 @@ private fun PatientPreviewCard(
                     fontSize = 12.sp,
                     lineHeight = 16.sp,
                 ),
-                color = colors.onAccent.copy(alpha = 0.9f),
+                color = colors.onBrandFill.copy(alpha = 0.9f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
