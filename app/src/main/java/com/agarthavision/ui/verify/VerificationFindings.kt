@@ -18,7 +18,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -72,6 +71,12 @@ import com.agarthavision.ui.theme.AgarthaTheme
 internal fun ModelOutputSection(
     output: ModelOutput,
     modifier: Modifier = Modifier,
+    /**
+     * Offered while the frame waits in the inference queue, so a slow run never holds the
+     * medtech hostage (14zcqntj6p1). Null otherwise, including for [ModelOutput.InProgress]
+     * produced by a frame still being fetched, which there is nothing to cancel on.
+     */
+    onCancelInference: (() -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
     val containerBg = if (output is ModelOutput.Unavailable) {
@@ -93,13 +98,7 @@ internal fun ModelOutputSection(
                 .padding(12.dp),
         ) {
             when (output) {
-                ModelOutput.InProgress -> CircularProgressIndicator(
-                    color = colors.accent,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier
-                        .testTag(VerifyTestTags.MODEL_OUTPUT_SPINNER)
-                        .size(24.dp),
-                )
+                ModelOutput.InProgress -> InferencePending(onCancelInference)
 
                 ModelOutput.Unavailable -> Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -210,6 +209,8 @@ internal fun AddedFindings(
     actions: VerificationSheetActions,
     expandedIndex: Int?,
     modifier: Modifier = Modifier,
+    /** False while the frame's model output is pending: nothing can be added until it lands. */
+    enabled: Boolean = true,
     onExpandedCardPositioned: (LayoutCoordinates) -> Unit = {},
     /**
      * Species already on this device matching what the added row at this index is typing.
@@ -261,12 +262,12 @@ internal fun AddedFindings(
 
         Text(
             text = stringResource(R.string.verify_add_species),
-            color = AgarthaTheme.colors.accent,
+            color = if (enabled) AgarthaTheme.colors.accent else AgarthaTheme.colors.textTertiary,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
                 .testTag(VerifyTestTags.ADD_SPECIES)
-                .clickable { actions.onAddSpecies() }
+                .clickable(enabled = enabled) { actions.onAddSpecies() }
                 .padding(vertical = 10.dp),
         )
 

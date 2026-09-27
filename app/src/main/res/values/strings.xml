@@ -85,7 +85,14 @@
       Kept distinct on purpose: "no signal was collected" and "the model looked and found
       nothing" are different facts, and the second is itself a labelled datapoint.
     -->
-    <string name="verify_model_unavailable">No model output. The inference server could not be reached, so this field was recorded without it. Add the eggs you see below.</string>
+    <string name="verify_model_unavailable">No model output. This field is verified by hand: inference was cancelled, or no model could read it. Add the eggs you see below.</string>
+    <string name="verify_model_in_inference">Frame is in inference</string>
+    <string name="verify_annotation_locked">Annotation unlocks when the model output arrives, or when you cancel inference.</string>
+    <string name="verify_cancel_inference">Cancel inference</string>
+    <string name="verify_cancel_inference_title">Cancel inference?</string>
+    <string name="verify_cancel_inference_body">This sample will never get a model output. You will verify it by hand. To get a model output again, discard the sample and capture the field again.</string>
+    <string name="verify_cancel_inference_confirm">Cancel inference</string>
+    <string name="verify_cancel_inference_dismiss">Keep waiting</string>
     <string name="verify_model_no_eggs">No eggs detected.</string>
     <string name="verify_model_total">TOTAL</string>
     <string name="verify_sample_indicator">Sample %1$d of %2$d</string>

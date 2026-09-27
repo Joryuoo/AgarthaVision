@@ -5,6 +5,7 @@ import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -55,6 +56,7 @@ class BoxRedrawTest {
         flaggedFrameStore,
         submitVerificationUseCase,
         searchSpeciesSuggestions,
+        mock<CancelInferenceUseCase>(),
     )
 
     private fun frame(predictions: Int = 1) = FlaggedFrame(
