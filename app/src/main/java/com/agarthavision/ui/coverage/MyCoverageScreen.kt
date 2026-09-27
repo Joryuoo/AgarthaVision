@@ -163,11 +163,11 @@ private fun CoverageLegend(modifier: Modifier = Modifier) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val bins = listOf("0%", "<10%", "<20%", "<40%", "40%+")
         bins.forEachIndexed { index, label ->
-            val fill = lerp(colors.accentTint, colors.accent, index / POSITIVE_RATE_BIN_COUNT)
+            val fill = lerp(colors.goldTint, colors.gold, index / POSITIVE_RATE_BIN_COUNT)
             LegendSwatch(fill, label)
         }
-        LegendSwatch(colors.surfaceMuted, "Too few")
-        LegendSwatch(colors.surfaceMuted, "No data")
+        LegendSwatch(colors.accent, "Too few")
+        LegendSwatch(colors.accent, "No data")
     }
 }
 

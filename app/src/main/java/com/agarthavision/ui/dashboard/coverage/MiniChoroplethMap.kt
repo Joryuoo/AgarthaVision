@@ -91,12 +91,12 @@ internal fun MiniChoroplethMap(
                         center = Offset(sx, sy),
                     )
                     drawCircle(
-                        color = colors.surfaceMuted,
+                        color = colors.accent,
                         radius = radius,
                         center = Offset(sx, sy),
                     )
                     drawCircle(
-                        color = colors.borderStrong,
+                        color = colors.gold,
                         radius = radius,
                         center = Offset(sx, sy),
                         style = Stroke(
@@ -110,7 +110,7 @@ internal fun MiniChoroplethMap(
                 } else {
                     val dotColor = if (stat is AreaStat.Reported) {
                         val bin = PositiveRateBin.of(stat.positiveRate)
-                        lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
+                        lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
                     } else {
                         colors.border
                     }
@@ -182,17 +182,17 @@ private fun DrawScope.drawArea(
     when (stat) {
         is AreaStat.Reported -> {
             val bin = PositiveRateBin.of(stat.positiveRate)
-            val fill = lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
+            val fill = lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
             drawPath(path, color = fill)
             drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.TooFew -> {
-            drawPath(path, color = colors.surfaceMuted)
-            drawHatching(path, colors.borderStrong)
+            drawPath(path, color = colors.accent)
+            drawHatching(path, colors.gold)
             drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.NoData, null -> {
-            drawPath(path, color = colors.surfaceMuted)
+            drawPath(path, color = colors.accent)
             drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
     }

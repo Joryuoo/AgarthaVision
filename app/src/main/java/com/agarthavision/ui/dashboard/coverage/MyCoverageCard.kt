@@ -95,20 +95,13 @@ fun MyCoverageCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(theme.gold)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = "MY COVERAGE",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = theme.onGold,
-                        letterSpacing = 1.1.sp,
-                    )
-                }
+                Text(
+                    text = "MY COVERAGE",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.textSecondary,
+                    letterSpacing = 1.2.sp,
+                )
                 Text(
                     text = periodLabel(period),
                     fontSize = 11.sp,
@@ -532,7 +525,7 @@ private fun CoverageCardLegend(
             color = colors.textTertiary,
         )
         for (bin in 0..4) {
-            val color = lerp(colors.accentTint, colors.accent, bin / 4f)
+            val color = lerp(colors.goldTint, colors.gold, bin / 4f)
             Box(
                 modifier = Modifier
                     .size(width = 6.dp, height = 6.dp)
@@ -552,13 +545,13 @@ private fun CoverageCardLegend(
                 .clip(RoundedCornerShape(1.dp))
                 .border(0.5.dp, colors.border, RoundedCornerShape(1.dp)),
         ) {
-            drawRect(colors.surfaceMuted)
+            drawRect(colors.accent)
             val strokeWidthPx = 1f
             val spacingPx = 3f
             var x = -size.height
             while (x < size.width) {
                 drawLine(
-                    color = colors.borderStrong,
+                    color = colors.gold,
                     start = Offset(x, size.height),
                     end = Offset(x + size.height, 0f),
                     strokeWidth = strokeWidthPx,
