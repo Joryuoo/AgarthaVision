@@ -25,11 +25,12 @@ object AppColors {
     val DarkMaroon        = Color(0xFFA01C29)
     val DarkMaroonPressed = Color(0xFFB82030)
     val MaroonBright      = DarkMaroon // Alias for backward compatibility
-    val RoseBright        = DarkMaroon // Alias for backward compatibility
+    val CrimsonBright     = Color(0xFFFF293E) // Vibrant crimson for dark mode text & accent
+    val RoseBright        = CrimsonBright // Alias for backward compatibility
 
-    val DarkAccentTint    = Color(0xFFA01C29).copy(alpha = 0.18f)
-    val DarkAccentTint2   = Color(0xFFA01C29).copy(alpha = 0.10f)
-    val DarkOnAccentTint  = DarkMaroon
+    val DarkAccentTint    = Color(0xFFFF293E).copy(alpha = 0.14f)
+    val DarkAccentTint2   = Color(0xFFFF293E).copy(alpha = 0.08f)
+    val DarkOnAccentTint  = CrimsonBright
 
     // Brand — CIT-U gold (fill-only; pair with Gray900 text)
     val Gold          = Color(0xFFFFB81C)
