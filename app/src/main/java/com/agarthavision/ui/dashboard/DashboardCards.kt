@@ -116,7 +116,7 @@ internal fun ActiveSessionHero(
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(999.dp))
-                .background(colors.surface)
+                .background(AppColors.White)
                 .clickable(onClick = onResume)
                 .padding(horizontal = 18.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center,
@@ -125,7 +125,7 @@ internal fun ActiveSessionHero(
                 text = "Resume",
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.accent,
+                color = colors.brandFill,
             )
         }
     }
