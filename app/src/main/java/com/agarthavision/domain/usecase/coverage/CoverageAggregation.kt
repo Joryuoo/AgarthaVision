@@ -24,10 +24,19 @@ fun aggregateCoverage(
     var totalPositives = 0
     var unlocatedSmears = 0
     val perProvince = linkedMapOf<String, AreaCount>()
+    val perTown = linkedMapOf<String, AreaCount>()
 
     for (row in townRows) {
         totalSmears += row.smearCount
         totalPositives += row.positiveCount
+
+        if (row.townCode != null) {
+            val existingTown = perTown[row.townCode] ?: AreaCount(0, 0)
+            perTown[row.townCode] = AreaCount(
+                smears = existingTown.smears + row.smearCount,
+                positives = existingTown.positives + row.positiveCount,
+            )
+        }
 
         val provinceKey = row.townCode?.let { directory.towns[it]?.provinceKey }
         if (provinceKey == null) {
@@ -60,7 +69,8 @@ fun aggregateCoverage(
         unlocatedSmears = unlocatedSmears,
         provinces = provinces,
         islandGroupCounts = islandGroupCounts,
-        framing = resolveFraming(provinces),
+        framing = resolveFraming(provinces, directory),
+        townCounts = perTown,
     )
 }
 
@@ -81,7 +91,10 @@ private fun provinceRankingComparator(): Comparator<ProvinceCoverage> =
         (province.count.stat as? AreaStat.Reported)?.smears ?: 0
     }.thenBy { it.name }
 
-private fun resolveFraming(provinces: List<ProvinceCoverage>): CoverageFraming {
+private fun resolveFraming(
+    provinces: List<ProvinceCoverage>,
+    directory: AreaDirectory,
+): CoverageFraming {
     return when (provinces.size) {
         0 -> CoverageFraming.Empty
         1 -> CoverageFraming.SingleProvince(provinces.first().code)
@@ -89,13 +102,38 @@ private fun resolveFraming(provinces: List<ProvinceCoverage>): CoverageFraming {
             val groups = provinces.map { it.islandGroup }.distinct()
             if (groups.size == 1) {
                 val group = groups.first()
-                CoverageFraming.IslandGroupFrame(group, title = group.displayName())
+                val regionCodes = provinces.mapNotNull { directory.provinces[it.code]?.regionCode }.distinct()
+                val regionTitle = if (regionCodes.size == 1) regionDisplayName(regionCodes.first()) else null
+                CoverageFraming.IslandGroupFrame(group, title = regionTitle ?: group.displayName())
             } else {
                 CoverageFraming.Country
             }
         }
     }
 }
+
+private val REGION_NAMES: Map<String, String> = mapOf(
+    "0100000000" to "Ilocos Region",
+    "0200000000" to "Cagayan Valley",
+    "0300000000" to "Central Luzon",
+    "0400000000" to "CALABARZON",
+    "0500000000" to "Bicol Region",
+    "0600000000" to "Western Visayas",
+    "0700000000" to "Central Visayas",
+    "0800000000" to "Eastern Visayas",
+    "0900000000" to "Zamboanga Peninsula",
+    "1000000000" to "Northern Mindanao",
+    "1100000000" to "Davao Region",
+    "1200000000" to "SOCCSKSARGEN",
+    "1300000000" to "National Capital Region",
+    "1400000000" to "Cordillera Administrative Region",
+    "1600000000" to "Caraga",
+    "1700000000" to "MIMAROPA",
+    "1800000000" to "Negros Island Region",
+    "1900000000" to "BARMM",
+)
+
+internal fun regionDisplayName(regionCode: String): String? = REGION_NAMES[regionCode]
 
 private fun IslandGroup.displayName(): String = when (this) {
     IslandGroup.LUZON -> "Luzon"

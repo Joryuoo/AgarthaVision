@@ -13,15 +13,21 @@ import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.MyCoverage
 import com.agarthavision.domain.model.ProvinceCoverage
+import com.agarthavision.domain.model.FindingsResult
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.coverage.LoadProvinceBoundariesUseCase
+import com.agarthavision.domain.usecase.coverage.LoadTownBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.ObserveMyCoverageUseCase
+import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -36,11 +42,37 @@ class MyCoverageCardTest {
     @get:Rule
     val composeRule = createComposeRule()
 
+    private val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
+    private val observeFindingsUseCase: ObserveFindingsUseCase = mock<ObserveFindingsUseCase>().also {
+        whenever(it.invoke(any(), any(), anyOrNull())).thenReturn(
+            flowOf(FindingsResult(emptyList(), 0)),
+        )
+    }
+
+    @Before
+    fun setUp() {
+        runBlocking {
+            whenever(loadTownBoundariesUseCase(any())).thenReturn(Result.success(null))
+        }
+    }
+
     private fun identityUseCase() = mock<ObserveLocalIdentityUseCase>().also {
         whenever(it.invoke()).thenReturn(
             flowOf(LocalIdentity(userId = "user-1", email = "user@example.com")),
         )
     }
+
+    private fun createViewModel(
+        observeMyCoverageUseCase: ObserveMyCoverageUseCase,
+        loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock(),
+    ) = MyCoverageCardViewModel(
+        clock = Clock.systemUTC(),
+        observeLocalIdentityUseCase = identityUseCase(),
+        observeMyCoverageUseCase = observeMyCoverageUseCase,
+        loadProvinceBoundariesUseCase = loadProvinceBoundariesUseCase,
+        loadTownBoundariesUseCase = loadTownBoundariesUseCase,
+        observeFindingsUseCase = observeFindingsUseCase,
+    )
 
     @Test
     fun `loading shows a skeleton`() {
@@ -48,12 +80,7 @@ class MyCoverageCardTest {
         whenever(observeMyCoverageUseCase(eq("user-1"), any(), any())).thenReturn(
             kotlinx.coroutines.flow.flow { }, // never emits -> stays Loading
         )
-        val vm = MyCoverageCardViewModel(
-            clock = Clock.systemUTC(),
-            observeLocalIdentityUseCase = identityUseCase(),
-            observeMyCoverageUseCase = observeMyCoverageUseCase,
-            loadProvinceBoundariesUseCase = mock(),
-        )
+        val vm = createViewModel(observeMyCoverageUseCase)
 
         composeRule.mainClock.autoAdvance = false
         composeRule.setContent {
@@ -83,12 +110,7 @@ class MyCoverageCardTest {
                 ),
             ),
         )
-        val vm = MyCoverageCardViewModel(
-            clock = Clock.systemUTC(),
-            observeLocalIdentityUseCase = identityUseCase(),
-            observeMyCoverageUseCase = observeMyCoverageUseCase,
-            loadProvinceBoundariesUseCase = mock(),
-        )
+        val vm = createViewModel(observeMyCoverageUseCase)
 
         composeRule.setContent {
             AgarthaVisionTheme {
@@ -135,12 +157,7 @@ class MyCoverageCardTest {
             whenever(loadProvinceBoundariesUseCase()).thenReturn(Result.success(provinces))
         }
 
-        val vm = MyCoverageCardViewModel(
-            clock = Clock.systemUTC(),
-            observeLocalIdentityUseCase = identityUseCase(),
-            observeMyCoverageUseCase = observeMyCoverageUseCase,
-            loadProvinceBoundariesUseCase = loadProvinceBoundariesUseCase,
-        )
+        val vm = createViewModel(observeMyCoverageUseCase, loadProvinceBoundariesUseCase)
 
         composeRule.setContent {
             AgarthaVisionTheme {
@@ -150,5 +167,92 @@ class MyCoverageCardTest {
 
         composeRule.onNodeWithText("Cebu").assertExists()
         composeRule.onNodeWithText("40% positive").assertExists()
+        composeRule.onNodeWithText("Tap to explore →").assertExists()
+    }
+
+    @Test
+    fun `a Ready state with IslandGroup framing renders region title and provinces`() {
+        val provinces = BoundarySet(areas = emptyList(), bounds = GeoBounds(0f, 0f, 1f, 1f))
+        val coverage = MyCoverage(
+            period = HomePeriod.LAST_7_DAYS,
+            totals = AreaCount(smears = 168, positives = 50),
+            unlocatedSmears = 0,
+            provinces = listOf(
+                ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(120, 41)),
+                ProvinceCoverage("BOH", "Bohol", IslandGroup.VISAYAS, AreaCount(44, 8)),
+                ProvinceCoverage("SIQ", "Siquijor", IslandGroup.VISAYAS, AreaCount(4, 1)),
+            ),
+            islandGroupCounts = mapOf(IslandGroup.VISAYAS to 3),
+            framing = CoverageFraming.IslandGroupFrame(IslandGroup.VISAYAS, "Central Visayas"),
+        )
+
+        val observeMyCoverageUseCase: ObserveMyCoverageUseCase = mock()
+        whenever(observeMyCoverageUseCase(eq("user-1"), any(), any()))
+            .thenReturn(flowOf(Result.success(coverage)))
+        val loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadProvinceBoundariesUseCase()).thenReturn(Result.success(provinces))
+        }
+
+        val vm = createViewModel(observeMyCoverageUseCase, loadProvinceBoundariesUseCase)
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                MyCoverageCard(period = HomePeriod.LAST_7_DAYS, onOpen = {}, viewModel = vm)
+            }
+        }
+
+        composeRule.onNodeWithText("Central Visayas").assertExists()
+        composeRule.onNodeWithText("3 provinces · 168 smears").assertExists()
+        composeRule.onNodeWithText("Cebu").assertExists()
+        composeRule.onNodeWithText("34%").assertExists()
+        composeRule.onNodeWithText("Bohol").assertExists()
+        composeRule.onNodeWithText("18%").assertExists()
+        composeRule.onNodeWithText("Siquijor").assertExists()
+        composeRule.onNodeWithText("Too few").assertExists()
+    }
+
+    @Test
+    fun `a Ready state with Country framing renders Philippines and summary`() {
+        val provinces = BoundarySet(areas = emptyList(), bounds = GeoBounds(0f, 0f, 1f, 1f))
+        val coverage = MyCoverage(
+            period = HomePeriod.LAST_30_DAYS,
+            totals = AreaCount(smears = 200, positives = 60),
+            unlocatedSmears = 0,
+            provinces = listOf(
+                ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(100, 34)),
+                ProvinceCoverage("DAV", "Davao del Sur", IslandGroup.MINDANAO, AreaCount(50, 10)),
+                ProvinceCoverage("LAG", "Laguna", IslandGroup.LUZON, AreaCount(30, 3)),
+                ProvinceCoverage("RIZ", "Rizal", IslandGroup.LUZON, AreaCount(15, 2)),
+                ProvinceCoverage("COT", "Cotabato", IslandGroup.MINDANAO, AreaCount(5, 1)),
+            ),
+            islandGroupCounts = mapOf(
+                IslandGroup.LUZON to 2,
+                IslandGroup.VISAYAS to 1,
+                IslandGroup.MINDANAO to 2,
+            ),
+            framing = CoverageFraming.Country,
+        )
+
+        val observeMyCoverageUseCase: ObserveMyCoverageUseCase = mock()
+        whenever(observeMyCoverageUseCase(eq("user-1"), any(), any()))
+            .thenReturn(flowOf(Result.success(coverage)))
+        val loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadProvinceBoundariesUseCase()).thenReturn(Result.success(provinces))
+        }
+
+        val vm = createViewModel(observeMyCoverageUseCase, loadProvinceBoundariesUseCase)
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                MyCoverageCard(period = HomePeriod.LAST_30_DAYS, onOpen = {}, viewModel = vm)
+            }
+        }
+
+        composeRule.onNodeWithText("Philippines").assertExists()
+        composeRule.onNodeWithText("5 provinces · 3 island groups").assertExists()
+        composeRule.onNodeWithText("+ 2 more").assertExists()
+        composeRule.onNodeWithText("Luzon 2 · Visayas 1 · Mindanao 2").assertExists()
     }
 }

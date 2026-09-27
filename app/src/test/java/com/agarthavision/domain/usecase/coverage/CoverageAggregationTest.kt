@@ -118,6 +118,50 @@ class CoverageAggregationTest {
     }
 
     @Test
+    fun `aggregateCoverage populates perTown counts`() {
+        val cebu = province("CEB", "Cebu", IslandGroup.VISAYAS)
+        val directory = directoryOf(cebu to listOf("t-ceb-1", "t-ceb-2"))
+
+        val rows = listOf(
+            TownCoverage("t-ceb-1", smearCount = 10, positiveCount = 4),
+            TownCoverage("t-ceb-2", smearCount = 5, positiveCount = 1),
+        )
+        val coverage = aggregateCoverage(HomePeriod.TODAY, rows, directory)
+        assertEquals(2, coverage.townCounts.size)
+        assertEquals(10, coverage.townCounts["t-ceb-1"]?.smears)
+        assertEquals(4, coverage.townCounts["t-ceb-1"]?.positives)
+        assertEquals(5, coverage.townCounts["t-ceb-2"]?.smears)
+        assertEquals(1, coverage.townCounts["t-ceb-2"]?.positives)
+    }
+
+    @Test
+    fun `same region resolves region name for title in IslandGroupFrame`() {
+        val cebu = ProvinceRef(
+            code = "CEB",
+            name = "Cebu",
+            regionCode = "0700000000",
+            islandGroup = IslandGroup.VISAYAS,
+        )
+        val bohol = ProvinceRef(
+            code = "BOH",
+            name = "Bohol",
+            regionCode = "0700000000",
+            islandGroup = IslandGroup.VISAYAS,
+        )
+        val directory = directoryOf(
+            cebu to listOf("t-ceb"),
+            bohol to listOf("t-boh"),
+        )
+        val rows = listOf(
+            TownCoverage("t-ceb", smearCount = 10, positiveCount = 4),
+            TownCoverage("t-boh", smearCount = 5, positiveCount = 1),
+        )
+        val coverage = aggregateCoverage(HomePeriod.TODAY, rows, directory)
+        val frame = coverage.framing as CoverageFraming.IslandGroupFrame
+        assertEquals("Central Visayas", frame.title)
+    }
+
+    @Test
     fun `identical rate and identical smear count tie-break to name ascending, deterministically`() {
         val cebu = province("CEB", "Cebu", IslandGroup.VISAYAS)
         val bohol = province("BOH", "Bohol", IslandGroup.VISAYAS)

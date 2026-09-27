@@ -16,9 +16,14 @@ import com.agarthavision.domain.model.MyCoverage
  */
 fun resolveCoverageFitBounds(coverage: MyCoverage, provinces: BoundarySet): GeoBounds {
     val framing = coverage.framing
-    if (framing is CoverageFraming.SingleProvince) {
-        provinces.byCode[framing.code]?.bounds?.let { return it }
+    return when {
+        framing is CoverageFraming.SingleProvince ->
+            provinces.byCode[framing.code]?.bounds ?: provinces.bounds
+        framing is CoverageFraming.Country ->
+            provinces.bounds
+        else -> {
+            val withData = coverage.provinces.mapNotNull { provinces.byCode[it.code]?.bounds }
+            withData.reduceOrNull(GeoBounds::union) ?: provinces.bounds
+        }
     }
-    val withData = coverage.provinces.mapNotNull { provinces.byCode[it.code]?.bounds }
-    return withData.reduceOrNull(GeoBounds::union) ?: provinces.bounds
 }

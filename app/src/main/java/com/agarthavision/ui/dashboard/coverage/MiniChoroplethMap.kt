@@ -6,17 +6,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.unit.dp
 import com.agarthavision.domain.geo.AreaShape
 import com.agarthavision.domain.geo.BoundarySet
 import com.agarthavision.domain.geo.GeoBounds
 import com.agarthavision.domain.geo.PositiveRateBin
 import com.agarthavision.domain.geo.ViewTransform
 import com.agarthavision.domain.geo.fitBounds
+import com.agarthavision.domain.model.AreaCount
 import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.domain.model.ProvinceCoverage
 import com.agarthavision.ui.theme.AgarthaColors
@@ -32,6 +35,7 @@ private const val HIGHLIGHT_STROKE_WIDTH_PX = 2.5f
  * richer rendering live only in the later full-screen coverage phase — this is the pager card's
  * small preview.
  */
+@Suppress("LongParameterList")
 @Composable
 internal fun MiniChoroplethMap(
     provinces: BoundarySet,
@@ -39,6 +43,9 @@ internal fun MiniChoroplethMap(
     fitBounds: GeoBounds,
     colors: AgarthaColors,
     modifier: Modifier = Modifier,
+    towns: BoundarySet? = null,
+    townCounts: Map<String, AreaCount> = emptyMap(),
+    showCentroidDots: Boolean = false,
 ) {
     Canvas(modifier = modifier) {
         val transform = fitBounds(
@@ -47,7 +54,77 @@ internal fun MiniChoroplethMap(
             heightPx = size.height,
             paddingPx = MAP_PADDING_PX,
         )
-        drawProvinces(provinces, coverageByCode, transform, colors)
+        if (showCentroidDots) {
+            provinces.areas.forEach { area ->
+                val path = pathFor(area, transform)
+                drawArea(path, null, colors)
+            }
+            val maxSmears = coverageByCode.values.maxOfOrNull { it.count.smears }?.coerceAtLeast(1) ?: 1
+            val minRadiusPx = 3.5f.dp.toPx()
+            val maxRadiusPx = 7.5f.dp.toPx()
+
+            coverageByCode.values.forEach { province ->
+                val shape = provinces.byCode[province.code] ?: return@forEach
+                val (sx, sy) = transform.toScreen(shape.labelX, shape.labelY)
+                val fraction = (province.count.smears.toFloat() / maxSmears).coerceIn(0f, 1f)
+                val radius = minRadiusPx + (maxRadiusPx - minRadiusPx) * fraction
+
+                val stat = province.count.stat
+                if (stat is AreaStat.TooFew) {
+                    drawCircle(
+                        color = Color.White,
+                        radius = radius + 1.2f.dp.toPx(),
+                        center = Offset(sx, sy),
+                    )
+                    drawCircle(
+                        color = colors.surfaceMuted,
+                        radius = radius,
+                        center = Offset(sx, sy),
+                    )
+                    drawCircle(
+                        color = colors.borderStrong,
+                        radius = radius,
+                        center = Offset(sx, sy),
+                        style = Stroke(
+                            width = 1.2f.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(
+                                floatArrayOf(4f.dp.toPx(), 3f.dp.toPx()),
+                                0f,
+                            ),
+                        ),
+                    )
+                } else {
+                    val dotColor = if (stat is AreaStat.Reported) {
+                        val bin = PositiveRateBin.of(stat.positiveRate)
+                        lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
+                    } else {
+                        colors.border
+                    }
+                    drawCircle(
+                        color = Color.White,
+                        radius = radius + 1.2f.dp.toPx(),
+                        center = Offset(sx, sy),
+                    )
+                    drawCircle(
+                        color = dotColor,
+                        radius = radius,
+                        center = Offset(sx, sy),
+                    )
+                }
+            }
+        } else if (towns != null) {
+            provinces.areas.forEach { area ->
+                val path = pathFor(area, transform)
+                drawArea(path, null, colors)
+            }
+            towns.areas.forEach { town ->
+                val path = pathFor(town, transform)
+                val stat = townCounts[town.code]?.stat
+                drawArea(path, stat, colors)
+            }
+        } else {
+            drawProvinces(provinces, coverageByCode, transform, colors)
+        }
     }
 }
 

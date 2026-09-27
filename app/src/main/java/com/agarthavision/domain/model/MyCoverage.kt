@@ -59,4 +59,5 @@ data class MyCoverage(
     /** Province count per island group, for later phases' chips. */
     val islandGroupCounts: Map<IslandGroup, Int>,
     val framing: CoverageFraming,
+    val townCounts: Map<String, AreaCount> = emptyMap(),
 )
