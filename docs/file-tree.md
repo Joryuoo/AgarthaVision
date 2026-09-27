@@ -84,6 +84,8 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `local/psgc/` | `PsgcSeeder` for bundled barangay dataset |
 | `local/species/` | `SpeciesSuggestionSeeder` and repository for offline autocomplete index |
 | `local/` | `SampleImageStore` — on-device JPEG files under `users/{owner}/samples/` |
+| `inference/` | `RemoteInferenceEngine` (the cloud container) and `PredictionMapper` |
+| `inference/ondevice/` | `OnDeviceInferenceEngine` and its parts: `ModelStore` compiles a bundled model with LiteRT, `FramePreprocessor` letterboxes, `YoloOutputDecoder` decodes and runs NMS |
 | `remote/` | Retrofit interface to the inference container, and its DTOs |
 | `supabase/` | Remote data sources and per-entity sync use cases (`PatientRemoteDataSource`, `SyncPatientUseCase`, etc.) |
 | `sync/` | `SyncWorker` `@HiltWorker` executing background sync passes |

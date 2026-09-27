@@ -18,9 +18,11 @@ Asking the model what is in a frame.
    This runs once per shutter tap, not on a timer (see [`capture`](capture.md)).
 
    The engine sits behind the `InferenceEngine` interface (`domain/inference/InferenceEngine.kt`)
-   and is injected directly, not chosen: there is exactly one backend. An on-device TFLite
-   implementation was built and benchmarked, then deferred — 20.8 s per frame. It lives on
-   `feat/offline-inference`, not here.
+   and is injected directly, not chosen: capture still calls the cloud only. A second
+   implementation, `OnDeviceInferenceEngine` (`data/inference/ondevice/`), runs a bundled TFLite
+   build of the same weights with LiteRT and returns the same shape. It is provided by
+   `core/di/InferenceModule.kt` but nothing routes to it yet; the background inference queue
+   will. See [On-device engine](#on-device-engine).
 2. **Authenticate.** An OkHttp interceptor attaches
    `Authorization: Bearer <BuildConfig.INFERENCE_API_KEY>` to every request
    (`core/di/InferenceModule.kt:41-46`). The server compares it literally
@@ -63,6 +65,30 @@ consecutive failures** flip the status to disconnected
 (`core/connectivity/NetworkMonitor.kt:59-79`), which surfaces as
 `ui/capture/ConnectionLossBanner.kt`. The loop is cancelled and the status resets when the
 session goes idle (`core/connectivity/NetworkMonitor.kt:44-49`).
+
+## On-device engine
+
+`OnDeviceInferenceEngine` (`data/inference/ondevice/OnDeviceInferenceEngine.kt`) is the offline
+counterpart. It is built and tested but not yet called by capture.
+
+- **Which model.** `assets/models/` bundles both precisions, each a `<model_version>.tflite` and
+  a `<model_version>.json` manifest written by `inference/export/export_mobile.py`.
+  `OnDeviceModels.SHIPPED` (`data/inference/ondevice/ModelStore.kt`) picks the one production
+  runs; the manifest's `model_version` is what the sample records.
+- **Loading.** Compiled once on first use, GPU first with LiteRT placing unsupported ops on the
+  CPU, CPU-only if the GPU will not initialise. A missing asset, bad manifest or refused model
+  makes `isAvailable()` false and `infer()` throw `InferenceConnectionException`; nothing
+  crashes, and the failure is remembered rather than retried per frame. All model calls run on
+  one dedicated thread.
+- **Matching the cloud.** Preprocessing is Ultralytics' letterbox (114 grey, same rounding),
+  a no-op for 640x640 captures. The head is not end-to-end, so `YoloOutputDecoder` runs
+  per-class NMS with the container's own defaults (conf 0.25, IoU 0.7, 300 boxes), un-letterboxes,
+  clips to the frame, and returns centre-based pixels like `server.py`. The TFLite head emits
+  box geometry **normalised to 0..1**; the manifest's `box_coordinates` says so and the
+  decoder scales it. Reading it as pixels was the zero-match fault the first attempt hit.
+- **Latency.** Every frame logs `pre/infer/post/total` ms under tag `OnDeviceInference`.
+  `OnDeviceInferenceParityTest` (androidTest) runs both precisions on the phone against the
+  cloud's answers for the same frames; `inference/export/make_parity_fixture.py` builds those.
 
 ## Hits
 

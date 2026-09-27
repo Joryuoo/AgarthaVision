@@ -9,6 +9,53 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27
+
+`14zcqntj6nw` with `14zcqntj6nx`.
+
+**Inference versions name the engine and the precision.** `<arch>-v<training-version>-<target>-<precision>`:
+the cloud reports `yolo12n-effv2s-v1-cloud-fp32` (`server.py`, the notebook), on-device results
+`yolo12n-effv2s-v1-tflite-fp16` or `-int8`. The old `yolov26-efficientnetv2-v1` named the wrong
+architecture: `best.pt` was trained from `effnet-v12.yaml`, a YOLOv12-nano neck on EfficientNetV2-S,
+and its head is not NMS-free.
+
+**The export tooling is ported from `feat/offline-inference` and fixed.** Two faults behind the
+2026-09-06 deferral were export faults, not the phone's:
+
+- The "fp16" file was byte-identical to fp32 (78 MB). onnx2tf 2.x also emits a model that is fp16
+  end to end, which LiteRT's CPU kernels reject. `export_mobile.py` now drives onnx2tf's
+  `tf_converter` backend and TensorFlow's converter itself, and refuses a build whose dtypes,
+  I/O or box geometry do not match its name. fp16 is 39.4 MB, int8 22.8 MB.
+- The TFLite head emits box geometry normalised to 0..1, and the old decoder read it as pixels:
+  the "zero boxes matched" result. Manifests now say `box_coordinates: normalized`.
+
+Both builds ship in `app/src/main/assets/models/` through Git LFS, each with a manifest named after
+its version. Model artifacts are no longer ignored there; capture fixtures still are.
+
+**`OnDeviceInferenceEngine`** (`data/inference/ondevice/`), on LiteRT 2.2's `CompiledModel` API.
+It compiles once, GPU first with CPU placement for unsupported ops, and runs on one thread.
+Preprocessing is Ultralytics' letterbox, and decoding runs NMS with the container's defaults. A
+missing or refused model reports unavailable instead of crashing. It is provided but not routed
+to yet: capture still calls the cloud only.
+
+Measured on a Redmi Note 11 against the cloud model's answers for the same 20 capture-shaped
+frames (`OnDeviceInferenceParityTest`):
+
+| | fp16 | int8 |
+|---|---|---|
+| Matched / missed / invented | 20 / 0 / 0 | 20 / 0 / 0 |
+| Mean IoU, mean confidence delta | 0.994, 0.0007 | 0.918, 0.027 |
+| Infer median (p90) | 4,885 ms (4,904) | 4,836 ms (4,856) |
+
+All 829 ops run on the GPU in one partition, against 20.8 s per frame on CPU last time. int8 buys
+no speed on the GPU and costs box accuracy, so fp16 is `OnDeviceModels.SHIPPED`. On the desktop,
+fp16 matched all 607 of `best.pt`'s detections across the 600 val images (mean IoU 0.993).
+
+**Build:** `android.uniquePackageNames=false`, because `litert` and `litert-api` share a namespace
+that AGP 9 rejects ([LiteRT#6965](https://github.com/google-ai-edge/LiteRT/issues/6965)).
+
+---
+
 ## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24
 
 `14zcqnthrx6` with `14zcqnthrx8`.

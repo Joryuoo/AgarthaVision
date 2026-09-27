@@ -41,6 +41,7 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | Prefs | DataStore Preferences | 1.1.2 | `libs.versions.toml:12` |
 | Background | WorkManager | 2.10.0 | `libs.versions.toml:11` |
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
+| On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `libs.versions.toml:34` |
 
 **Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
 
