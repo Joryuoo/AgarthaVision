@@ -152,8 +152,10 @@
     <string name="verify_sheet_kebab_desc">Sample actions</string>
     <string name="verify_user_note_label">Notes (optional)</string>
     <string name="verify_user_note_placeholder">Anything the medtech wants to record</string>
-    <string name="badge_ai_suggested">AI-suggested</string>
     <string name="badge_manual">Manual</string>
+    <string name="badge_inference_queued">Queued</string>
+    <string name="badge_inference_running">In inference</string>
+    <string name="badge_inference_ready">Ready</string>
     <string name="badge_edited">Edited</string>
     <string name="queue_filter_all">All</string>
     <string name="queue_filter_ai">AI Assisted</string>

@@ -9,6 +9,25 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/queue-inference-badges — every queue row says where its model output is · 2026-09-27
+
+`14zcqntj6p0`.
+
+Each Verification Queue row's badge now shows the sample's inference state: **Queued**, **In
+inference**, **Ready** or **Manual**. It replaces the "AI-suggested" / "Manual" pill, which could
+only say whether a model was ever involved.
+
+- Four states, not two. Frames run one at a time and the on-device path takes seconds each, so
+  labelling every waiting frame "In inference" would misstate what the system is doing.
+- The label is always drawn, and the tone only reinforces it: neutral for queued, gold for in
+  inference, the accent tint for ready (as AI rows had) and the warning tint for manual (as
+  manual rows had). All come from theme tokens.
+- It updates live. The queue is a Room query and `QueueSample` compares by value, so a row
+  moves Queued → In inference → Ready without leaving the screen.
+- Every row stays tappable, pending ones included.
+
+---
+
 ## feat/instant-capture — the shutter confirms at once and never spins · 2026-09-27
 
 `14zcqntj6nz`.

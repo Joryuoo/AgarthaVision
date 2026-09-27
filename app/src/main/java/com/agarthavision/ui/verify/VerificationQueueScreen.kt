@@ -55,9 +55,10 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import com.agarthavision.R
-import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.EmptyState
@@ -369,6 +370,33 @@ private fun QueueFilterChip(
     }
 }
 
+/**
+ * The inference-state pill on a queue row (14zcqntj6p0). Recomposes as the row's state moves,
+ * because the queue is a live Room query and [QueueSample] compares by value.
+ */
+@Composable
+internal fun InferenceStateBadge(
+    state: InferenceState,
+    modifier: Modifier = Modifier,
+) {
+    val badge = InferenceBadge.of(state)
+    val (container, content) = badge.tones(AgarthaTheme.colors)
+    Box(
+        modifier = modifier
+            .testTag(VerifyTestTags.inferenceBadge(badge))
+            .background(container, CircleShape)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(
+            stringResource(badge.label),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = content,
+            style = InterBaseStyle,
+        )
+    }
+}
+
 @Composable
 private fun FrameRow(
     sample: QueueSample,
@@ -378,7 +406,6 @@ private fun FrameRow(
     onLongClick: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    val isAI = sample.source == FrameSource.MODEL
 
     // The row leads with the capture time, which is the sample's label on the Verification
     // Screen too - the same name in both places, so the row you tapped is the screen you land
@@ -449,24 +476,11 @@ private fun FrameRow(
             )
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // One badge, not two. Every row here is unverified, so the "Pending" pill said
-                // nothing; what does still vary is whether the model ever saw this frame, and a
-                // Manual row is the one the medtech has to annotate from scratch through Add Egg.
-                Box(
-                    modifier = Modifier
-                        .background(if (isAI) colors.accentTint else colors.warningTint, CircleShape)
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        stringResource(
-                            if (isAI) R.string.badge_ai_suggested else R.string.badge_manual,
-                        ),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = if (isAI) colors.accent else colors.warningText,
-                        style = InterBaseStyle,
-                    )
-                }
+                // One badge, not two. Every row here is unverified, so a "Pending" pill would say
+                // nothing. What does vary is where the model output is: still queued, being
+                // inferred, ready to verify with it, or never coming. The row stays tappable in
+                // every state; the Verification Screen shows what a pending frame is waiting on.
+                InferenceStateBadge(sample.inferenceState)
                 // Non-prose dot separator glyph exempt from strings.xml localization (C11).
                 Text("·", fontSize = 12.sp, color = colors.textTertiary, style = InterBaseStyle)
                 Text(timeStr, fontSize = 12.sp, color = colors.textSecondary, style = InterTabularStyle)
