@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -52,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.domain.geo.BoundarySet
 import com.agarthavision.domain.geo.ViewTransform
 import com.agarthavision.domain.geo.fitBounds
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.dashboard.PeriodToggle
 import com.agarthavision.ui.dashboard.coverage.drawProvinces
 import com.agarthavision.ui.icons.AgarthaIcons
@@ -118,23 +121,41 @@ fun MyCoverageScreen(
 
         Spacer(Modifier.height(Spacing.sm))
 
-        val provinces = state.provinces
-        if (provinces != null) {
-            CoverageMap(
-                provinces = provinces,
-                state = state,
-                onTap = viewModel::onMapTap,
-                onCameraTargetConsumed = viewModel::onCameraTargetConsumed,
+        val hasData = (state.coverage?.totals?.smears ?: 0) > 0
+        if (!state.isLoading && !hasData) {
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(horizontal = Spacing.md),
-            )
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyState(
+                    icon = Icons.Outlined.Map,
+                    title = "No smears in this period",
+                    body = "Smears you examine will appear here by province.",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         } else {
-            Box(modifier = Modifier.fillMaxWidth().weight(1f))
-        }
+            val provinces = state.provinces
+            if (provinces != null) {
+                CoverageMap(
+                    provinces = provinces,
+                    state = state,
+                    onTap = viewModel::onMapTap,
+                    onCameraTargetConsumed = viewModel::onCameraTargetConsumed,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(horizontal = Spacing.md),
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxWidth().weight(1f))
+            }
 
-        CoverageLegend(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs))
+            CoverageLegend(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs))
+        }
 
         Text(
             text = "Administrative boundaries: OCHA Philippines Common Operational Datasets " +
@@ -164,10 +185,10 @@ private fun CoverageLegend(modifier: Modifier = Modifier) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         val bins = listOf("0%", "<10%", "<20%", "<40%", "40%+")
         bins.forEachIndexed { index, label ->
-            val fill = lerp(colors.goldTint, colors.gold, index / POSITIVE_RATE_BIN_COUNT)
+            val fill = lerp(colors.accentTint, colors.accent, index / POSITIVE_RATE_BIN_COUNT)
             LegendSwatch(fill, label)
         }
-        LegendSwatch(Color.White, "Too few")
+        LegendSwatch(colors.surfaceMuted, "Too few")
         LegendSwatch(Color.White, "No data")
     }
 }
@@ -268,11 +289,9 @@ private fun CoverageMap(
                         minScale = minScale,
                         maxScale = maxScale,
                     )
-                    val newTx = clampTranslation(next.tx, canvasSize.first)
-                    val newTy = clampTranslation(next.ty, canvasSize.second)
                     coroutineScope.launch { camera.scale.snapTo(next.scale) }
-                    coroutineScope.launch { camera.tx.snapTo(newTx) }
-                    coroutineScope.launch { camera.ty.snapTo(newTy) }
+                    coroutineScope.launch { camera.tx.snapTo(next.tx) }
+                    coroutineScope.launch { camera.ty.snapTo(next.ty) }
                 }
             }
             .pointerInput(provinces) {
@@ -293,20 +312,10 @@ private fun CoverageMap(
             transform = currentTransform,
             colors = colors,
             highlightCode = state.selected?.code,
-            highlightColor = colors.gold,
+            highlightColor = colors.accent,
             pathCache = pathCache,
         )
     }
-}
-
-/**
- * Keeps the country bbox from fully leaving the viewport — a simple clamp against the current
- * span, not elastic/bounce behavior (out of scope per the plan).
- */
-private fun clampTranslation(value: Float, viewportSpan: Float): Float {
-    if (viewportSpan <= 0f) return value
-    val slack = viewportSpan
-    return value.coerceIn(-slack, slack)
 }
 
 /**

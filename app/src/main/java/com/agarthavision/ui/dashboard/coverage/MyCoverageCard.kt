@@ -24,16 +24,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -62,7 +59,6 @@ import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaColors
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.LocalAgarthaColors
 
 private const val TOP_PROVINCES_SHOWN = 3
 private const val PERCENT_FACTOR = 100
@@ -79,25 +75,13 @@ fun MyCoverageCard(
 
     val theme = AgarthaTheme.colors
     val shape = RoundedCornerShape(12.dp)
-    val cardColors = remember(theme) {
-        theme.copy(
-            textPrimary = Color.White,
-            textSecondary = Color.White.copy(alpha = 0.8f),
-            textTertiary = Color.White.copy(alpha = 0.65f),
-            surfaceVariant = Color.White.copy(alpha = 0.15f),
-            surfaceMuted = Color.White.copy(alpha = 0.2f),
-            border = Color.White.copy(alpha = 0.25f),
-            borderStrong = Color.White.copy(alpha = 0.5f),
-            accent = theme.gold,
-        )
-    }
 
     Box(
         modifier = modifier
             .testTag("myCoverageCard")
             .clip(shape)
-            .background(theme.accent, shape)
-            .border(1.dp, theme.accentPressed, shape)
+            .background(theme.surface, shape)
+            .border(1.dp, theme.border, shape)
             .clickable { onOpen(period) }
             .semantics(mergeDescendants = true) {
                 role = Role.Button
@@ -105,44 +89,42 @@ fun MyCoverageCard(
             }
             .padding(16.dp),
     ) {
-        CompositionLocalProvider(LocalAgarthaColors provides cardColors) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "MY COVERAGE",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        letterSpacing = 1.2.sp,
+        Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "MY COVERAGE",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = theme.textSecondary,
+                    letterSpacing = 1.2.sp,
+                )
+                Text(
+                    text = periodLabel(period),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = theme.textSecondary,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                when (val s = state) {
+                    is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
+                    is MyCoverageCardUiState.Empty -> EmptyState(
+                        icon = Icons.Outlined.Map,
+                        title = "No smears in this period",
+                        body = "Smears you examine will appear here by province.",
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    Text(
-                        text = periodLabel(period),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = Color.White.copy(alpha = 0.8f),
+                    is MyCoverageCardUiState.Error -> Text(
+                        text = s.message,
+                        fontSize = 12.sp,
+                        color = theme.textSecondary,
                     )
-                }
-                Spacer(Modifier.height(8.dp))
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    when (val s = state) {
-                        is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
-                        is MyCoverageCardUiState.Empty -> EmptyState(
-                            icon = Icons.Outlined.Map,
-                            title = "No smears in this period",
-                            body = "Smears you examine will appear here by province.",
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        is MyCoverageCardUiState.Error -> Text(
-                            text = s.message,
-                            fontSize = 12.sp,
-                            color = Color.White.copy(alpha = 0.8f),
-                        )
-                        is MyCoverageCardUiState.Ready -> ReadyContent(s)
-                    }
+                    is MyCoverageCardUiState.Ready -> ReadyContent(s)
                 }
             }
         }
@@ -262,7 +244,7 @@ private fun SingleProvinceContent(
                     species.take(TOP_PROVINCES_SHOWN).forEach { item ->
                         val shortName = item.name.split(" ").firstOrNull() ?: item.name
                         val dotColor = when (shortName.lowercase()) {
-                            "ascaris" -> theme.goldTint
+                            "ascaris" -> theme.accent
                             "trichuris" -> theme.gold
                             "hookworm" -> theme.success
                             else -> theme.textSecondary
@@ -543,7 +525,7 @@ private fun CoverageCardLegend(
             color = colors.textTertiary,
         )
         for (bin in 0..4) {
-            val color = lerp(colors.goldTint, colors.gold, bin / 4f)
+            val color = lerp(colors.accentTint, colors.accent, bin / 4f)
             Box(
                 modifier = Modifier
                     .size(width = 6.dp, height = 6.dp)
@@ -563,13 +545,13 @@ private fun CoverageCardLegend(
                 .clip(RoundedCornerShape(1.dp))
                 .border(0.5.dp, colors.border, RoundedCornerShape(1.dp)),
         ) {
-            drawRect(Color.White)
+            drawRect(colors.surfaceMuted)
             val strokeWidthPx = 1f
             val spacingPx = 3f
             var x = -size.height
             while (x < size.width) {
                 drawLine(
-                    color = colors.gold,
+                    color = colors.borderStrong,
                     start = Offset(x, size.height),
                     end = Offset(x + size.height, 0f),
                     strokeWidth = strokeWidthPx,

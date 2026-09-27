@@ -116,4 +116,30 @@ class ProvinceSheetTest {
         composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
         composeRule.onNodeWithText("Town 1").performScrollTo().assertExists()
     }
+
+    @Test
+    fun `view all towns is hidden when province has only no data`() {
+        val towns = BoundarySet(
+            areas = (1..8).map { townShape("T$it", "Town $it") },
+            bounds = GeoBounds(0f, 0f, 1f, 1f),
+        )
+        val selected = SelectedProvince(
+            code = "CEB",
+            name = "Cebu",
+            coverage = null,
+            towns = TownGeometry.Available(towns),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                ProvinceSheetContent(
+                    selected = selected,
+                    showAllTowns = false,
+                    onShowAllTowns = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
+    }
 }

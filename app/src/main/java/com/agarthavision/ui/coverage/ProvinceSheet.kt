@@ -27,8 +27,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
@@ -110,7 +112,7 @@ internal fun ProvinceSheetContent(
     ) {
         ProvinceMiniMap(selected)
         Spacer(Modifier.height(12.dp))
-        Text(selected.name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+        Text(selected.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.accent)
         TownCountLine(selected)
         Spacer(Modifier.height(6.dp))
         RateLine(selected.coverage?.count?.stat)
@@ -199,13 +201,62 @@ private fun TownCountLine(selected: SelectedProvince) {
 @Composable
 private fun RateLine(stat: AreaStat?) {
     val colors = AgarthaTheme.colors
-    val text = when (stat) {
-        is AreaStat.Reported ->
-            "${(stat.positiveRate * PERCENT_FACTOR).toInt()}% positive · ${stat.smears} smears"
-        AreaStat.TooFew -> "Too few smears to show a rate"
-        AreaStat.NoData, null -> "No smears from this province in this period"
+    when (stat) {
+        is AreaStat.Reported -> {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.accent)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = "${(stat.positiveRate * PERCENT_FACTOR).toInt()}% positive",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.goldTint)
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                ) {
+                    Text(
+                        text = "${stat.smears} smears",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colors.goldText,
+                    )
+                }
+            }
+        }
+        AreaStat.TooFew -> {
+            Text(
+                text = "Too few smears to show a rate",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
+        AreaStat.NoData, null -> {
+            Text(
+                text = "No smears from this province in this period",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = colors.textSecondary,
+                modifier = Modifier.padding(vertical = 4.dp),
+            )
+        }
     }
-    Text(text, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
 }
 
 @Composable
@@ -262,6 +313,8 @@ private fun TownRanking(
             }.thenByDescending { (_, stat) -> (stat as? AreaStat.Reported)?.positiveRate ?: 0.0 },
         )
 
+    val hasData = (selected.coverage?.count?.smears ?: 0) > 0 || ranked.any { it.second != AreaStat.NoData }
+
     Text("Towns", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
     Spacer(Modifier.height(8.dp))
 
@@ -271,7 +324,7 @@ private fun TownRanking(
         }
     } else {
         ranked.take(TOP_TOWNS_SHOWN).forEach { (area, stat) -> TownRow(area.name, stat) }
-        if (ranked.size > TOP_TOWNS_SHOWN) {
+        if (hasData && ranked.size > TOP_TOWNS_SHOWN) {
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { onShowAllTowns(true) }) {
                 Text("View all ${ranked.size} towns")

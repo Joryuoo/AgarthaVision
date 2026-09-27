@@ -29,7 +29,7 @@ import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.domain.model.ProvinceCoverage
 import com.agarthavision.ui.theme.AgarthaColors
 
-private const val MAP_PADDING_PX = 8f
+private const val MAP_PADDING_PX = 12f
 private const val POSITIVE_RATE_BIN_COUNT = 4f
 private const val HATCH_LINE_SPACING_PX = 6f
 private const val STROKE_WIDTH_PX = 1.2f
@@ -86,17 +86,17 @@ internal fun MiniChoroplethMap(
                 val stat = province.count.stat
                 if (stat is AreaStat.TooFew) {
                     drawCircle(
-                        color = colors.accent,
+                        color = Color.White,
                         radius = radius + 1.2f.dp.toPx(),
                         center = Offset(sx, sy),
                     )
                     drawCircle(
-                        color = colors.goldTint,
+                        color = colors.surfaceMuted,
                         radius = radius,
                         center = Offset(sx, sy),
                     )
                     drawCircle(
-                        color = colors.gold,
+                        color = colors.accent,
                         radius = radius,
                         center = Offset(sx, sy),
                         style = Stroke(
@@ -110,12 +110,12 @@ internal fun MiniChoroplethMap(
                 } else {
                     val dotColor = if (stat is AreaStat.Reported) {
                         val bin = PositiveRateBin.of(stat.positiveRate)
-                        lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
+                        lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
                     } else {
-                        colors.gold
+                        colors.border
                     }
                     drawCircle(
-                        color = colors.accent,
+                        color = Color.White,
                         radius = radius + 1.2f.dp.toPx(),
                         center = Offset(sx, sy),
                     )
@@ -127,10 +127,6 @@ internal fun MiniChoroplethMap(
                 }
             }
         } else if (towns != null) {
-            provinces.areas.forEach { area ->
-                val path = pathCache.getOrPut(area.code) { pathFor(area, transform) }
-                drawArea(path, null, colors)
-            }
             towns.areas.forEach { town ->
                 val path = townPathCache.getOrPut(town.code) { pathFor(town, transform) }
                 val stat = townCounts[town.code]?.stat
@@ -182,18 +178,18 @@ private fun DrawScope.drawArea(
     when (stat) {
         is AreaStat.Reported -> {
             val bin = PositiveRateBin.of(stat.positiveRate)
-            val fill = lerp(colors.goldTint, colors.gold, bin / POSITIVE_RATE_BIN_COUNT)
+            val fill = lerp(colors.accentTint, colors.accent, bin / POSITIVE_RATE_BIN_COUNT)
             drawPath(path, color = fill)
-            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.TooFew -> {
-            drawPath(path, color = Color.White)
-            drawHatching(path, colors.gold)
-            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = colors.surfaceMuted)
+            drawHatching(path, colors.accent)
+            drawPath(path, color = Color.White, style = Stroke(STROKE_WIDTH_PX))
         }
         AreaStat.NoData, null -> {
             drawPath(path, color = Color.White)
-            drawPath(path, color = colors.accent, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = colors.border, style = Stroke(STROKE_WIDTH_PX))
         }
     }
 }
