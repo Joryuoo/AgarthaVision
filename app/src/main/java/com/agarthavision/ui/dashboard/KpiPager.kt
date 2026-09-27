@@ -42,6 +42,7 @@ import com.agarthavision.ui.dashboard.coverage.MyCoverageCard
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 @Suppress("LongParameterList") // Mirrors the sibling KpiPager tile-click callback; each param is an independent slot.
 @Composable
@@ -79,6 +80,13 @@ internal fun KpiPager(
                     )
                 },
         ) { page ->
+            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+            val pageTransitionModifier = Modifier.graphicsLayer {
+                val progress = pageOffset.coerceIn(0f, 1f)
+                alpha = 1f - (progress * 0.25f)
+                scaleX = 1f - (progress * 0.04f)
+                scaleY = 1f - (progress * 0.04f)
+            }
             when (page) {
                 0 -> {
                     KpiGrid(
@@ -87,6 +95,7 @@ internal fun KpiPager(
                         onTileClick = onTileClick,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .then(pageTransitionModifier)
                             .onSizeChanged { size ->
                                 if (size.height > 0) {
                                     page0HeightDp = with(density) { size.height.toDp() }
@@ -107,7 +116,7 @@ internal fun KpiPager(
                     MyCoverageCard(
                         period = period,
                         onOpen = onOpenCoverage,
-                        modifier = page1Modifier,
+                        modifier = page1Modifier.then(pageTransitionModifier),
                     )
                 }
             }
@@ -119,13 +128,15 @@ internal fun KpiPager(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PagerDots(
+                pagerState = pagerState,
                 pageCount = 2,
-                current = pagerState.currentPage,
                 onSelect = { targetPage ->
                     coroutineScope.launch { pagerState.animateScrollToPage(targetPage) }
                 },
             )
-            if (pagerState.currentPage == 0) {
+            val continuousOffset = (pagerState.currentPage + pagerState.currentPageOffsetFraction).coerceIn(0f, 1f)
+            val hintDismissProgress = (1f - continuousOffset * 2.5f).coerceIn(0f, 1f)
+            if (hintDismissProgress > 0f) {
                 val infiniteTransition = rememberInfiniteTransition(label = "swipeHint")
                 val nudgeOffset by infiniteTransition.animateFloat(
                     initialValue = 0f,
@@ -136,14 +147,14 @@ internal fun KpiPager(
                     ),
                     label = "nudgeOffset",
                 )
-                val hintAlpha by infiniteTransition.animateFloat(
+                val pulseAlpha by infiniteTransition.animateFloat(
                     initialValue = 0.65f,
                     targetValue = 1f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(durationMillis = 850, easing = FastOutSlowInEasing),
                         repeatMode = RepeatMode.Reverse,
                     ),
-                    label = "hintAlpha",
+                    label = "pulseAlpha",
                 )
                 Spacer(Modifier.width(Spacing.sm))
                 Text(
@@ -155,7 +166,7 @@ internal fun KpiPager(
                         .testTag("pagerCoverageHint")
                         .graphicsLayer {
                             translationX = nudgeOffset * density.density
-                            alpha = hintAlpha
+                            alpha = hintDismissProgress * pulseAlpha
                         }
                         .clickable {
                             coroutineScope.launch { pagerState.animateScrollToPage(1) }
