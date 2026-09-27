@@ -77,7 +77,7 @@ internal fun RecentSessionCard(
             .background(colors.surface, shape)
             .border(1.dp, colors.border, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
             .semantics(mergeDescendants = true) {
                 role = Role.Button
                 contentDescription = cardDescription
@@ -94,8 +94,9 @@ internal fun RecentSessionCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 17.sp,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
                 text = patientName,
                 fontSize = 13.sp,
@@ -103,8 +104,9 @@ internal fun RecentSessionCard(
                 color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                lineHeight = 15.sp,
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
                 text = subtitleText,
                 fontSize = 12.sp,
@@ -113,13 +115,14 @@ internal fun RecentSessionCard(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 14.sp,
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(4.dp))
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape(999.dp))
                     .background(badgeBg)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
             ) {
                 Text(
                     text = badgeText,
