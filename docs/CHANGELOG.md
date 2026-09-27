@@ -45,6 +45,9 @@ bump ships a `Migration` (C6). Destructive fallback stays only for installs olde
 **Connect timeout 10 s → 5 s.** Nobody waits on the call now, and the phone answers when the
 cloud cannot.
 
+**The connection-loss banner no longer says captures become Manual.** It reads "Cloud model
+unreachable · Captures are still recorded. This phone reads them instead, more slowly."
+
 ---
 
 ## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27
