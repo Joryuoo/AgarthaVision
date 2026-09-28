@@ -27,8 +27,10 @@ import kotlinx.serialization.Serializable
  * definition of visibility that could drift from the policy.
  */
 class PatientRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Writes the patient row: insert first, update on primary-key conflict.
      *
@@ -83,10 +85,14 @@ class PatientRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ───────────────────────────────────────────────
 
-    /** Every patient the authenticated caller can see, oldest first. */
-    suspend fun fetchPatients(): List<PatientEntity> =
+    /**
+     * Fetches a page of patients the authenticated caller can see, ordered by creation time ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
+     */
+    suspend fun fetchPatients(offset: Long = 0L, limit: Long = 500L): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
             order("created_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
         }.decodeList<PatientRow>().map { it.toEntity() }
 
     /**
@@ -95,10 +101,12 @@ class PatientRemoteDataSource @Inject constructor(
      * Pulled alongside the patients themselves because `PatientDao` resolves visibility
      * through this join: a patient row with no matching link is present on the device and
      * invisible to every query that reads it.
+     * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchPatientLinks(): List<PatientUserEntity> =
-        supabase.postgrest[PATIENT_USERS_TABLE].select()
-            .decodeList<PatientUserRow>()
+    suspend fun fetchPatientLinks(offset: Long = 0L, limit: Long = 500L): List<PatientUserEntity> =
+        supabase.postgrest[PATIENT_USERS_TABLE].select {
+            range(offset, offset + limit - 1)
+        }.decodeList<PatientUserRow>()
             .map { it.toEntity() }
 
     // ── Row shapes ────────────────────────────────────────────────────────────

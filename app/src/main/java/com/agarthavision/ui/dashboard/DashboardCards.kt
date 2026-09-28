@@ -29,13 +29,25 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
+import com.agarthavision.R
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Science
@@ -52,116 +64,216 @@ internal fun ActiveSessionHero(
     elapsed: String,
     frameCount: Int,
     onResume: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    val frameCountText = pluralStringResource(R.plurals.dashboard_frame_count, frameCount, frameCount)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(colors.accent)
+            .clip(RoundedCornerShape(20.dp))
+            .background(colors.brandFill)
             .clickable(onClick = onResume)
-            .padding(18.dp)
+            .padding(horizontal = 18.dp, vertical = 14.dp),
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "RECENT SESSION",
-                fontSize = 10.sp,
+                text = "CONTINUE",
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.onAccent.copy(alpha = 0.92f),
-                letterSpacing = 1.2.sp
+                color = colors.onBrandFill.copy(alpha = 0.85f),
+                letterSpacing = 1.2.sp,
+                lineHeight = 13.sp,
             )
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
-                sessionId,
-                fontSize = 28.sp,
+                text = sessionId,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = colors.onAccent,
-                letterSpacing = (-0.7).sp,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                lineHeight = 30.sp
+                color = colors.onBrandFill,
+                letterSpacing = (-0.3).sp,
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 24.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(elapsed,
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text("  ·  ", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.5f))
-                Text(frameCount.toString(),
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.onAccent,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"))
-                Text(" frames", fontSize = 12.sp, color = colors.onAccent.copy(alpha = 0.85f))
-            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Updated $elapsed · $frameCountText",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Normal,
+                color = colors.onBrandFill.copy(alpha = 0.9f),
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 16.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
 
-        // Idle "breathing" scale so the recent-session affordance feels alive without the
-        // old blinking dot, which read as a still-live recording indicator.
-        val idleTransition = rememberInfiniteTransition(label = "recentSessionIdle")
-        val iconScale by idleTransition.animateFloat(
-            initialValue = 1f,
-            targetValue = 1.12f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(durationMillis = 1400, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "recentSessionIdleScale"
-        )
+        Spacer(Modifier.width(12.dp))
+
         Box(
             modifier = Modifier
-                .size(56.dp)
-                .background(colors.surface, CircleShape)
-                .clickable(onClick = onResume),
-            contentAlignment = Alignment.Center
+                .clip(RoundedCornerShape(999.dp))
+                .background(AppColors.White)
+                .clickable(onClick = onResume)
+                .padding(horizontal = 18.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                imageVector = AgarthaIcons.Science,
-                contentDescription = "Open session",
-                tint = colors.accent,
-                modifier = Modifier
-                    .size(22.dp)
-                    .scale(iconScale)
+            Text(
+                text = "Resume",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.brandFill,
             )
         }
     }
 }
 
+enum class KpiKind {
+    SESSIONS,
+    POSITIVE_RATE,
+    TO_REVIEW,
+    AI_AGREEMENT,
+}
+
+data class KpiTileUi(
+    val kind: KpiKind,
+    val label: String,
+    val value: String,
+    val subtitle: String,
+    val changeText: String = "",
+    val sparkline: List<Double?> = emptyList(),
+    val spokenDescription: String = "",
+)
+
 @Composable
-internal fun KpiGrid(kpis: KpiState, modifier: Modifier = Modifier) {
+internal fun KpiGrid(
+    tiles: List<KpiTileUi>,
+    isLoading: Boolean,
+    onTileClick: (KpiKind) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     val colors = AgarthaTheme.colors
+    val colorForKind = { kind: KpiKind ->
+        when (kind) {
+            KpiKind.SESSIONS -> KpiTileColors(
+                bgColor = colors.brandFill,
+                contentColor = colors.onBrandFill,
+                labelColor = colors.onBrandFill,
+                subtitleColor = colors.onBrandFill.copy(alpha = 0.85f),
+                badgeBg = colors.onBrandFill.copy(alpha = 0.2f),
+                badgeTextColor = colors.onBrandFill,
+                sparklineColor = colors.onBrandFill.copy(alpha = 0.65f),
+            )
+            KpiKind.POSITIVE_RATE -> KpiTileColors(
+                bgColor = AppColors.Gray900,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White,
+                subtitleColor = AppColors.White.copy(alpha = 0.8f),
+                badgeBg = AppColors.White.copy(alpha = 0.16f),
+                badgeTextColor = AppColors.White,
+                sparklineColor = AppColors.White.copy(alpha = 0.65f),
+                borderColor = if (colors.isDark) colors.border else Color.Transparent,
+            )
+            KpiKind.TO_REVIEW -> KpiTileColors(
+                bgColor = colors.gold,
+                contentColor = AppColors.Gray900,
+                labelColor = AppColors.Gray900,
+                subtitleColor = AppColors.Gray900.copy(alpha = 0.85f),
+                badgeBg = AppColors.Gray900.copy(alpha = 0.14f),
+                badgeTextColor = AppColors.Gray900,
+                sparklineColor = Color(0xFF6B4E00),
+            )
+            KpiKind.AI_AGREEMENT -> KpiTileColors(
+                bgColor = AppColors.Gray700,
+                contentColor = AppColors.White,
+                labelColor = AppColors.White,
+                subtitleColor = AppColors.White.copy(alpha = 0.8f),
+                badgeBg = AppColors.White.copy(alpha = 0.16f),
+                badgeTextColor = AppColors.White,
+                sparklineColor = AppColors.White.copy(alpha = 0.65f),
+                borderColor = if (colors.isDark) colors.border else Color.Transparent,
+            )
+        }
+    }
+
+    val displayTiles = if (tiles.size >= 4) {
+        tiles.take(4)
+    } else {
+        listOf(
+            KpiTileUi(
+                KpiKind.SESSIONS,
+                "Sessions",
+                "0",
+                "0 patients",
+                changeText = "",
+                spokenDescription = "Sessions, 0, 0 patients. Opens sessions.",
+            ),
+            KpiTileUi(
+                KpiKind.POSITIVE_RATE,
+                "Positive rate",
+                "—",
+                "No smears examined yet",
+                changeText = "",
+                spokenDescription = "Positive rate, no smears examined yet. Opens examined smears.",
+            ),
+            KpiTileUi(
+                KpiKind.TO_REVIEW,
+                "To review",
+                "0",
+                "0 verified today",
+                changeText = "",
+                spokenDescription = "To review, 0 frames. Opens frames to review.",
+            ),
+            KpiTileUi(
+                KpiKind.AI_AGREEMENT,
+                "AI agreement",
+                "—",
+                "No AI results reviewed yet",
+                changeText = "",
+                spokenDescription = "AI agreement, no AI results reviewed yet. Opens AI agreement details.",
+            ),
+        )
+    }
+
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Sessions", kpis.sessionsCount, trend = null,
-                colors = KpiTileColors(
-                    bgColor = colors.accent,
-                    contentColor = colors.onAccent,
-                    labelColor = colors.onAccent.copy(alpha = 0.8f),
-                ),
-                modifier = Modifier.weight(1f))
-            KpiTile("Verified", kpis.samplesCount, trend = null,
-                colors = KpiTileColors(
-                    bgColor = AppColors.Gray700,
-                    contentColor = AppColors.White,
-                    labelColor = AppColors.White.copy(alpha = 0.8f),
-                ),
-                modifier = Modifier.weight(1f))
+            val tile0 = displayTiles[0]
+            KpiTile(
+                tile = tile0,
+                colors = colorForKind(tile0.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile0.kind) },
+                modifier = Modifier.weight(1f),
+            )
+            val tile1 = displayTiles[1]
+            KpiTile(
+                tile = tile1,
+                colors = colorForKind(tile1.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile1.kind) },
+                modifier = Modifier.weight(1f),
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            KpiTile("Patients", kpis.patientsCount, trend = null,
-                colors = KpiTileColors(
-                    bgColor = AppColors.Gray900,
-                    contentColor = AppColors.White,
-                    labelColor = AppColors.White.copy(alpha = 0.8f),
-                    borderColor = colors.border,
-                ),
-                modifier = Modifier.weight(1f))
-            KpiTile("To review", kpis.pendingCount, trend = null,
-                colors = KpiTileColors(
-                    bgColor = colors.gold,
-                    contentColor = colors.onGold,
-                    labelColor = colors.onGold.copy(alpha = 0.75f),
-                ),
-                modifier = Modifier.weight(1f))
+            val tile2 = displayTiles[2]
+            KpiTile(
+                tile = tile2,
+                colors = colorForKind(tile2.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile2.kind) },
+                modifier = Modifier.weight(1f),
+            )
+            val tile3 = displayTiles[3]
+            KpiTile(
+                tile = tile3,
+                colors = colorForKind(tile3.kind),
+                isLoading = isLoading,
+                onClick = { onTileClick(tile3.kind) },
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -171,51 +283,121 @@ private data class KpiTileColors(
     val bgColor: Color,
     val contentColor: Color,
     val labelColor: Color,
+    val subtitleColor: Color,
+    val badgeBg: Color,
+    val badgeTextColor: Color,
+    val sparklineColor: Color,
     val borderColor: Color = Color.Transparent,
 )
 
-/** A [KpiTile]'s trend indicator — the direction only has meaning alongside its label text. */
-private data class KpiTrend(val label: String, val isUp: Boolean)
-
 @Composable
 private fun KpiTile(
-    label: String,
-    value: String,
-    trend: KpiTrend?,
+    tile: KpiTileUi,
     colors: KpiTileColors,
-    modifier: Modifier = Modifier
+    isLoading: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier
-            .background(colors.bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.borderColor, RoundedCornerShape(12.dp))
-            .padding(14.dp)
-    ) {
-        Text(label, fontSize = 11.sp, fontWeight = FontWeight.Medium, color = colors.labelColor)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            value,
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
-            color = colors.contentColor,
-            letterSpacing = (-0.7).sp,
-            style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-            lineHeight = 30.sp
-        )
-        if (trend != null) {
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (trend.isUp) {
-                    Text("↑ ", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = AgarthaTheme.colors.success)
-                }
+    val shape = RoundedCornerShape(16.dp)
+    val badgeText = when {
+        tile.changeText.isNotEmpty() -> tile.changeText
+        tile.kind == KpiKind.TO_REVIEW && tile.value != "0" && tile.value != "—" -> "tap"
+        else -> ""
+    }
+
+    Box(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .testTag("kpiTile_${tile.label}")
+                .fillMaxWidth()
+                .clip(shape)
+                .background(if (isLoading) Color.Transparent else colors.bgColor, shape)
+                .border(1.dp, if (isLoading) Color.Transparent else colors.borderColor, shape)
+                .clickable(
+                    enabled = !isLoading,
+                    onClickLabel = "Open ${tile.label.lowercase()}",
+                    onClick = onClick,
+                )
+                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .then(
+                    if (isLoading) {
+                        Modifier
+                            .alpha(0f)
+                            .clearAndSetSemantics {}
+                    } else {
+                        Modifier.semantics(mergeDescendants = true) {
+                            role = Role.Button
+                            if (tile.spokenDescription.isNotEmpty()) {
+                                contentDescription = tile.spokenDescription
+                            }
+                        }
+                    }
+                )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
-                    trend.label,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (trend.isUp) AgarthaTheme.colors.success else colors.labelColor,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum")
+                    text = tile.label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.labelColor,
+                )
+                if (badgeText.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(colors.badgeBg)
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = badgeText,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.badgeTextColor,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = tile.value,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.contentColor,
+                letterSpacing = (-0.5).sp,
+                style = TextStyle(fontFeatureSettings = "tnum"),
+                lineHeight = 30.sp,
+            )
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = tile.subtitle,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Normal,
+                color = colors.subtitleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (tile.sparkline.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                Sparkline(
+                    points = tile.sparkline,
+                    lineColor = colors.sparklineColor,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(20.dp),
                 )
             }
+        }
+        if (isLoading) {
+            SkeletonBox(
+                modifier = Modifier.matchParentSize(),
+                shape = shape,
+            )
         }
     }
 }
@@ -231,12 +413,23 @@ private fun KpiTile(
 
 @Composable
 internal fun SpeciesMixCard(
+    title: String,
+    positiveSmearsCount: Int,
     speciesData: List<SpeciesData>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val theme = AgarthaTheme.colors
     // Categorical series colors — brand tokens only (labels carry the meaning)
     val colors = listOf(theme.accent, theme.gold, theme.success)
+
+    val speciesCount = speciesData.size
+    val speciesPart = if (speciesCount == 1) "1 species" else "$speciesCount species"
+    val smearPart = if (positiveSmearsCount == 1) {
+        "1 positive smear"
+    } else {
+        "$positiveSmearsCount positive smears"
+    }
+    val summaryText = "$speciesPart · $smearPart"
 
     Column(
         modifier = modifier
@@ -245,9 +438,9 @@ internal fun SpeciesMixCard(
             .border(1.dp, theme.border, RoundedCornerShape(12.dp))
             .padding(16.dp)
     ) {
-        Text("Today's findings", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
+        Text(title, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = theme.textPrimary)
         Text(
-            "${speciesData.size} species detected",
+            summaryText,
             fontSize = 11.sp,
             color = theme.textSecondary,
             modifier = Modifier.padding(top = 2.dp)
@@ -306,62 +499,6 @@ internal fun SpeciesMixCard(
                 }
             }
         }
-    }
-}
-
-@Composable
-internal fun VerifyAlertRow(
-    pendingCount: Int,
-    oldestAgo: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colors = AgarthaTheme.colors
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(colors.surface)
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 12.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(colors.warningTint, RoundedCornerShape(10.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = AgarthaIcons.Warning,
-                contentDescription = null,
-                tint = colors.warning,
-                modifier = Modifier.size(18.dp)
-            )
-        }
-        Spacer(Modifier.width(Spacing.md))
-        Column(Modifier.weight(1f)) {
-            Text(
-                "$pendingCount frames awaiting verification",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.textPrimary
-            )
-            Text(
-                "Oldest pending · $oldestAgo",
-                fontSize = 11.sp,
-                color = colors.textSecondary,
-                style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
-                modifier = Modifier.padding(top = 1.dp)
-            )
-        }
-        Icon(
-            imageVector = AgarthaIcons.ChevronRight,
-            contentDescription = null,
-            tint = colors.textTertiary,
-            modifier = Modifier.size(18.dp)
-        )
     }
 }
 

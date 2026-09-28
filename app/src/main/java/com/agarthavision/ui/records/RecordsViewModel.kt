@@ -8,6 +8,8 @@ import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.usecase.records.ObserveReportsUseCase
 import com.agarthavision.domain.usecase.records.ReportsQuery
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -27,12 +29,20 @@ import kotlinx.coroutines.flow.stateIn
 data class RecordsState(
     val reports: List<Report> = emptyList(),
     val totalReports: Int = 0,
+    val unsyncedReports: Int = 0,
     val isLoading: Boolean = true,
     val selectedSpecies: EggSpecies? = null,
     val startDate: LocalDate? = null,
     val endDate: LocalDate? = null,
     val searchQuery: String = "",
     val canLoadMore: Boolean = false,
+    /**
+     * One instant per emission, sourced from the injected [Clock], so the screen's
+     * Today/This-week bucketing always reflects the same "now" the state was computed with —
+     * rather than a Composable-local `System.currentTimeMillis()` snapshot frozen at first
+     * composition.
+     */
+    val now: Instant = Instant.now(),
 )
 
 /**
@@ -42,6 +52,7 @@ data class RecordsState(
 @HiltViewModel
 class RecordsViewModel @Inject constructor(
     observeReportsUseCase: ObserveReportsUseCase,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val selectedSpecies = MutableStateFlow<EggSpecies?>(null)
@@ -79,12 +90,14 @@ class RecordsViewModel @Inject constructor(
         RecordsState(
             reports = result.items,
             totalReports = result.totalCount,
+            unsyncedReports = result.unsyncedCount,
             isLoading = false,
             selectedSpecies = q.species,
             startDate = q.startDate,
             endDate = q.endDate,
             searchQuery = rawSearch,
             canLoadMore = result.items.size < result.totalCount,
+            now = clock.instant(),
         )
     }.stateIn(
         scope = viewModelScope,

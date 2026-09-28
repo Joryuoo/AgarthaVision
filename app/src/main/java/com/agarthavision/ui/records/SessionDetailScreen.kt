@@ -50,6 +50,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -464,9 +465,9 @@ private fun TabButton(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    val bg = if (selected) colors.accent else colors.surface
-    val border = if (selected) colors.accent else colors.border
-    val fg = if (selected) colors.onAccent else colors.textSecondary
+    val bg = if (selected) colors.brandFill else colors.surface
+    val border = if (selected) colors.brandFill else colors.border
+    val fg = if (selected) colors.onBrandFill else colors.textSecondary
 
     Box(
         modifier = modifier
@@ -572,12 +573,12 @@ internal fun LpfHeroCard(
     val speciesCount = session.speciesCount
     val samplesTotal = session.samplesTotal
     val themeColors = AgarthaTheme.colors
-    val onCard = themeColors.onAccent
+    val onCard = themeColors.onBrandFill
     val onCardMuted = onCard.copy(alpha = 0.72f)
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(themeColors.accent, RoundedCornerShape(12.dp))
+            .background(themeColors.brandFill, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp)),
     ) {
         Box(
@@ -683,7 +684,15 @@ private fun LpfMeta(
 ) {
     val labelColor = contentColor.copy(alpha = 0.72f)
     if (confirmedEggs == 0) {
-        Text("No confirmed eggs in $samplesTotal fields", fontSize = 13.sp, color = labelColor)
+        Text(
+            pluralStringResource(
+                R.plurals.session_detail_no_confirmed_eggs_fields,
+                samplesTotal,
+                samplesTotal,
+            ),
+            fontSize = 13.sp,
+            color = labelColor,
+        )
     } else {
         StatRun(
             listOf(

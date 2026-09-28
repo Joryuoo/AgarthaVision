@@ -3,14 +3,18 @@ package com.agarthavision.data.repository
 import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.core.util.sevenDaysAgoMillis
+import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.usecase.patients.PatientSort
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -282,6 +286,134 @@ class PatientRepositoryImplTest {
             barangayCode = "0723017001",
         ).first()
         assertEquals(1, count)
+    }
+
+    // ── TODAY/THIS_WEEK/EARLIER bucket filtering happens in SQL, not just in ordering ──────
+
+    @Test
+    fun `EARLIER sort excludes a patient whose last activity is within the last 7 days`() = runTest {
+        val now = Instant.parse("2026-01-15T12:00:00Z")
+        val todayStart = startOfTodayMillis(now)
+        val sevenDaysAgo = sevenDaysAgoMillis(now)
+
+        repository.insert(patient(id = "p-recent", lastname = "Cruz").copy(updatedAt = now))
+        repository.insert(
+            patient(id = "p-old", lastname = "Santos").copy(updatedAt = now.minus(30, ChronoUnit.DAYS)),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 50,
+            sort = PatientSort.EARLIER,
+            todayStartMillis = todayStart,
+            sevenDaysAgoMillis = sevenDaysAgo,
+        ).first()
+
+        assertEquals(listOf("p-old"), results.map { it.id })
+    }
+
+    @Test
+    fun `EARLIER sort with a small limit still surfaces an older patient behind a more recent one`() = runTest {
+        // This is the exact shape of the bug: an unfiltered, recency-ordered LIMIT page (as it
+        // used to be built) would return only "p-recent" here and never reach "p-old" — the
+        // Earlier bucket would look empty even though an older patient exists. Filtering must
+        // happen in the WHERE clause, before LIMIT is applied, not client-side afterward.
+        val now = Instant.parse("2026-01-15T12:00:00Z")
+        val todayStart = startOfTodayMillis(now)
+        val sevenDaysAgo = sevenDaysAgoMillis(now)
+
+        repository.insert(patient(id = "p-recent", lastname = "Cruz").copy(updatedAt = now))
+        repository.insert(
+            patient(id = "p-old", lastname = "Santos").copy(updatedAt = now.minus(30, ChronoUnit.DAYS)),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 1,
+            sort = PatientSort.EARLIER,
+            todayStartMillis = todayStart,
+            sevenDaysAgoMillis = sevenDaysAgo,
+        ).first()
+
+        assertEquals(listOf("p-old"), results.map { it.id })
+    }
+
+    @Test
+    fun `EARLIER count reflects the bucket filter, not every visible patient`() = runTest {
+        val now = Instant.parse("2026-01-15T12:00:00Z")
+        val todayStart = startOfTodayMillis(now)
+        val sevenDaysAgo = sevenDaysAgoMillis(now)
+
+        repository.insert(patient(id = "p-recent", lastname = "Cruz").copy(updatedAt = now))
+        repository.insert(
+            patient(id = "p-old", lastname = "Santos").copy(updatedAt = now.minus(30, ChronoUnit.DAYS)),
+        )
+
+        val count = repository.observePatientCount(
+            userId = USER_A,
+            query = "",
+            sort = PatientSort.EARLIER,
+            todayStartMillis = todayStart,
+            sevenDaysAgoMillis = sevenDaysAgo,
+        ).first()
+
+        // Not 2: canLoadMore (items.size < total) must see the filtered total, or pagination
+        // thinks there is more to load for a bucket that is already exhausted.
+        assertEquals(1, count)
+    }
+
+    @Test
+    fun `TODAY sort matches only activity from today`() = runTest {
+        val now = Instant.parse("2026-01-15T12:00:00Z")
+        val todayStart = startOfTodayMillis(now)
+        val sevenDaysAgo = sevenDaysAgoMillis(now)
+
+        repository.insert(patient(id = "p-today", lastname = "Cruz").copy(updatedAt = now))
+        repository.insert(
+            patient(id = "p-this-week", lastname = "Reyes").copy(updatedAt = now.minus(2, ChronoUnit.DAYS)),
+        )
+        repository.insert(
+            patient(id = "p-old", lastname = "Santos").copy(updatedAt = now.minus(30, ChronoUnit.DAYS)),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 50,
+            sort = PatientSort.TODAY,
+            todayStartMillis = todayStart,
+            sevenDaysAgoMillis = sevenDaysAgo,
+        ).first()
+
+        assertEquals(listOf("p-today"), results.map { it.id })
+    }
+
+    @Test
+    fun `THIS_WEEK sort matches activity from the last 7 days excluding today`() = runTest {
+        val now = Instant.parse("2026-01-15T12:00:00Z")
+        val todayStart = startOfTodayMillis(now)
+        val sevenDaysAgo = sevenDaysAgoMillis(now)
+
+        repository.insert(patient(id = "p-today", lastname = "Cruz").copy(updatedAt = now))
+        repository.insert(
+            patient(id = "p-this-week", lastname = "Reyes").copy(updatedAt = now.minus(2, ChronoUnit.DAYS)),
+        )
+        repository.insert(
+            patient(id = "p-old", lastname = "Santos").copy(updatedAt = now.minus(30, ChronoUnit.DAYS)),
+        )
+
+        val results = repository.observePatients(
+            userId = USER_A,
+            query = "",
+            limit = 50,
+            sort = PatientSort.THIS_WEEK,
+            todayStartMillis = todayStart,
+            sevenDaysAgoMillis = sevenDaysAgo,
+        ).first()
+
+        assertEquals(listOf("p-this-week"), results.map { it.id })
     }
 
     // ── sorting ───────────────────────────────────────────────────────────────

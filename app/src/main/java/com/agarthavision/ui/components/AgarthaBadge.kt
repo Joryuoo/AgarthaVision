@@ -45,8 +45,8 @@ fun AgarthaBadge(
 
     when (variant) {
         AgarthaBadgeVariant.Default -> {
-            containerColor = colors.accent
-            contentColor = colors.onAccent
+            containerColor = colors.brandFill
+            contentColor = colors.onBrandFill
         }
         AgarthaBadgeVariant.Secondary -> {
             containerColor = colors.surfaceMuted

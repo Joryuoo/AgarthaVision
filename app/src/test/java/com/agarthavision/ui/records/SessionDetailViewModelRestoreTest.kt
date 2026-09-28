@@ -150,7 +150,7 @@ class SessionDetailViewModelRestoreTest {
 
 /** A download that waits on [gate], counting every fetch it is asked for. */
 private class GatedRemote : ReportRemoteDataSource(
-    supabase = mock(),
+    supabaseProvider = mock(),
     gson = Gson(),
 ) {
     val gate = CompletableDeferred<Unit>()

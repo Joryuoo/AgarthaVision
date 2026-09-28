@@ -16,7 +16,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -26,6 +25,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.ui.activity.ActivityScreen
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.components.AgarthaBottomBar
 import com.agarthavision.ui.components.bottomBarRoutes
@@ -38,6 +38,10 @@ import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
 import com.agarthavision.ui.settings.SettingsScreen
+import com.agarthavision.domain.model.HomePeriod
+import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.ui.sessionlist.SessionListScreen
+import com.agarthavision.ui.coverage.MyCoverageScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
@@ -70,8 +74,20 @@ sealed class Screen(val route: String) {
     data object SampleDetail : Screen("records/sample/{sampleId}") {
         fun createRoute(sampleId: String) = "records/sample/$sampleId"
     }
+    data object SessionList : Screen("sessions?filter={filter}&period={period}") {
+        fun createRoute(
+            filter: SessionListFilter = SessionListFilter.ALL,
+            period: HomePeriod? = null,
+        ) = "sessions?filter=${filter.name}&period=${period?.name ?: "ALL"}"
+    }
     data object VerificationQueue : Screen("verification_queue")
     data object Settings : Screen("settings")
+    data object Activity : Screen("activity")
+
+    /** The full-screen My coverage map drill-down from the Home coverage card. */
+    data object MyCoverage : Screen("coverage?period={period}") {
+        fun createRoute(period: HomePeriod) = "coverage?period=${period.name}"
+    }
 }
 
 @Composable
@@ -162,7 +178,8 @@ fun AgarthaNavHost(
         // === Primary tabs (fade between them) ===
         composable(Screen.Dashboard.route) {
             DashboardScreen(
-                onNavigate = { route -> navController.navigate(route) }
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateToTab = { tabRoute -> navController.navigateToTab(tabRoute) },
             )
         }
         composable(Screen.Patients.route) {
@@ -339,6 +356,119 @@ fun AgarthaNavHost(
             SampleDetailScreen(onBack = { navController.popBackStack() })
         }
 
+        composable(
+            route = Screen.SessionList.route,
+            arguments = listOf(
+                navArgument("filter") {
+                    type = NavType.StringType
+                    defaultValue = SessionListFilter.ALL.name
+                },
+                navArgument("period") {
+                    type = NavType.StringType
+                    defaultValue = "ALL"
+                },
+            ),
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(220),
+                )
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(280),
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(220),
+                )
+            },
+        ) {
+            SessionListScreen(
+                onBack = { navController.popBackStack() },
+                onNavigate = { route -> navController.navigate(route) },
+            )
+        }
+
+        composable(
+            route = Screen.MyCoverage.route,
+            arguments = listOf(
+                navArgument("period") {
+                    type = NavType.StringType
+                    defaultValue = HomePeriod.TODAY.name
+                },
+            ),
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(220),
+                )
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(280),
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(220),
+                )
+            },
+        ) {
+            MyCoverageScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = Screen.Activity.route,
+            enterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(280, easing = FastOutSlowInEasing),
+                )
+            },
+            exitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(220),
+                )
+            },
+            popEnterTransition = {
+                slideIntoContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Right,
+                    animationSpec = tween(280),
+                )
+            },
+            popExitTransition = {
+                slideOutOfContainer(
+                    AnimatedContentTransitionScope.SlideDirection.Left,
+                    animationSpec = tween(220),
+                )
+            },
+        ) {
+            ActivityScreen(
+                onBack = { navController.popBackStack() },
+                onNavigate = { route -> navController.navigate(route) },
+                onNavigateToTab = { tabRoute -> navController.navigateToTab(tabRoute) },
+            )
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen(
                 onSignInClick = { navController.navigate(Screen.Login.route) },
@@ -373,11 +503,22 @@ fun AgarthaNavHost(
  * has a name here rather than being copied by hand at each call site. A destination that is not
  * a tab (capture, a detail screen, login) is an ordinary `navigate` and must not use this:
  * restoring saved state is exactly wrong for a screen you are pushing onto the current stack.
+ *
+ * Pops to [Screen.Dashboard] specifically, never `graph.findStartDestination()`. The graph's
+ * start destination is not a fixed thing: it is `login` when the app cold-starts signed-out
+ * (see [AgarthaNavGraph]'s `startDestination` and the auth gate in `MainActivity`), and `login`
+ * is popped with `inclusive = true` the moment sign-in succeeds. From then on `popUpTo(login)`
+ * has nothing to pop to and silently no-ops — `saveState`/`restoreState` never fire, so every
+ * tab tap pushes a fresh entry (and a fresh `hiltViewModel()`) instead of restoring the saved
+ * one, and the back stack grows forever (14zcqntj1xk). Dashboard doesn't have that problem: it
+ * is always present on the back stack whenever the bottom bar — and therefore this function —
+ * is reachable, whether the process started on Dashboard directly, arrived there via sign-in
+ * replacing `login`, or via sign-out-then-sign-in again replacing the whole graph.
  */
 private fun NavHostController.navigateToTab(route: String) {
     navigate(route) {
-        // Pop back to start so each tab maintains its own stack.
-        popUpTo(graph.findStartDestination().id) { saveState = true }
+        // Pop back to the Dashboard tab root so each tab maintains its own stack.
+        popUpTo(Screen.Dashboard.route) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }

@@ -7,6 +7,7 @@ import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.sync.LastSyncStore
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
@@ -71,6 +72,9 @@ class SettingsViewModelTest {
     private val fetchOutcomeStore: FetchOutcomeStore = mock<FetchOutcomeStore>().also {
         whenever(it.observeIncomplete(any())).thenReturn(MutableStateFlow(false))
     }
+    private val lastSyncStore: LastSyncStore = mock<LastSyncStore>().also {
+        whenever(it.observe(any())).thenReturn(MutableStateFlow(null))
+    }
 
     private fun viewModel() = SettingsViewModel(
         observeLocalIdentityUseCase = observeLocalIdentityUseCase,
@@ -83,6 +87,7 @@ class SettingsViewModelTest {
         signOutUseCase = signOutUseCase,
         initialFetchStateStore = initialFetchStateStore,
         fetchOutcomeStore = fetchOutcomeStore,
+        lastSyncStore = lastSyncStore,
     )
 
     @Test
@@ -193,5 +198,23 @@ class SettingsViewModelTest {
                 assertTrue(event is SettingsEvent.SignOutBlocked)
             }
         }
+
+    @Test
+    fun `onSelectTheme persists specified theme mode`() = runTest(mainDispatcherRule.testDispatcher.scheduler) {
+        whenever(setThemeModeUseCase.invoke(ThemeMode.SYSTEM)).thenReturn(Result.success(Unit))
+        val vm = viewModel()
+        vm.uiState.test {
+            var snapshot = awaitItem()
+            while (snapshot.isLoading) {
+                snapshot = awaitItem()
+            }
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        vm.onSelectTheme(ThemeMode.SYSTEM)
+        advanceUntilIdle()
+
+        verify(setThemeModeUseCase).invoke(ThemeMode.SYSTEM)
+    }
 
 }

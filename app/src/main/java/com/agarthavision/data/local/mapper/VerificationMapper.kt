@@ -111,6 +111,9 @@ fun addedDetectionIdFor(sampleId: String, species: String, slot: Int, stageKey: 
  */
 fun detectionIdFor(sampleId: String, ordinal: Int): String = derive("$sampleId#box#$ordinal")
 
+fun isPredictionBacked(detectionId: String, sampleId: String, detectionsInSample: Int): Boolean =
+    (0 until detectionsInSample).any { detectionIdFor(sampleId, it) == detectionId }
+
 /**
  * The id the model's own prediction at [ordinal] gets in `predictions`.
  *

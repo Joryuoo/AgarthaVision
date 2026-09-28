@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -91,6 +92,7 @@ import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
+import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -158,8 +160,11 @@ fun SessionsScreen(
                     PatientPreviewCard(
                         patient = patient,
                         barangayName = state.barangayName,
-                        totalCount = state.totalCount,
-                        unverifiedCount = state.unverifiedCount,
+                        counts = PatientPreviewCounts(
+                            totalCount = state.totalCount,
+                            unverifiedCount = state.unverifiedCount,
+                            isLoading = state.isLoading,
+                        ),
                         modifier = Modifier.padding(horizontal = 20.dp, vertical = 6.dp),
                     )
                 }
@@ -192,7 +197,16 @@ fun SessionsScreen(
 
                 // Sessions List
                 when {
-                    state.isLoading -> Spacer(Modifier.weight(1f))
+                    state.isLoading -> Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        repeat(3) {
+                            SessionCardSkeleton()
+                        }
+                    }
                     state.sessions.isEmpty() -> Box(
                         modifier = Modifier
                             .weight(1f)
@@ -275,8 +289,8 @@ fun SessionsScreen(
                             .height(49.dp),
                         shape = CircleShape,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.accent,
-                            contentColor = colors.onAccent
+                            containerColor = colors.brandFill,
+                            contentColor = colors.onBrandFill,
                         )
                     ) {
                         Icon(
@@ -284,11 +298,15 @@ fun SessionsScreen(
                             // The button's own "New session" label says it; repeating it
                             // makes TalkBack read the control twice.
                             contentDescription = null,
-                            tint = colors.onAccent,
+                            tint = colors.onBrandFill,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("New session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.session_picker_create),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }
@@ -343,7 +361,7 @@ private fun AppBar(onBack: () -> Unit) {
             Text(
                 text = stringResource(R.string.sessions_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = colors.accent,
+                color = if (colors.isDark) Color.White else Color.Black,
             )
             Text(
                 text = stringResource(R.string.sessions_subtitle_purpose),
@@ -362,12 +380,18 @@ private fun AppBar(onBack: () -> Unit) {
  * can verify they are reading smears for the correct patient without navigating back.
  * Persists while scrolling the session list below.
  */
+/** Counts + loading state for [PatientPreviewCard] — bundled since they always travel together. */
+private data class PatientPreviewCounts(
+    val totalCount: Int,
+    val unverifiedCount: Int,
+    val isLoading: Boolean,
+)
+
 @Composable
 private fun PatientPreviewCard(
     patient: Patient,
     barangayName: String?,
-    totalCount: Int,
-    unverifiedCount: Int,
+    counts: PatientPreviewCounts,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -387,7 +411,7 @@ private fun PatientPreviewCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(colors.accent)
+            .background(colors.brandFill)
             .padding(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -403,7 +427,7 @@ private fun PatientPreviewCard(
                     lineHeight = 30.sp,
                     fontWeight = FontWeight.Bold,
                 ),
-                color = colors.onAccent,
+                color = colors.onBrandFill,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false),
@@ -422,7 +446,7 @@ private fun PatientPreviewCard(
                     Icon(
                         imageVector = icon,
                         contentDescription = stringResource(descRes),
-                        tint = colors.onAccent,
+                        tint = colors.onBrandFill,
                     )
                 }
             }
@@ -433,7 +457,7 @@ private fun PatientPreviewCard(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
             ),
-            color = colors.onAccent.copy(alpha = 0.9f),
+            color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -443,25 +467,29 @@ private fun PatientPreviewCard(
                 fontSize = 12.sp,
                 lineHeight = 16.sp,
             ),
-            color = colors.onAccent.copy(alpha = 0.9f),
+            color = colors.onBrandFill.copy(alpha = 0.9f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Text(
-            text = pluralStringResource(
-                R.plurals.sessions_subtitle,
-                totalCount,
-                totalCount,
-                unverifiedCount,
-            ),
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 12.sp,
-                lineHeight = 16.sp,
-            ),
-            color = colors.onAccent.copy(alpha = 0.9f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (counts.isLoading) {
+            SkeletonBox(Modifier.width(140.dp).height(12.dp))
+        } else {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.sessions_subtitle,
+                    counts.totalCount,
+                    counts.totalCount,
+                    counts.unverifiedCount,
+                ),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                ),
+                color = colors.onBrandFill.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -478,6 +506,28 @@ internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueue
     totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
     unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
     else -> SessionQueueBadge.PENDING
+}
+
+/** Loading placeholder for [SessionCard], modeled on RecordsScreen's `ReportCardSkeleton`. */
+@Composable
+private fun SessionCardSkeleton(modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            SkeletonBox(modifier = Modifier.width(140.dp).height(19.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+            SkeletonBox(modifier = Modifier.width(100.dp).height(13.dp))
+        }
+        SkeletonBox(modifier = Modifier.width(48.dp).height(24.dp))
+    }
 }
 
 @Composable
@@ -538,7 +588,7 @@ private fun SessionCard(
                 val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
                 val hasPending = unverified > 0
                 val (badgeBg, badgeTextColor) = if (hasPending) {
-                    colors.accent to colors.onAccent
+                    colors.accentTint to colors.onAccentTint
                 } else {
                     colors.surfaceMuted to colors.textSecondary
                 }
@@ -588,7 +638,12 @@ private fun SessionCard(
                         .clickable { actions.onViewReportClick() }
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
-                    Text("$eggs eggs", color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        pluralStringResource(R.plurals.sessions_eggs_count, eggs, eggs),
+                        color = badgeColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -609,7 +664,7 @@ fun LiveDot() {
     Box(
         modifier = Modifier
             .size(6.dp)
-            .background(AgarthaTheme.colors.onAccent.copy(alpha = alpha), CircleShape)
+            .background(AgarthaTheme.colors.onAccentTint.copy(alpha = alpha), CircleShape)
     )
 }
 
@@ -636,7 +691,7 @@ private fun NewSessionSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -791,7 +846,11 @@ private fun NewSessionSheet(
                         contentColor = colors.textPrimary
                     )
                 ) {
-                    Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.session_picker_dialog_cancel),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
                 Button(
                     onClick = {
@@ -800,21 +859,28 @@ private fun NewSessionSheet(
                     enabled = !state.isCreating,
                     modifier = Modifier.weight(1f).height(49.dp),
                     shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = colors.accent, contentColor = colors.onAccent)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.brandFill,
+                        contentColor = colors.onBrandFill,
+                    ),
                 ) {
                     if (state.isCreating) {
                         CircularProgressIndicator(
-                            color = colors.onAccent,
+                            color = colors.onBrandFill,
                             modifier = Modifier.size(18.dp),
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.session_picker_dialog_start),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
                             contentDescription = null,
-                            tint = colors.onAccent,
+                            tint = colors.onBrandFill,
                             modifier = Modifier.size(16.dp)
                         )
                     }

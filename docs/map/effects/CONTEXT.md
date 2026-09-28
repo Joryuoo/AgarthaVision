@@ -36,13 +36,17 @@ the vintage alone leaves the picker permanently empty after any future version b
 ## Changing the surveillance map or the barangay picker
 
 **Open:** `../objects/PsgcBarangay.md` · `../objects/Session.md` ·
-`supabase/migrations/0010_session_psgc_barangay.sql` · `tools/psgc/README.md`.
+`supabase/migrations/0010_session_psgc_barangay.sql` · `tools/psgc/README.md` ·
+`tools/geo/README.md`.
 
-**The non-obvious break:** the PSGC vintage is pinned, and the code list and the Admin
-Website's boundary GeoJSON must come from the **same release**. Move one without the other
-and the choropleth silently fails to join for every unit that changed — it looks like
-missing data, not a version mismatch. Newer code lists on the legacy 9-digit PSGC do not
-join this dataset's 10-digit codes at all.
+**The non-obvious break:** the PSGC vintage is pinned, and the code list and any boundary
+geometry that joins on it — the Admin Website's GeoJSON, and the on-device
+`app/src/main/assets/geo/ph-{provinces,towns}-<vintage>.bin` assets `BoundaryRepository` reads
+— must come from the **same release**. Move one without the other and the join silently fails
+for every unit that changed — it looks like missing data, not a version mismatch. Newer code
+lists on the legacy 9-digit PSGC do not join this dataset's 10-digit codes at all.
+`GeoDataset.VINTAGE` must equal `PsgcDataset.VINTAGE`; `tools/geo/README.md` "Rebuilding for a
+future PSGC vintage change" covers moving both together.
 
 **Also easy to miss:** the barangay code is patient-locating data. The admin aggregation
 suppresses figures below a minimum cell size, and that threshold is deliberately not a
@@ -110,7 +114,8 @@ sensitive code in the repo.
 **The non-obvious break:** verdicts are lowercase in Room and uppercase in Postgres
 (`domain/model/DetectionVerdict.kt:13-16`). Adding a value means the enum, the Postgres CHECK,
 **and** every raw SQL string that names a verdict — `data/local/dao/DetectionDao.kt:43`, `:66`,
-`:87`. Those three query strings do not agree with each other today.
+`:87`, and `data/local/dao/CoverageDao.kt`'s `observeTownCoverage` (the My coverage card's
+examined/positive smear query). Those do not agree with each other today.
 
 ## Changing sync
 
@@ -128,6 +133,10 @@ one direct awaited call and is deliberately so.
 touches `WorkManager.getInstance()` while Hilt is still field-injecting `AgarthaVisionApp`,
 which calls back for a `HiltWorkerFactory` that the same pass has not assigned yet, and the app
 dies at launch.
+
+`ui/sessions/SessionsViewModel` reads `isSyncing` via `domain/usecase/sync/ObserveSyncInProgressUseCase`
+to hold back a zero-count Sessions display while a sync is running, so changing what counts as
+"syncing" affects the Sessions empty state.
 
 **Corrected 86d4brr1f:** this section used to say a failed row waits for "login, app start while
 authenticated, or connectivity returning". Login was real; **app start did not exist** until

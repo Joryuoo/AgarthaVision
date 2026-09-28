@@ -126,7 +126,7 @@ class RestoreReportFilesUseCaseTest {
 }
 
 private class StubRemote(private val stored: Set<String>) : ReportRemoteDataSource(
-    supabase = mock(),
+    supabaseProvider = mock(),
     gson = Gson(),
 ) {
     val downloadedPaths = mutableListOf<String>()
@@ -219,4 +219,6 @@ private class FakeDao(seeded: List<ReportEntity>) : ReportDao {
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
 
     override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeUnsyncedCount(userId: String): Flow<Int> = flowOf(0)
 }

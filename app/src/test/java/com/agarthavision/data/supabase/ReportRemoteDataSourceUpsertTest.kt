@@ -94,7 +94,7 @@ class ReportRemoteDataSourceUpsertTest {
 
     @Test
     fun `the report row is written insert-if-absent on its id`() = runBlocking {
-        ReportRemoteDataSource(client, Gson()).upsertReport(entity("report-1"))
+        ReportRemoteDataSource(dagger.Lazy { client }, Gson()).upsertReport(entity("report-1"))
 
         val request = requests.single()
         assertEquals("POST", request.method)
@@ -107,7 +107,7 @@ class ReportRemoteDataSourceUpsertTest {
 
     @Test
     fun `a retry sends the same insert-if-absent write, never an update`() = runBlocking {
-        val remote = ReportRemoteDataSource(client, Gson())
+        val remote = ReportRemoteDataSource(dagger.Lazy { client }, Gson())
 
         remote.upsertReport(entity("report-2"))
         remote.upsertReport(entity("report-2"))

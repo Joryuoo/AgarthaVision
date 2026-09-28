@@ -18,8 +18,10 @@ import javax.inject.Inject
  * is `id`; this data source is the translation boundary between those shapes.
  */
 class SessionRemoteDataSource @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
 ) {
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
+
     /**
      * Returns the authenticated Supabase user id, or null when no session exists.
      */
@@ -48,12 +50,14 @@ class SessionRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     /**
-     * Fetches all sessions owned by [userId], ordered by start time ascending.
+     * Fetches a page of sessions owned by [userId], ordered by start time ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchSessions(userId: String): List<SessionEntity> =
+    suspend fun fetchSessions(userId: String, offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
         supabase.postgrest[SESSIONS_TABLE].select {
             filter { eq("user_id", userId) }
             order("started_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
         }.decodeList<SessionRow>().map { it.toEntity() }
 
     /**

@@ -74,13 +74,19 @@ follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<Fram
 
 `@Singleton` is for the database, OkHttp, Retrofit, Gson, the Supabase client, and the
 app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `CameraManager`,
-`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped.
+`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped, with one
+exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
+~25-40k quantized points out of the bundled offline boundary assets once per process. An
+unscoped or lifecycle-scoped alternative would repeat that parse on every screen that touches
+province/town geometry.
 
 **Enforcement:** review only. The scoped set is visible at
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,
 `core/di/SupabaseModule.kt:23-33`, and on the classes themselves
 (`core/session/SessionManager.kt:29`, `core/camera/FrameSampler.kt:28`,
-`data/repository/FlaggedFrameStore.kt:40`).
+`data/repository/FlaggedFrameStore.kt:40`). `SupabaseClient` is injected as
+`dagger.Lazy<SupabaseClient>` so resolving a ViewModel never constructs it on the main thread;
+the app warms it off-main in `AgarthaVisionApp.onCreate`.
 
 ## C6 — Migrations own the schema
 
@@ -272,7 +278,9 @@ invisible to TalkBack.
 a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
 the stale wording is what produced a hand-drawn tab icon (C13).
 
-**Enforcement:** review only. The token definitions are the single source —
+**User-facing strings and localization:** All user-facing prose copy lives in `res/values/strings.xml` and is referenced via `stringResource` or `pluralStringResource`. Non-prose formatting glyphs (such as punctuation separators `" · "` or `"·"` and direction/trend symbols `"↑ "`) are explicitly exempt from `strings.xml` extraction as they carry no translatable prose content.
+
+**Enforcement:** review and Android Lint (`HardcodedText`). The token definitions are the single source —
 `ui/theme/Color.kt`, `ui/theme/Palette.kt`, `ui/theme/Spacing.kt`, `ui/theme/Theme.kt`,
 `ui/theme/Type.kt`.
 

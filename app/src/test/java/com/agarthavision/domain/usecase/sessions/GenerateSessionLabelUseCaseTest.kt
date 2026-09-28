@@ -181,6 +181,8 @@ private class FakePatientRepository(private val patient: Patient?) : PatientRepo
         barangayCode: String?,
         minBirthdate: Long?,
         maxBirthdate: Long?,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
     ): Flow<List<Patient>> = flowOf(emptyList())
     override fun observePatientCount(
         userId: String,
@@ -189,6 +191,9 @@ private class FakePatientRepository(private val patient: Patient?) : PatientRepo
         barangayCode: String?,
         minBirthdate: Long?,
         maxBirthdate: Long?,
+        sort: PatientSort,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
     ): Flow<Int> = flowOf(0)
     override fun observePatientById(patientId: String): Flow<Patient?> = flowOf(patient)
     override suspend fun findDuplicates(

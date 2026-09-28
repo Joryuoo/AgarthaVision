@@ -2,9 +2,15 @@
 
 package com.agarthavision.ui.records
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,24 +22,40 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.CloudDone
+import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.CloudQueue
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.PictureAsPdf
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -46,14 +68,25 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -61,19 +94,28 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.core.util.DateBucket
+import com.agarthavision.core.util.classifyDateBucket
+import com.agarthavision.core.util.sevenDaysAgoMillis
+import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
+import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.components.ScreenHeader
-import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.FileOpen
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private const val REPORTS_SKELETON_COUNT = 6
 private const val STATS_REPORTS_WEIGHT = 0.25f
@@ -91,6 +133,7 @@ fun RecordsScreen(
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val colors = AgarthaTheme.colors
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var shareError by remember { mutableStateOf<Int?>(null) }
@@ -112,6 +155,32 @@ fun RecordsScreen(
     }
 
     val listState = rememberLazyListState()
+    var isFiltersVisible by rememberSaveable { mutableStateOf(true) }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < -8f) {
+                    isFiltersVisible = false
+                } else if (delta > 8f) {
+                    isFiltersVisible = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val isFiltersRetracted by remember {
+        derivedStateOf {
+            !isFiltersVisible && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
+        }
+    }
+
+    LaunchedEffect(state.selectedSpecies, state.startDate, state.endDate, state.searchQuery) {
+        isFiltersVisible = true
+    }
+
     val shouldLoadMore by remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -122,109 +191,272 @@ fun RecordsScreen(
         if (shouldLoadMore) viewModel.onLoadMore()
     }
 
+    val todayStartMillis = remember(state.now) { startOfTodayMillis(state.now) }
+    val sevenDaysAgoMillis = remember(state.now) { sevenDaysAgoMillis(state.now) }
+
+    val groupedReports = remember(state.reports, todayStartMillis, sevenDaysAgoMillis) {
+        val today = mutableListOf<Report>()
+        val thisWeek = mutableListOf<Report>()
+        val earlier = mutableListOf<Report>()
+        for (report in state.reports) {
+            val t = report.generatedAt.toEpochMilli()
+            when (classifyDateBucket(t, todayStartMillis, sevenDaysAgoMillis)) {
+                DateBucket.TODAY -> today.add(report)
+                DateBucket.THIS_WEEK -> thisWeek.add(report)
+                DateBucket.EARLIER -> earlier.add(report)
+            }
+        }
+        buildList {
+            if (today.isNotEmpty()) add("TODAY" to today)
+            if (thisWeek.isNotEmpty()) add("THIS WEEK" to thisWeek)
+            if (earlier.isNotEmpty()) add("EARLIER" to earlier)
+        }
+    }
+
     Scaffold(
-        topBar = {
-            ScreenHeader(
-                title = stringResource(R.string.reports_title),
-                purpose = stringResource(R.string.reports_subtitle_purpose),
-                status = stringResource(
-                    if (!state.isNarrowed) {
-                        R.string.reports_scope_all
-                    } else {
-                        R.string.reports_scope_filtered
-                    },
-                ),
-            )
-        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = AgarthaTheme.colors.background,
+        containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inner),
-            contentPadding = PaddingValues(bottom = Spacing.md),
+                .padding(inner)
+                .background(colors.background),
         ) {
-            item {
-                Spacer(Modifier.height(Spacing.xs))
-                SearchInput(
-                    value = state.searchQuery,
-                    onValueChange = viewModel::onSearchChanged,
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 480.dp)
+                    .align(Alignment.TopCenter),
+            ) {
+                // 1. Header (tight padding)
+                ReportsScreenHeader(
+                    total = state.totalReports,
+                    unsynced = state.unsyncedReports,
                 )
-            }
 
-            item {
-                Spacer(Modifier.height(Spacing.md))
-                val selected = state.selectedSpecies
-                val activeFilter = when (selected) {
-                    null -> stringResource(R.string.records_species_all)
-                    EggSpecies.OTHER -> stringResource(R.string.records_species_others)
-                    else -> selected.displayName
-                }
-                StatsRow(
-                    reportsCount = if (state.isLoading) "—" else state.totalReports.toString(),
-                    activeFilter = activeFilter,
-                    onSpeciesFilterClick = { showSpeciesDialog = true },
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-            item {
-                Spacer(Modifier.height(Spacing.xs))
-                DateRangeFilterBar(
-                    startDate = state.startDate,
-                    endDate = state.endDate,
-                    onRangeSelected = viewModel::onDateRangeSelected,
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-            item { Spacer(Modifier.height(Spacing.xs)) }
-
-            when {
-                state.isLoading -> items(REPORTS_SKELETON_COUNT) {
-                    ReportCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
-                }
-                state.reports.isEmpty() -> item {
-                    ReportsEmptyState(narrowed = state.isNarrowed)
-                }
-                else -> {
-                    items(state.reports, key = { it.id }) { report ->
-                        ReportCard(
-                            report = report,
-                            onSessionClick = { onSessionClick(report.sessionId) },
-                            onOpenPdf = {
-                                shareError = viewReportPdf(context, report.pdfFilePath)
-                            },
-                            onOpenCsv = {
-                                shareError = viewReportCsv(context, report.csvFilePath)
-                            },
-                            onSharePdf = {
-                                shareError = shareReportPdf(context, report.pdfFilePath)
-                            },
-                            onShareCsv = {
-                                shareError = shareReportCsv(context, report.csvFilePath)
-                            },
-                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                // 2. Search Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.surfaceVariant)
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp),
                         )
-                    }
-                    if (state.canLoadMore) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = Spacing.md),
-                                contentAlignment = Alignment.Center,
+                        Spacer(modifier = Modifier.width(10.dp))
+                        BasicTextField(
+                            value = state.searchQuery,
+                            onValueChange = viewModel::onSearchChanged,
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(
+                                fontSize = 15.sp,
+                                color = colors.textPrimary,
+                            ),
+                            singleLine = true,
+                            cursorBrush = SolidColor(colors.accent),
+                            decorationBox = { innerTextField ->
+                                if (state.searchQuery.isEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.reports_search_placeholder),
+                                        fontSize = 15.sp,
+                                        color = colors.textTertiary,
+                                    )
+                                }
+                                innerTextField()
+                            },
+                        )
+                        if (state.searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.onSearchChanged("") },
+                                modifier = Modifier.size(24.dp),
                             ) {
-                                CircularProgressIndicator(
-                                    color = AgarthaTheme.colors.accent,
-                                    modifier = Modifier.size(24.dp),
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = null,
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         }
                     }
                 }
+
+                // 3. StatsRow & DateRangeFilterBar (retractable when scrolling down)
+                AnimatedVisibility(
+                    visible = !isFiltersRetracted,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 4.dp),
+                    ) {
+                        val selected = state.selectedSpecies
+                        val activeFilter = when (selected) {
+                            null -> stringResource(R.string.records_species_all)
+                            EggSpecies.OTHER -> stringResource(R.string.records_species_others)
+                            else -> selected.displayName
+                        }
+                        StatsRow(
+                            reportsCount = if (state.isLoading) "—" else state.totalReports.toString(),
+                            activeFilter = activeFilter,
+                            onSpeciesFilterClick = { showSpeciesDialog = true },
+                        )
+                        Spacer(Modifier.height(Spacing.xs))
+                        DateRangeFilterBar(
+                            startDate = state.startDate,
+                            endDate = state.endDate,
+                            onRangeSelected = viewModel::onDateRangeSelected,
+                        )
+                    }
+                }
+
+                // 4. LazyColumn list of reports
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection),
+                    contentPadding = PaddingValues(bottom = Spacing.md),
+                ) {
+                    when {
+                        state.isLoading && state.reports.isEmpty() -> items(REPORTS_SKELETON_COUNT) {
+                            ReportCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
+                        }
+                        groupedReports.isEmpty() -> {
+                            // With the Earlier bucket always populated (see classifyDateBucket),
+                            // this is only reachable when state.reports itself is empty — no
+                            // report is ever dropped from every section silently.
+                            item { ReportsEmptyState(narrowed = state.isNarrowed) }
+                        }
+                        else -> {
+                            groupedReports.forEach { (sectionTitle, items) ->
+                                item(key = "section_$sectionTitle") {
+                                    Text(
+                                        text = sectionTitle,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = colors.textSecondary,
+                                        modifier = Modifier.padding(
+                                            start = 20.dp,
+                                            end = 20.dp,
+                                            top = 10.dp,
+                                            bottom = 4.dp,
+                                        ),
+                                    )
+                                }
+                                items(items, key = { it.id }) { report ->
+                                    ReportCard(
+                                        report = report,
+                                        onSessionClick = { onSessionClick(report.sessionId) },
+                                        onOpenPdf = {
+                                            shareError = viewReportPdf(context, report.pdfFilePath)
+                                        },
+                                        onOpenCsv = {
+                                            shareError = viewReportCsv(context, report.csvFilePath)
+                                        },
+                                        onSharePdf = {
+                                            shareError = shareReportPdf(context, report.pdfFilePath)
+                                        },
+                                        onShareCsv = {
+                                            shareError = shareReportCsv(context, report.csvFilePath)
+                                        },
+                                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                            if (state.canLoadMore) {
+                                item(key = "load_more_indicator") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = Spacing.md),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = AgarthaTheme.colors.accent,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportsScreenHeader(
+    total: Int,
+    unsynced: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 2.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.reports_title),
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (colors.isDark) Color.White else Color.Black,
+            letterSpacing = (-0.5).sp,
+            lineHeight = 30.sp,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 1.dp),
+        ) {
+            val reportText = if (total == 1) "1 report" else "$total reports"
+            Text(
+                text = reportText,
+                fontSize = 14.sp,
+                color = colors.textSecondary,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " · ",
+                fontSize = 14.sp,
+                color = colors.textSecondary,
+                fontWeight = FontWeight.Medium,
+            )
+            if (unsynced > 0) {
+                Text(
+                    text = "$unsynced not synced",
+                    fontSize = 14.sp,
+                    color = colors.goldText,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.settings_sync_all_synced),
+                    fontSize = 14.sp,
+                    color = colors.textSecondary,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
@@ -278,9 +510,9 @@ private fun StatsRow(
                 .weight(STATS_REPORTS_WEIGHT)
                 .fillMaxHeight(),
             colors = StatTileColors(
-                bgColor = colors.accent,
-                contentColor = colors.onAccent,
-                labelColor = colors.onAccent.copy(alpha = 0.8f),
+                bgColor = colors.brandFill,
+                contentColor = colors.onBrandFill,
+                labelColor = colors.onBrandFill.copy(alpha = 0.8f),
             ),
             valueFontSize = STATS_REPORT_NUMBER_FONT_SIZE,
         )
@@ -394,7 +626,7 @@ private fun SpeciesFilterDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         title = {
             Text(
@@ -458,6 +690,172 @@ private fun SpeciesFilterDialog(
     )
 }
 
+private val REPORT_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("h:mm a", Locale.getDefault())
+private val REPORT_DATE_TIME_FORMATTER: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("MMM d, h:mm a", Locale.getDefault())
+
+internal fun formatReportSubtitle(generatedAt: Instant, patientName: String?): String {
+    val localDateTime = generatedAt.atZone(ZoneId.systemDefault())
+    val isToday = localDateTime.toLocalDate() == LocalDate.now(ZoneId.systemDefault())
+    val formatter = if (isToday) REPORT_TIME_FORMATTER else REPORT_DATE_TIME_FORMATTER
+    val timeStr = formatter.format(localDateTime)
+    return if (patientName.isNullOrBlank()) {
+        "Generated $timeStr"
+    } else {
+        "Generated $timeStr · $patientName"
+    }
+}
+
+private data class StatusBadgeStyle(
+    val bg: Color,
+    val fg: Color,
+    val icon: ImageVector,
+    val textRes: Int,
+)
+
+@Composable
+private fun ReportStatusBadge(status: ReportSyncStatus) {
+    val colors = AgarthaTheme.colors
+    val style = when (status) {
+        ReportSyncStatus.SYNCED -> StatusBadgeStyle(
+            bg = colors.successTint,
+            fg = colors.successText,
+            icon = Icons.Outlined.CloudDone,
+            textRes = R.string.report_status_synced,
+        )
+        ReportSyncStatus.SYNC_FAILED -> StatusBadgeStyle(
+            bg = colors.dangerTint,
+            fg = colors.dangerText,
+            icon = Icons.Outlined.CloudOff,
+            textRes = R.string.report_status_failed,
+        )
+        ReportSyncStatus.PENDING -> StatusBadgeStyle(
+            bg = colors.warningTint,
+            fg = colors.warningText,
+            icon = Icons.Outlined.CloudQueue,
+            textRes = R.string.records_status_pending_sync,
+        )
+    }
+    Row(
+        modifier = Modifier
+            .background(style.bg, RoundedCornerShape(999.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Icon(
+            imageVector = style.icon,
+            contentDescription = null,
+            tint = style.fg,
+            modifier = Modifier.size(13.dp),
+        )
+        Text(
+            text = stringResource(style.textRes),
+            color = style.fg,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            style = TextStyle(fontFeatureSettings = "tnum"),
+        )
+    }
+}
+
+@Composable
+private fun SpeciesBulletItem(
+    speciesName: String,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val bulletColor = when {
+        speciesName.contains("ascaris", ignoreCase = true) -> colors.accent
+        speciesName.contains("trichuris", ignoreCase = true) -> AppColors.Gold
+        speciesName.contains("hookworm", ignoreCase = true) -> AppColors.Amber
+        else -> colors.accent
+    }
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(bulletColor, CircleShape),
+        )
+        Text(
+            text = speciesName,
+            fontSize = 12.sp,
+            fontStyle = FontStyle.Italic,
+            color = colors.textSecondary,
+        )
+    }
+}
+
+@Composable
+private fun ReportStatCount(count: String, label: String) {
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            text = count,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = AgarthaTheme.colors.textPrimary,
+        )
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Normal,
+            color = AgarthaTheme.colors.textSecondary,
+        )
+    }
+}
+
+@Composable
+private fun ReportActionButton(
+    icon: ImageVector,
+    label: String,
+    contentDescription: String,
+    isPrimary: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val bg = if (isPrimary) colors.accentTint else colors.surface
+    val contentColor = if (isPrimary) colors.accent else colors.textPrimary
+    val borderModifier = if (!isPrimary) {
+        Modifier.border(1.dp, colors.border, RoundedCornerShape(8.dp))
+    } else {
+        Modifier
+    }
+
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .then(borderModifier)
+            .background(bg)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 7.dp)
+            .semantics { this.contentDescription = contentDescription },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+        )
+    }
+}
+
 @Composable
 internal fun ReportCard(
     report: Report,
@@ -468,150 +866,187 @@ internal fun ReportCard(
     onShareCsv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val colors = AgarthaTheme.colors
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(AgarthaTheme.colors.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .background(colors.surface, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onSessionClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Row(
-            verticalAlignment = Alignment.Top,
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = report.generatedAt.formatReportDateTime(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AgarthaTheme.colors.textPrimary,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.reports_session_link,
-                        report.sessionLabel ?: report.sessionId.take(8),
-                    ),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = AgarthaTheme.colors.accent,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-            }
-            ReportStatusPill(status = report.supabaseStatus)
+            Text(
+                text = report.sessionLabel ?: report.sessionId.take(8),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = colors.textPrimary,
+            )
+            ReportStatusBadge(status = report.supabaseStatus)
         }
 
-        Spacer(Modifier.height(8.dp))
-        val noSpeciesText = stringResource(R.string.report_no_positive_species)
-        val moreFormat = stringResource(R.string.reports_species_more)
+        Spacer(Modifier.height(2.dp))
+
         Text(
-            text = formatPositiveSpeciesSummary(
-                species = report.positiveSpecies,
-                emptyFallback = noSpeciesText,
-                moreFormat = moreFormat,
-            ),
+            text = formatReportSubtitle(report.generatedAt, report.patientName),
             fontSize = 12.sp,
-            color = AgarthaTheme.colors.textSecondary,
+            color = colors.textSecondary,
         )
 
-        Spacer(Modifier.height(10.dp))
-        HorizontalDivider(color = AgarthaTheme.colors.border, thickness = 1.dp)
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(4.dp))
+
+        if (report.positiveSpecies.isEmpty()) {
+            Text(
+                text = stringResource(R.string.report_no_positive_species),
+                fontSize = 12.sp,
+                color = colors.textSecondary,
+            )
+        } else {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                report.positiveSpecies.forEach { speciesName ->
+                    SpeciesBulletItem(speciesName = speciesName)
+                }
+            }
+        }
+
+        Spacer(Modifier.height(4.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatRun(
-                listOf(
-                    Stat(report.totalEggsConfirmed.toString(), "eggs"),
-                    Stat(
-                        if (report.positiveSpecies.isEmpty()) "0" else report.positiveSpecies.size.toString(),
-                        "species",
-                    ),
-                    Stat(report.totalSamples.toString(), "samples"),
-                ),
+            ReportStatCount(
+                count = report.totalEggsConfirmed.toString(),
+                label = "eggs",
             )
+            ReportStatCount(
+                count = if (report.positiveSpecies.isEmpty()) "0" else report.positiveSpecies.size.toString(),
+                label = "species",
+            )
+            ReportStatCount(
+                count = report.totalSamples.toString(),
+                label = "samples",
+            )
+        }
+
+        val hasPdf = report.pdfFilePath != null
+        val hasCsv = report.csvFilePath != null
+        if (hasPdf || hasCsv) {
+            Spacer(Modifier.height(6.dp))
+            HorizontalDivider(color = colors.border, thickness = 1.dp)
+            Spacer(Modifier.height(6.dp))
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (report.pdfFilePath != null) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.reports_format_pdf),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AgarthaTheme.colors.textSecondary,
-                        )
-                        ReportIconAction(
-                            icon = AgarthaIcons.FileOpen,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (hasPdf) {
+                        ReportActionButton(
+                            icon = Icons.Outlined.PictureAsPdf,
+                            label = stringResource(R.string.reports_format_pdf),
                             contentDescription = stringResource(R.string.reports_open_pdf),
+                            isPrimary = true,
                             onClick = onOpenPdf,
                         )
-                        ReportIconAction(
-                            icon = Icons.Outlined.Share,
-                            contentDescription = stringResource(R.string.reports_share_pdf),
-                            onClick = onSharePdf,
+                    }
+
+                    if (hasCsv) {
+                        ReportActionButton(
+                            icon = Icons.Outlined.TableChart,
+                            label = stringResource(R.string.reports_format_csv),
+                            contentDescription = stringResource(R.string.reports_open_csv),
+                            isPrimary = false,
+                            onClick = onOpenCsv,
                         )
                     }
                 }
-                if (report.csvFilePath != null) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+
+                var shareMenuExpanded by remember { mutableStateOf(false) }
+
+                Box {
+                    IconButton(
+                        onClick = {
+                            when {
+                                hasPdf && hasCsv -> shareMenuExpanded = true
+                                hasPdf -> onSharePdf()
+                                hasCsv -> onShareCsv()
+                                else -> {}
+                            }
+                        },
+                        modifier = Modifier.size(36.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.reports_format_csv),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = AgarthaTheme.colors.textSecondary,
+                        Icon(
+                            imageVector = Icons.Outlined.Share,
+                            contentDescription = stringResource(R.string.report_share_action),
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp),
                         )
-                        ReportIconAction(
-                            icon = AgarthaIcons.FileOpen,
-                            contentDescription = stringResource(R.string.reports_open_csv),
-                            onClick = onOpenCsv,
-                        )
-                        ReportIconAction(
-                            icon = Icons.Outlined.Share,
-                            contentDescription = stringResource(R.string.reports_share_csv),
-                            onClick = onShareCsv,
-                        )
+                    }
+
+                    if (hasPdf && hasCsv) {
+                        DropdownMenu(
+                            expanded = shareMenuExpanded,
+                            onDismissRequest = { shareMenuExpanded = false },
+                            modifier = Modifier.background(colors.surfaceHigh),
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.reports_share_pdf),
+                                        color = colors.textPrimary,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.PictureAsPdf,
+                                        contentDescription = null,
+                                        tint = colors.accent,
+                                    )
+                                },
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onSharePdf()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = stringResource(R.string.reports_share_csv),
+                                        color = colors.textPrimary,
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Outlined.TableChart,
+                                        contentDescription = null,
+                                        tint = colors.textPrimary,
+                                    )
+                                },
+                                onClick = {
+                                    shareMenuExpanded = false
+                                    onShareCsv()
+                                },
+                            )
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun ReportIconAction(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(32.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(AgarthaTheme.colors.surfaceVariant)
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(6.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = contentDescription,
-            tint = AgarthaTheme.colors.textPrimary,
-            modifier = Modifier.size(18.dp),
-        )
     }
 }
 

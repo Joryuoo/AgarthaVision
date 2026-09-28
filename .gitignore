@@ -22,6 +22,9 @@ app/release/
 
 node_modules/
 
+tools/geo/.cache/
+tools/geo/build/*.geojson
+
 .env
 .mcp.json
 AGENTS.md

@@ -16,6 +16,7 @@ import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -26,6 +27,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -63,6 +65,7 @@ class SessionsViewModelTest {
     companion object {
         private const val INITIAL_PAGE = 5
         private const val PAGE_STEP = 10
+        private const val SEARCH_DEBOUNCE_MS = 300L
     }
 
     // ---------------------------------------------------------------------------
@@ -375,7 +378,7 @@ class SessionsViewModelTest {
             val vm = buildViewModelWithIdentityFlow(
                 repo = recording,
                 identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@example.com")),
-                patientId = null,
+                deps = IdentityFlowDeps(patientId = null),
             )
 
             vm.state.test {
@@ -415,6 +418,118 @@ class SessionsViewModelTest {
                 assertEquals(expected.unverifiedCount, settled.unverifiedCount)
                 cancelAndIgnoreRemainingEvents()
             }
+        }
+
+    // ---------------------------------------------------------------------------
+    // A sync in progress holds back a confident empty result (86d4c2q2e)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `syncing with an empty unfiltered result stays loading until sync finishes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val whileSyncing = expectMostRecentItem()
+                assertTrue(
+                    "an empty, unfiltered result during a sync is unknown, not settled-empty",
+                    whileSyncing.isLoading,
+                )
+
+                syncing.value = false
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(settled.isLoading)
+                assertEquals(0, settled.totalCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `syncing with a non-empty result settles immediately`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 7),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(
+                    "existing data means there is no need to wait on the sync",
+                    settled.isLoading,
+                )
+                assertEquals(7, settled.totalCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a filtered search does not wait on a sync in progress`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem() // initial (loading) settle, discarded
+
+                vm.onSearchQueryChanged("X")
+                advanceTimeBy(SEARCH_DEBOUNCE_MS)
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(
+                    "a filtered/searched empty result is settled regardless of sync state",
+                    settled.isLoading,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a sync that never resolves leaves an unfiltered zero-session patient stuck loading`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Genuinely zero sessions AND a sync that never completes (e.g. offline with no
+            // timeout, or stuck retrying). This documents that isLoading has no escape hatch
+            // here: the screen has no way to distinguish "still syncing" from "sync is wedged"
+            // without SyncScheduler itself resolving isSyncing to false at some point.
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            val collectJob = launch { vm.state.collect { } }
+            advanceUntilIdle()
+            assertTrue("stays loading while sync is in progress", vm.state.value.isLoading)
+
+            // Advance well past any plausible UI timeout — nothing here ever settles it.
+            advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertTrue(
+                "with no sync completion signal, the screen stays loading indefinitely " +
+                    "(no client-side timeout exists to unstick it)",
+                vm.state.value.isLoading,
+            )
+            collectJob.cancel()
         }
 
     // ---------------------------------------------------------------------------
@@ -970,6 +1085,59 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // 14zcqntj20y: the empty/initial query is exempt from the 300ms debounce
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `fresh viewModel queries repository without waiting out the debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                // Do not call advanceUntilIdle() first — that would mask a still-present
+                // 300ms delay. runCurrent() only drains work scheduled for "now"; if the
+                // empty query were still debounced, no repo call would exist yet here.
+                testScheduler.runCurrent()
+
+                assertTrue(
+                    "the initial empty search query must not wait out SEARCH_DEBOUNCE_MS " +
+                        "before the first repo query fires",
+                    recording.capturedArgs.isNotEmpty(),
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `non-empty query typed immediately still waits out the full debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                testScheduler.runCurrent()
+                val countAfterInitial = recording.capturedArgs.size
+
+                vm.onSearchQueryChanged("x")
+                testScheduler.runCurrent()
+                assertEquals(
+                    "a non-empty query must not fire before its debounce window elapses",
+                    countAfterInitial,
+                    recording.capturedArgs.size,
+                )
+
+                advanceTimeBy(SEARCH_DEBOUNCE_MS)
+                testScheduler.runCurrent()
+                assertTrue(
+                    "a non-empty query must fire once its 300ms debounce window elapses",
+                    recording.capturedArgs.size > countAfterInitial,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Patient Identity Preview Header
     // ---------------------------------------------------------------------------
 
@@ -992,9 +1160,7 @@ class SessionsViewModelTest {
             val vm = buildViewModelWithIdentityFlow(
                 repo = LambdaSessionRepository({ emptyList() }),
                 identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
-                patientRepo = patientRepo,
-                psgcRepo = psgcRepo,
-                patientId = "patient-1",
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
             )
 
             vm.state.test {
@@ -1016,8 +1182,7 @@ class SessionsViewModelTest {
             val vm = buildViewModelWithIdentityFlow(
                 repo = LambdaSessionRepository({ emptyList() }),
                 identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
-                patientRepo = patientRepo,
-                patientId = "unknown-patient",
+                deps = IdentityFlowDeps(patientRepo = patientRepo, patientId = "unknown-patient"),
             )
 
             vm.state.test {
@@ -1055,9 +1220,7 @@ class SessionsViewModelTest {
             val vm = buildViewModelWithIdentityFlow(
                 repo = LambdaSessionRepository({ emptyList() }),
                 identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
-                patientRepo = patientRepo,
-                psgcRepo = psgcRepo,
-                patientId = "patient-1",
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
             )
 
             vm.state.test {
@@ -1117,9 +1280,10 @@ class SessionsViewModelTest {
         userId: String?,
         rowsByLimit: (Int) -> List<SessionWithStats>,
         counts: SessionsCounts = SessionsCounts(),
+        syncInProgressFlow: Flow<Boolean> = flowOf(false),
     ): SessionsViewModel {
         val repo = LambdaSessionRepository(rowsByLimit, counts)
-        return buildViewModel(repo, userId)
+        return buildViewModel(repo, userId, syncInProgressFlow)
     }
 
     private fun viewModelWithRecording(
@@ -1127,12 +1291,25 @@ class SessionsViewModelTest {
         userId: String? = "u1",
     ): SessionsViewModel = buildViewModel(repo, userId)
 
-    private fun buildViewModel(repo: SessionRepository, userId: String?): SessionsViewModel {
+    private fun buildViewModel(
+        repo: SessionRepository,
+        userId: String?,
+        syncInProgressFlow: Flow<Boolean> = flowOf(false),
+    ): SessionsViewModel {
         val identityFlow = MutableStateFlow(
             userId?.let { LocalIdentity(userId = it, email = "user@example.com") }
         )
-        return buildViewModelWithIdentityFlow(repo, identityFlow)
+        return buildViewModelWithIdentityFlow(
+            repo,
+            identityFlow,
+            deps = IdentityFlowDeps(syncInProgressFlow = syncInProgressFlow),
+        )
     }
+
+    private fun stubSyncInProgressUseCase(flow: Flow<Boolean> = flowOf(false)): ObserveSyncInProgressUseCase =
+        mock<ObserveSyncInProgressUseCase>().also {
+            whenever(it.invoke()).thenReturn(flow)
+        }
 
     /** Variant that accepts a pre-configured [sessionManager] (e.g. with startSession stubbed). */
     private fun buildViewModelWithSessionManager(
@@ -1154,6 +1331,7 @@ class SessionsViewModelTest {
             generateSessionLabelUseCase = stubLabelUseCase(),
             patientRepository = patientRepo,
             psgcRepository = psgcRepo,
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
@@ -1167,12 +1345,21 @@ class SessionsViewModelTest {
         onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
     }
 
+    /**
+     * Optional collaborators for [buildViewModelWithIdentityFlow] — bundled since callers only
+     * ever override a few at a time.
+     */
+    private data class IdentityFlowDeps(
+        val patientRepo: PatientRepository? = null,
+        val psgcRepo: PsgcRepository? = null,
+        val patientId: String? = "patient-1",
+        val syncInProgressFlow: Flow<Boolean> = flowOf(false),
+    )
+
     private fun buildViewModelWithIdentityFlow(
         repo: SessionRepository,
         identityFlow: MutableStateFlow<LocalIdentity?>,
-        patientRepo: PatientRepository = stubPatientRepository(),
-        psgcRepo: PsgcRepository = stubPsgcRepository(),
-        patientId: String? = "patient-1",
+        deps: IdentityFlowDeps = IdentityFlowDeps(),
     ): SessionsViewModel {
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(identityFlow)
@@ -1189,10 +1376,11 @@ class SessionsViewModelTest {
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
             generateSessionLabelUseCase = stubLabelUseCase(),
-            patientRepository = patientRepo,
-            psgcRepository = psgcRepo,
+            patientRepository = deps.patientRepo ?: stubPatientRepository(),
+            psgcRepository = deps.psgcRepo ?: stubPsgcRepository(),
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
             savedStateHandle = SavedStateHandle(
-                if (patientId != null) mapOf("patientId" to patientId) else emptyMap()
+                if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
             ),
         )
     }

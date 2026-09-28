@@ -256,12 +256,13 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
 
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
     override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeUnsyncedCount(userId: String): Flow<Int> = flowOf(0)
 }
 
 private class StubRemoteDataSource(
     private val shouldThrow: Boolean,
 ) : ReportRemoteDataSource(
-    supabase = mock(),
+    supabaseProvider = mock(),
     gson = com.google.gson.Gson(),
 ) {
     var upsertCallCount = 0
@@ -288,7 +289,7 @@ private class StubRemoteDataSource(
 private class InsertIfAbsentRemoteDataSource(
     serverRowIds: List<String> = emptyList(),
 ) : ReportRemoteDataSource(
-    supabase = mock(),
+    supabaseProvider = mock(),
     gson = com.google.gson.Gson(),
 ) {
     private val rows = serverRowIds.toMutableList()

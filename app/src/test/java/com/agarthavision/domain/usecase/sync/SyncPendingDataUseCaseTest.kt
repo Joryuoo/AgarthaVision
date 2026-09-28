@@ -12,12 +12,18 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.data.supabase.SyncSessionUseCase
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.LastSyncStore
+import com.agarthavision.domain.sync.SyncCompletion
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -46,6 +52,9 @@ class SyncPendingDataUseCaseTest {
     private val syncSessionUseCase: SyncSessionUseCase = mock()
     private val syncSampleUseCase: SyncSampleUseCase = mock()
     private val syncReportUseCase: SyncReportUseCase = mock()
+    private val lastSyncStore: LastSyncStore = mock()
+    private val fixedInstant = Instant.parse("2026-09-27T10:00:00Z")
+    private val clock: Clock = Clock.fixed(fixedInstant, ZoneOffset.UTC)
 
     private val useCase = SyncPendingDataUseCase(
         authRepository = authRepository,
@@ -58,6 +67,8 @@ class SyncPendingDataUseCaseTest {
         syncSessionUseCase = syncSessionUseCase,
         syncSampleUseCase = syncSampleUseCase,
         syncReportUseCase = syncReportUseCase,
+        lastSyncStore = lastSyncStore,
+        clock = clock,
     )
 
     @Before
@@ -126,6 +137,25 @@ class SyncPendingDataUseCaseTest {
 
         verify(syncPatientUseCase).invoke(PATIENT_ID)
         assertEquals(1, summary.patientsSynced)
+    }
+
+    // ── last-sync recording ──────────────────────────────────────────────────
+
+    @Test
+    fun `a push syncing more than 0 items records the completion`() = runTest {
+        whenever(patientDao.getPatientsPendingSync(USER_ID)).thenReturn(listOf(patientEntity()))
+        whenever(syncPatientUseCase(PATIENT_ID)).thenReturn(Result.success(Unit))
+
+        useCase()
+
+        verify(lastSyncStore).record(USER_ID, SyncCompletion(fixedInstant.toEpochMilli(), 1))
+    }
+
+    @Test
+    fun `a push syncing 0 items does not record a completion`() = runTest {
+        useCase()
+
+        verify(lastSyncStore, never()).record(any(), any())
     }
 
     // ── skip conditions ───────────────────────────────────────────────────────

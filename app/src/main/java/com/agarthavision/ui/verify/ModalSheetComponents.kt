@@ -139,7 +139,7 @@ fun SheetActionRow(state: SheetActionRowState) {
                 .weight(2f)
                 .testTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
                 .background(
-                    if (state.primaryEnabled) colors.accent else colors.accent.copy(alpha = 0.4f),
+                    if (state.primaryEnabled) colors.brandFill else colors.brandFill.copy(alpha = 0.4f),
                     RoundedCornerShape(14.dp),
                 )
                 .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() }
@@ -148,7 +148,7 @@ fun SheetActionRow(state: SheetActionRowState) {
         ) {
             Text(
                 text = if (state.primaryLoading) "Loading..." else state.primaryLabel,
-                color = colors.onAccent,
+                color = colors.onBrandFill,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.SemiBold,
                 letterSpacing = (-0.2).sp
