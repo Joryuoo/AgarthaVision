@@ -15,6 +15,9 @@ import kotlinx.coroutines.flow.flowOf
 /** Sort order for the patient list. */
 enum class PatientSort {
     RECENT,
+    TODAY,
+    THIS_WEEK,
+    EARLIER,
     LAST_NAME,
     FIRST_NAME,
 }
@@ -44,6 +47,9 @@ data class PatientsQuery(
 data class PatientListItem(
     val patient: Patient,
     val barangayName: String?,
+    val unverifiedCount: Int = 0,
+    val positiveSpecies: String? = null,
+    val lastActivityAt: Long? = null,
 )
 
 /**
@@ -128,11 +134,19 @@ class ObservePatientsUseCase @Inject constructor(
      */
     private suspend fun List<Patient>.mapToItems(): List<PatientListItem> {
         val names = mutableMapOf<String, String?>()
+        val summaries = patientRepository.getPatientActivitySummaries(map { it.id }) ?: emptyMap()
         return map { patient ->
             val name = names.getOrPut(patient.psgcBarangayCode) {
                 psgcRepository.getBarangay(patient.psgcBarangayCode)?.name
             }
-            PatientListItem(patient = patient, barangayName = name)
+            val summary = summaries[patient.id]
+            PatientListItem(
+                patient = patient,
+                barangayName = name,
+                unverifiedCount = summary?.unverifiedCount ?: 0,
+                positiveSpecies = summary?.positiveSpecies,
+                lastActivityAt = summary?.lastActivityAt ?: patient.updatedAt.toEpochMilli(),
+            )
         }
     }
 }

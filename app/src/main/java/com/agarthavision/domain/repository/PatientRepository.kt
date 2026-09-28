@@ -113,4 +113,8 @@ interface PatientRepository {
         userId: String,
         limit: Int,
     ): Flow<List<ActivityItem.PatientAdded>> = emptyFlow()
+
+    suspend fun getPatientActivitySummaries(
+        patientIds: List<String>,
+    ): Map<String, com.agarthavision.data.local.dao.PatientActivitySummary> = emptyMap()
 }

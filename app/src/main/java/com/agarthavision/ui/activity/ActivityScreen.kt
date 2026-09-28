@@ -28,6 +28,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,7 +61,7 @@ private fun ActivityAppBar(onBack: () -> Unit) {
             Text(
                 text = stringResource(R.string.activity_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = colors.accent,
+                color = if (colors.isDark) Color.White else Color.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

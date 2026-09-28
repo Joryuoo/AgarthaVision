@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,7 +68,7 @@ fun AppHeader(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = stringResource(R.string.app_name),
-            color = colors.accent,
+            color = if (colors.isDark) Color.White else Color.Black,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp

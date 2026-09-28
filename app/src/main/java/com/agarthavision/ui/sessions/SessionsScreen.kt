@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -356,7 +357,7 @@ private fun AppBar(onBack: () -> Unit) {
             Text(
                 text = stringResource(R.string.sessions_title),
                 style = MaterialTheme.typography.headlineSmall,
-                color = colors.accent,
+                color = if (colors.isDark) Color.White else Color.Black,
             )
             Text(
                 text = stringResource(R.string.sessions_subtitle_purpose),

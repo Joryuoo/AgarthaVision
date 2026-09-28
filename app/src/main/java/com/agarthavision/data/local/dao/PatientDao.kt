@@ -1,5 +1,6 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -58,7 +59,7 @@ interface PatientDao {
           AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
           AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
         ORDER BY
-          CASE WHEN :sort = 'RECENT' THEN MAX(
+          CASE WHEN :sort = 'RECENT' OR :sort = 'TODAY' OR :sort = 'THIS_WEEK' OR :sort = 'EARLIER' THEN MAX(
               p.updated_at,
               COALESCE((SELECT MAX(se.started_at) FROM sessions se
                         WHERE se.patient_id = p.patient_id), 0),
@@ -309,7 +310,40 @@ interface PatientDao {
         """,
     )
     fun observeAddedActivity(userId: String, limit: Int): Flow<List<PatientAddedActivityRow>>
+
+    @Query(
+        """
+        SELECT 
+            p.patient_id AS patientId,
+            COUNT(CASE WHEN sa.status = 'flagged' THEN 1 END) AS unverifiedCount,
+            (SELECT d.class_label FROM detections d
+             JOIN samples sa2 ON sa2.sample_id = d.sample_id
+             JOIN sessions se2 ON se2.session_id = sa2.session_id
+             WHERE se2.patient_id = p.patient_id AND sa2.deleted_at IS NULL AND d.verdict != 'false_positive'
+             LIMIT 1) AS positiveSpecies,
+            MAX(
+                p.updated_at,
+                COALESCE((SELECT MAX(se3.started_at) FROM sessions se3 WHERE se3.patient_id = p.patient_id), 0),
+                COALESCE((SELECT MAX(MAX(sa3.timestamp, sa3.verified_at)) FROM samples sa3
+                          JOIN sessions se4 ON se4.session_id = sa3.session_id
+                          WHERE se4.patient_id = p.patient_id AND sa3.deleted_at IS NULL), 0)
+            ) AS lastActivityAt
+        FROM patients p
+        LEFT JOIN sessions se ON se.patient_id = p.patient_id
+        LEFT JOIN samples sa ON sa.session_id = se.session_id AND sa.deleted_at IS NULL
+        WHERE p.patient_id IN (:patientIds)
+        GROUP BY p.patient_id
+        """,
+    )
+    suspend fun getPatientActivitySummaries(patientIds: List<String>): List<PatientActivitySummary>
 }
+
+data class PatientActivitySummary(
+    @ColumnInfo(name = "patientId") val patientId: String,
+    @ColumnInfo(name = "unverifiedCount") val unverifiedCount: Int,
+    @ColumnInfo(name = "positiveSpecies") val positiveSpecies: String?,
+    @ColumnInfo(name = "lastActivityAt") val lastActivityAt: Long,
+)
 
 data class PatientAddedActivityRow(
     val patientId: String,

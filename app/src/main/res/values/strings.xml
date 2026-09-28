@@ -527,6 +527,9 @@
     <string name="patients_sex_unknown">Sex not recorded</string>
     <string name="patients_sort_label">Sort by</string>
     <string name="patients_sort_recent">Recent activity</string>
+    <string name="patients_sort_today">Today</string>
+    <string name="patients_sort_this_week">This week</string>
+    <string name="patients_sort_earlier">Earlier</string>
     <string name="patients_sort_lastname">Last name</string>
     <string name="patients_sort_firstname">First name</string>
     <string name="patients_filters_title">Filters</string>

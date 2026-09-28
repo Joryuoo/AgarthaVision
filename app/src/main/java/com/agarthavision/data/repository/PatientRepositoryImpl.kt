@@ -160,4 +160,11 @@ class PatientRepositoryImpl @Inject constructor(
                 )
             }
         }
+
+    override suspend fun getPatientActivitySummaries(
+        patientIds: List<String>,
+    ): Map<String, com.agarthavision.data.local.dao.PatientActivitySummary> {
+        if (patientIds.isEmpty()) return emptyMap()
+        return patientDao.getPatientActivitySummaries(patientIds).associateBy { it.patientId }
+    }
 }

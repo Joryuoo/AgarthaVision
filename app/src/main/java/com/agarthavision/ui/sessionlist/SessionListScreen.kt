@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -102,7 +103,7 @@ private fun SessionListAppBar(
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
-                color = colors.accent,
+                color = if (colors.isDark) Color.White else Color.Black,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

@@ -249,6 +249,9 @@ private fun FilterSortSelector(
     var expanded by remember { mutableStateOf(false) }
     val label = when (sort) {
         PatientSort.RECENT -> stringResource(R.string.patients_sort_recent)
+        PatientSort.TODAY -> stringResource(R.string.patients_sort_today)
+        PatientSort.THIS_WEEK -> stringResource(R.string.patients_sort_this_week)
+        PatientSort.EARLIER -> stringResource(R.string.patients_sort_earlier)
         PatientSort.LAST_NAME -> stringResource(R.string.patients_sort_lastname)
         PatientSort.FIRST_NAME -> stringResource(R.string.patients_sort_firstname)
     }
@@ -293,6 +296,27 @@ private fun FilterSortSelector(
                     text = { Text(stringResource(R.string.patients_sort_recent)) },
                     onClick = {
                         onSortSelected(PatientSort.RECENT)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_today)) },
+                    onClick = {
+                        onSortSelected(PatientSort.TODAY)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_this_week)) },
+                    onClick = {
+                        onSortSelected(PatientSort.THIS_WEEK)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_earlier)) },
+                    onClick = {
+                        onSortSelected(PatientSort.EARLIER)
                         expanded = false
                     },
                 )

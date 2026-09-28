@@ -153,7 +153,7 @@ private fun LoginScreenContent(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "AgarthaVision",
-                            color = colors.accent,
+                            color = if (colors.isDark) Color.White else Color.Black,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.75).sp, // -0.025em * 30px
