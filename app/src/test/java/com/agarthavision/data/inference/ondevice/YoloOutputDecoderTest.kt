@@ -11,8 +11,8 @@ class YoloOutputDecoderTest {
     private val classNames = listOf("Ascaris lumbricoides", "Hookworm", "Trichuris trichiura")
 
     private fun manifest(anchors: Int, maxDetections: Int = 300, normalized: Boolean = true) = ModelManifest(
-        modelVersion = "yolo12n-effv2s-v1-tflite-fp16",
-        modelFile = "yolo12n-effv2s-v1-tflite-fp16.tflite",
+        modelVersion = "yolo26n-effv2b0-v1-tflite-fp32",
+        modelFile = "yolo26n-effv2b0-v1-tflite-fp32.tflite",
         inputWidth = 640,
         inputHeight = 640,
         outputShape = listOf(1, 4 + classNames.size, anchors),

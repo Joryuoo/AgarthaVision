@@ -77,9 +77,9 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `NetworkMonitor`, `SampleImageStore`. The inference side adds the two engines
 (`RemoteInferenceEngine`, and `OnDeviceInferenceEngine` with its `ModelStore`,
 `FramePreprocessor` and `YoloOutputDecoder`), which hold a compiled model or a client and are
-expensive to build, and `InProcessInferenceQueue`, which must own the queue's one consumer.
-Repositories and use cases are unscoped, and so is `InferenceQueueProcessor`: the queue is its
-only holder.
+expensive to build, `WorkManagerInferenceQueue`, and `InferenceQueueProcessor`, which holds the
+circuit breaker, the retry schedule and the lock that keeps passes from overlapping: WorkManager
+builds a new worker per pass, so those must outlive it. Repositories and use cases are unscoped.
 
 **Enforcement:** review only. The scoped set is visible at
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,

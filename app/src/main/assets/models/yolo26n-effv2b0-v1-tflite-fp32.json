@@ -1,7 +1,7 @@
 {
-  "model_version": "yolo12n-effv2s-v1-tflite-fp16",
-  "model_file": "yolo12n-effv2s-v1-tflite-fp16.tflite",
-  "precision": "fp16",
+  "model_version": "yolo26n-effv2b0-v1-tflite-fp32",
+  "model_file": "yolo26n-effv2b0-v1-tflite-fp32.tflite",
+  "precision": "fp32",
   "input_width": 640,
   "input_height": 640,
   "output_shape": [

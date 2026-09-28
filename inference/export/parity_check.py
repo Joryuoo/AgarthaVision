@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Compare an exported model against best.pt on the same images.
+"""Compare an exported model against the .pt checkpoint on the same images.
 
     python inference/export/parity_check.py \
-        --weights inference/weights/best.pt \
-        --model inference/export/out/yolo12n-effv2s-v1-tflite-fp16.tflite \
+        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
+        --model inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
         --images path/to/test/images
 
 Answers one question: did conversion change what the model finds? Runs both through the
@@ -58,7 +58,7 @@ def collect_images(root: Path, limit: int) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--weights", default="inference/weights/best.pt")
+    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2b0.pt")
     parser.add_argument("--model", required=True, help="Exported .tflite or .onnx")
     parser.add_argument("--images", required=True, help="Image file or directory")
     parser.add_argument("--imgsz", type=int, default=640)
@@ -132,7 +132,7 @@ def main() -> int:
     class_rate = class_agreements / matched if matched else 0.0
     miss_rate = missed / reference_total if reference_total else 0.0
 
-    print("\n=== Parity: exported model vs best.pt ===")
+    print("\n=== Parity: exported model vs the .pt checkpoint ===")
     print(f"images                 {len(images)}")
     print(f"reference detections   {reference_total}")
     print(f"matched                {matched}")
@@ -142,7 +142,7 @@ def main() -> int:
     print(f"mean |conf delta|      {mean_conf_delta:.4f}")
     print(f"class agreement        {class_rate:.1%}")
 
-    print("\nNote: 'missed' means the export lost a detection best.pt found — the direction")
+    print("\nNote: 'missed' means the export lost a detection the .pt checkpoint found — the direction")
     print("that silently lowers an egg count. 'Invented' boxes are caught during validation.")
     print("They are not equivalent and are deliberately not netted off.")
 

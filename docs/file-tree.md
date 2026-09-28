@@ -86,7 +86,7 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `local/species/` | `SpeciesSuggestionSeeder` and repository for offline autocomplete index |
 | `local/` | `SampleImageStore` — on-device JPEG files under `users/{owner}/samples/` |
 | `inference/` | `RemoteInferenceEngine` (the cloud container) and `PredictionMapper` |
-| `inference/queue/` | `InProcessInferenceQueue` — runs the inference queue's one consumer on an app-scoped coroutine |
+| `inference/queue/` | `WorkManagerInferenceQueue`, `InferenceQueueWorker` and `InferenceRetryWorker` — run the inference queue's passes through WorkManager, one at a time |
 | `inference/ondevice/` | `OnDeviceInferenceEngine` and its parts: `ModelStore` compiles a bundled model with LiteRT, `FramePreprocessor` letterboxes, `YoloOutputDecoder` decodes and runs NMS |
 | `remote/` | Retrofit interface to the inference container, and its DTOs |
 | `supabase/` | Remote data sources and per-entity sync use cases (`PatientRemoteDataSource`, `SyncPatientUseCase`, etc.) |
@@ -119,11 +119,12 @@ Numbered, committed, applied by hand in the Supabase dashboard. Never run progra
 ## `inference/`
 
 `server.py` (the two endpoints), `Dockerfile` (ROCm PyTorch base), `requirements.txt`,
-`weights/best.pt`, plus Kaggle notebook and notes. `export/` turns `best.pt` into the on-device
-TFLite models and checks them against it (`export/README.md`). Not part of the Gradle build.
+`weights/` (the trained checkpoints, Git LFS: `yolo26n-efficientnetv2b0.pt`, which the server
+runs, and the `yolo26n-mobilenetv4convsmall.pt` candidate), plus Kaggle notebook and notes.
+`export/` turns a checkpoint into the on-device TFLite models and checks them against it (`export/README.md`). Not part of the Gradle build.
 
 The exported models themselves ship in `app/src/main/assets/models/`, one `<model_version>.tflite`
-(Git LFS) and `<model_version>.json` manifest per precision.
+(Git LFS) and `<model_version>.json` manifest per bundled build.
 
 ## `docs/`
 
