@@ -31,6 +31,7 @@ import com.agarthavision.ui.theme.AgarthaColors
 
 private const val MAP_PADDING_PX = 12f
 private const val HATCH_LINE_SPACING_PX = 6f
+private const val MAX_HATCH_LINES = 60f
 private const val STROKE_WIDTH_PX = 1.2f
 private const val HIGHLIGHT_STROKE_WIDTH_DP = 2f
 
@@ -153,7 +154,23 @@ internal fun DrawScope.drawProvinces(
     highlightColor: Color? = null,
     pathCache: MutableMap<String, Path>? = null,
 ) {
+    // Rebuilding every province's path is the dominant per-frame cost during a live pinch/pan
+    // (the transform changes every frame, so pathCache can't help across gesture frames — see
+    // the cache-invalidation note at its call site). Skipping areas outside the current viewport
+    // keeps that cost proportional to what's on screen instead of the whole country, which is
+    // what actually matters once the user has zoomed in.
+    val (viewMinX, viewMinY) = transform.toMap(0f, 0f)
+    val (viewMaxX, viewMaxY) = transform.toMap(size.width, size.height)
+    val visibleBounds = GeoBounds(
+        minX = minOf(viewMinX, viewMaxX),
+        minY = minOf(viewMinY, viewMaxY),
+        maxX = maxOf(viewMinX, viewMaxX),
+        maxY = maxOf(viewMinY, viewMaxY),
+    )
     provinces.areas.forEach { area ->
+        if (!area.bounds.intersects(visibleBounds)) {
+            return@forEach
+        }
         val stat = coverageByCode[area.code]?.count?.stat
         val path = pathCache?.getOrPut(area.code) { pathFor(area, transform) } ?: pathFor(area, transform)
         drawArea(path, stat, colors)
@@ -211,10 +228,17 @@ internal fun pathFor(area: AreaShape, transform: ViewTransform): Path {
     return path
 }
 
-/** A simple diagonal-line hatch clipped to [path], for the "too few smears" tier. */
+/**
+ * A simple diagonal-line hatch clipped to [path], for the "too few smears" tier. Line count grows
+ * with the path's on-screen span, so a large shape at a high zoom level would otherwise issue
+ * hundreds of draw calls per frame — [MAX_HATCH_LINES] widens the spacing past a fixed line
+ * budget instead of drawing every 6px regardless of size.
+ */
 private fun DrawScope.drawHatching(path: Path, color: Color) {
     clipPath(path) {
         val bounds = path.getBounds()
+        val span = (bounds.right - bounds.left) + bounds.height
+        val spacing = maxOf(HATCH_LINE_SPACING_PX, span / MAX_HATCH_LINES)
         var x = bounds.left - bounds.height
         while (x < bounds.right) {
             drawLine(
@@ -223,7 +247,7 @@ private fun DrawScope.drawHatching(path: Path, color: Color) {
                 end = Offset(x + bounds.height, bounds.top),
                 strokeWidth = STROKE_WIDTH_PX,
             )
-            x += HATCH_LINE_SPACING_PX
+            x += spacing
         }
     }
 }

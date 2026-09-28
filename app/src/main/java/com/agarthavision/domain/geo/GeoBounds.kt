@@ -23,6 +23,10 @@ data class GeoBounds(
 
     fun contains(x: Float, y: Float): Boolean = x in minX..maxX && y in minY..maxY
 
+    /** True if this box and [other] overlap on both axes (touching edges count as overlap). */
+    fun intersects(other: GeoBounds): Boolean =
+        minX <= other.maxX && maxX >= other.minX && minY <= other.maxY && maxY >= other.minY
+
     /**
      * Expands this box symmetrically about its center so neither axis is smaller than
      * [minSpan], so a tiny province (e.g. a single small island) does not over-zoom when
