@@ -22,8 +22,8 @@ import org.junit.runner.RunWith
  * writes them into this source set's gitignored `assets/fixtures/`. Without them the parity
  * tests are skipped, not failed.
  *
- * Each precision also logs its per-frame latency (tag `OnDeviceParity`), which is what the
- * fp16-versus-int8 decision is made from. Read it with
+ * The model also logs its per-frame latency (tag `OnDeviceParity`), which is what a choice
+ * between precisions or backbones is made from. Read it with
  * `adb logcat -d -s OnDeviceParity OnDeviceInference`.
  */
 @RunWith(AndroidJUnit4::class)
@@ -40,10 +40,7 @@ class OnDeviceInferenceParityTest {
     )
 
     @Test
-    fun fp16MatchesTheCloudModel() = assertParity(OnDeviceModels.FP16)
-
-    @Test
-    fun int8MatchesTheCloudModel() = assertParity(OnDeviceModels.INT8)
+    fun shippedModelMatchesTheCloudModel() = assertParity(OnDeviceModels.SHIPPED)
 
     @Test
     fun aMissingModelReportsUnavailableInsteadOfCrashing() = runBlocking {

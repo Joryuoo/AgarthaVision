@@ -5,9 +5,9 @@
 #   pip install -r inference/export/requirements-export.txt
 #
 # The fork is pinned to the same commit the container uses. Export MUST run against it —
-# stock ultralytics does not know what an EfficientNetV2Backbone is and will fail to
-# reconstruct best.pt.
-git+https://github.com/DMKuZu/ultralytics@c2b156345e2e1468f6113b60813ddb7eeab969d1
+# stock ultralytics, and the fork's older main, do not know what a TimmBackbone is and will
+# fail to reconstruct the checkpoints.
+git+https://github.com/DMKuZu/ultralytics@1fd204363ca9b9ae65047916afa564d8ed3be019
 timm
 torchvision
 

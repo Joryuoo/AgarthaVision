@@ -78,6 +78,22 @@ fp16 matched all 607 of `best.pt`'s detections across the 600 val images (mean I
 **Build:** `android.uniquePackageNames=false`, because `litert` and `litert-api` share a namespace
 that AGP 9 rejects ([LiteRT#6965](https://github.com/google-ai-edge/LiteRT/issues/6965)).
 
+**2026-09-28: new weights, YOLO26-nano on EfficientNetV2-B0.** `best.pt` is replaced by
+`inference/weights/yolo26n-efficientnetv2b0.pt` (val mAP50-95 0.913), which the cloud and the phone
+both run. `yolo26n-mobilenetv4convsmall.pt` (0.901) is committed beside it as the next on-device
+candidate. Versions are now `yolo26n-effv2b0-v1-cloud-fp32` and `yolo26n-effv2b0-v1-tflite-fp32`.
+The tables above measure the old model.
+
+- **Fork pin `c2b1563` → `1fd2043`** (`feat/optimized-inference`) in `requirements.txt`, the export
+  requirements and the notebook. The old pin has no `TimmBackbone` and cannot load either file.
+- **The phone ships fp32**, 26.9 MB, to see whether it runs the B0 model at all before trading
+  accuracy for size. The old fp16 and int8 builds are removed. `export_mobile.py` now also writes
+  the fp32 build, and patches `TimmBackbone` instead of `EfficientNetV2Backbone`.
+- **Output layout unchanged.** These heads were trained with YOLO26's one-to-one branch off, so
+  the TFLite output is still `[1, 7, 8400]` normalised, and the decoder and its NMS stand as they are.
+- **Parity on the desktop**, 20 capture-shaped frames: fp32 matched 22 of 22 of the PyTorch
+  checkpoint's detections at IoU 1.0000; fp16 22 of 22 at 0.9972. Not yet measured on the phone.
+
 ---
 
 ## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Report precision / recall / mAP for best.pt and each exported variant, side by side.
+"""Report precision / recall / mAP for the .pt checkpoint and each exported variant, side by side.
 
     python inference/export/accuracy_report.py \
         --data ~/datasets/agarthavision/data.yaml \
-        --weights inference/weights/best.pt \
-        --models inference/export/out/yolo12n-effv2s-v1-tflite-fp16.tflite inference/export/out/yolo12n-effv2s-v1-tflite-int8.tflite
+        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
+        --models inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite inference/export/out/yolo26n-effv2b0-v1-tflite-int8.tflite
 
 This is the number that answers "is the mobile model good enough?" — parity_check.py only
-says how far the export drifted from best.pt, which is not the same as being correct.
+says how far the export drifted from the .pt checkpoint, which is not the same as being correct.
 
 ## Read the split warning
 
@@ -91,7 +91,7 @@ def evaluate(model_path: str, data_yaml: str, imgsz: int, split: str) -> dict | 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", required=True, help="Path to data.yaml")
-    parser.add_argument("--weights", default="inference/weights/best.pt")
+    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2b0.pt")
     parser.add_argument("--models", nargs="*", default=[], help="Exported models to compare")
     parser.add_argument("--manifest", help="A build's <model_version>.json manifest, for the class-order check")
     parser.add_argument("--imgsz", type=int, default=640)
@@ -139,7 +139,7 @@ def main() -> int:
 
     if len(rows) > 1:
         reference = rows[0]
-        print("\n=== Cost of export, relative to best.pt ===")
+        print("\n=== Cost of export, relative to the .pt checkpoint ===")
         for row in rows[1:]:
             delta_map50 = row["map50"] - reference["map50"]
             delta_recall = row["recall"] - reference["recall"]

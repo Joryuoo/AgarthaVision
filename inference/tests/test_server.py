@@ -60,7 +60,7 @@ def test_infer_keeps_the_response_shape_the_app_parses():
     assert response.status_code == 200
     body = response.json()
     assert set(body) == {"model_version", "predictions", "image", "inference_ms"}
-    assert body["model_version"] == "yolo12n-effv2s-v1-cloud-fp32"
+    assert body["model_version"] == "yolo26n-effv2b0-v1-cloud-fp32"
     assert body["image"] == {"width": 64, "height": 48}
     assert body["predictions"] == [{
         "class": "Ascaris lumbricoides",

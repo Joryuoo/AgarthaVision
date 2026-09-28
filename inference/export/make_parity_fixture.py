@@ -33,7 +33,7 @@ from pathlib import Path
 
 CAPTURE_FRAME_SIZE_PX = 640
 CAPTURE_JPEG_QUALITY = 80
-CLOUD_MODEL_VERSION = "yolo12n-effv2s-v1-cloud-fp32"
+CLOUD_MODEL_VERSION = "yolo26n-effv2b0-v1-cloud-fp32"
 
 
 def capture_frame(path: Path) -> bytes:
@@ -55,7 +55,7 @@ def capture_frame(path: Path) -> bytes:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--weights", default="inference/weights/best.pt")
+    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2b0.pt")
     parser.add_argument("--images", required=True, help="Directory of labelled frames, ideally a held-out split")
     parser.add_argument("--count", type=int, default=20)
     parser.add_argument("--out", default="app/src/androidTest/assets/fixtures")
