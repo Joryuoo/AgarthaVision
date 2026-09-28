@@ -136,6 +136,19 @@ class MyCoverageViewModelTest {
         observeFindingsUseCase = observeFindingsUseCase,
     )
 
+    /**
+     * [MyCoverageViewModel.coverageCache] is a private implementation detail, but the whole point
+     * of the mismatch-guard regression test below is to prove a stale emission never gets written
+     * into it under the wrong period key — that can't be observed via [MyCoverageUiState] alone
+     * once a later, correct emission arrives and overwrites `uiState.coverage`.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun coverageCacheOf(vm: MyCoverageViewModel): Map<HomePeriod, MyCoverage> {
+        val field = MyCoverageViewModel::class.java.getDeclaredField("coverageCache")
+        field.isAccessible = true
+        return field.get(vm) as Map<HomePeriod, MyCoverage>
+    }
+
     @Test
     fun `valid period from SavedStateHandle is used`() = runTest {
         val vm = buildViewModel(savedStateHandle = SavedStateHandle(mapOf("period" to "LAST_7_DAYS")))
@@ -445,6 +458,62 @@ class MyCoverageViewModelTest {
         assertEquals(setOf("TOWN-CEB-1", "TOWN-CEB-2"), townCounts?.keys)
         assertEquals(AreaCount(10, 4), townCounts?.get("TOWN-CEB-1"))
         assertEquals(AreaCount(8, 1), townCounts?.get("TOWN-CEB-2"))
+    }
+
+    @Test
+    fun `stale in-flight coverage result tagged with old period is dropped, not cached under new period`() = runTest {
+        // Regression test for the periodFlow / coverageResultState race: onPeriodChange updates
+        // periodFlow synchronously, but the combine() collector can still be holding the OLD
+        // period's tagged result when it re-fires (the new period's flatMapLatest flow hasn't
+        // emitted yet). Before the fix, coverageResultState wasn't tagged with the period it was
+        // queried for, so this stale (old-period) result would get written into
+        // coverageCache[newPeriod] and clobber the correct value. Here LAST_30_DAYS's query never
+        // completes (a CompletableDeferred it awaits on), simulating Room's async re-query being
+        // slower than the periodFlow update it's racing against.
+        val todayCoverage = coverage(
+            listOf(ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))),
+            CoverageFraming.SingleProvince("CEB"),
+        )
+        val deferred = CompletableDeferred<Result<MyCoverage>>()
+        val observeMyCoverageUseCase: ObserveMyCoverageUseCase = mock()
+        whenever(observeMyCoverageUseCase.invoke(any(), eq(HomePeriod.TODAY), any())).thenReturn(
+            flowOf(Result.success(todayCoverage)),
+        )
+        whenever(observeMyCoverageUseCase.invoke(any(), eq(HomePeriod.LAST_30_DAYS), any())).thenReturn(
+            flow { emit(deferred.await()) },
+        )
+        val vm = buildViewModel(observeMyCoverageUseCase = observeMyCoverageUseCase)
+        advanceUntilIdle()
+
+        // Sanity: TODAY's result loaded and cached normally before the race begins.
+        assertEquals(HomePeriod.TODAY, vm.uiState.value.period)
+        assertEquals(todayCoverage, vm.uiState.value.coverage)
+        val cameraTargetBeforeSwitch = vm.uiState.value.cameraTarget
+
+        vm.onPeriodChange(HomePeriod.LAST_30_DAYS)
+        advanceUntilIdle() // LAST_30_DAYS's flow is now suspended awaiting `deferred`.
+
+        // While LAST_30_DAYS's real result is still in flight, the combine() collector re-fires
+        // with periodFlow == LAST_30_DAYS but coverageResultState still tagged (TODAY, todayCoverage).
+        // The mismatch guard must drop that instead of mislabeling todayCoverage as LAST_30_DAYS's.
+        assertTrue(HomePeriod.LAST_30_DAYS !in coverageCacheOf(vm))
+        assertEquals(todayCoverage, coverageCacheOf(vm)[HomePeriod.TODAY])
+        // cameraTarget must not have been nudged by the stale emission's withCoverage() call.
+        assertEquals(cameraTargetBeforeSwitch, vm.uiState.value.cameraTarget)
+
+        // Now the real LAST_30_DAYS result arrives.
+        val last30Coverage = coverage(
+            listOf(ProvinceCoverage("DAV", "Davao del Sur", IslandGroup.MINDANAO, AreaCount(5, 1))),
+            CoverageFraming.SingleProvince("DAV"),
+        )
+        deferred.complete(Result.success(last30Coverage))
+        advanceUntilIdle()
+
+        assertEquals(HomePeriod.LAST_30_DAYS, vm.uiState.value.period)
+        assertEquals(last30Coverage, vm.uiState.value.coverage)
+        assertEquals(last30Coverage, coverageCacheOf(vm)[HomePeriod.LAST_30_DAYS])
+        // The stale TODAY result must never have been written under the LAST_30_DAYS key.
+        assertNotEquals(todayCoverage, coverageCacheOf(vm)[HomePeriod.LAST_30_DAYS])
     }
 
     @Test

@@ -119,7 +119,14 @@ class MyCoverageViewModel @Inject constructor(
 
     private val initialProvinces = loadProvinceBoundariesUseCase.cachedOrNull()
     private val provincesState = MutableStateFlow<BoundarySet?>(initialProvinces)
-    private val coverageResultState = MutableStateFlow<Result<MyCoverage>?>(null)
+
+    /**
+     * The period each [Result] was actually queried for, alongside the result itself. Tagging the
+     * period here (rather than just trusting [periodFlow]'s current value) lets the [combine]
+     * below detect and drop a stale emission that raced ahead of a period change — see the
+     * mismatch check in the collector.
+     */
+    private val coverageResultState = MutableStateFlow<Pair<HomePeriod, Result<MyCoverage>>?>(null)
 
     private val _uiState = MutableStateFlow(
         MyCoverageUiState(
@@ -166,15 +173,21 @@ class MyCoverageViewModel @Inject constructor(
                 } else {
                     periodFlow.flatMapLatest { period ->
                         val windows = period.windows(clock.instant(), CLINICAL_ZONE)
-                        observeMyCoverageUseCase(userId, period, windows)
+                        observeMyCoverageUseCase(userId, period, windows).map { result -> period to result }
                     }
                 }
-            }.collect { result -> coverageResultState.value = result }
+            }.collect { tagged -> coverageResultState.value = tagged }
         }
         viewModelScope.launch {
-            combine(provincesState, coverageResultState, periodFlow) { provinces, coverageResult, period ->
-                Triple(provinces, coverageResult, period)
-            }.collect { (provinces, coverageResult, period) ->
+            combine(provincesState, coverageResultState, periodFlow) { provinces, taggedResult, period ->
+                Triple(provinces, taggedResult, period)
+            }.collect { (provinces, taggedResult, period) ->
+                // A tagged result whose period doesn't match the current periodFlow value is stale:
+                // it was queried for a period we've since switched away from (flatMapLatest already
+                // cancelled that in-flight query, but this emission was already in the pipe). Drop it
+                // and wait for the next emission, which will be for the now-current period.
+                if (taggedResult != null && taggedResult.first != period) return@collect
+                val coverageResult = taggedResult?.second
                 _uiState.update { current ->
                     when {
                         coverageResult == null -> current.copy(period = period, provinces = provinces)
