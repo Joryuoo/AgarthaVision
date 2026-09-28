@@ -22,9 +22,12 @@ model output.
 `in_inference` → `ready`, or `manual`. `InferenceQueueProcessor` takes one frame at a time,
 oldest first: the cloud first, the on-device model when the cloud fails for any reason, a `503`
 included. `CloudCircuitBreaker` skips the cloud for 60 s after three failures in a row, doubling
-per failed probe up to 10 minutes. It runs on one app-scoped coroutine (`InProcessInferenceQueue`),
-started at app launch and woken by each capture. A frame interrupted by a killed process is put
-back in the queue on the next pass.
+per failed probe up to 10 minutes. It runs through WorkManager (`WorkManagerInferenceQueue`), like
+sync: each capture and each app launch appends an `InferenceQueueWorker` pass to one unique chain,
+so passes never overlap, and `InferenceRetryWorker` wakes the queue when a failed frame is due. A
+frame interrupted by a killed process is put back in the queue on the next pass. The queue keeps
+going after the app is swiped away, whenever Android allows it background work; on MIUI that needs
+Autostart, as sync does. The queue itself is the rows in Room, on the phone.
 
 **When both engines fail**, the frame waits 30 s, then twice as long each time up to 5 minutes,
 and becomes manual after 5 attempts (`samples.inference_attempts`). Other frames keep moving.

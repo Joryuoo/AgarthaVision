@@ -17,10 +17,17 @@ returns. The model output arrives later.
 - **The queue is the sample rows.** `samples.inference_state` (Room only, added at version 23)
   is `queued` → `in_inference` → `ready`, or `manual`. There is no separate table, so the queue
   survives the app being killed and the phone rebooting.
-- **One consumer, oldest first.** `InferenceQueueProcessor` (`domain/inference/`) runs on one
-  app-scoped coroutine in `InProcessInferenceQueue` (`data/inference/queue/`), started at app
-  launch and woken by every capture. Each pass first puts any `in_inference` row back to
-  `queued`, which is how a frame interrupted by a killed process is picked up again.
+- **One consumer, oldest first.** `InferenceQueueProcessor` (`domain/inference/`) runs in
+  WorkManager passes (`data/inference/queue/`). Every capture and every app launch appends an
+  `InferenceQueueWorker` to one unique chain (`APPEND_OR_REPLACE`), so passes run one after
+  another, and the processor also holds a lock for the whole pass. Each pass first puts any
+  `in_inference` row back to `queued`, which is how a frame interrupted by a killed process, or
+  by WorkManager stopping a pass, is picked up again.
+- **Background.** WorkManager runs a pass after the app is swiped away or killed, whenever
+  Android allows the app background work, and again after a reboot. No network constraint, since
+  the on-device model needs none, and never expedited (see [`sync`](sync.md)). On MIUI, background
+  work needs the per-app Autostart permission, off by default, the same as sync. When it does not
+  run, nothing is lost: the frames wait in Room on the phone for the next capture or app start.
 - **Cloud first, then this phone.** Each frame goes to `RemoteInferenceEngine`. On any failure,
   a `503` included, the same frame goes to `OnDeviceInferenceEngine`.
 - **Circuit breaker.** `CloudCircuitBreaker` opens after three cloud failures in a row. Frames
@@ -28,7 +35,9 @@ returns. The model output arrives later.
   costs three timeouts rather than one per frame.
 - **Both engines fail.** The frame goes back to the queue and waits 30 s, then twice as long each
   time up to 5 minutes. After 5 failed attempts it becomes a manual sample. `samples.inference_attempts`
-  holds the count, so a crash loop cannot reset it. Other frames are not held up meanwhile.
+  holds the count, so a crash loop cannot reset it. Other frames are not held up meanwhile. The
+  wait is a separate delayed request, `InferenceRetryWorker`, which appends a pass when the
+  earliest failed frame is due, so it never holds later captures behind it.
 - **Every transition is one conditional UPDATE** (`SampleDao`, queue section). A result is
   written only if the row is still `in_inference`, so a cancel (`CancelInferenceUseCase`) or a
   delete that lands first makes the result a no-op. A cancelled sample is recorded manual

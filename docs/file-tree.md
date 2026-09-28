@@ -86,7 +86,7 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `local/species/` | `SpeciesSuggestionSeeder` and repository for offline autocomplete index |
 | `local/` | `SampleImageStore` — on-device JPEG files under `users/{owner}/samples/` |
 | `inference/` | `RemoteInferenceEngine` (the cloud container) and `PredictionMapper` |
-| `inference/queue/` | `InProcessInferenceQueue` — runs the inference queue's one consumer on an app-scoped coroutine |
+| `inference/queue/` | `WorkManagerInferenceQueue`, `InferenceQueueWorker` and `InferenceRetryWorker` — run the inference queue's passes through WorkManager, one at a time |
 | `inference/ondevice/` | `OnDeviceInferenceEngine` and its parts: `ModelStore` compiles a bundled model with LiteRT, `FramePreprocessor` letterboxes, `YoloOutputDecoder` decodes and runs NMS |
 | `remote/` | Retrofit interface to the inference container, and its DTOs |
 | `supabase/` | Remote data sources and per-entity sync use cases (`PatientRemoteDataSource`, `SyncPatientUseCase`, etc.) |

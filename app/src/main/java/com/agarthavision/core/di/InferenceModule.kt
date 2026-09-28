@@ -2,12 +2,12 @@ package com.agarthavision.core.di
 
 import com.agarthavision.BuildConfig
 import com.agarthavision.data.inference.RemoteInferenceEngine
-import com.agarthavision.data.inference.queue.InProcessInferenceQueue
 import com.agarthavision.data.inference.ondevice.FramePreprocessor
 import com.agarthavision.data.inference.ondevice.ModelStore
 import com.agarthavision.data.inference.ondevice.OnDeviceInferenceEngine
 import com.agarthavision.data.inference.ondevice.OnDeviceModels
 import com.agarthavision.data.inference.ondevice.YoloOutputDecoder
+import com.agarthavision.data.inference.queue.WorkManagerInferenceQueue
 import com.agarthavision.data.remote.InferenceApi
 import com.agarthavision.data.repository.InferenceQueueRepositoryImpl
 import com.agarthavision.domain.inference.CloudCircuitBreaker
@@ -119,10 +119,12 @@ object InferenceModule {
      *
      * Built here rather than injected so the two engines are passed by concrete type. Both are
      * [com.agarthavision.domain.inference.InferenceEngine]s, and naming them here is clearer than
-     * a pair of qualifiers. Unscoped: [InProcessInferenceQueue] is its only holder, and a second
-     * instance would bring a second circuit breaker with it.
+     * a pair of qualifiers. A singleton, because WorkManager builds a new worker for every pass:
+     * the circuit breaker, the retry schedule and the lock that keeps passes from overlapping
+     * must be the same ones each time.
      */
     @Provides
+    @Singleton
     fun provideInferenceQueueProcessor(
         repository: InferenceQueueRepository,
         cloudEngine: RemoteInferenceEngine,
@@ -146,7 +148,7 @@ object InferenceModule {
 @InstallIn(SingletonComponent::class)
 abstract class InferenceBindingModule {
     @Binds
-    abstract fun bindInferenceQueue(impl: InProcessInferenceQueue): InferenceQueue
+    abstract fun bindInferenceQueue(impl: WorkManagerInferenceQueue): InferenceQueue
 
     @Binds
     abstract fun bindInferenceQueueRepository(impl: InferenceQueueRepositoryImpl): InferenceQueueRepository

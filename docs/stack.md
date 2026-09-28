@@ -76,6 +76,8 @@ the pure-Kotlin `domain/sync/SyncScheduler` port, enqueued as unique work with a
 constraint and exponential backoff. `androidx.hilt:hilt-work` supplies `@HiltWorker`, and
 WorkManager's default initializer is removed in the manifest so `AgarthaVisionApp`'s
 `Configuration.Provider` can hand it the `HiltWorkerFactory`. See `map/processes/sync.md`.
+The inference queue runs through WorkManager the same way (14zcqntj6ny). See
+`map/processes/infer.md`.
 
 Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrofit converter
 (`core/di/InferenceModule.kt:35`, `:69`), **kotlinx.serialization** for Supabase row shapes
