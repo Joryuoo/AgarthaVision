@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import java.time.Clock
 import javax.inject.Inject
@@ -65,7 +67,8 @@ class MyCoverageCardViewModel @Inject constructor(
 
     private var cachedProvinces: BoundarySet? = loadProvinceBoundariesUseCase.cachedOrNull()
     private val townsCache = mutableMapOf<String, BoundarySet?>()
-    private val findingsCache = mutableMapOf<String, List<SpeciesFinding>>()
+    private val findingsCache = mutableMapOf<Pair<String, HomePeriod>, List<SpeciesFinding>>()
+    private val stateCache = mutableMapOf<Pair<String, HomePeriod>, MyCoverageCardUiState>()
 
     fun setPeriod(period: HomePeriod) {
         periodFlow.value = period
@@ -89,10 +92,19 @@ class MyCoverageCardViewModel @Inject constructor(
                         },
                     )
                 }
+                    .onStart { emit(stateCache[userId to period] ?: MyCoverageCardUiState.Loading) }
+                    .onEach {
+                        if (it is MyCoverageCardUiState.Ready || it is MyCoverageCardUiState.Empty) {
+                            stateCache[userId to period] = it
+                        }
+                    }
             }
         }
     }.stateIn(
         scope = viewModelScope,
+        // stateIn keeps the last emitted value across resubscribe (so the card re-renders
+        // instantly on return), and the 5s stop timeout lets period time-windows recompute
+        // when the upstream flow restarts after being backgrounded.
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = MyCoverageCardUiState.Loading,
     )
@@ -132,7 +144,7 @@ class MyCoverageCardViewModel @Inject constructor(
         val framing = coverage.framing
         if (framing is CoverageFraming.SingleProvince) {
             val towns = getTowns(framing.code)
-            val cachedSpecies = findingsCache[userId] ?: emptyList()
+            val cachedSpecies = findingsCache[userId to coverage.period] ?: emptyList()
             emit(
                 MyCoverageCardUiState.Ready(
                     coverage = coverage,
@@ -146,7 +158,7 @@ class MyCoverageCardViewModel @Inject constructor(
             if (findingsFlow != null) {
                 emitAll(
                     findingsFlow.map { findings ->
-                        findingsCache[userId] = findings.species
+                        findingsCache[userId to coverage.period] = findings.species
                         MyCoverageCardUiState.Ready(
                             coverage = coverage,
                             provinces = provinces,

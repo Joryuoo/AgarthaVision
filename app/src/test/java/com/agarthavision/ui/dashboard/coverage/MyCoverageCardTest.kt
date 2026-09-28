@@ -1,8 +1,13 @@
 package com.agarthavision.ui.dashboard.coverage
 
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.dp
 import com.agarthavision.domain.model.AreaCount
 import com.agarthavision.domain.geo.AreaShape
 import com.agarthavision.domain.geo.BoundarySet
@@ -119,6 +124,44 @@ class MyCoverageCardTest {
         }
 
         composeRule.onNodeWithText("No smears in this period").assertExists()
+    }
+
+    @Test
+    fun `empty state renders inside the real fixed-height modifier used by KpiPager`() {
+        // Mirrors KpiPager's Modifier.fillMaxWidth().height(coveragePageHeight(...)) for page 1 —
+        // this is the exact shape of modifier that regressed to a blank card when it used
+        // heightIn(min = 220.dp) instead (that collapses to 0px inside the pager's unbounded
+        // LazyColumn measuring context, since the card body uses weight(1f) internally).
+        val observeMyCoverageUseCase: ObserveMyCoverageUseCase = mock()
+        whenever(observeMyCoverageUseCase(eq("user-1"), any(), any())).thenReturn(
+            flowOf(
+                Result.success(
+                    MyCoverage(
+                        period = HomePeriod.TODAY,
+                        totals = AreaCount(0, 0),
+                        unlocatedSmears = 0,
+                        provinces = emptyList(),
+                        islandGroupCounts = emptyMap(),
+                        framing = CoverageFraming.Empty,
+                    ),
+                ),
+            ),
+        )
+        val vm = createViewModel(observeMyCoverageUseCase)
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                MyCoverageCard(
+                    period = HomePeriod.TODAY,
+                    onOpen = {},
+                    modifier = Modifier.fillMaxWidth().height(220.dp),
+                    viewModel = vm,
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("myCoverageCard").assertIsDisplayed()
+        composeRule.onNodeWithText("No smears in this period").assertIsDisplayed()
     }
 
     @Test

@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -21,8 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,14 +54,10 @@ internal fun KpiPager(
     onOpenCoverage: (HomePeriod) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var savedPage by rememberSaveable { mutableIntStateOf(0) }
-    val pagerState = rememberPagerState(initialPage = savedPage, pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 2 })
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
-    var page0HeightDp by remember { mutableStateOf<Dp?>(null) }
-
-    // Persist the current page so it survives navigation away and back.
-    savedPage = pagerState.currentPage
+    var page0HeightDpValue by rememberSaveable { mutableFloatStateOf(0f) }
 
     Column(modifier = modifier) {
         HorizontalPager(
@@ -86,12 +80,15 @@ internal fun KpiPager(
                     )
                 },
         ) { page ->
-            val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
-            val pageTransitionModifier = Modifier.graphicsLayer {
-                val progress = pageOffset.coerceIn(0f, 1f)
-                alpha = 1f - (progress * 0.25f)
-                scaleX = 1f - (progress * 0.04f)
-                scaleY = 1f - (progress * 0.04f)
+            val pageTransitionModifier = remember(page) {
+                Modifier.graphicsLayer {
+                    val pageOffset =
+                        ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction).absoluteValue
+                    val progress = pageOffset.coerceIn(0f, 1f)
+                    alpha = 1f - (progress * 0.25f)
+                    scaleX = 1f - (progress * 0.04f)
+                    scaleY = 1f - (progress * 0.04f)
+                }
             }
             when (page) {
                 0 -> {
@@ -104,25 +101,19 @@ internal fun KpiPager(
                             .then(pageTransitionModifier)
                             .onSizeChanged { size ->
                                 if (size.height > 0) {
-                                    page0HeightDp = with(density) { size.height.toDp() }
+                                    page0HeightDpValue = with(density) { size.height.toDp().value }
                                 }
                             },
                     )
                 }
                 1 -> {
-                    val page1Modifier = if (page0HeightDp != null) {
-                        Modifier
-                            .fillMaxWidth()
-                            .height(page0HeightDp!!)
-                    } else {
-                        Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 220.dp)
-                    }
                     MyCoverageCard(
                         period = period,
                         onOpen = onOpenCoverage,
-                        modifier = page1Modifier.then(pageTransitionModifier),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(coveragePageHeight(page0HeightDpValue))
+                            .then(pageTransitionModifier),
                     )
                 }
             }
@@ -182,3 +173,8 @@ internal fun KpiPager(
         }
     }
 }
+
+private val COVERAGE_PAGE_FALLBACK_HEIGHT = 220.dp
+
+internal fun coveragePageHeight(page0HeightDpValue: Float): Dp =
+    if (page0HeightDpValue > 0f) page0HeightDpValue.dp else COVERAGE_PAGE_FALLBACK_HEIGHT

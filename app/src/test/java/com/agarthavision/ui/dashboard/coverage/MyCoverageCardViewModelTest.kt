@@ -21,7 +21,9 @@ import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -166,6 +168,66 @@ class MyCoverageCardViewModelTest {
 
             verify(loadTownBoundariesUseCase).invoke("CEB")
             verify(observeFindingsUseCase).invoke(eq("user-1"), any(), anyOrNull())
+        }
+
+    @Test
+    fun `resubscribing after the WhileSubscribed timeout replays the cached state instead of Loading`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(observeMyCoverageUseCase(eq("user-1"), any(), any()))
+                .thenReturn(flowOf(Result.success(emptyCoverage(HomePeriod.TODAY))))
+
+            val vm = viewModel()
+
+            vm.uiState.test {
+                skipDefaultsUntilEmptyFor(HomePeriod.TODAY)
+                cancelAndIgnoreRemainingEvents()
+            }
+
+            // Past the 5s WhileSubscribed stop timeout, with no active subscribers.
+            advanceTimeBy(6_000)
+            runCurrent()
+
+            vm.uiState.test {
+                val resumed = awaitItem()
+                assertTrue(
+                    "expected the cached Empty state on resubscribe, got $resumed",
+                    resumed is MyCoverageCardUiState.Empty,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `switching period shows Loading for an unseen period but replays the cache when returning`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(observeMyCoverageUseCase(eq("user-1"), any(), any()))
+                .thenAnswer { invocation ->
+                    val period = invocation.arguments[1] as HomePeriod
+                    flowOf(Result.success(emptyCoverage(period)))
+                }
+
+            val vm = viewModel()
+            vm.uiState.test {
+                skipDefaultsUntilEmptyFor(HomePeriod.TODAY)
+
+                vm.setPeriod(HomePeriod.LAST_7_DAYS)
+                val firstAfterSwitch = awaitItem()
+                assertTrue(
+                    "switching to a never-seen period must show Loading, not a stale state, " +
+                        "got $firstAfterSwitch",
+                    firstAfterSwitch is MyCoverageCardUiState.Loading,
+                )
+                skipDefaultsUntilEmptyFor(HomePeriod.LAST_7_DAYS)
+
+                vm.setPeriod(HomePeriod.TODAY)
+                val backToToday = awaitItem()
+                assertTrue(
+                    "returning to a previously cached period must replay its cached Empty " +
+                        "state, not Loading, got $backToToday",
+                    backToToday is MyCoverageCardUiState.Empty &&
+                        backToToday.period == HomePeriod.TODAY,
+                )
+            }
         }
 
     private suspend fun app.cash.turbine.ReceiveTurbine<MyCoverageCardUiState>.skipDefaultsUntilEmptyFor(

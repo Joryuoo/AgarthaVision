@@ -26,7 +26,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +47,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.geo.IslandGroup
 import com.agarthavision.domain.model.AreaStat
@@ -67,6 +67,10 @@ import com.agarthavision.ui.theme.LocalAgarthaColors
 private const val TOP_PROVINCES_SHOWN = 3
 private const val PERCENT_FACTOR = 100
 
+/**
+ * Renders the My Coverage summary card. [modifier] must provide a bounded height — the card
+ * body uses `weight(1f)` internally and collapses to 0px inside an unbounded parent.
+ */
 @Composable
 fun MyCoverageCard(
     period: HomePeriod,
@@ -75,7 +79,7 @@ fun MyCoverageCard(
     viewModel: MyCoverageCardViewModel = hiltViewModel(),
 ) {
     LaunchedEffect(period) { viewModel.setPeriod(period) }
-    val state by viewModel.uiState.collectAsState()
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     CompositionLocalProvider(LocalAgarthaColors provides LightAgarthaColors) {
         val theme = AgarthaTheme.colors

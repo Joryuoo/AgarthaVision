@@ -126,7 +126,7 @@ fun DashboardScreen(
 
             // 1b. Needs Attention strip
             if (!state.needsAttention.isEmpty) {
-                item {
+                item(key = "needsAttention") {
                     Spacer(Modifier.height(Spacing.xs))
                     NeedsAttentionStrip(
                         needsAttention = state.needsAttention,
@@ -157,7 +157,7 @@ fun DashboardScreen(
                     )
                 }
             }
-            item {
+            item(key = "kpiPager") {
                 Spacer(Modifier.height(Spacing.sm))
                 KpiPager(
                     tiles = state.kpiTiles,
@@ -315,7 +315,7 @@ private fun LazyListScope.renderActiveAndRecentSessions(
     onNavigate: (String) -> Unit,
 ) {
     state.activeSession?.let { session ->
-        item {
+        item(key = "activeSession") {
             val nowMillis = remember { System.currentTimeMillis() }
             ActiveSessionHero(
                 sessionId = session.label,
@@ -329,7 +329,7 @@ private fun LazyListScope.renderActiveAndRecentSessions(
     }
 
     if (state.recentSessions.isNotEmpty()) {
-        item {
+        item(key = "recentSessions") {
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = Spacing.xl),
@@ -350,7 +350,7 @@ private fun LazyListScope.renderActiveAndRecentSessions(
             Spacer(Modifier.height(Spacing.lg))
         }
     } else if (state.activeSession != null) {
-        item {
+        item(key = "recentSessions") {
             Spacer(Modifier.height(Spacing.md))
         }
     }
