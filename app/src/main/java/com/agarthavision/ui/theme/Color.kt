@@ -89,7 +89,7 @@ object AppColors {
     val DarkCoverageBin2   = Color(0xFF8C1823)
     val DarkCoverageBin3   = Color(0xFFC43343)
     val DarkCoverageBin4   = Color(0xFFF06B78)
-    val DarkCoverageNoData = Color(0xFF2A2522)
+    val DarkCoverageNoData = Color(0xFF4A443F)
     val DarkCoverageTooFew = Color(0xFF37322E)
 
     // Microscope-feel sample tile gradient — warm dark, no navy

@@ -135,7 +135,7 @@ val LightAgarthaColors = AgarthaColors(
         lerp(AppColors.MaroonTint, AppColors.Maroon, 0.75f),
         AppColors.Maroon,
     ),
-    coverageNoData = AppColors.Gray50,
+    coverageNoData = AppColors.Gray200,
     coverageTooFew = AppColors.Gray100,
 )
 

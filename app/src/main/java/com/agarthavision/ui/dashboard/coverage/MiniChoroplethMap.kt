@@ -186,7 +186,7 @@ private fun DrawScope.drawArea(
         }
         AreaStat.NoData, null -> {
             drawPath(path, color = colors.coverageNoData)
-            drawPath(path, color = colors.border, style = Stroke(STROKE_WIDTH_PX))
+            drawPath(path, color = colors.borderStrong, style = Stroke(STROKE_WIDTH_PX))
         }
     }
 }
