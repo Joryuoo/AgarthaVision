@@ -1,16 +1,10 @@
 package com.agarthavision.ui.settings
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -22,9 +16,8 @@ import org.robolectric.annotation.Config
 /**
  * Compose UI tests for [AppearanceCard].
  *
- * The key behaviour being tested is that the *whole card* is the tap target, not only the
- * sun/moon glyph at its edge. Previously only an [IconButton] was tappable; this suite
- * would have failed against that implementation.
+ * Verifies that the Theme card renders the Light, Dark, and System options,
+ * and clicking each option dispatches the appropriate [ThemeMode] selection.
  *
  * Runs on the JVM under Robolectric inside `:app:testDebugUnitTest`.
  */
@@ -35,147 +28,56 @@ class AppearanceCardTest {
     @get:Rule
     val composeRule = createComposeRule()
 
-    // ── Tappability ──────────────────────────────────────────────────────────
-
-    /**
-     * Core regression: clicking the "Dark mode" label text — not the icon — must
-     * invoke [onToggleTheme]. Before this fix only the IconButton area did so.
-     *
-     * The label lives inside a Row with mergeDescendants = true, so we need
-     * useUnmergedTree = true to reach the raw Text node and prove that tapping
-     * that specific pixel area dispatches the action.
-     */
     @Test
-    fun `clicking the dark mode label text invokes onToggleTheme`() {
-        var callCount = 0
+    fun `theme card displays theme label and all three options`() {
         composeRule.setContent {
             AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = false, onToggleTheme = { callCount++ })
+                AppearanceCard(themeMode = ThemeMode.LIGHT, onSelectTheme = {})
             }
         }
 
-        composeRule
-            .onNodeWithText("Dark mode", useUnmergedTree = true)
-            .performClick()
-
-        assertEquals(1, callCount)
+        composeRule.onNodeWithText("Theme").assertIsDisplayed()
+        composeRule.onNodeWithText("Light").assertIsDisplayed()
+        composeRule.onNodeWithText("Dark").assertIsDisplayed()
+        composeRule.onNodeWithText("System").assertIsDisplayed()
     }
 
     @Test
-    fun `clicking the card when already in dark mode invokes onToggleTheme`() {
-        var callCount = 0
+    fun `clicking dark option invokes onSelectTheme with DARK`() {
+        var selectedMode: ThemeMode? = null
         composeRule.setContent {
             AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = true, onToggleTheme = { callCount++ })
+                AppearanceCard(themeMode = ThemeMode.LIGHT, onSelectTheme = { selectedMode = it })
             }
         }
 
-        composeRule
-            .onNodeWithText("Dark mode", useUnmergedTree = true)
-            .performClick()
-
-        assertEquals(1, callCount)
-    }
-
-    // ── Content descriptions ─────────────────────────────────────────────────
-
-    @Test
-    fun `when not in dark mode the merged node has contentDescription theme_toggle_to_dark`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = false, onToggleTheme = {})
-            }
-        }
-
-        // "Switch to dark mode" is the string resource value of R.string.theme_toggle_to_dark
-        composeRule
-            .onNodeWithContentDescription("Switch to dark mode")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Dark").performClick()
+        assertEquals(ThemeMode.DARK, selectedMode)
     }
 
     @Test
-    fun `when in dark mode the merged node has contentDescription theme_toggle_to_light`() {
+    fun `clicking light option invokes onSelectTheme with LIGHT`() {
+        var selectedMode: ThemeMode? = null
         composeRule.setContent {
             AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = true, onToggleTheme = {})
+                AppearanceCard(themeMode = ThemeMode.DARK, onSelectTheme = { selectedMode = it })
             }
         }
 
-        // "Switch to light mode" is the string resource value of R.string.theme_toggle_to_light
-        composeRule
-            .onNodeWithContentDescription("Switch to light mode")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Light").performClick()
+        assertEquals(ThemeMode.LIGHT, selectedMode)
     }
 
     @Test
-    fun `contentDescription flips when isDarkMode changes from false to true`() {
-        var dark by mutableStateOf(false)
+    fun `clicking system option invokes onSelectTheme with SYSTEM`() {
+        var selectedMode: ThemeMode? = null
         composeRule.setContent {
             AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = dark, onToggleTheme = {})
-            }
-        }
-        composeRule.onNodeWithContentDescription("Switch to dark mode").assertIsDisplayed()
-
-        // Drive the state change and wait for recomposition.
-        composeRule.runOnIdle { dark = true }
-        composeRule.waitForIdle()
-
-        composeRule.onNodeWithContentDescription("Switch to light mode").assertIsDisplayed()
-    }
-
-    // ── Role ─────────────────────────────────────────────────────────────────
-
-    @Test
-    fun `the merged node carries Role Switch when isDarkMode is false`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = false, onToggleTheme = {})
+                AppearanceCard(themeMode = ThemeMode.LIGHT, onSelectTheme = { selectedMode = it })
             }
         }
 
-        composeRule
-            .onNode(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
-            .assertIsDisplayed()
-    }
-
-    @Test
-    fun `the merged node carries Role Switch when isDarkMode is true`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = true, onToggleTheme = {})
-            }
-        }
-
-        composeRule
-            .onNode(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
-            .assertIsDisplayed()
-    }
-
-    // ── Icon has no duplicate content description ────────────────────────────
-
-    /**
-     * The icon must have contentDescription = null so screen readers don't announce
-     * both the merged row label and a second description for the glyph.
-     * If a node with the toggle description exists, there must be exactly one of them.
-     */
-    @Test
-    fun `only one node carries the toggle content description when isDarkMode is false`() {
-        composeRule.setContent {
-            AgarthaVisionTheme {
-                AppearanceCard(isDarkMode = false, onToggleTheme = {})
-            }
-        }
-
-        // onAllNodesWithContentDescription would throw if 0 nodes; onNodeWithContentDescription
-        // already asserts exactly one. Confirm the label-text node is not also a separate node.
-        composeRule
-            .onNodeWithContentDescription("Switch to dark mode")
-            .assertIsDisplayed()
-
-        // There should be no node for "Switch to light mode" (wrong direction label absent)
-        composeRule
-            .onNodeWithContentDescription("Switch to light mode")
-            .assertDoesNotExist()
+        composeRule.onNodeWithText("System").performClick()
+        assertEquals(ThemeMode.SYSTEM, selectedMode)
     }
 }

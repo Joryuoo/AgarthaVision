@@ -441,11 +441,11 @@ private fun ReportsScreenHeader(
     ) {
         Text(
             text = stringResource(R.string.reports_title),
-            fontSize = 32.sp,
+            fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             color = if (colors.isDark) Color.White else Color.Black,
             letterSpacing = (-0.5).sp,
-            lineHeight = 34.sp,
+            lineHeight = 30.sp,
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
