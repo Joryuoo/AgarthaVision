@@ -77,6 +77,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.core.util.DateBucket
+import com.agarthavision.core.util.classifyDateBucket
+import com.agarthavision.core.util.sevenDaysAgoMillis
+import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Sex
@@ -306,25 +310,27 @@ fun PatientsScreen(
                 if (shouldLoadMore) viewModel.onLoadMore()
             }
 
-            val nowMillis = remember { System.currentTimeMillis() }
-            val todayStartMillis = remember(state.now) {
-                state.now.atZone(CLINICAL_ZONE).toLocalDate()
-                    .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
-            }
-            val sevenDaysAgoMillis = remember(nowMillis) {
-                nowMillis - 7 * 24 * 60 * 60 * 1000L
-            }
+            // Single source of "now" for this screen: the ViewModel-provided clock reading,
+            // not a Composable-local System.currentTimeMillis() snapshot (that was a second,
+            // independently-frozen clock feeding the same "time ago" / bucketing math).
+            val nowMillis = remember(state.now) { state.now.toEpochMilli() }
+            val todayStartMillis = remember(state.now) { startOfTodayMillis(state.now) }
+            val sevenDaysAgoMillis = remember(state.now) { sevenDaysAgoMillis(state.now) }
 
             val groupedPatients = remember(state.patients, state.sort, todayStartMillis, sevenDaysAgoMillis) {
+                fun bucketOf(item: PatientListItem): DateBucket {
+                    val activity = item.lastActivityAt ?: item.patient.updatedAt.toEpochMilli()
+                    return classifyDateBucket(activity, todayStartMillis, sevenDaysAgoMillis)
+                }
                 when (state.sort) {
                     PatientSort.RECENT -> {
                         val today = mutableListOf<PatientListItem>()
                         val thisWeek = mutableListOf<PatientListItem>()
                         for (item in state.patients) {
-                            val activity = item.lastActivityAt ?: item.patient.updatedAt.toEpochMilli()
-                            when {
-                                activity >= todayStartMillis -> today.add(item)
-                                activity >= sevenDaysAgoMillis -> thisWeek.add(item)
+                            when (bucketOf(item)) {
+                                DateBucket.TODAY -> today.add(item)
+                                DateBucket.THIS_WEEK -> thisWeek.add(item)
+                                DateBucket.EARLIER -> Unit
                             }
                         }
                         buildList {
@@ -333,24 +339,15 @@ fun PatientsScreen(
                         }
                     }
                     PatientSort.TODAY -> {
-                        val today = state.patients.filter {
-                            val activity = it.lastActivityAt ?: it.patient.updatedAt.toEpochMilli()
-                            activity >= todayStartMillis
-                        }
+                        val today = state.patients.filter { bucketOf(it) == DateBucket.TODAY }
                         if (today.isNotEmpty()) listOf("TODAY" to today) else emptyList()
                     }
                     PatientSort.THIS_WEEK -> {
-                        val thisWeek = state.patients.filter {
-                            val activity = it.lastActivityAt ?: it.patient.updatedAt.toEpochMilli()
-                            activity in sevenDaysAgoMillis..<todayStartMillis
-                        }
+                        val thisWeek = state.patients.filter { bucketOf(it) == DateBucket.THIS_WEEK }
                         if (thisWeek.isNotEmpty()) listOf("THIS WEEK" to thisWeek) else emptyList()
                     }
                     PatientSort.EARLIER -> {
-                        val earlier = state.patients.filter {
-                            val activity = it.lastActivityAt ?: it.patient.updatedAt.toEpochMilli()
-                            activity < sevenDaysAgoMillis
-                        }
+                        val earlier = state.patients.filter { bucketOf(it) == DateBucket.EARLIER }
                         if (earlier.isNotEmpty()) listOf("EARLIER" to earlier) else emptyList()
                     }
                     PatientSort.LAST_NAME, PatientSort.FIRST_NAME -> {

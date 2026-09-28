@@ -9,8 +9,10 @@ import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.usecase.records.FakeAuthRepository
 import com.agarthavision.domain.usecase.records.ObserveReportsUseCase
 import com.agarthavision.util.MainDispatcherRule
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -416,7 +418,7 @@ class RecordsViewModelTest {
         val reportRepo = LambdaReportRepository(rowsByLimit, totalCount)
         val authRepo = FakeAuthRepository(userId)
         val useCase = ObserveReportsUseCase(authRepo, reportRepo)
-        return RecordsViewModel(useCase)
+        return RecordsViewModel(useCase, fixedClock())
     }
 
     private fun viewModelWithRecording(
@@ -425,8 +427,10 @@ class RecordsViewModelTest {
     ): RecordsViewModel {
         val authRepo = FakeAuthRepository(userId)
         val useCase = ObserveReportsUseCase(authRepo, reportRepo)
-        return RecordsViewModel(useCase)
+        return RecordsViewModel(useCase, fixedClock())
     }
+
+    private fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC)
 }
 
 // ---------------------------------------------------------------------------

@@ -94,7 +94,10 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
-import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.core.util.DateBucket
+import com.agarthavision.core.util.classifyDateBucket
+import com.agarthavision.core.util.sevenDaysAgoMillis
+import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -188,26 +191,19 @@ fun RecordsScreen(
         if (shouldLoadMore) viewModel.onLoadMore()
     }
 
-    val nowMillis = remember { System.currentTimeMillis() }
-    val todayStartMillis = remember(nowMillis) {
-        Instant.ofEpochMilli(nowMillis).atZone(CLINICAL_ZONE).toLocalDate()
-            .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
-    }
-    val sevenDaysAgoMillis = remember(nowMillis) {
-        nowMillis - 7 * 24 * 60 * 60 * 1000L
-    }
+    val todayStartMillis = remember(state.now) { startOfTodayMillis(state.now) }
+    val sevenDaysAgoMillis = remember(state.now) { sevenDaysAgoMillis(state.now) }
 
-    val groupedReports = remember(state.reports, state.startDate, state.endDate, todayStartMillis, sevenDaysAgoMillis) {
-        val hasDateFilter = state.startDate != null || state.endDate != null
+    val groupedReports = remember(state.reports, todayStartMillis, sevenDaysAgoMillis) {
         val today = mutableListOf<Report>()
         val thisWeek = mutableListOf<Report>()
         val earlier = mutableListOf<Report>()
         for (report in state.reports) {
             val t = report.generatedAt.toEpochMilli()
-            when {
-                t >= todayStartMillis -> today.add(report)
-                t >= sevenDaysAgoMillis -> thisWeek.add(report)
-                hasDateFilter -> earlier.add(report)
+            when (classifyDateBucket(t, todayStartMillis, sevenDaysAgoMillis)) {
+                DateBucket.TODAY -> today.add(report)
+                DateBucket.THIS_WEEK -> thisWeek.add(report)
+                DateBucket.EARLIER -> earlier.add(report)
             }
         }
         buildList {
@@ -344,27 +340,10 @@ fun RecordsScreen(
                             ReportCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
                         }
                         groupedReports.isEmpty() -> {
-                            item {
-                                val isDefaultDate = state.startDate == null && state.endDate == null
-                                val hasOlderRecords = isDefaultDate && state.reports.isNotEmpty()
-                                if (hasOlderRecords) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = Spacing.xl, vertical = Spacing.xxxl),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        EmptyState(
-                                            icon = Icons.Outlined.Inbox,
-                                            title = "No recent reports",
-                                            body = "No reports found for today or this week. " +
-                                                "Select a date range to view earlier reports.",
-                                        )
-                                    }
-                                } else {
-                                    ReportsEmptyState(narrowed = state.isNarrowed)
-                                }
-                            }
+                            // With the Earlier bucket always populated (see classifyDateBucket),
+                            // this is only reachable when state.reports itself is empty — no
+                            // report is ever dropped from every section silently.
+                            item { ReportsEmptyState(narrowed = state.isNarrowed) }
                         }
                         else -> {
                             groupedReports.forEach { (sectionTitle, items) ->
