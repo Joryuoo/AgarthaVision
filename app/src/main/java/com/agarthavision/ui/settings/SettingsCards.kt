@@ -361,15 +361,6 @@ internal fun SyncCard(
                 failedCount = state.counts.failedReports,
             )
 
-            if (state.counts.failed > 0) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.settings_sync_failed, state.counts.failed),
-                    color = colors.danger,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
         }
     }
 }
