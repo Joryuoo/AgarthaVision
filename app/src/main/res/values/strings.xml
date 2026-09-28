@@ -56,6 +56,30 @@
         <item quantity="one">%1$d smear has a location not in the bundled map data</item>
         <item quantity="other">%1$d smears have a location not in the bundled map data</item>
     </plurals>
+
+    <!-- My coverage -->
+    <string name="coverage_title">My coverage</string>
+    <string name="coverage_explore">Explore</string>
+    <string name="coverage_positive_rate">Positive rate</string>
+    <string name="coverage_too_few">Too few</string>
+    <string name="coverage_positive_rate_label">positive rate</string>
+    <string name="coverage_positive_smears_label">positive smears</string>
+    <string name="coverage_smears_examined_label">smears examined</string>
+    <string name="coverage_species_header">SPECIES IN POSITIVE SMEARS</string>
+    <string name="coverage_towns_header">TOWNS</string>
+    <string name="coverage_all_towns">All %1$d</string>
+    <string name="coverage_zoom_in">Zoom in</string>
+    <string name="coverage_zoom_out">Zoom out</string>
+    <string name="coverage_recenter">Recenter</string>
+    <string name="coverage_close_sheet">Close</string>
+    <string name="coverage_empty_title">No smears in this period</string>
+    <string name="coverage_empty_body">Smears you examine will appear here by province.</string>
+    <string name="coverage_attribution">Administrative boundaries: OCHA Philippines Common Operational Datasets (COD-AB), CC BY-IGO 3.0.</string>
+    <plurals name="coverage_towns_with_data">
+        <item quantity="one">%1$d town with data</item>
+        <item quantity="other">%1$d towns with data</item>
+    </plurals>
+    <string name="coverage_more_provinces">+%1$d more</string>
     <string name="activity_empty">No activity yet</string>
     <string name="activity_title">Recent activity</string>
 
