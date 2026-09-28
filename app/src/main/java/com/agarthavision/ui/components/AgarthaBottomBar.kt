@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
@@ -36,11 +37,12 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.PeopleOutline
 import com.agarthavision.R
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.CardsStack
 import com.agarthavision.ui.icons.HomeAppLogo
-import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.icons.Settings
 import com.agarthavision.ui.theme.AgarthaTheme
 
@@ -50,23 +52,24 @@ sealed class Tab(
     val icon: ImageVector
 ) {
     data object Home     : Tab("dashboard", R.string.nav_tab_home,     AgarthaIcons.HomeAppLogo)
-    data object Sessions : Tab("sessions",  R.string.nav_tab_sessions, AgarthaIcons.Science)
-    data object Records  : Tab("records",   R.string.nav_tab_records,  AgarthaIcons.CardsStack)
+    data object Patients : Tab("patients",  R.string.nav_tab_patients, Icons.Outlined.PeopleOutline)
+    data object Reports  : Tab("reports",   R.string.nav_tab_reports,  AgarthaIcons.CardsStack)
     data object Settings : Tab("settings",  R.string.settings_title,   AgarthaIcons.Settings)
 }
 
-val tabs: List<Tab> = listOf(Tab.Home, Tab.Sessions, Tab.Records, Tab.Settings)
+val tabs: List<Tab> = listOf(Tab.Home, Tab.Patients, Tab.Reports, Tab.Settings)
 
 /**
- * Screens that should show the bottom bar.
- * Only the main root level screens have the bottom navigation.
+ * Routes that show the bottom bar — the four root destinations, and nothing else.
+ *
+ * **Derived from [tabs], never written out again.** This used to be a second,
+ * hand-maintained set of the same string literals, and `AgarthaNavGraph` checks *this* one
+ * to decide whether to draw the bar. Renaming a tab's route in one place and not the other
+ * made the bar silently stop appearing on that screen — no crash, no warning, and nothing
+ * to grep for, because both spellings were valid strings. Deriving it means the two cannot
+ * drift.
  */
-val bottomBarRoutes: Set<String> = setOf(
-    "dashboard",
-    "sessions",
-    "records",
-    "settings"
-)
+val bottomBarRoutes: Set<String> = tabs.map { it.route }.toSet()
 
 /**
  * Custom bottom navigation bar built from basic Compose primitives.
@@ -96,10 +99,22 @@ fun AgarthaBottomBar(
         shadowElevation = 0.dp
     ) {
         Column(
-            // Balance the bar: equal padding above and below the tab row. Previously
-            // navigationBarsPadding() dumped the whole system-nav inset below the row with
-            // nothing above it, so the bar read bottom-heavy.
-            modifier = Modifier.padding(vertical = 6.dp)
+            // The navigation-bar inset goes HERE, inside the Surface, and must stay here.
+            //
+            // MainActivity calls enableEdgeToEdge() and the Scaffold zeroes its
+            // contentWindowInsets, so nothing else puts this inset back. Without it the bar
+            // is laid out flush to the bottom of the screen and the system navigation bar --
+            // 47dp of it in three-button mode -- sits on top of the tab row, consuming every
+            // touch before the app sees it. Only a ~21dp strip at the top of the bar stayed
+            // tappable, which read as "the tabs work sometimes".
+            //
+            // Applying it inside the Surface rather than around it is what keeps the earlier
+            // complaint fixed too: the background still paints to the bottom of the screen,
+            // so the area behind the system buttons is bar-coloured instead of a grey gap,
+            // and the row keeps equal 6dp above and below rather than reading bottom-heavy.
+            modifier = Modifier
+                .navigationBarsPadding()
+                .padding(vertical = 6.dp)
         ) {
             Row(
                 modifier = Modifier

@@ -1,12 +1,14 @@
 package com.agarthavision.ui.settings
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
@@ -18,18 +20,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
+import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.sync.SyncCompletion
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
-import com.agarthavision.ui.components.ScreenHeader
-import com.agarthavision.ui.theme.Spacing
 import kotlinx.coroutines.flow.collectLatest
 
 /** Actions the Settings screen's sections dispatch back to the [SettingsViewModel]. */
@@ -37,16 +42,16 @@ data class SettingsActions(
     val onSignInClick: () -> Unit,
     val onSignOutClick: () -> Unit,
     val onSyncNowClick: () -> Unit,
-    val onToggleTheme: () -> Unit,
+    val onSelectTheme: (ThemeMode) -> Unit,
 )
 
 /**
- * Production Settings screen: Account, Data & Sync, Appearance, About.
- * Per the Settings scope (ADR-007 follow-ups) and ADR-008.
+ * Production Settings screen: Account, Data & Sync, Appearance, About, and Sign out.
  */
 @Composable
 fun SettingsScreen(
     onSignInClick: () -> Unit,
+    onSignedOut: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -57,7 +62,7 @@ fun SettingsScreen(
     LaunchedEffect(eventFlow) {
         eventFlow.collectLatest { event ->
             when (event) {
-                SettingsEvent.SignedOut -> Unit
+                SettingsEvent.SignedOut -> onSignedOut()
                 is SettingsEvent.SignOutBlocked -> signOutBlockedReason = event.reason
             }
         }
@@ -69,13 +74,13 @@ fun SettingsScreen(
             onSignInClick = onSignInClick,
             onSignOutClick = { showSignOutDialog = true },
             onSyncNowClick = viewModel::onSyncNow,
-            onToggleTheme = viewModel::onToggleTheme,
+            onSelectTheme = viewModel::onSelectTheme,
         ),
     )
 
     if (showSignOutDialog) {
         SignOutConfirmDialog(
-            pendingCount = state.pendingSyncCounts.totalPending,
+            unsyncedCount = state.pendingSyncCounts.totalUnsynced,
             onConfirm = {
                 showSignOutDialog = false
                 viewModel.onSignOut()
@@ -86,6 +91,26 @@ fun SettingsScreen(
 
     signOutBlockedReason?.let { reason ->
         SignOutBlockedDialog(reason = reason, onDismiss = { signOutBlockedReason = null })
+    }
+}
+
+@Composable
+private fun SettingsScreenHeader(modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.settings_title),
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (colors.isDark) Color.White else Color.Black,
+            letterSpacing = (-0.5).sp,
+            lineHeight = 30.sp,
+        )
     }
 }
 
@@ -101,25 +126,21 @@ private fun SettingsContent(
             .fillMaxSize()
             .background(colors.background),
     ) {
-        // AgarthaNavGraph zeroes contentWindowInsets app-wide; the header owns the status-bar
-        // inset and stays put, so nothing scrolls under the phone's status bar.
-        ScreenHeader(
-            title = stringResource(R.string.settings_title),
-            purpose = stringResource(R.string.settings_subtitle_purpose),
-        )
+        SettingsScreenHeader()
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = Spacing.xl),
+            contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             item {
-                SettingsSection(title = stringResource(R.string.settings_section_account)) {
-                    AccountCard(
-                        identity = state.identity,
-                        isOffline = state.isOffline,
-                        onSignInClick = actions.onSignInClick,
-                        onSignOutClick = actions.onSignOutClick,
-                    )
-                }
+                AccountCard(
+                    identity = state.identity,
+                    isOffline = state.isOffline,
+                    onSignInClick = actions.onSignInClick,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
+            item {
+                Spacer(Modifier.height(10.dp))
             }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_sync)) {
@@ -130,22 +151,35 @@ private fun SettingsContent(
                             counts = state.pendingSyncCounts,
                             isSyncing = state.isSyncing,
                             canSyncNow = state.canSyncNow,
-                            unlinkedSessions = state.unlinkedSessions,
                             initialFetchDone = state.initialFetchDone,
                             isFetching = state.isSyncing,
+                            lastFetchIncomplete = state.lastFetchIncomplete,
                         ),
+                        lastSyncMillis = state.lastSyncCompletion?.completedAtMillis,
                         onSyncNowClick = actions.onSyncNowClick,
                     )
                 }
             }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_appearance)) {
-                    AppearanceCard(isDarkMode = state.isDarkMode, onToggleTheme = actions.onToggleTheme)
+                    AppearanceCard(
+                        themeMode = state.themeMode,
+                        onSelectTheme = actions.onSelectTheme,
+                    )
                 }
             }
             item {
                 SettingsSection(title = stringResource(R.string.settings_section_about)) {
                     AboutCard()
+                }
+            }
+            if (state.isSignedIn) {
+                item {
+                    Spacer(Modifier.height(14.dp))
+                    SignOutSection(
+                        unsyncedCount = state.pendingSyncCounts.totalUnsynced,
+                        onSignOutClick = actions.onSignOutClick,
+                    )
                 }
             }
         }
@@ -154,7 +188,7 @@ private fun SettingsContent(
 
 @Composable
 private fun SignOutConfirmDialog(
-    pendingCount: Int,
+    unsyncedCount: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -165,8 +199,8 @@ private fun SignOutConfirmDialog(
         title = { Text(stringResource(R.string.settings_sign_out_dialog_title)) },
         text = {
             Text(
-                if (pendingCount > 0) {
-                    stringResource(R.string.settings_sign_out_dialog_body_pending, pendingCount)
+                if (unsyncedCount > 0) {
+                    stringResource(R.string.settings_sign_out_dialog_body_pending, unsyncedCount)
                 } else {
                     stringResource(R.string.settings_sign_out_dialog_body_synced)
                 },
@@ -174,7 +208,12 @@ private fun SignOutConfirmDialog(
         },
         confirmButton = {
             TextButton(onClick = onConfirm) {
-                Text(stringResource(R.string.settings_sign_out_dialog_confirm), color = colors.danger)
+                val confirm = if (unsyncedCount > 0) {
+                    R.string.settings_sign_out_dialog_confirm_discard
+                } else {
+                    R.string.settings_sign_out_dialog_confirm
+                }
+                Text(stringResource(confirm), color = colors.danger)
             }
         },
         dismissButton = {
@@ -206,22 +245,34 @@ private fun SettingsScreenPreview() {
     SettingsContent(
         state = SettingsUiState(
             isLoading = false,
-            identity = LocalIdentity(userId = "user-1", email = "medtech@example.com"),
+            identity = LocalIdentity(userId = "user-1", email = "medtech@agartha.ph"),
             isSignedIn = true,
             isOffline = false,
+            themeMode = ThemeMode.LIGHT,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(2, 5, 1, 0),
+            pendingSyncCounts = PendingSyncCounts(
+                pendingPatients = 0,
+                pendingSessions = 2,
+                pendingSamples = 0,
+                pendingReports = 0,
+                failed = 1,
+                failedSamples = 1,
+            ),
+            lastSyncCompletion = SyncCompletion(
+                completedAtMillis = System.currentTimeMillis() - 3600000L,
+                itemsSynced = 4,
+            ),
         ),
         actions = SettingsActions(
             onSignInClick = {},
             onSignOutClick = {},
             onSyncNowClick = {},
-            onToggleTheme = {},
+            onSelectTheme = {},
         ),
     )
 }
 
-@Preview(showBackground = true, name = "Settings - signed out with unlinked sessions")
+@Preview(showBackground = true, name = "Settings - signed out")
 @Composable
 private fun SettingsScreenSignedOutPreview() {
     SettingsContent(
@@ -230,15 +281,15 @@ private fun SettingsScreenSignedOutPreview() {
             identity = null,
             isSignedIn = false,
             isOffline = false,
+            themeMode = ThemeMode.LIGHT,
             isDarkMode = false,
-            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
-            unlinkedSessions = 3,
+            pendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
         ),
         actions = SettingsActions(
             onSignInClick = {},
             onSignOutClick = {},
             onSyncNowClick = {},
-            onToggleTheme = {},
+            onSelectTheme = {},
         ),
     )
 }

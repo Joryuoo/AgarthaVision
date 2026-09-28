@@ -150,9 +150,6 @@ private fun pendingSample(id: String): Sample = Sample(
     sessionId = "session-1",
     filePath = "/tmp/$id.jpg",
     storagePath = null,
-    latitude = 10.0,
-    longitude = 20.0,
-    accuracyMeters = 5f,
     status = SampleStatus.FLAGGED,
 )
 
@@ -165,8 +162,5 @@ private fun pendingUnownedSample(id: String): Sample = Sample(
     sessionId = "session-1",
     filePath = "/tmp/$id.jpg",
     storagePath = null,
-    latitude = 10.0,
-    longitude = 20.0,
-    accuracyMeters = 5f,
     status = SampleStatus.FLAGGED,
 )

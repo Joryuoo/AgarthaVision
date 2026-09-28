@@ -12,7 +12,9 @@ import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
+import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import com.agarthavision.util.MainDispatcherRule
+import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -80,10 +82,9 @@ class CaptureViewModelTest {
         val entity = SessionEntity(
             sessionId = "session-1",
             userId = "user-1",
+            patientId = "patient-1",
             deviceId = "device-1",
             startedAt = Instant.EPOCH.toEpochMilli(),
-            endedAt = null,
-            notes = null,
             label = "Smear 042",
         )
         return SessionState.Active(
@@ -92,12 +93,14 @@ class CaptureViewModelTest {
         )
     }
 
-    private fun makeFrame(): FlaggedFrame = FlaggedFrame(
-        sessionId = "session-1",
-        capturedAt = Instant.EPOCH,
-        jpegBytes = ByteArray(4),
-        predictions = listOf(Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)),
-    )
+    private fun makeFrame(sampleId: String = "sample-1", capturedAt: Instant = Instant.EPOCH) =
+        FlaggedFrame(
+            sampleId = sampleId,
+            sessionId = "session-1",
+            capturedAt = capturedAt,
+            jpegBytes = ByteArray(4),
+            predictions = listOf(Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f)),
+        )
 
     @Test
     fun `Disconnected status latches connection-lost banner`() =
@@ -129,17 +132,39 @@ class CaptureViewModelTest {
         }
 
     @Test
-    fun `onDetectionToastTap sets verificationTarget`() =
+    fun `onCapturedFrameToastTap opens the sample the confirmation names`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
+            val older = makeFrame(sampleId = "sample-older", capturedAt = Instant.EPOCH)
+            val tapped = makeFrame(sampleId = "sample-tapped", capturedAt = Instant.ofEpochSecond(30))
+            framesState.value = listOf(tapped, older)
             advanceUntilIdle()
 
-            val frame = makeFrame()
-            vm.onDetectionToastTap(frame)
+            vm.onCapturedFrameToastTap("sample-older")
             advanceUntilIdle()
 
-            assertEquals(frame, vm.state.value.verificationTarget)
+            // By id, not by position: the head of the queue is not what the medtech tapped.
+            assertEquals(older, vm.state.value.verificationTarget)
+        }
+
+    /**
+     * The confirmation outlives the row it is about. A sample verified or deleted from
+     * elsewhere in those two seconds has nothing left to open, and a lookup that misses must
+     * do nothing rather than fall back to whatever row is nearest.
+     */
+    @Test
+    fun `onCapturedFrameToastTap does nothing for a sample that has left the queue`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            framesState.value = listOf(makeFrame(sampleId = "sample-still-here"))
+            advanceUntilIdle()
+
+            vm.onCapturedFrameToastTap("sample-gone")
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.verificationTarget)
         }
 
     @Test
@@ -181,7 +206,9 @@ class CaptureViewModelTest {
     fun `onVerificationDismissed clears verificationTarget`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            vm.onDetectionToastTap(makeFrame())
+            framesState.value = listOf(makeFrame(sampleId = "sample-1"))
+            advanceUntilIdle()
+            vm.onCapturedFrameToastTap("sample-1")
             advanceUntilIdle()
             assertNotNull(vm.state.value.verificationTarget)
 
@@ -225,7 +252,7 @@ class CaptureViewModelTest {
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(FrameSource.MODEL))
+                .thenReturn(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)))
             advanceUntilIdle()
 
             vm.onCapture()
@@ -271,7 +298,7 @@ class CaptureViewModelTest {
             sessionState.value = makeActiveState()
             val bytes = publishFrame()
             whenever(captureFieldUseCase.invoke("session-1", bytes))
-                .thenReturn(Result.success(FrameSource.MODEL))
+                .thenReturn(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)))
             advanceUntilIdle()
 
             now += MAX_FRAME_AGE_MS
@@ -281,6 +308,89 @@ class CaptureViewModelTest {
 
             verify(captureFieldUseCase).invoke("session-1", bytes)
             assertNull(vm.state.value.errorMessage)
+        }
+
+    /**
+     * Every successful tap is confirmed, and the confirmation names the row that tap wrote.
+     *
+     * The id matters more than the message: it is what lets the medtech open the frame they
+     * just took rather than whatever is currently newest.
+     */
+    @Test
+    fun `onCapture emits one FrameCaptured event carrying the row it wrote`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", bytes))
+                .thenReturn(Result.success(CaptureOutcome("sample-7", FrameSource.MODEL)))
+            advanceUntilIdle()
+
+            vm.events.test {
+                vm.onCapture()
+                advanceUntilIdle()
+
+                assertEquals(
+                    CaptureEvent.FrameCaptured(CaptureOutcome("sample-7", FrameSource.MODEL)),
+                    awaitItem(),
+                )
+                expectNoEvents()
+            }
+        }
+
+    /**
+     * A field the inference container never saw is still a capture, and is confirmed as one.
+     *
+     * The medtech gets the same reassurance the tap landed; only the wording differs, so ten
+     * captures taken with the container down do not read as ten ordinary ones.
+     */
+    @Test
+    fun `a capture taken with the container unreachable is still confirmed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val bytes = publishFrame()
+            whenever(captureFieldUseCase.invoke("session-1", bytes))
+                .thenReturn(Result.success(CaptureOutcome("sample-8", FrameSource.MANUAL)))
+            advanceUntilIdle()
+
+            vm.events.test {
+                vm.onCapture()
+                advanceUntilIdle()
+
+                val event = awaitItem() as CaptureEvent.FrameCaptured
+                assertEquals(FrameSource.MANUAL, event.outcome.source)
+            }
+        }
+
+    /**
+     * The regression this event exists for.
+     *
+     * The confirmation used to be derived from the head of the flagged queue, which is a live
+     * Room query: verifying the newest sample promotes an older one, and the screen announced
+     * "Frame captured" for a frame captured minutes earlier. Nobody tapped the shutter here, so
+     * nothing may be confirmed.
+     */
+    @Test
+    fun `a queue that reshuffles on its own confirms nothing`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val older = makeFrame(sampleId = "sample-older", capturedAt = Instant.EPOCH)
+            val newer = makeFrame(sampleId = "sample-newer", capturedAt = Instant.ofEpochSecond(30))
+            advanceUntilIdle()
+
+            vm.events.test {
+                // Entering the screen with a queue already populated.
+                framesState.value = listOf(newer, older)
+                advanceUntilIdle()
+
+                // The newest is verified, so the older one becomes the head.
+                framesState.value = listOf(older)
+                advanceUntilIdle()
+
+                expectNoEvents()
+            }
         }
 
     private companion object {

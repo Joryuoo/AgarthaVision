@@ -12,7 +12,11 @@
 
 # ── Supabase ────────────────────────────────────────────────────────────────
 # Dashboard → Settings → API → Project URL + Publishable (anon) key.
-# Two projects: agarthavision-dev and agarthavision-prod.
+#
+# `staging` and `main` point at agarthavision-dev / agarthavision-prod.
+# The patient-records work (feat/patient-records) points its DEV values at the
+# separate `agarthavision` project instead — its schema diverges too far to share
+# a database with the rest of Sprint 1. Ask for the URL + anon key out of band.
 SUPABASE_URL_DEV=https://<dev-project-ref>.supabase.co
 SUPABASE_ANON_KEY_DEV=sb_publishable_<dev-anon-key>
 SUPABASE_URL_PROD=https://<prod-project-ref>.supabase.co
@@ -21,6 +25,12 @@ SUPABASE_ANON_KEY_PROD=sb_publishable_<prod-anon-key>
 # ── Inference (self-hosted FastAPI container on a rented GPU droplet) ────────
 # DMKuZu spins up the droplet, runs the inference container, and shares the
 # IP + bearer key over the team chat. See ADR-003.
+#
+# Both keys are suffixed. app/build.gradle.kts:67 reads INFERENCE_API_KEY_DEV and
+# :90 reads INFERENCE_API_KEY_PROD; an unsuffixed INFERENCE_API_KEY resolves to
+# null, which compiles fine and ships an empty bearer token — the inference call
+# then fails with a 401 that looks like a server problem. See constraints.md C10.
 INFERENCE_URL_DEV=http://<droplet-ip>:8000
 INFERENCE_URL_PROD=http://<droplet-ip>:8000
-INFERENCE_API_KEY=<shared-secret>
+INFERENCE_API_KEY_DEV=<shared-secret-dev>
+INFERENCE_API_KEY_PROD=<shared-secret-prod>

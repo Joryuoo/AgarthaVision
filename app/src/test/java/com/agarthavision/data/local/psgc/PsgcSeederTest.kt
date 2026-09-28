@@ -27,8 +27,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * End-to-end test of the bundled PSGC dataset: the real asset, through gzip and the parser,
- * into real SQLite, then queried the way the picker queries it.
+ * End-to-end test of the bundled PSGC dataset: the real asset, attached and copied into real
+ * SQLite, then queried the way the picker queries it.
  *
  * Runs under Robolectric so it lands in `:app:testDebugUnitTest` — no emulator. It reads
  * the asset that actually ships, so a regenerated dataset with a broken shape fails here

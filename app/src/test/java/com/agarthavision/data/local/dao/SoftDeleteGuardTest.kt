@@ -32,9 +32,11 @@ class SoftDeleteGuardTest {
     private val daoDir = File("src/main/java/com/agarthavision/data/local/dao")
 
     private val daoFiles = listOf(
+        "PatientDao.kt",
         "SampleDao.kt",
         "DetectionDao.kt",
         "SessionDao.kt",
+        "CoverageDao.kt",
     ).map { File(daoDir, it) }
 
     @Test

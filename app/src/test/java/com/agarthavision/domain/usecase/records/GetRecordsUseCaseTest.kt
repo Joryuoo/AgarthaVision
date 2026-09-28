@@ -1,18 +1,14 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
-import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.model.Sample
-import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -22,7 +18,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -34,9 +29,9 @@ class GetRecordsUseCaseTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `records map sampleCount totalEpg and speciesLabels from bulk fetch`() = runTest {
+    fun `records map sampleCount totalEggs and speciesLabels from bulk fetch`() = runTest {
         val session = session(id = "session-1", userId = "user-1")
-        val row = sessionWithStats(session, totalSamples = 3, totalEpg = 42)
+        val row = sessionWithStats(session, totalSamples = 3, totalEggs = 42)
         val sessionRepo = FakeSessionRepository(listOf(row))
         val detectionRepo = FakeDetectionRepository(
             speciesMap = mapOf("session-1" to listOf("Ascaris lumbricoides", "Trichuris trichiura")),
@@ -53,14 +48,14 @@ class GetRecordsUseCaseTest {
         val item = result.items.single()
         assertEquals("session-1", item.session.id)
         assertEquals(3, item.sampleCount)
-        assertEquals(42, item.totalEpg)
+        assertEquals(42, item.totalEggs)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), item.speciesLabels)
     }
 
     @Test
     fun `speciesLabels come straight from the map keyed by session id`() = runTest {
         val session = session(id = "s1", userId = "u1")
-        val row = sessionWithStats(session, totalSamples = 1, totalEpg = 0)
+        val row = sessionWithStats(session, totalSamples = 1, totalEggs = 0)
         val detectionRepo = FakeDetectionRepository(
             speciesMap = mapOf("s1" to listOf("Hookworm", "Ascaris lumbricoides")),
         )
@@ -77,7 +72,7 @@ class GetRecordsUseCaseTest {
     @Test
     fun `speciesLabels are empty when session has no detections in bulk map`() = runTest {
         val session = session(id = "no-detections", userId = "u1")
-        val row = sessionWithStats(session, totalSamples = 0, totalEpg = 0)
+        val row = sessionWithStats(session, totalSamples = 0, totalEggs = 0)
         val detectionRepo = FakeDetectionRepository(speciesMap = emptyMap())
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = "u1"),
@@ -97,7 +92,7 @@ class GetRecordsUseCaseTest {
     fun `totals from repository are surfaced in RecordsResult`() = runTest {
         val sessionRepo = FakeSessionRepository(
             rows = emptyList(),
-            totals = RecordsTotals(sessionCount = 7, totalSamples = 42, totalEpg = 13),
+            totals = RecordsTotals(sessionCount = 7, totalSamples = 42, totalEggs = 13),
         )
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = "u1"),
@@ -109,7 +104,7 @@ class GetRecordsUseCaseTest {
 
         assertEquals(7, result.totals.sessionCount)
         assertEquals(42, result.totals.totalSamples)
-        assertEquals(13, result.totals.totalEpg)
+        assertEquals(13, result.totals.totalEggs)
     }
 
     // ---------------------------------------------------------------------------
@@ -119,7 +114,7 @@ class GetRecordsUseCaseTest {
     @Test
     fun `signed out passes a null owner through so unowned rows are read`() = runTest {
         val sessionRepo = FakeSessionRepository(
-            listOf(sessionWithStats(session("session-1", "user-1"), totalSamples = 1, totalEpg = 0)),
+            listOf(sessionWithStats(session("session-1", "user-1"), totalSamples = 1, totalEggs = 0)),
         )
         val useCase = GetRecordsUseCase(
             authRepository = FakeAuthRepository(userId = null),
@@ -426,9 +421,9 @@ class GetRecordsUseCaseTest {
     @Test
     fun `when totals flow emits a second value result re-emits with updated totals and same items`() = runTest {
         val session = session("s1", "u1")
-        val row = sessionWithStats(session, totalSamples = 2, totalEpg = 5)
-        val totals1 = RecordsTotals(sessionCount = 1, totalSamples = 2, totalEpg = 5)
-        val totals2 = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEpg = 10)
+        val row = sessionWithStats(session, totalSamples = 2, totalEggs = 5)
+        val totals1 = RecordsTotals(sessionCount = 1, totalSamples = 2, totalEggs = 5)
+        val totals2 = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEggs = 10)
 
         val multiRepo = MultiEmitSessionRepository(
             pageEmissions = listOf(listOf(row)),
@@ -456,9 +451,9 @@ class GetRecordsUseCaseTest {
     fun `when page flow emits a second value result re-emits with updated items and preserved totals`() = runTest {
         val session1 = session("s1", "u1")
         val session2 = session("s2", "u1")
-        val row1 = sessionWithStats(session1, totalSamples = 1, totalEpg = 2)
-        val row2 = sessionWithStats(session2, totalSamples = 3, totalEpg = 6)
-        val totals = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEpg = 8)
+        val row1 = sessionWithStats(session1, totalSamples = 1, totalEggs = 2)
+        val row2 = sessionWithStats(session2, totalSamples = 3, totalEggs = 6)
+        val totals = RecordsTotals(sessionCount = 2, totalSamples = 4, totalEggs = 8)
 
         val multiRepo = MultiEmitSessionRepository(
             pageEmissions = listOf(listOf(row1), listOf(row1, row2)),
@@ -563,10 +558,14 @@ internal class FakeSessionRepository(
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(rows.map { it.session }.filter { it.userId == null || it.userId == userId })
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -593,6 +592,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -603,6 +603,7 @@ internal class FakeSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -625,8 +626,6 @@ internal class FakeDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         speciesMap.filterKeys { it in sessionIds }
@@ -645,9 +644,13 @@ private class MultiEmitSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
 
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -672,6 +675,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -682,6 +686,7 @@ private class MultiEmitSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -700,16 +705,15 @@ private fun session(id: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
-        notes = null,
+        patientId = "patient-1",
         label = null,
     )
 
-private fun sessionWithStats(session: Session, totalSamples: Int, totalEpg: Int): SessionWithStats =
+private fun sessionWithStats(session: Session, totalSamples: Int, totalEggs: Int): SessionWithStats =
     SessionWithStats(
         session = session,
         totalSamples = totalSamples,
         verifiedSamples = 0,
         unverifiedSamples = 0,
-        totalEpg = totalEpg,
+        totalEggs = totalEggs,
     )

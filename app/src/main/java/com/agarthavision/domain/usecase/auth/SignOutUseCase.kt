@@ -21,10 +21,14 @@ import javax.inject.Inject
 class SignOutUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionManager: SessionManager,
+    private val discardUnsyncedDataUseCase: DiscardUnsyncedDataUseCase,
 ) {
-    /** Signs out, detaching from any active session first. */
+    /** Signs out, detaching from any active session and discarding unsynced work first. */
     suspend operator fun invoke(): Result<Unit> = runCatching {
         sessionManager.clearActive()
+        // Before signOut, not after: the discard is scoped by the cached identity, and
+        // signOut is what clears it. Reversed, this would silently discard nothing.
+        authRepository.currentLocalUserId()?.let { userId -> discardUnsyncedDataUseCase(userId) }
         authRepository.signOut()
     }
 }

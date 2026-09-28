@@ -1,6 +1,8 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 
 /**
  * The medtech's answers about a single [Finding], in the order the sheet asks them.
@@ -23,43 +25,108 @@ data class VerificationAnswers(
     val species: EggSpecies? = null,
     val otherSpeciesText: String = "",
     /**
-     * Eggs of this species in this field. Only ever set on a finding with no prediction — a
-     * box is worth exactly one egg, and that is not the medtech's to edit.
+     * **Eggs of this species the medtech counted in this field, the model's own boxes
+     * included.** Only ever set on a finding with no prediction: a box is worth exactly one egg,
+     * and that is not the medtech's to edit.
+     *
+     * A total, deliberately, and not the number being added on top. Two reasons, and the second
+     * is the one that made the old shape wrong:
+     *
+     * 1. It is what the medtech actually counts. A tally at the microscope produces "23
+     *    Ascaris in this field", and a field asking for the 14 *beyond* the nine the model
+     *    boxed makes them do the subtraction in their head, under time pressure, with nothing
+     *    anywhere to catch an error. The unboxed remainder is derived instead — see
+     *    [com.agarthavision.domain.usecase.verify.unboxedCountOf].
+     * 2. It is stable under a later answer. Reject one of the model's boxes after typing the
+     *    total and the medtech still saw 23 eggs; a stored remainder would silently read 22,
+     *    because the number it was relative to moved underneath it.
+     *
+     * Named [fieldTotal] rather than reusing `eggCount` on purpose. The meaning changed, and a
+     * field whose meaning drifts under its old name is the exact shape this project has already
+     * been bitten by twice (`sessions.ended_at`, `detections.verified_by_user`).
      */
-    val eggCount: Int? = null,
+    val fieldTotal: Int? = null,
     /**
-     * True once the medtech deliberately asserts a species — by confirming the model's
-     * suggestion, or by picking one themselves.
+     * A box the medtech drew by hand, in the model's own coordinate space.
      *
-     * Persisted to `detections.species_touched`
-     * (`supabase/migrations/0012_polyparasitism_findings.sql`). It was added when the sheet
-     * pre-filled the model's species silently, to keep "a human did not object" distinguishable
-     * from "a human confirmed this" in a table that doubles as the retraining corpus.
+     * On a prediction-backed row this **replaces** the model's box: the model boxed a real egg
+     * badly, and this is where it actually is. On an added row it is simply where the egg is,
+     * and it stays null when the medtech did not bother — an added egg with no box is a complete
+     * finding, which is what `detections.bbox_*` is nullable for.
      *
-     * 86d4auj84 then removed the silent pre-fill: the sheet now *asks*, so under the current
-     * flow every submitted species is a deliberate assertion and this is true on every row. It
-     * is kept, and asserted in `SubmitVerificationUseCaseTest`, precisely because that is an
-     * invariant worth catching the loss of — a future path that writes a species without
-     * asking would show up here as a false, rather than silently entering the corpus as a
-     * human judgement.
-     *
-     * **Invariant:** any path that sets [species] must set this true.
+     * Deliberately not a synthesised [com.agarthavision.domain.inference.Prediction]: that would
+     * need a class label and a confidence the model never assigned, and both feed the retraining
+     * corpus.
      */
-    val speciesTouched: Boolean = false,
+    val drawnBox: ImageBox? = null,
+    /**
+     * Where the eggs on an **added** row are, for the ones the medtech bothered to locate.
+     *
+     * Deliberately a second field rather than a list [drawnBox] widens into: the two are
+     * different facts. [drawnBox] *replaces* one box the model got wrong and latches
+     * [boxReplaced]; this one says where eggs the model never boxed actually sit, and there is
+     * no model claim for it to contradict. Collapsing them would put a replacement and a
+     * location in one list and leave nothing able to tell which a given entry was.
+     *
+     * **Drawn boxes occupy the front slots.** Egg *k* of the unboxed set carries
+     * `drawnBoxes[k]` when one exists, and the rest are simply not drawn. Two things fall out
+     * of that ordering for free: lowering [fieldTotal] drops undrawn eggs first, and the clamp
+     * that refuses to go below `drawnBoxes.size` is the only guard needed to make hand-drawn
+     * geometry — the most expensive data this screen produces — impossible to delete with a
+     * stray digit.
+     */
+    val drawnBoxes: List<ImageBox> = emptyList(),
+    /**
+     * The model put this box in the wrong place, and that does not stop being true because a
+     * human fixed it.
+     *
+     * Set when a redraw is committed, and **it locks Q2 to "No"**. This is the training signal
+     * the whole drawing feature exists to capture: an implementation that lets Q2 flip back to
+     * "Yes" after a redraw destroys the label, silently, leaving a frame that claims the model
+     * localised correctly while carrying the human's geometry.
+     *
+     * A frame reopened for editing reconstructs this by comparing the stored `bbox_*` against
+     * the prediction it belongs to. That is the only durable record: the alternative is a new
+     * column, which means a Room version bump, and this project has already been burned once by
+     * a version collision (`core/database/AgarthaDatabase.kt` records it).
+     */
+    val boxReplaced: Boolean = false,
+    /** Developmental stage chosen by the medtech for STH species. */
+    val stage: EggStage? = null,
+    val otherStageText: String = "",
+    /**
+     * Whether this added card permanently owns its species' plain, stage-less detection id.
+     *
+     * Tri-state and deliberately not a plain `Boolean`. `null` is "undecided" — a card added
+     * fresh this session with no persisted history yet to consult. `true` and `false` are pins
+     * set once by [com.agarthavision.domain.usecase.verify.OpenVerificationTargetUseCase] from
+     * what is already on disk when a verified sample is reopened, and reflect which id this card
+     * already owns (or should own) — not simply how many rows its species currently has: `false`
+     * when this card's boxes are already filed under a stage-aware id, however many siblings
+     * survive alongside it (including none — a species can be down to a single row that still
+     * owns a stage-aware id from before a sibling was removed). `true` when this card owns, or
+     * should claim, the plain stage-less id — the common case of a lone row with no stage-aware
+     * id of its own, or the one row of a multi-row species that never got a stage segment.
+     *
+     * **A `false` pin must never flip to `true` later in the same session**, even if every
+     * sibling of that species is subsequently removed and this card ends up alone. Re-electing it
+     * as primary would move the plain id onto a row that is not the one currently holding it
+     * remotely — the same orphan-row double-count `14zcqnthz6e` exists to prevent, just triggered
+     * by an in-session removal instead of a later reopen. See
+     * `VerificationMapper.toDetectionEntities` for where this is read, and
+     * `Finding.primaryAddedIndexBySpecies` for how a still-undecided (`null`) species falls back
+     * to a stable, list-order rule.
+     */
+    val isPrimaryAdded: Boolean? = null,
 ) {
     /**
-     * True when the species question is answered.
-     *
-     * No developmental-stage gate. The dropdown 86d4a6jwy added was reverted on staging
-     * (`9dcfd5d`) — the four stages it shipped were never checked against literature — and the
-     * ticket is deprioritised. The stage is not the reading the surveillance output turns on;
-     * the infectivity level is, and that is tracked separately (86d3fzd28).
+     * True when the species and stage questions are answered.
      */
     val speciesIsComplete: Boolean
         get() = when (species) {
             null -> false
             EggSpecies.OTHER -> otherSpeciesText.isNotBlank()
-            else -> true
+            else -> stage != EggStage.OTHER || otherStageText.isNotBlank()
         }
 
     /**
@@ -73,5 +140,19 @@ data class VerificationAnswers(
             // OTHER carries no canonical class; the typed text is the label.
             EggSpecies.OTHER -> otherSpeciesText.trim().takeIf { it.isNotBlank() }
             else -> species.canonicalClass
+        }
+
+    val stageLabel: String?
+        get() = when (stage) {
+            null -> null
+            EggStage.OTHER -> otherStageText.trim().ifBlank { EggStage.OTHER.displayName }
+            else -> stage.name
+        }
+
+    val stageDisplayName: String?
+        get() = when (stage) {
+            null -> null
+            EggStage.OTHER -> otherStageText.trim().ifBlank { EggStage.OTHER.displayName }
+            else -> stage.displayName
         }
 }

@@ -1,19 +1,24 @@
 package com.agarthavision.ui.sessions
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.model.Sex
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
 import com.agarthavision.util.MainDispatcherRule
 import java.time.Instant
 import java.time.LocalDate
@@ -22,21 +27,31 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doThrow
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import com.agarthavision.data.local.entity.SessionEntity
 
+// One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
+// files and make the duplicate-label cases harder to read against the rest of the suite.
+@Suppress("LargeClass")
 @OptIn(ExperimentalCoroutinesApi::class)
 class SessionsViewModelTest {
 
@@ -50,6 +65,7 @@ class SessionsViewModelTest {
     companion object {
         private const val INITIAL_PAGE = 5
         private const val PAGE_STEP = 10
+        private const val SEARCH_DEBOUNCE_MS = 300L
     }
 
     // ---------------------------------------------------------------------------
@@ -311,6 +327,9 @@ class SessionsViewModelTest {
     @Test
     fun `null identity passes null userId to repository`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // The VM forwards the null rather than deciding anything with it. What a
+            // signed-out reader is allowed to see is settled one layer down — see
+            // SessionRepositoryImplTest, where the answer is "nothing".
             val recording = RecordingSessionRepository()
             val vm = viewModelWithRecording(recording, userId = null)
 
@@ -321,6 +340,56 @@ class SessionsViewModelTest {
                 assertTrue(
                     "observeVisibleSessionsPage must be called with userId=null",
                     recording.capturedArgs.any { it.userId == null },
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
+    // PB-09c: the list is scoped to the patient in the route
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `the route patient id is passed to the repository`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                // Scoping lives in SQL, not in a filter over the loaded page: the list is
+                // paginated, so a client-side filter would drop rows from the count and
+                // shrink the page without ever looking wrong.
+                assertTrue(
+                    "every page query must be scoped to the route's patient",
+                    recording.capturedArgs.isNotEmpty() &&
+                        recording.capturedArgs.all { it.patientId == "patient-1" },
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a route with no patient id resolves to an error instead of loading forever`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = buildViewModelWithIdentityFlow(
+                repo = recording,
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@example.com")),
+                deps = IdentityFlowDeps(patientId = null),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val state = expectMostRecentItem()
+
+                assertFalse("a missing patient must not hang on the loading skeleton", state.isLoading)
+                assertNotNull(state.errorMessage)
+                assertTrue(
+                    "no query should be issued without a patient to scope it to",
+                    recording.capturedArgs.isEmpty(),
                 )
                 cancelAndIgnoreRemainingEvents()
             }
@@ -349,6 +418,118 @@ class SessionsViewModelTest {
                 assertEquals(expected.unverifiedCount, settled.unverifiedCount)
                 cancelAndIgnoreRemainingEvents()
             }
+        }
+
+    // ---------------------------------------------------------------------------
+    // A sync in progress holds back a confident empty result (86d4c2q2e)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `syncing with an empty unfiltered result stays loading until sync finishes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val whileSyncing = expectMostRecentItem()
+                assertTrue(
+                    "an empty, unfiltered result during a sync is unknown, not settled-empty",
+                    whileSyncing.isLoading,
+                )
+
+                syncing.value = false
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(settled.isLoading)
+                assertEquals(0, settled.totalCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `syncing with a non-empty result settles immediately`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 7),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(
+                    "existing data means there is no need to wait on the sync",
+                    settled.isLoading,
+                )
+                assertEquals(7, settled.totalCount)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a filtered search does not wait on a sync in progress`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem() // initial (loading) settle, discarded
+
+                vm.onSearchQueryChanged("X")
+                advanceTimeBy(SEARCH_DEBOUNCE_MS)
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertFalse(
+                    "a filtered/searched empty result is settled regardless of sync state",
+                    settled.isLoading,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a sync that never resolves leaves an unfiltered zero-session patient stuck loading`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Genuinely zero sessions AND a sync that never completes (e.g. offline with no
+            // timeout, or stuck retrying). This documents that isLoading has no escape hatch
+            // here: the screen has no way to distinguish "still syncing" from "sync is wedged"
+            // without SyncScheduler itself resolving isSyncing to false at some point.
+            val syncing = MutableStateFlow(true)
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { emptyList() },
+                counts = SessionsCounts(totalCount = 0),
+                syncInProgressFlow = syncing,
+            )
+
+            val collectJob = launch { vm.state.collect { } }
+            advanceUntilIdle()
+            assertTrue("stays loading while sync is in progress", vm.state.value.isLoading)
+
+            // Advance well past any plausible UI timeout — nothing here ever settles it.
+            advanceTimeBy(60_000)
+            advanceUntilIdle()
+            assertTrue(
+                "with no sync completion signal, the screen stays loading indefinitely " +
+                    "(no client-side timeout exists to unstick it)",
+                vm.state.value.isLoading,
+            )
+            collectJob.cancel()
         }
 
     // ---------------------------------------------------------------------------
@@ -581,6 +762,162 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // Duplicate label rejection (86d4bzjhw)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `onCreateSession sets DUPLICATE_LABEL error when label is already taken for this patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val repo = DuplicateLabelSessionRepository(takenLabel = "GARCIAM-S01")
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("GarciaM-S01")
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertEquals(
+                    "onCreateSession must surface DUPLICATE_LABEL when the label is taken",
+                    "A smear with this label already exists for this patient.",
+                    state.errorMessage,
+                )
+                assertFalse(
+                    "isCreating must be false after duplicate rejection",
+                    state.isCreating,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onCreateSession does not reject a label that is not taken`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // No taken labels — the duplicate pre-check passes. We stub startSession to throw a
+            // known non-duplicate error so runCatching maps it to a generic message, not the
+            // DUPLICATE_LABEL string, which is what this test asserts.
+            val repo = DuplicateLabelSessionRepository(takenLabel = "OtherLabel-S01")
+            val sessionManager = mock<SessionManager> {
+                on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+                onBlocking { startSession(any(), any()) } doThrow RuntimeException("test-stub-create-failed")
+            }
+            val vm = buildViewModelWithSessionManager(repo, sessionManager, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("GarciaM-S01")
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertFalse(
+                    "A non-duplicate label must not produce DUPLICATE_LABEL error; got: ${state.errorMessage}",
+                    state.errorMessage == "A smear with this label already exists for this patient.",
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onRenameSession sets DUPLICATE_LABEL error when new label is already taken for this patient`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val inputLabel = "GarciaM-S02"
+            val repo = DuplicateLabelSessionRepository(
+                takenLabel = "GARCIAM-S02",
+                existingSession = makeSession("s1", "u1"),
+            )
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onRenameSession("s1", inputLabel)
+                advanceUntilIdle()
+
+                val state = expectMostRecentItem()
+                assertEquals(
+                    "onRenameSession must surface DUPLICATE_LABEL when the new label is already taken",
+                    "A smear with this label already exists for this patient.",
+                    state.errorMessage,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `onRenameSession allows keeping the same label (self-rename exclusion)`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Renaming s1 to its own current label must NOT be blocked. The excludingSessionId
+            // parameter ensures the session's own label is not counted as a collision.
+            // A successful rename emits no state change (onSuccess has no state update), so we
+            // verify no DUPLICATE_LABEL error appears in any state emitted after the call.
+            val ownLabel = "GarciaM-S01"
+            val repo = DuplicateLabelSessionRepository(
+                takenLabel = ownLabel,
+                existingSession = makeSession("s1", "u1"),
+                excludeSelfFromTaken = true,   // fake honours excludingSessionId
+            )
+            val vm = buildViewModel(repo, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                val initial = expectMostRecentItem()
+                assertNull("errorMessage must be null before rename", initial.errorMessage)
+
+                vm.onRenameSession("s1", ownLabel)
+                advanceUntilIdle()
+
+                // A successful rename emits no state change (onSuccess has no state update).
+                // If DUPLICATE_LABEL had been set there would be a pending item here; there must not be.
+                expectNoEvents()
+                cancel()
+            }
+        }
+
+    @Test
+    fun `onCreateSession stores label as uppercase even when typed in lowercase`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // A medtech types "smear 1" — the VM must uppercase it before writing and before
+            // checking uniqueness, so the unique index (which is case-sensitive in SQLite) sees
+            // the same form as auto-generated labels.
+            val successEntity = SessionEntity(
+                sessionId = "sess-new",
+                userId = "u1",
+                patientId = "patient-1",
+                deviceId = "device-1",
+                startedAt = 1_000L,
+                label = "SMEAR 1",
+            )
+            val sessionManager = mock<SessionManager> {
+                on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+                onBlocking { startSession(any(), any()) } doReturn successEntity
+            }
+            val repo = DuplicateLabelSessionRepository(takenLabel = "__nothing_taken__")
+            val vm = buildViewModelWithSessionManager(repo, sessionManager, userId = "u1")
+
+            vm.state.test {
+                advanceUntilIdle()
+                expectMostRecentItem()
+
+                vm.onCreateSession("smear 1")
+                advanceUntilIdle()
+
+                val labelCaptor = argumentCaptor<String>()
+                verify(sessionManager).startSession(label = labelCaptor.capture(), patientId = eq("patient-1"))
+                assertEquals(
+                    "onCreateSession must uppercase and trim the label before calling startSession",
+                    "SMEAR 1",
+                    labelCaptor.firstValue,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Error state interplay
     // ---------------------------------------------------------------------------
 
@@ -599,7 +936,7 @@ class SessionsViewModelTest {
                 assertEquals(3, initial.sessions.size)
 
                 // Trigger error via blank label.
-                vm.onCreateSession("", notes = null)
+                vm.onCreateSession("")
                 advanceUntilIdle()
                 val withError = expectMostRecentItem()
                 assertEquals("Label is required.", withError.errorMessage)
@@ -636,7 +973,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 expectMostRecentItem()
 
-                vm.onCreateSession("", notes = null)
+                vm.onCreateSession("")
                 advanceUntilIdle()
                 val withError = expectMostRecentItem()
                 assertEquals("Label is required.", withError.errorMessage)
@@ -748,16 +1085,205 @@ class SessionsViewModelTest {
         }
 
     // ---------------------------------------------------------------------------
+    // 14zcqntj20y: the empty/initial query is exempt from the 300ms debounce
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `fresh viewModel queries repository without waiting out the debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                // Do not call advanceUntilIdle() first — that would mask a still-present
+                // 300ms delay. runCurrent() only drains work scheduled for "now"; if the
+                // empty query were still debounced, no repo call would exist yet here.
+                testScheduler.runCurrent()
+
+                assertTrue(
+                    "the initial empty search query must not wait out SEARCH_DEBOUNCE_MS " +
+                        "before the first repo query fires",
+                    recording.capturedArgs.isNotEmpty(),
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `non-empty query typed immediately still waits out the full debounce window`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val recording = RecordingSessionRepository()
+            val vm = viewModelWithRecording(recording)
+
+            vm.state.test {
+                testScheduler.runCurrent()
+                val countAfterInitial = recording.capturedArgs.size
+
+                vm.onSearchQueryChanged("x")
+                testScheduler.runCurrent()
+                assertEquals(
+                    "a non-empty query must not fire before its debounce window elapses",
+                    countAfterInitial,
+                    recording.capturedArgs.size,
+                )
+
+                advanceTimeBy(SEARCH_DEBOUNCE_MS)
+                testScheduler.runCurrent()
+                assertTrue(
+                    "a non-empty query must fire once its 300ms debounce window elapses",
+                    recording.capturedArgs.size > countAfterInitial,
+                )
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
+    // Patient Identity Preview Header
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `state emits patient and resolved barangay name when patient exists`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = defaultTestPatient
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn flowOf(patient)
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals("Dela Cruz, Juan D.", settled.patient?.displayName)
+                assertEquals(Sex.MALE, settled.patient?.sex)
+                assertEquals("Poblacion", settled.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state has null patient and null barangayName when patient is not found`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("unknown-patient") } doReturn flowOf(null)
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                deps = IdentityFlowDeps(patientRepo = patientRepo, patientId = "unknown-patient"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertNull(settled.patient)
+                assertNull(settled.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state updates patient and barangay when patient flow re-emits`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patientSource = MutableStateFlow<Patient?>(defaultTestPatient)
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn patientSource
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+                onBlocking { getBarangay("072217002") } doReturn PsgcBarangay(
+                    code = "072217002",
+                    name = "San Roque",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val initial = expectMostRecentItem()
+                assertEquals("Poblacion", initial.barangayName)
+
+                patientSource.value = defaultTestPatient.copy(
+                    lastname = "Santos",
+                    psgcBarangayCode = "072217002",
+                )
+                advanceUntilIdle()
+                val updated = expectMostRecentItem()
+                assertEquals("Santos, Juan D.", updated.patient?.displayName)
+                assertEquals("San Roque", updated.barangayName)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    // ---------------------------------------------------------------------------
     // Factory helpers
     // ---------------------------------------------------------------------------
+
+    private val defaultTestPatient = Patient(
+        id = "patient-1",
+        lastname = "Dela Cruz",
+        firstname = "Juan",
+        middleName = "Diaz",
+        sex = Sex.MALE,
+        birthdate = LocalDate.of(2000, 1, 1),
+        psgcBarangayCode = "072217001",
+        createdBy = "user-1",
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+    )
+
+    private fun stubPatientRepository(patient: Patient? = defaultTestPatient): PatientRepository =
+        mock<PatientRepository> {
+            on { observePatientById(any()) } doReturn flowOf(patient)
+            onBlocking { getPatientById(any()) } doReturn patient
+        }
+
+    private fun stubPsgcRepository(barangayName: String? = "Poblacion"): PsgcRepository =
+        mock<PsgcRepository> {
+            onBlocking { getBarangay(any()) } doReturn barangayName?.let {
+                PsgcBarangay(
+                    code = "072217001",
+                    name = it,
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                    regionName = "Region VII",
+                )
+            }
+        }
 
     private fun viewModelWith(
         userId: String?,
         rowsByLimit: (Int) -> List<SessionWithStats>,
         counts: SessionsCounts = SessionsCounts(),
+        syncInProgressFlow: Flow<Boolean> = flowOf(false),
     ): SessionsViewModel {
         val repo = LambdaSessionRepository(rowsByLimit, counts)
-        return buildViewModel(repo, userId)
+        return buildViewModel(repo, userId, syncInProgressFlow)
     }
 
     private fun viewModelWithRecording(
@@ -765,16 +1291,75 @@ class SessionsViewModelTest {
         userId: String? = "u1",
     ): SessionsViewModel = buildViewModel(repo, userId)
 
-    private fun buildViewModel(repo: SessionRepository, userId: String?): SessionsViewModel {
+    private fun buildViewModel(
+        repo: SessionRepository,
+        userId: String?,
+        syncInProgressFlow: Flow<Boolean> = flowOf(false),
+    ): SessionsViewModel {
         val identityFlow = MutableStateFlow(
             userId?.let { LocalIdentity(userId = it, email = "user@example.com") }
         )
-        return buildViewModelWithIdentityFlow(repo, identityFlow)
+        return buildViewModelWithIdentityFlow(
+            repo,
+            identityFlow,
+            deps = IdentityFlowDeps(syncInProgressFlow = syncInProgressFlow),
+        )
     }
+
+    private fun stubSyncInProgressUseCase(flow: Flow<Boolean> = flowOf(false)): ObserveSyncInProgressUseCase =
+        mock<ObserveSyncInProgressUseCase>().also {
+            whenever(it.invoke()).thenReturn(flow)
+        }
+
+    /** Variant that accepts a pre-configured [sessionManager] (e.g. with startSession stubbed). */
+    private fun buildViewModelWithSessionManager(
+        repo: SessionRepository,
+        sessionManager: SessionManager,
+        userId: String?,
+        patientRepo: PatientRepository = stubPatientRepository(),
+        psgcRepo: PsgcRepository = stubPsgcRepository(),
+    ): SessionsViewModel {
+        val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(
+                MutableStateFlow(userId?.let { id -> LocalIdentity(userId = id, email = "user@example.com") })
+            )
+        }
+        return SessionsViewModel(
+            sessionRepository = repo,
+            sessionManager = sessionManager,
+            observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
+            patientRepository = patientRepo,
+            psgcRepository = psgcRepo,
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
+        )
+    }
+
+    /**
+     * The generator is exercised by its own pure tests; here it only has to not be null. The
+     * VM calls it from `init`, so an unstubbed mock would return null from a non-null
+     * `Result` and take down every test in this file.
+     */
+    private fun stubLabelUseCase() = mock<GenerateSessionLabelUseCase> {
+        onBlocking { invoke(any(), any()) } doReturn Result.success("C.G.-0730600000-001")
+    }
+
+    /**
+     * Optional collaborators for [buildViewModelWithIdentityFlow] — bundled since callers only
+     * ever override a few at a time.
+     */
+    private data class IdentityFlowDeps(
+        val patientRepo: PatientRepository? = null,
+        val psgcRepo: PsgcRepository? = null,
+        val patientId: String? = "patient-1",
+        val syncInProgressFlow: Flow<Boolean> = flowOf(false),
+    )
 
     private fun buildViewModelWithIdentityFlow(
         repo: SessionRepository,
         identityFlow: MutableStateFlow<LocalIdentity?>,
+        deps: IdentityFlowDeps = IdentityFlowDeps(),
     ): SessionsViewModel {
         val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
             whenever(it.invoke()).thenReturn(identityFlow)
@@ -784,18 +1369,19 @@ class SessionsViewModelTest {
         val sessionManager = mock<SessionManager> {
             on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
         }
-        val setExempt = mock<SetSessionClaimExemptUseCase>()
-        val claim = mock<ClaimLocalDataUseCase>()
-        // Real use case over a mocked repository, as in SessionPickerViewModelTest; the
-        // barangay picker is out of scope here but the VM wires it up in init.
-        val searchBarangays = SearchBarangaysUseCase(mock<PsgcRepository>())
+        // The screen is reached at `patients/{patientId}`, so the VM reads the patient it
+        // creates sessions for straight off the route.
         return SessionsViewModel(
             sessionRepository = repo,
             sessionManager = sessionManager,
             observeLocalIdentityUseCase = observeLocalIdentityUseCase,
-            setSessionClaimExemptUseCase = setExempt,
-            claimLocalDataUseCase = claim,
-            searchBarangaysUseCase = searchBarangays,
+            generateSessionLabelUseCase = stubLabelUseCase(),
+            patientRepository = deps.patientRepo ?: stubPatientRepository(),
+            psgcRepository = deps.psgcRepo ?: stubPsgcRepository(),
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
+            savedStateHandle = SavedStateHandle(
+                if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
+            ),
         )
     }
 }
@@ -806,6 +1392,7 @@ class SessionsViewModelTest {
 
 private data class PageArgs(
     val userId: String?,
+    val patientId: String,
     val sinceMillis: Long,
     val startMillis: Long?,
     val endMillis: Long?,
@@ -824,9 +1411,13 @@ private class RecordingSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
@@ -836,6 +1427,7 @@ private class RecordingSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -843,12 +1435,13 @@ private class RecordingSessionRepository(
         query: String,
         limit: Int,
     ): Flow<List<SessionWithStats>> {
-        capturedArgs += PageArgs(userId, sinceMillis, startMillis, endMillis, query, limit)
+        capturedArgs += PageArgs(userId, patientId, sinceMillis, startMillis, endMillis, query, limit)
         return flowOf(rows.take(limit))
     }
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -872,9 +1465,13 @@ private class ControllableSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
@@ -884,6 +1481,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -894,6 +1492,7 @@ private class ControllableSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -915,9 +1514,13 @@ private class LambdaSessionRepository(
     override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
         flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?, startMillis: Long?, endMillis: Long?, query: String, species: String?, limit: Int,
     ): Flow<List<SessionWithStats>> = flowOf(emptyList())
@@ -927,6 +1530,7 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -937,12 +1541,83 @@ private class LambdaSessionRepository(
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts> = flowOf(counts)
+}
+
+// ---------------------------------------------------------------------------
+// Duplicate-label fake — returns true from isSessionLabelTaken for a specific label.
+// ---------------------------------------------------------------------------
+
+/**
+ * Fake that simulates a taken label. Pass [excludeSelfFromTaken] = true to simulate the
+ * real DAO behaviour where the session being renamed is excluded from the collision count
+ * (the `excludingSessionId != session_id` clause in the query).
+ */
+private class DuplicateLabelSessionRepository(
+    private val takenLabel: String,
+    private val existingSession: SessionWithStats? = null,
+    private val excludeSelfFromTaken: Boolean = false,
+) : SessionRepository {
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean {
+        // When excludeSelfFromTaken is true and a session id is given, pretend the exclusion
+        // means the label is NOT taken for that specific rename — matching real DAO semantics.
+        if (excludeSelfFromTaken && excludingSessionId != null) return false
+        return label == takenLabel
+    }
+
+    override suspend fun getSessionById(sessionId: String): Session? =
+        existingSession?.session?.takeIf { it.id == sessionId }
+
+    override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
+        flowOf(emptyList())
+    override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
+    override fun observeSessionRecordsPage(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeSessionRecordsTotals(
+        userId: String?,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        species: String?,
+    ): Flow<RecordsTotals> = flowOf(RecordsTotals())
+    override fun observeVisibleSessionsPage(
+        userId: String?,
+        patientId: String,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+        limit: Int,
+    ): Flow<List<SessionWithStats>> = flowOf(emptyList())
+    override fun observeVisibleSessionsCounts(
+        userId: String?,
+        patientId: String,
+        activeSessionId: String?,
+        sinceMillis: Long,
+        startMillis: Long?,
+        endMillis: Long?,
+        query: String,
+    ): Flow<SessionsCounts> = flowOf(SessionsCounts())
 }
 
 // ---------------------------------------------------------------------------
@@ -954,14 +1629,13 @@ private fun makeSession(id: String, userId: String): SessionWithStats =
         session = Session(
             id = id,
             userId = userId,
+            patientId = "patient-1",
             deviceId = "device-1",
             startedAt = Instant.EPOCH.toEpochMilli(),
-            endedAt = null,
-            notes = null,
             label = "Smear $id",
         ),
         totalSamples = 0,
         verifiedSamples = 0,
         unverifiedSamples = 0,
-        totalEpg = 0,
+        totalEggs = 0,
     )

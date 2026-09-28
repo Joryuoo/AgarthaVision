@@ -52,13 +52,18 @@ class RemoteInferenceEngine @Inject constructor(
         // against the medtech's wifi. Older containers omit it and the split degrades to
         // "all of it was network", which is honest rather than wrong.
         val serverInferMs = body?.inferenceMs?.toLong() ?: 0L
+        val predictions = body?.predictions.orEmpty().toDomainPredictions()
+
+        // Counts are provided by newer containers; older ones require a client-side fallback.
+        val counts = body?.counts ?: predictions.groupBy { it.classLabel }.mapValues { it.value.size }
 
         return InferenceResult(
-            predictions = body?.predictions.orEmpty().toDomainPredictions(),
+            predictions = predictions,
             imageWidth = body?.image?.width,
             imageHeight = body?.image?.height,
             modelVersion = body?.modelVersion,
             engine = id,
+            counts = counts,
             timings = InferenceTimings(
                 inferMs = serverInferMs,
                 networkMs = (totalMs - serverInferMs).coerceAtLeast(0),

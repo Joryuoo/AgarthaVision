@@ -6,6 +6,7 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.SessionRemoteDataSource
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.SyncScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,10 +26,9 @@ import javax.inject.Singleton
  *
  * **A session does not end.** One session is one fecal smear, and the medtech keeps coming back
  * to it - correcting a sample, generating a report from whatever is verified so far. There is
- * no `stopSession`, and nothing in the app writes `sessions.ended_at` any more. The column and
- * its nullability stay: sessions closed before this change are real history and must not be
- * rewritten, `SessionRemoteDataSource.closeSession` still exists for them, and [resumeSession]
- * still refuses to reopen one.
+ * no `stopSession`, and as of Room 13 there is no `sessions.ended_at` column either, so
+ * [resumeSession] has nothing left to refuse and `closeSession` is gone from the remote data
+ * source — it wrote two columns the table no longer has.
  *
  * What replaces ending is [clearActive], which detaches the app from a session without
  * declaring it finished.
@@ -42,6 +42,7 @@ class SessionManager @Inject constructor(
     private val authRepository: AuthRepository,
     private val deviceIdProvider: DeviceIdProvider,
     private val activeSessionIdStore: ActiveSessionIdStore,
+    private val syncScheduler: SyncScheduler,
 ) {
     private val _state = MutableStateFlow<SessionState>(SessionState.Idle)
 
@@ -59,33 +60,41 @@ class SessionManager @Inject constructor(
      * on a missing auth session or a failed remote push.
      *
      * @param label The fecal-smear name the medtech entered in the picker.
-     * @param psgcBarangayCode The patient's barangay as a zero-padded 10-digit PSGC code.
-     *   Null only for callers that predate the picker; the Sessions UI always supplies it.
-     * @param notes Optional in-session observations (slide condition, prep quality, etc.).
+     * @param patientId The patient this smear belongs to. Required, and a real foreign key:
+     *   `sessions.patient_id` is NOT NULL and references `patients`, so an id that does not
+     *   resolve fails the insert rather than stranding an orphan smear. The Sessions list is
+     *   reached at `patients/{patientId}`, which is where the caller gets it.
      * @return The locally persisted session row.
      */
     suspend fun startSession(
         label: String,
-        psgcBarangayCode: String? = null,
-        notes: String? = null,
+        patientId: String,
     ): SessionEntity {
         val now = Instant.now()
-        val ownerId = authRepository.currentLocalUserId()
+        // Never null: login is mandatory on first run, so an identity is cached before any
+        // screen that could reach here exists. Asserting it is the point — a session with no
+        // owner cannot be pushed, and silently creating one would strand the smear on the
+        // device with no error anywhere.
+        val ownerId = requireNotNull(authRepository.currentLocalUserId()) {
+            "startSession called with no cached identity; the first-run login gate should " +
+                "have made that impossible."
+        }
         val entity = SessionEntity(
             sessionId = UUID.randomUUID().toString(),
             userId = ownerId,
+            patientId = patientId,
             deviceId = deviceIdProvider.id,
             startedAt = now.toEpochMilli(),
-            endedAt = null,
-            notes = notes,
             label = label,
-            psgcBarangayCode = psgcBarangayCode,
             supabaseStatus = SessionSyncStatus.PENDING.value,
-            claimExempt = false,
         )
-        sessionDao.insertSession(entity)
+        sessionDao.upsertSession(entity)
         val synced = pushSessionInsert(entity)
         activate(synced, now)
+        // pushSessionInsert already tried the server directly. This is for the case where it
+        // could not: the row stays PENDING and the scheduler retries it with backoff instead
+        // of leaving it for whenever someone next opens Settings.
+        syncScheduler.requestSync()
         return synced
     }
 
@@ -96,7 +105,6 @@ class SessionManager @Inject constructor(
     suspend fun resumeSession(sessionId: String): SessionEntity {
         val entity = sessionDao.getSessionById(sessionId)
             ?: error("Session $sessionId not found locally.")
-        check(entity.endedAt == null) { "Cannot resume an already-ended session." }
         activate(entity, Instant.ofEpochMilli(entity.startedAt))
         return entity
     }
@@ -104,21 +112,41 @@ class SessionManager @Inject constructor(
     /**
      * Re-attaches to the session the medtech was last working in, if it is still open.
      *
-     * Called once at app start. Without it a process restart would leave the app idle while a
-     * session is still live, and the verification queue would render empty - see
-     * [ActiveSessionIdStore].
+     * Called once at app start, from `AgarthaVisionApp.onCreate`, off the main thread — the
+     * client can act on `state` (via `startSession`/`resumeSession`) concurrently while this
+     * runs, whereas previously both were serialized on main through `MainViewModel`. Every
+     * step here is written to be safe against that race:
      *
-     * A stored id that no longer resolves, or resolves to a session ended before this change,
-     * clears itself rather than throwing: the pointer is a convenience, and failing to restore
-     * it must never stop the app launching.
+     * - Bails immediately unless `state` is still [SessionState.Idle], so a session already
+     *   started or resumed by the user is never disturbed.
+     * - Reads the stored pointer and looks up the entity without touching `state`.
+     * - Only clears the stored pointer for a dangling id while `state` is still `Idle` — a
+     *   concurrent `startSession` may have written a new pointer, and clearing it here would
+     *   clobber that.
+     * - Publishes the restored entity with a `compareAndSet` from `Idle`, not a plain write:
+     *   if the state moved between the checks above and here, the CAS fails and this returns
+     *   `null` rather than overwriting whatever the user's action put there.
+     *
+     * A stored id that no longer resolves clears itself rather than throwing: the pointer is a
+     * convenience, and failing to restore it must never stop the app launching.
      */
     suspend fun restoreActiveSession(): SessionEntity? {
-        val storedId = activeSessionIdStore.read() ?: return null
-        return runCatching { resumeSession(storedId) }
-            .getOrElse {
+        val entity: SessionEntity? = if (_state.value != SessionState.Idle) {
+            null
+        } else {
+            val storedId = activeSessionIdStore.read()
+            val resolved = storedId?.let { runCatching { sessionDao.getSessionById(it) }.getOrNull() }
+            if (resolved == null && storedId != null && _state.value == SessionState.Idle) {
                 activeSessionIdStore.write(null)
-                null
             }
+            resolved
+        }
+
+        val activated = entity != null && _state.compareAndSet(
+            SessionState.Idle,
+            SessionState.Active(entity, Instant.ofEpochMilli(entity.startedAt)),
+        )
+        return if (activated) entity else null
     }
 
     /**
@@ -140,11 +168,15 @@ class SessionManager @Inject constructor(
     }
 
     /**
-     * Pushes the local session row to Supabase when an owner is set and not opted out.
-     * Returns the entity with its resolved [SessionSyncStatus]; never throws.
+     * Pushes the local session row to Supabase. Returns the entity with its resolved
+     * [SessionSyncStatus]; never throws.
+     *
+     * The claim-exempt half of this guard is gone with the opt-out itself. The null-owner
+     * half is now unreachable via [startSession] — it is kept only because
+     * `SessionEntity.userId` is still typed nullable for rows pulled from Supabase.
      */
     private suspend fun pushSessionInsert(entity: SessionEntity): SessionEntity {
-        if (entity.userId == null || entity.claimExempt) {
+        if (entity.userId == null) {
             return entity
         }
         return runCatching {

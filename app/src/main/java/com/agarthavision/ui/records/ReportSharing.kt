@@ -96,10 +96,23 @@ private fun shareReportFile(context: Context, filePath: String?, mimeType: Strin
  *
  * A `content://` value came from MediaStore and is already shareable; anything else
  * is a filesystem path and has to go through [FileProvider].
+ *
+ * The MediaStore branch is **probed, not trusted**. It used to return `path.toUri()`
+ * unconditionally, which quietly assumed the id still meant something on this device.
+ * MediaStore ids are per-device, so a row synced from another phone names an id that is
+ * either absent or — worse — some unrelated file. Handing that to `ACTION_VIEW` surfaced as
+ * "No app available", which reads like a missing PDF reader and is nothing of the kind.
+ * Opening the descriptor and closing it immediately is the cheapest honest answer: it
+ * distinguishes "the file is not here" from "this device cannot display PDFs", and only the
+ * first is worth fetching from Storage for.
  */
 private fun resolveReportUri(context: Context, path: String): Uri? =
     if (path.startsWith(CONTENT_URI_PREFIX)) {
-        path.toUri()
+        path.toUri().takeIf { uri ->
+            runCatching {
+                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { }
+            }.getOrNull() != null
+        }
     } else {
         File(path).takeIf { it.exists() }?.let { file ->
             runCatching {

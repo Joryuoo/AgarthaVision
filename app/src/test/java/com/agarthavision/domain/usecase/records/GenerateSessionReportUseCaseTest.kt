@@ -1,5 +1,7 @@
 package com.agarthavision.domain.usecase.records
 
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
+import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
@@ -14,7 +16,6 @@ import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.repository.ReportFileStore
@@ -30,6 +31,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.agarthavision.domain.sync.RecordingSyncScheduler
 
 class GenerateSessionReportUseCaseTest {
     @Test
@@ -53,8 +55,14 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(2, report.totalSamples)
         assertEquals(3, report.totalEggsConfirmed)
         assertEquals(listOf("Ascaris lumbricoides", "Trichuris trichiura"), report.positiveSpecies)
-        assertEquals(48, report.epgPerSpecies["Ascaris lumbricoides"])
-        assertEquals(24, report.epgPerSpecies["Trichuris trichiura"])
+        // The range, not a mean, and the report path now computes it through the same
+        // aggregation the screen uses rather than its own copy of the arithmetic.
+        val ascaris = report.lpfPerSpecies["Ascaris lumbricoides"]!!
+        assertEquals(0, ascaris.min)
+        assertEquals(2, ascaris.max)
+        val trichuris = report.lpfPerSpecies["Trichuris trichiura"]!!
+        assertEquals(0, trichuris.min)
+        assertEquals(1, trichuris.max)
         assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
         // CSV-format report carries no PDF, and the PDF renderer was never invoked.
         assertNull(report.pdfFilePath)
@@ -86,6 +94,13 @@ class GenerateSessionReportUseCaseTest {
     fun `carries the verified species into the generated csv without re-entry`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
+        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2)
+        )
+        org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
+            .thenReturn(findings)
+
         val useCase = GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
@@ -107,12 +122,14 @@ class GenerateSessionReportUseCaseTest {
                 ),
                 eggCounts = listOf(EggCount("Ascaris lumbricoides", 2)),
             ),
+            findingDao = findingDao,
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.CSV)
@@ -133,12 +150,14 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = null),
             sampleRepository = ReportSampleRepository(samples = emptyList()),
             detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
+            findingDao = org.mockito.kotlin.mock(),
             reportRepository = FakeReportRepository(),
             reportFileStore = FakeReportFileStore(),
             reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
 
         val result = useCase("session-1", ReportFormat.PDF)
@@ -146,11 +165,57 @@ class GenerateSessionReportUseCaseTest {
         assertTrue(result.isFailure)
     }
 
+    @Test
+    fun `refuses a session with no verified samples and writes nothing`() = runTest {
+        // 86d4bzm9k. getSamplesForSession leaves out frames still in the queue, so an empty
+        // list is a session whose every sample is unverified, or one with none at all.
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val syncScheduler = RecordingSyncScheduler()
+        val useCase = GenerateSessionReportUseCase(
+            authRepository = ReportAuthRepository(userId = "user-1"),
+            sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
+            sampleRepository = ReportSampleRepository(samples = emptyList()),
+            detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
+            findingDao = org.mockito.kotlin.mock(),
+            reportRepository = reportRepository,
+            reportFileStore = reportFileStore,
+            reportCsvBuilder = ReportCsvBuilder(),
+            reportPdfBuilder = ReportPdfBuilder(),
+            reportPdfRenderer = FakeReportPdfRenderer(),
+            syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = syncScheduler,
+        )
+
+        val result = useCase("session-1", ReportFormat.PDF)
+
+        assertTrue(result.isFailure)
+        assertEquals(
+            GenerateSessionReportUseCase.NO_VERIFIED_SAMPLES_MESSAGE,
+            result.exceptionOrNull()?.message,
+        )
+        assertNull(reportRepository.lastInserted)
+        assertNull(reportFileStore.lastPdfReportId)
+        assertNull(reportFileStore.lastReportId)
+        assertEquals(0, syncScheduler.requests)
+    }
+
     private fun standardUseCase(
         reportRepository: FakeReportRepository,
         reportFileStore: FakeReportFileStore,
-    ): GenerateSessionReportUseCase =
-        GenerateSessionReportUseCase(
+    ): GenerateSessionReportUseCase {
+        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
+        // Default mock behavior for 2 samples, one with Ascaris(2) + Trichuris(1), one clean.
+        // Mean Ascaris = (2+0)/2 = 1.0, Mean Trichuris = (1+0)/2 = 0.5
+        val findings = listOf(
+            SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2),
+            SampleSpeciesFindingEntity("f2", "sample-1", "Trichuris trichiura", null, 1),
+        )
+        kotlinx.coroutines.runBlocking {
+            org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
+                .thenReturn(findings)
+        }
+        return GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
@@ -168,13 +233,16 @@ class GenerateSessionReportUseCaseTest {
                     EggCount("Trichuris trichiura", 1),
                 ),
             ),
+            findingDao = findingDao,
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
             reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
+            syncScheduler = RecordingSyncScheduler(),
         )
+    }
 }
 
 /** null caller = sees everything; concrete caller = sees own rows plus unowned rows. */
@@ -208,10 +276,14 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = false
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
         flowOf(session?.let(::listOf).orEmpty())
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) = Unit
-    override suspend fun claimSession(sessionId: String, userId: String) = Unit
     override fun observeSessionRecordsPage(
         userId: String?,
         startMillis: Long?,
@@ -230,6 +302,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -240,6 +313,7 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
 
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -283,8 +357,6 @@ private class ReportDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
@@ -305,6 +377,32 @@ private class FakeReportRepository : ReportRepository {
     ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
 
     override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeAll(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeAllCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.domain.model.Report>> = flowOf(emptyList())
+
+    override fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
 
     override suspend fun getById(reportId: String): com.agarthavision.domain.model.Report? = null
 
@@ -335,6 +433,12 @@ private class FakeReportFileStore : ReportFileStore {
         lastPdfBytes = pdf
         return "/Documents/AgarthaVision/report.pdf"
     }
+
+    override suspend fun readBytes(path: String): ByteArray? = when (path) {
+        "/Documents/AgarthaVision/report.pdf" -> lastPdfBytes
+        "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
+        else -> null
+    }
 }
 
 private fun reportSession(sessionId: String, userId: String): Session =
@@ -343,8 +447,7 @@ private fun reportSession(sessionId: String, userId: String): Session =
         userId = userId,
         deviceId = "device-1",
         startedAt = 1_000L,
-        endedAt = 2_000L,
-        notes = null,
+        patientId = "patient-1",
         label = "Session A",
     )
 
@@ -360,9 +463,6 @@ private fun reportSample(id: String, sessionId: String, userId: String): Sample 
         storagePath = "$userId/$id.jpg",
         inferenceModelVersion = "model-1",
         isManual = false,
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
 
@@ -383,17 +483,22 @@ private fun reportDetection(
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = expertClass,
-        verifiedByUser = true,
     )
 
 private fun noOpSyncReportUseCase(): SyncReportUseCase =
     SyncReportUseCase(
         reportDao = NoOpReportDao(),
         remoteDataSource = NoOpReportRemoteDataSource(),
+        reportFileStore = FakeReportFileStore(),
     )
 
 private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun insertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit
+    override suspend fun updateFilePaths(
+        reportId: String,
+        pdfFilePath: String?,
+        csvFilePath: String?,
+    ) = Unit
     override fun observeReportsForSession(
         sessionId: String,
         userId: String,
@@ -401,18 +506,42 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
         offset: Int,
     ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
     override fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int> = flowOf(0)
+    override fun observeAllReports(
+        userId: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.entity.ReportEntity>> = flowOf(emptyList())
+    override fun observeAllReportsCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeFilteredReports(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<com.agarthavision.data.local.dao.ReportWithSessionLabel>> = flowOf(emptyList())
+    override fun observeFilteredReportsCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> = flowOf(0)
     override suspend fun getReportById(reportId: String): com.agarthavision.data.local.entity.ReportEntity? = null
     override suspend fun getReportsPendingSync(
         userId: String,
     ): List<com.agarthavision.data.local.entity.ReportEntity> = emptyList()
+    override suspend fun deleteReport(reportId: String) = Unit
     override suspend fun updateSupabaseStatus(reportId: String, status: String) = Unit
     override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) = Unit
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
     override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeUnsyncedCount(userId: String): Flow<Int> = flowOf(0)
 }
 
 private class NoOpReportRemoteDataSource : com.agarthavision.data.supabase.ReportRemoteDataSource(
-    supabase = org.mockito.kotlin.mock(),
+    supabaseProvider = org.mockito.kotlin.mock(),
     gson = com.google.gson.Gson(),
 ) {
     override suspend fun upsertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit

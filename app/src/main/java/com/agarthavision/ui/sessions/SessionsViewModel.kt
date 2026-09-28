@@ -1,18 +1,20 @@
 package com.agarthavision.ui.sessions
 
-import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
-import com.agarthavision.domain.model.PsgcBarangay
+import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
-import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
-import com.agarthavision.domain.usecase.sessions.SetSessionClaimExemptUseCase
-import com.agarthavision.domain.usecase.auth.ClaimLocalDataUseCase
-import com.agarthavision.core.util.sanitizeDateRange
+import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
+import android.database.sqlite.SQLiteConstraintException
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.time.Duration
 import java.time.Instant
@@ -22,16 +24,16 @@ import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -49,16 +51,29 @@ data class SessionsState(
     /** Frames awaiting review across the filtered sessions. See [SessionsCounts]. */
     val unverifiedCount: Int = 0,
     val canLoadMore: Boolean = false,
-    /** Current text in the New Session sheet's barangay picker. */
-    val barangayQuery: String = "",
-    /** Matches for [barangayQuery], capped by [SearchBarangaysUseCase.RESULT_LIMIT]. */
-    val barangayResults: List<PsgcBarangay> = emptyList(),
-    /** The barangay chosen for the session being created. Required before it can start. */
-    val selectedBarangay: PsgcBarangay? = null,
+    /**
+     * The smear the app is currently working in, or null.
+     *
+     * The list used to read this off `Session.endedAt == null`, which was true for every
+     * row because nothing writes `ended_at`. [com.agarthavision.core.session.SessionManager]
+     * is the only thing that knows which session is active, so the flag comes from there.
+     */
+    val activeSessionId: String? = null,
+    /**
+     * The auto-generated label the New Session sheet opens on, or empty when it could not be
+     * built. Empty is the pre-PB-10 behaviour — a field the medtech types into — rather than
+     * a blocked sheet: a failure to suggest a name is no reason to refuse a smear.
+     */
+    val suggestedLabel: String = "",
+    /** The patient whose session list this is, or null while loading. */
+    val patient: Patient? = null,
+    /** The barangay name resolved from [Patient.psgcBarangayCode], or null. */
+    val barangayName: String? = null,
 )
 
 sealed interface SessionsEvent {
     data class NavigateToCapture(val sessionId: String) : SessionsEvent
+    data class NavigateToVerificationQueue(val sessionId: String) : SessionsEvent
     data class ShareExport(val content: String) : SessionsEvent
 }
 
@@ -76,31 +91,47 @@ sealed interface SessionsEvent {
  * belong to one ViewModel, and splitting them across two classes to satisfy a count would
  * be inconsistent with every other ViewModel here for no functional benefit.
  */
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class SessionsViewModel @Inject constructor(
     private val sessionRepository: SessionRepository,
     private val sessionManager: SessionManager,
     private val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
-    private val setSessionClaimExemptUseCase: SetSessionClaimExemptUseCase,
-    private val claimLocalDataUseCase: ClaimLocalDataUseCase,
-    private val searchBarangaysUseCase: SearchBarangaysUseCase,
+    private val generateSessionLabelUseCase: GenerateSessionLabelUseCase,
+    private val patientRepository: PatientRepository,
+    private val psgcRepository: PsgcRepository,
+    private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
     private val internalState = MutableStateFlow(SessionsState())
     private val eventChannel = Channel<SessionsEvent>(Channel.BUFFERED)
     val events = eventChannel.receiveAsFlow()
 
-    private val barangayQueries = MutableStateFlow("")
+    /**
+     * The patient whose smears this screen lists, read from the `patients/{patientId}` route.
+     *
+     * Every session here belongs to that patient — both the ones listed and the ones created:
+     * `sessions.patient_id` is NOT NULL with a foreign key onto `patients`, and the list query
+     * scopes on it. A null is unreachable through the UI (nothing navigates here without a
+     * patient), so it renders an empty list with an error rather than crashing on a route
+     * that should not exist.
+     */
+    private val patientId: String? = savedStateHandle["patientId"]
 
     init {
-        observeBarangayQueries()
+        refreshSuggestedLabel()
     }
 
     // Per ADR-007 (hard-rule fix): identity comes from a use case, not a direct
     // data-source read. Null identity (signed-out / offline) still lists local sessions.
     private val userIdFlow = observeLocalIdentityUseCase().map { it?.userId }
+
+    // Cold, per ObserveSyncInProgressUseCase's contract - no `.onStart { emit(false) }` here,
+    // since that would reintroduce a transient "not syncing" reading before the scheduler's
+    // real state is known, which is the same confident-zero bug this ticket fixes.
+    private val syncInProgressFlow = observeSyncInProgressUseCase()
 
     private val startDate = MutableStateFlow<LocalDate?>(null)
     private val endDate = MutableStateFlow<LocalDate?>(null)
@@ -109,7 +140,16 @@ class SessionsViewModel @Inject constructor(
 
     // Debounced search prevents a new Room query on every keystroke; raw searchQuery
     // is still combined into the final state so the text field reflects input immediately.
-    private val debouncedSearch = searchQuery.debounce(SEARCH_DEBOUNCE_MS)
+    // The empty/initial query is exempt from the debounce: a screen's first load must not
+    // wait for a keystroke-coalescing window that doesn't apply to it. Without this, the
+    // debounce timer delayed the very first Room query on every fresh SessionsViewModel
+    // instance (i.e. every time a medtech re-enters a patient's Sessions screen), which is
+    // what caused a skeleton flash on every navigation regardless of actual query speed.
+    // distinctUntilChanged guards against a redundant re-emission if the query is cleared
+    // and something else briefly re-triggers the same empty value.
+    private val debouncedSearch = searchQuery
+        .debounce { query -> if (query.isEmpty()) 0L else SEARCH_DEBOUNCE_MS }
+        .distinctUntilChanged()
 
     /** Bundled upstream inputs, re-emitted whenever any input changes. */
     private data class SessionsInputs(
@@ -135,21 +175,30 @@ class SessionsViewModel @Inject constructor(
     ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
-     * Observable UI state for the Sessions screen.
-     *
-     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
-     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
-     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
-     * A fresh collector therefore receives the last non-loading state immediately — no
-     * flicker back to the loading skeleton on resubscribe — while the query eventually
-     * restarts and emits a fresh update.
-     *
-     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
-     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
-     * only update after the debounce window.
+     * Observes the patient entity and resolves their barangay name for the preview header.
      */
-    val state: StateFlow<SessionsState> = queryInputs
+    private val patientFlow: Flow<Pair<Patient?, String?>> = if (patientId.isNullOrBlank()) {
+        flowOf(null to null)
+    } else {
+        patientRepository.observePatientById(patientId).map { patient ->
+            val barangayName = patient?.psgcBarangayCode?.let { code ->
+                psgcRepository.getBarangay(code)?.name
+            }
+            patient to barangayName
+        }
+    }
+
+    private val sessionsStateFlow = queryInputs
         .flatMapLatest { inputs ->
+            // Unreachable through the UI. Emitting an empty, non-loading state keeps a
+            // malformed route from hanging on the loading skeleton forever, and keeps the
+            // patient id out of the SQL as a nullable that would silently match nothing.
+            val patient = patientId
+            if (patient.isNullOrBlank()) {
+                return@flatMapLatest internalState.map {
+                    it.copy(isLoading = false, errorMessage = PATIENT_REQUIRED)
+                }
+            }
             val zone = ZoneId.systemDefault()
             val sinceMillis = Instant.now().minus(Duration.ofDays(RECENT_WINDOW_DAYS)).toEpochMilli()
             val startMillis = inputs.start?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
@@ -165,33 +214,69 @@ class SessionsViewModel @Inject constructor(
 
             combine(
                 sessionRepository.observeVisibleSessionsPage(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped, inputs.limit,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped, inputs.limit,
                 ),
                 sessionRepository.observeVisibleSessionsCounts(
-                    inputs.userId, inputs.activeSessionId, sinceMillis, startMillis, endMillis,
-                    escaped,
+                    inputs.userId, patient, inputs.activeSessionId, sinceMillis, startMillis,
+                    endMillis, escaped,
                 ),
                 internalState,
                 searchQuery,
-            ) { sessions, counts, internal, rawSearch ->
+                syncInProgressFlow,
+            ) { sessions, counts, internal, rawSearch, syncing ->
+                // An empty, unfiltered result while a sync is running is "unknown" rather than
+                // settled-empty: the local DB may simply not have pulled the remote rows yet.
+                // A filtered/searched empty result is left alone - the medtech typed a query
+                // that has no matches, which is settled regardless of sync state.
+                val unfiltered = inputs.debouncedQuery.isEmpty() &&
+                    inputs.start == null && inputs.end == null
+                val awaitingRemote = syncing && unfiltered && counts.totalCount == 0
                 internal.copy(
                     sessions = sessions,
-                    isLoading = false,
+                    isLoading = awaitingRemote,
                     startDate = inputs.start,
                     endDate = inputs.end,
                     searchQuery = rawSearch,
                     totalCount = counts.totalCount,
                     unverifiedCount = counts.unverifiedCount,
                     canLoadMore = sessions.size >= inputs.limit,
+                    activeSessionId = inputs.activeSessionId,
                 )
             }
         }
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5_000),
-            initialValue = SessionsState(),
+
+    /**
+     * Observable UI state for the Sessions screen.
+     *
+     * Uses [SharingStarted.WhileSubscribed] with a 5-second stop timeout so the upstream
+     * Room query is cancelled when there are no active collectors (e.g. the screen leaves
+     * composition), but the [StateFlow]'s replay cache retains the last emitted value.
+     * A fresh collector therefore receives the last non-loading state immediately — no
+     * flicker back to the loading skeleton on resubscribe — while the query eventually
+     * restarts and emits a fresh update.
+     *
+     * [searchQuery] is combined from the raw (un-debounced) flow so the text field
+     * reflects every keystroke immediately, while [sessions] and [totalCount]/[unverifiedCount]
+     * only update after the debounce window.
+     *
+     * An empty, unfiltered result while [ObserveSyncInProgressUseCase] reports a sync running
+     * is treated as "unknown" rather than settled-empty, so `isLoading` stays true instead of
+     * flashing a confident zero the moment before the remote pull lands its rows.
+     */
+    val state: StateFlow<SessionsState> = combine(
+        sessionsStateFlow,
+        patientFlow,
+    ) { sessionsState, (patient, barangayName) ->
+        sessionsState.copy(
+            patient = patient,
+            barangayName = barangayName,
         )
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = SessionsState(),
+    )
 
     /**
      * Updates the free-text search query. Resets pagination.
@@ -220,110 +305,73 @@ class SessionsViewModel @Inject constructor(
     }
 
     /**
-     * Toggles a session's account link (per ADR-007). When the session is unowned it
-     * flips the claim-exempt opt-out; when it is owned + pending the user can unlink it;
-     * an unowned session with an available identity can be claimed on demand.
-     */
-    fun onToggleAccountLink(sessionId: String, link: Boolean) {
-        viewModelScope.launch {
-            val userId = userIdFlow.first()
-            val result = if (link && userId != null) {
-                claimLocalDataUseCase(userId, sessionIds = listOf(sessionId))
-                Result.success(Unit)
-            } else {
-                // link == false → opt out of claiming (or unlink a still-pending session).
-                setSessionClaimExemptUseCase(sessionId, exempt = !link)
-            }
-            result.onFailure { error ->
-                internalState.update { it.copy(errorMessage = error.message ?: "Could not update link.") }
-            }
-        }
-    }
-
-    /**
-     * Runs the barangay search off the keystroke path.
+     * Starts a smear for the patient this screen belongs to.
      *
-     * Debounced so a medtech typing "cebu" triggers one query instead of four, and
-     * [mapLatest] so a slower earlier search cannot land after a newer one and show stale
-     * results. The search itself is a local Room scan — there is no network call here, which
-     * is what makes the picker work with the radio off.
+     * **The sheet no longer asks for a barangay or a note.** The barangay lives on the
+     * patient — it is the unit surveillance aggregates on, it is what the admin site's
+     * geospatial mapping tracks, and it does not change from one smear to the next. The note
+     * was only ever an ad-hoc patient identifier, which the patient record now is properly.
      */
-    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
-    private fun observeBarangayQueries() {
-        viewModelScope.launch {
-            barangayQueries
-                .debounce(BARANGAY_DEBOUNCE_MS)
-                .distinctUntilChanged()
-                .mapLatest { query ->
-                    searchBarangaysUseCase(query).getOrElse { throwable ->
-                        // Without this the picker renders its "no barangay matches" state for a
-                        // broken table exactly as it does for a typo, and nothing anywhere says
-                        // the dataset failed to seed.
-                        Log.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
-                        emptyList()
-                    }
-                }
-                .collect { results -> internalState.update { it.copy(barangayResults = results) } }
-        }
-    }
-
-    fun onBarangayQueryChanged(query: String) {
-        internalState.update { it.copy(barangayQuery = query) }
-        barangayQueries.value = query
-    }
-
-    /**
-     * Resolves [code] against the current result set. Ignored when it matches nothing,
-     * which can only happen if results changed under a tap already in flight.
-     */
-    fun onBarangaySelected(code: String) {
-        val barangay = internalState.value.barangayResults.firstOrNull { it.code == code } ?: return
-        internalState.update {
-            it.copy(selectedBarangay = barangay, barangayQuery = "", barangayResults = emptyList())
-        }
-        barangayQueries.value = ""
-    }
-
-    /** Clears the picker — on the clear button, on sheet dismissal, and after a session starts. */
-    fun onBarangayCleared() {
-        internalState.update {
-            it.copy(selectedBarangay = null, barangayQuery = "", barangayResults = emptyList())
-        }
-        barangayQueries.value = ""
-    }
-
-    fun onCreateSession(label: String, notes: String?) {
+    fun onCreateSession(label: String) {
         if (internalState.value.isCreating) return
-        // The barangay is what makes a smear mappable, so a new session has to carry one.
-        // Sessions predating the picker keep a null code; nothing backfills them.
-        val barangay = internalState.value.selectedBarangay
-        if (label.isBlank() || barangay == null) {
-            // Both guards are defence in depth — SessionsScreen blocks submit before it gets
-            // here. The barangay wording is kept identical to `session_new_barangay_required`
-            // so the two paths cannot drift into two different messages for one rule.
-            val reason = if (label.isBlank()) LABEL_REQUIRED else BARANGAY_REQUIRED
+        // Defence in depth on both. SessionsScreen blocks submit on a blank label, and no
+        // navigation reaches this screen without a patient id — a null here would mean a
+        // route that does not carry one, which would fail the foreign key anyway.
+        val patient = patientId
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = label.trim().uppercase()
+        if (normalizedLabel.isBlank() || patient.isNullOrBlank()) {
+            val reason = if (normalizedLabel.isBlank()) LABEL_REQUIRED else PATIENT_REQUIRED
             internalState.update { it.copy(errorMessage = reason) }
             return
         }
         internalState.update { it.copy(isCreating = true, errorMessage = null) }
         viewModelScope.launch {
+            // Pre-check: reject the label before touching the DB so the medtech sees a
+            // friendly message rather than a constraint violation crash.
+            if (sessionRepository.isSessionLabelTaken(patient, normalizedLabel)) {
+                internalState.update { it.copy(isCreating = false, errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
-                sessionManager.startSession(
-                    label = label.trim(),
-                    psgcBarangayCode = barangay.code,
-                    notes = notes?.takeIf { it.isNotBlank() },
-                )
+                sessionManager.startSession(label = normalizedLabel, patientId = patient)
             }.onSuccess { entity ->
                 internalState.update { it.copy(isCreating = false, errorMessage = null) }
-                onBarangayCleared()
+                // The smear just created holds the suggestion that was on screen, so the next
+                // one has to move on. Recomputed from the database rather than incremented
+                // locally: the medtech may have edited the label before submitting it, and a
+                // local counter would then hand out a number that is already in use.
+                refreshSuggestedLabel()
                 eventChannel.send(SessionsEvent.NavigateToCapture(entity.sessionId))
             }.onFailure { error ->
-                // The sheet has already closed and its label/note state has gone with it, so
-                // leaving the selection behind would reopen a half-filled sheet.
-                onBarangayCleared()
-                internalState.update {
-                    it.copy(isCreating = false, errorMessage = error.message ?: "Failed to create session.")
+                // Backstop: if a concurrent create slipped past the pre-check and the unique
+                // index fired, map the constraint exception to the same user-facing message
+                // rather than surfacing a generic or technical error.
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Failed to create session."
                 }
+                internalState.update { it.copy(isCreating = false, errorMessage = message) }
+            }
+        }
+    }
+
+    /**
+     * Recomputes the label the New Session sheet pre-fills with.
+     *
+     * Silent on failure. The sheet falls back to an empty field, which is what it had before
+     * the generator existed; surfacing an error banner for a suggestion the medtech can type
+     * over themselves would be noise on a screen they came to to start a smear.
+     */
+    private fun refreshSuggestedLabel() {
+        val patient = patientId ?: return
+        viewModelScope.launch {
+            generateSessionLabelUseCase(patient).onSuccess { label ->
+                internalState.update { it.copy(suggestedLabel = label) }
             }
         }
     }
@@ -340,15 +388,51 @@ class SessionsViewModel @Inject constructor(
         }
     }
 
+    fun onOpenVerificationQueue(sessionId: String) {
+        viewModelScope.launch {
+            runCatching { sessionManager.resumeSession(sessionId) }
+                .onSuccess { eventChannel.send(SessionsEvent.NavigateToVerificationQueue(sessionId)) }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(errorMessage = error.message ?: "Could not open verification queue.")
+                    }
+                }
+        }
+    }
+
     fun onRenameSession(sessionId: String, newLabel: String) {
         if (newLabel.isBlank()) return
+        val patient = patientId ?: return
+        // Normalize to uppercase so that manually typed labels and auto-generated labels
+        // share the same case, keeping the unique index naturally case-consistent.
+        val normalizedLabel = newLabel.trim().uppercase()
         viewModelScope.launch {
+            // Resolve the session to confirm it belongs to this patient before checking the
+            // label. If the session is not found (race or stale state), bail silently —
+            // there is no session to rename.
+            val session = sessionRepository.getSessionById(sessionId) ?: return@launch
+            if (session.patientId != patient) return@launch
+
+            if (sessionRepository.isSessionLabelTaken(
+                    patientId = patient,
+                    label = normalizedLabel,
+                    excludingSessionId = sessionId,
+                )
+            ) {
+                internalState.update { it.copy(errorMessage = DUPLICATE_LABEL) }
+                return@launch
+            }
             runCatching {
-                sessionRepository.updateSessionLabel(sessionId, newLabel.trim())
+                sessionRepository.updateSessionLabel(sessionId, normalizedLabel)
             }.onFailure { error ->
-                internalState.update {
-                    it.copy(errorMessage = error.message ?: "Could not rename session.")
+                val message = if (error.cause is SQLiteConstraintException ||
+                    error is SQLiteConstraintException
+                ) {
+                    DUPLICATE_LABEL
+                } else {
+                    error.message ?: "Could not rename session."
                 }
+                internalState.update { it.copy(errorMessage = message) }
             }
         }
     }
@@ -375,8 +459,6 @@ class SessionsViewModel @Inject constructor(
     }
 
     private companion object {
-        private const val TAG = "SessionsViewModel"
-
         private const val RECENT_WINDOW_DAYS = 30L
         private const val INITIAL_PAGE = 5
         private const val PAGE_STEP = 10
@@ -384,15 +466,15 @@ class SessionsViewModel @Inject constructor(
         /** Debounce for the session list's free-text search before it hits Room. */
         private const val SEARCH_DEBOUNCE_MS = 300L
 
-        /** Long enough to coalesce a burst of keystrokes, short enough to feel immediate. */
-        private const val BARANGAY_DEBOUNCE_MS = 150L
-
         // Copy lives here rather than in strings.xml to match the other ViewModels in this
         // module (see CaptureViewModel). Lifting all of it into resources needs an error-type
         // seam across every screen state, which is a wider change than this ticket.
         private const val LABEL_REQUIRED = "Label is required."
 
-        /** Must stay word-for-word identical to `R.string.session_new_barangay_required`. */
-        private const val BARANGAY_REQUIRED = "Please select the patient's barangay to continue."
+        /** Shown when the medtech picks a label already used by another smear for this patient. */
+        private const val DUPLICATE_LABEL = "A smear with this label already exists for this patient."
+
+        /** Unreachable through the UI: every route that opens this screen carries a patient. */
+        private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."
     }
 }

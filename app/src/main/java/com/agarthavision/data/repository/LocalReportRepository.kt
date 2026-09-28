@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+ 
 package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.ReportDao
@@ -36,6 +38,39 @@ class LocalReportRepository @Inject constructor(
     override fun observeCountForSession(sessionId: String, userId: String): Flow<Int> =
         reportDao.observeReportCountForSession(sessionId, userId)
 
+    override fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>> =
+        reportDao.observeAllReports(userId, limit, offset).map { rows ->
+            rows.map { it.toDomain(gson) }
+        }
+
+    override fun observeAllCount(userId: String): Flow<Int> =
+        reportDao.observeAllReportsCount(userId)
+
+    override fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+        limit: Int,
+        offset: Int,
+    ): Flow<List<Report>> =
+        reportDao.observeFilteredReports(userId, startMillis, endMillis, species, query, limit, offset).map { rows ->
+            rows.map { row ->
+                val patientName = formatMaskedPatientName(row.patientLastname, row.patientFirstname)
+                row.report.toDomain(gson, row.sessionLabel, patientName)
+            }
+        }
+
+    override fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String,
+    ): Flow<Int> =
+        reportDao.observeFilteredReportsCount(userId, startMillis, endMillis, species, query)
+
     override suspend fun getById(reportId: String): Report? =
         reportDao.getReportById(reportId)?.toDomain(gson)
 
@@ -45,4 +80,21 @@ class LocalReportRepository @Inject constructor(
     override suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus) {
         reportDao.updateSupabaseStatus(reportId, status.value)
     }
+
+    override fun observeUnsyncedCount(userId: String): Flow<Int> =
+        reportDao.observeUnsyncedCount(userId)
 }
+
+private fun formatMaskedPatientName(lastname: String?, firstname: String?): String? {
+    if (lastname.isNullOrBlank()) return null
+    val last = lastname.trim()
+    val maskedLast = if (last.length <= 2) {
+        last
+    } else {
+        val middleBullets = "•".repeat(last.length - 2)
+        "${last.first()}$middleBullets${last.last()}"
+    }
+    val initial = firstname?.trim()?.firstOrNull()?.uppercaseChar()
+    return if (initial != null) "$maskedLast, $initial." else maskedLast
+}
+

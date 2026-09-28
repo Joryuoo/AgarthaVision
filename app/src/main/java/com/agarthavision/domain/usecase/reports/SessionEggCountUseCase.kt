@@ -1,56 +1,52 @@
 package com.agarthavision.domain.usecase.reports
 
-import com.agarthavision.core.util.EpgCalculator
+import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.domain.model.EggCount
-import com.agarthavision.domain.model.EggSpecies
-import com.agarthavision.domain.model.InfectivityLevel
+import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.SampleRepository
 import javax.inject.Inject
 
 /**
- * Computes per-session egg counts and EPG from confirmed detections.
+ * The per-species LPF range for a session, for the screen.
+ *
+ * Philippine medtechs use Direct Smear rather than Kato-Katz, so there is no eggs-per-gram to
+ * report (PB-16). The aggregation itself lives in [aggregateLpfPerSpecies], which the report
+ * path calls too — the two used to compute it separately, from copied code.
  */
 class SessionEggCountUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val detectionRepository: DetectionRepository,
+    private val sampleRepository: SampleRepository,
+    private val findingDao: SampleSpeciesFindingDao,
 ) {
     /**
-     * Returns per-species counts, total egg count, EPG, and the WHO infectivity tier for a
-     * session.
+     * Returns per-species counts, total egg count, and LPF density for a session.
      */
-    suspend operator fun invoke(sessionId: String): SessionEggCounts {
+    suspend operator fun invoke(sessionId: String): Result<SessionEggCounts> = runCatching {
         val userId = authRepository.currentLocalUserId()
-        val counts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
-        val total = counts.sumOf { it.count }
-        val epg = EpgCalculator.epg(total)
 
-        // Same normalization the report path uses (alias -> EggSpecies), but keyed by the
-        // recognized EggSpecies itself rather than its display string, since the WHO tier
-        // table is keyed on the enum. Unrecognized/"Other" labels have no WHO table entry and
-        // are excluded here rather than silently folded into a tier they don't have.
-        val epgPerSpecies: Map<EggSpecies, Int> = counts
-            .mapNotNull { count -> count.canonicalEggSpecies()?.let { it to count.count } }
-            .groupBy({ it.first }, { it.second })
-            .mapValues { (_, speciesCounts) -> EpgCalculator.epg(speciesCounts.sum()) }
+        // Every field the medtech recorded, clean ones included. A field with none of a species
+        // contributes a zero to that species' range, so leaving them out of the denominator
+        // would raise every minimum off the floor it belongs on.
+        //
+        // No `coerceAtLeast(1)`. It was there to keep a mean from dividing by zero; with the
+        // mean gone there is nothing to divide, and a session with no fields correctly produces
+        // no ranges rather than a denominator invented to avoid an exception.
+        val samples = sampleRepository.getSamplesForSession(sessionId, userId)
+        val fieldCount = samples.size
 
-        val infectivityLevel = InfectivityLevelCalculator.sessionLevel(epgPerSpecies)
-        val topSpecies = infectivityLevel?.let { level ->
-            epgPerSpecies.entries
-                .filter { (species, speciesEpg) ->
-                    InfectivityLevelCalculator.classify(species, speciesEpg) == level
-                }
-                .maxByOrNull { it.value }
-                ?.key
-        }
+        val confirmedCounts = detectionRepository.getConfirmedEggCountsForSession(sessionId, userId)
+        val total = confirmedCounts.sumOf { it.count }
 
-        return SessionEggCounts(
-            counts = counts,
+        val findings = findingDao.getFindingsForSession(sessionId, userId)
+
+        SessionEggCounts(
+            counts = confirmedCounts,
             totalEggCount = total,
-            epg = epg,
-            epgPerSpecies = epgPerSpecies,
-            infectivityLevel = infectivityLevel,
-            topSpecies = topSpecies,
+            lpfPerSpecies = aggregateLpfPerSpecies(findings, fieldCount),
+            fieldCount = fieldCount,
         )
     }
 }
@@ -61,15 +57,13 @@ class SessionEggCountUseCase @Inject constructor(
 data class SessionEggCounts(
     val counts: List<EggCount>,
     val totalEggCount: Int,
-    val epg: Int,
-    val epgPerSpecies: Map<EggSpecies, Int> = emptyMap(),
-    val infectivityLevel: InfectivityLevel? = null,
-    val topSpecies: EggSpecies? = null,
+    val lpfPerSpecies: Map<String, LpfDensity> = emptyMap(),
+    val fieldCount: Int = 0,
 ) {
     companion object {
         /**
          * Empty default when no user session is available.
          */
-        fun empty(): SessionEggCounts = SessionEggCounts(emptyList(), 0, 0)
+        fun empty(): SessionEggCounts = SessionEggCounts(emptyList(), 0)
     }
 }

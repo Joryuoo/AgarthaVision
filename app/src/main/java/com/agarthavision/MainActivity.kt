@@ -5,12 +5,15 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.usecase.auth.AuthGate
+import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.navigation.AgarthaNavGraph
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import dagger.hilt.android.AndroidEntryPoint
@@ -31,16 +34,39 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate() so the system swaps the launch theme
         // (Theme.AgarthaVision.Starting) for the splash and hands off to the app theme.
-        installSplashScreen()
+        val splash = installSplashScreen()
+
+        // Hold the splash until the first-run gate resolves. Reading the cached identity is
+        // a fast disk read, but it is not instant, and without this the Dashboard composes
+        // for a frame or two behind the login screen on a fresh install — which reads as a
+        // flash of someone else's data. This gate is DataStore-only: resolving it never
+        // constructs the Supabase client or the session graph on this path (86d4byw6p).
+        splash.setKeepOnScreenCondition { mainViewModel.authGate.value == AuthGate.Loading }
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
-            AgarthaVisionTheme(darkTheme = themeMode == ThemeMode.DARK) {
-                AgarthaNavGraph(
-                    cameraManager = cameraManager,
-                    frameSampler = frameSampler
-                )
+            val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
+            val isDark = when (themeMode) {
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            AgarthaVisionTheme(darkTheme = isDark) {
+                // Loading never reaches composition: the splash is still up. Rendering the
+                // Dashboard for it would defeat the condition above.
+                if (authGate != AuthGate.Loading) {
+                    AgarthaNavGraph(
+                        cameraManager = cameraManager,
+                        frameSampler = frameSampler,
+                        startDestination = if (authGate == AuthGate.NeedsLogin) {
+                            Screen.Login.route
+                        } else {
+                            Screen.Dashboard.route
+                        },
+                    )
+                }
             }
         }
     }

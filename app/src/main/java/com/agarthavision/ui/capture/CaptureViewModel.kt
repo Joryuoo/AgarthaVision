@@ -10,12 +10,14 @@ import com.agarthavision.core.util.ElapsedClock
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.usecase.capture.CaptureFieldUseCase
+import com.agarthavision.domain.usecase.capture.CaptureOutcome
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -36,9 +38,9 @@ import javax.inject.Inject
  *   The latch is cleared **only** by a successful [resumeConnection] probe (per
  *   CONTEXT.md).
  *
- * **Verification entry points:** [onDetectionToastTap] (single-frame, from
- * Sonner) opens the verification sheet directly. The queue lives on its own
- * route (`VerificationQueueScreen` + `VerificationQueueViewModel`); Capture
+ * **Verification entry points:** [onCapturedFrameToastTap] (single-frame, from the
+ * capture confirmation) opens the verification sheet directly. The queue lives on
+ * its own route (`VerificationQueueScreen` + `VerificationQueueViewModel`); Capture
  * navigates there via a callback.
  *
  * See CONTEXT.md.
@@ -55,6 +57,19 @@ class CaptureViewModel @Inject constructor(
 
     private val _state = MutableStateFlow(CaptureState())
     val state: StateFlow<CaptureState> = _state.asStateFlow()
+
+    private val _events = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = 1)
+
+    /**
+     * One-shot outcomes of a shutter tap, for the screen to confirm.
+     *
+     * An event per tap rather than a derived signal off [CaptureState.flaggedFrames]: the queue
+     * is a live Room query and its head moves without anyone tapping anything. Verifying or
+     * deleting a sample promotes an older row to the front, and re-entering the screen with a
+     * queue already populated makes a months-old frame the newest thing the screen has seen.
+     * Both used to fire a "Frame captured" confirmation for a frame nobody had just captured.
+     */
+    val events: SharedFlow<CaptureEvent> = _events.asSharedFlow()
 
 
     init {
@@ -96,7 +111,16 @@ class CaptureViewModel @Inject constructor(
     }
 
 
-    fun onDetectionToastTap(frame: FlaggedFrame) {
+    /**
+     * Opens the sample a capture confirmation is about, looked up by the id that tap returned.
+     *
+     * By id, not by position: the confirmation stays on screen for a couple of seconds and the
+     * queue keeps moving underneath it. A row that has already left the flagged set — verified
+     * or deleted from elsewhere in that window — simply has nothing to open, which is why this
+     * is a lookup that can miss rather than an index.
+     */
+    fun onCapturedFrameToastTap(sampleId: String) {
+        val frame = _state.value.flaggedFrames.firstOrNull { it.sampleId == sampleId } ?: return
         _state.update { it.copy(verificationTarget = frame) }
     }
 
@@ -134,6 +158,7 @@ class CaptureViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(isBusy = true, errorMessage = null) }
             captureFieldUseCase(sessionId, cached.jpegBytes)
+                .onSuccess { outcome -> _events.emit(CaptureEvent.FrameCaptured(outcome)) }
                 .onFailure { throwable ->
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
@@ -209,3 +234,23 @@ data class CaptureState(
     val isProbingConnection: Boolean = false,
     val verificationTarget: FlaggedFrame? = null,
 )
+
+/**
+ * A one-shot outcome of a shutter tap.
+ *
+ * Separate from [CaptureState] because a confirmation is an event, not a condition: it happens
+ * once, to the medtech who tapped, and re-reading it later would be re-announcing it.
+ */
+sealed interface CaptureEvent {
+
+    /**
+     * The tap landed and a row was written.
+     *
+     * Fired for **every** successful capture, including the two that look like nothing happened:
+     * a field the model read and found clean, and a field recorded while the inference container
+     * was unreachable. Both are real results. Without a confirmation the medtech reads silence as
+     * a missed tap and captures the same field again, which is how a smear ends up with duplicate
+     * fields and an inflated count.
+     */
+    data class FrameCaptured(val outcome: CaptureOutcome) : CaptureEvent
+}

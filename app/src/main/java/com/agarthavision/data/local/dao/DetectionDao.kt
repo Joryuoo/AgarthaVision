@@ -22,6 +22,19 @@ interface DetectionDao {
     @Query("SELECT * FROM detections WHERE sample_id = :sampleId")
     suspend fun getDetectionsForSample(sampleId: String): List<DetectionEntity>
 
+    /**
+     * Removes detection rows by id.
+     *
+     * Exists for one narrow job: an added species whose count the medtech lowered on re-open
+     * leaves slots behind, because [insertDetections] replaces and never deletes, and a stale
+     * slot would keep a null-`bbox_*` row alive for an egg that is no longer claimed. The caller
+     * (`SubmitVerificationUseCase`) computes the ids and excludes every prediction-backed one, so
+     * a box the model produced cannot reach this even in principle — those are the rows C8
+     * protects, and a rejection is kept as a labelled FALSE_POSITIVE rather than deleted.
+     */
+    @Query("DELETE FROM detections WHERE detection_id IN (:detectionIds)")
+    suspend fun deleteDetectionsByIds(detectionIds: List<String>)
+
     @Query("SELECT * FROM detections WHERE sample_id = :sampleId")
     fun observeDetectionsForSample(sampleId: String): Flow<List<DetectionEntity>>
 
@@ -73,26 +86,8 @@ interface DetectionDao {
         sinceTimestamp: Long,
     ): Flow<List<SessionEggCountRow>>
 
-    /**
-     * Fetches counts per sample over a time window for bucketing into daily totals.
-     */
-    @Query(
-        """
-         SELECT s.timestamp, COUNT(*) AS eggCount
-        FROM detections d
-        JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.deleted_at is null
-          AND s.user_id = :userId
-          AND s.timestamp >= :sinceTimestamp
-          AND d.verdict = 'confirmed'
-        GROUP BY s.sample_id
-        ORDER BY s.timestamp ASC
-        """,
-    )
-    fun observeDailyEggCountsSince(
-        userId: String,
-        sinceTimestamp: Long,
-    ): Flow<List<DailyEggCountRow>>
+    // observeDailyEggCountsSince went with the Home tab's sparkline (PB-23). It bucketed
+    // counts per sample into daily totals for that chart and nothing else ever read it.
 
     /**
      * Bulk-fetches distinct species labels for a set of sessions, excluding deleted
@@ -119,7 +114,55 @@ interface DetectionDao {
         """,
     )
     suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): List<SessionSpeciesRow>
+
+    @Query(
+        """
+        SELECT d.detection_id AS detectionId, d.sample_id AS sampleId, d.verdict AS verdict, s.verified_at AS verifiedAt,
+          (SELECT COUNT(*) FROM detections d2 WHERE d2.sample_id = d.sample_id) AS detectionsInSample
+        FROM detections d JOIN samples s ON s.sample_id = d.sample_id
+        WHERE s.user_id = :userId AND s.deleted_at is null AND s.status != 'flagged' AND s.is_manual = 0
+          AND s.verified_at >= :fromMillis AND s.verified_at < :toMillis
+        """,
+    )
+    fun observeRulingsBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<RulingRow>>
+
+    /**
+     * Observes distinct session-species detection rows for findings within a time window.
+     */
+    @Query(
+        """
+        SELECT s.session_id AS sessionId,
+               COALESCE(d.expert_class, d.class_label) AS rawSpecies,
+               b.city_muni_code AS townCode
+        FROM detections d
+        JOIN samples sa ON sa.sample_id = d.sample_id
+        JOIN sessions s ON s.session_id = sa.session_id
+        JOIN patients p ON p.patient_id = s.patient_id
+        LEFT JOIN psgc_barangays b ON b.code = p.psgc_barangay_code
+        WHERE s.user_id = :userId
+          AND s.started_at >= :startMillis
+          AND s.started_at < :endMillis
+          AND sa.deleted_at is null
+          AND sa.status != 'flagged'
+          AND d.verdict != 'false_positive'
+        """,
+    )
+    fun observeSessionFindingsBetween(
+        userId: String,
+        startMillis: Long,
+        endMillis: Long,
+    ): Flow<List<SessionFindingRow>>
 }
+
+data class SessionFindingRow(
+    val sessionId: String,
+    val rawSpecies: String,
+    val townCode: String?,
+)
 
 /**
  * Row result for per-session egg counts grouped by species.
@@ -130,15 +173,17 @@ data class SessionEggCountRow(
     val eggCount: Int,
 )
 
-data class DailyEggCountRow(
-    val timestamp: Long,
-    @ColumnInfo(name = "eggCount")
-    val eggCount: Int,
-)
-
 /**
  * Row result for a bulk species-per-session lookup.
  * [sessionId] is the SQL alias for `samples.session_id`;
  * [species] resolves to `expert_class` when set, otherwise `class_label`.
  */
 data class SessionSpeciesRow(val sessionId: String, val species: String)
+
+data class RulingRow(
+    val detectionId: String,
+    val sampleId: String,
+    val verdict: String,
+    val verifiedAt: Long,
+    val detectionsInSample: Int,
+)

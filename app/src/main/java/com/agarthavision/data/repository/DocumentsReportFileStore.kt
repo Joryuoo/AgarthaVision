@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import androidx.core.net.toUri
 import com.agarthavision.domain.repository.ReportFileStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -37,6 +38,21 @@ class DocumentsReportFileStore @Inject constructor(
         val fileName = "agarthavision-session-${sessionId.sanitize()}-${reportId.sanitize()}.pdf"
         return writeBytes(fileName, PDF_MIME_TYPE, pdf)
     }
+
+    /**
+     * Both shapes [writeCsv] and [writePdf] can return are read here, and every failure
+     * collapses to null: a cleared MediaStore entry throws rather than returning empty, and
+     * a caller that has to distinguish "gone" from "unreadable" would have nothing different
+     * to do about it.
+     */
+    override suspend fun readBytes(path: String): ByteArray? =
+        if (path.startsWith(CONTENT_URI_PREFIX)) {
+            runCatching {
+                context.contentResolver.openInputStream(path.toUri())?.use { it.readBytes() }
+            }.getOrNull()
+        } else {
+            runCatching { File(path).takeIf { it.exists() }?.readBytes() }.getOrNull()
+        }
 
     private fun writeBytes(fileName: String, mimeType: String, bytes: ByteArray): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -87,6 +103,7 @@ class DocumentsReportFileStore @Inject constructor(
 
     private companion object {
         private const val REPORT_FOLDER_NAME = "AgarthaVision"
+        private const val CONTENT_URI_PREFIX = "content://"
         private const val CSV_MIME_TYPE = "text/csv"
         private const val PDF_MIME_TYPE = "application/pdf"
         private val REPORT_RELATIVE_PATH =

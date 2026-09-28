@@ -11,7 +11,7 @@ import com.agarthavision.R
 
 // ── Inter font family (Google Fonts) ──────────────────────────────────────────
 // Replaces the retired Geist + JetBrains Mono families. Inter ships tabular
-// figures via `fontFeatureSettings = "tnum"`, so the EPG / mono readouts below
+// figures via `fontFeatureSettings = "tnum"`, so the numeric readouts below
 // no longer need a separate monospaced family.
 
 val GoogleFontProvider = GoogleFont.Provider(
@@ -80,7 +80,7 @@ val AppTypography = Typography(
 // Now Inter-based with tabular figures (tnum) instead of JetBrains Mono / Geist.
 // Use these directly (not via MaterialTheme.typography) for the listed surfaces.
 
-// IDs, timestamps, GPS coords, EPG readouts — tabular figures required
+// IDs, timestamps, GPS coords, LPF readouts — tabular figures required
 val MonoDataStyle = TextStyle(
     fontFamily = InterFamily,
     fontWeight = FontWeight.Medium,
@@ -98,8 +98,8 @@ val MonoSmallStyle = TextStyle(
     fontFeatureSettings = "tnum",
 )
 
-// Hero EPG number — Inter, large, tabular figures (tnum)
-val EpgDisplayStyle = TextStyle(
+// Hero density number — Inter, large, tabular figures (tnum)
+val HeroDensityStyle = TextStyle(
     fontFamily = InterFamily,
     fontWeight = FontWeight.Bold,
     fontSize = 56.sp,

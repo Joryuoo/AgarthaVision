@@ -1,17 +1,30 @@
 # PSGC barangay asset
 
-Generator for `app/src/main/assets/psgc/psgc-barangays-<vintage>.csvgz`, the bundled
-reference dataset behind the session barangay picker.
+Generators for the bundled reference dataset behind the barangay picker, in two stages.
 
-The output is **committed**. A normal build never runs this, and the app never fetches
+| Stage | Script | Reads | Writes | Network |
+|---|---|---|---|---|
+| 1 | `build-psgc-asset.py` | upstream PSA release | `tools/psgc/psgc-barangays-<vintage>.csvgz` | **yes** |
+| 2 | `build-psgc-db.py` | that CSV | `app/src/main/assets/psgc/psgc-barangays-<vintage>.db` | no |
+
+**Only the `.db` is packaged.** The CSV stays in the repo as the intermediate; shipping both
+would put the same 42,010 rows in the APK twice. Splitting the stages means the shipped
+database can be rebuilt anywhere, and is provably derived from the bytes the CSV's own
+checksum pins.
+
+Both outputs are **committed**. A normal build never runs either, and the app never fetches
 reference data at runtime — medtechs work in areas with no cellular signal, so the dataset
-ships in the APK and is Room-seeded on first run.
+ships in the APK and is copied into Room on first run.
 
 ```bash
 python -m venv .venv
 .venv/Scripts/pip install -r tools/psgc/requirements.txt   # POSIX: .venv/bin/pip
-.venv/Scripts/python tools/psgc/build-psgc-asset.py
+.venv/Scripts/python tools/psgc/build-psgc-asset.py        # stage 1, needs the network
+python tools/psgc/build-psgc-db.py                         # stage 2, stdlib only
 ```
+
+Stage 2 needs no third-party packages — it uses Python's own `sqlite3` — so it runs outside
+the venv.
 
 ## Vintage
 
@@ -67,17 +80,23 @@ digits, remapping the 2023 set is a leading-prefix change on the four affected u
 1. Point `UPSTREAM_SHA`, `VINTAGE` and `RELEASE` in `build-psgc-asset.py` at the new release.
    `RELEASE` must be one of the release names the upstream bundles; the script lists them and
    aborts if the name is unknown.
-2. Run the generator. It aborts rather than emitting a row it cannot fully resolve, so a
-   changed upstream shape surfaces as a failure, not as blank labels in the picker.
+2. Run both stages, in order. Each aborts rather than emitting a row it cannot fully resolve,
+   so a changed upstream shape surfaces as a failure, not as blank labels in the picker.
+   Stage 2 also re-checks the barangay and region counts before it writes.
 3. Update `PsgcDataset.VINTAGE`, `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT` — the
    generator prints the hash and the counts. The seeder re-seeds when `VINTAGE` changes, so
    devices pick the new data up on next launch without a migration.
-4. Delete the superseded `.csvgz`, and update the table above plus the object card.
+4. Delete the superseded `.csvgz` **and** `.db`, and update the table above plus the object
+   card. `ASSET_SHA256` is the hash of the `.db`, which is what ships.
 5. Re-point the Admin Website's boundary GeoJSON at the matching release.
 
 ## Output format
 
-Gzipped CSV, one header row, RFC 4180 quoting (133 barangay names contain commas):
+**Stage 1** writes gzipped CSV, one header row, RFC 4180 quoting (133 barangay names contain
+commas). **Stage 2** writes one SQLite table, `psgc_barangays`, whose columns mirror
+`PsgcBarangayEntity` and carry the same values, except that an empty `province_code` or
+`province_name` becomes `NULL` and `search_extra` is folded into `search_text` rather than
+stored. The shared columns:
 
 | Column | Notes |
 |---|---|
@@ -86,7 +105,8 @@ Gzipped CSV, one header row, RFC 4180 quoting (133 barangay names contain commas
 | `city_muni_code` / `city_muni_name` | Always present. |
 | `province_code` / `province_name` | **Empty for 3,025 barangays** — highly urbanised and independent cities occupy the province slot themselves, so PSGC gives them no province. |
 | `region_code` / `region_name` | Always present. |
-| `search_extra` | Extra search terms, not displayed. Set for Manila's 897 barangays only. |
+| `search_extra` | Extra search terms, not displayed. Set for Manila's 897 barangays only. CSV only. |
+| `search_text` | `.db` only. Barangay, city/municipality, province and `search_extra`, space-joined, blanks dropped, lowercased. Folded in Python, not by SQL `lower()`, which is ASCII-only — 438 names carry characters outside it. |
 
 ## Upstream shapes the generator handles
 
@@ -109,13 +129,19 @@ Gzipped CSV, one header row, RFC 4180 quoting (133 barangay names contain commas
 
 ## Verifying the committed asset
 
-Nothing in the build reruns the generator, so the SHA-256 above is what ties
-`app/src/main/assets/psgc/psgc-barangays-q2_2026.csvgz` to the script that produced it.
-`PsgcAssetPackagingTest` asserts it on every test run; to check by hand:
+Nothing in the build reruns the generators, so the SHA-256 above is what ties
+`app/src/main/assets/psgc/psgc-barangays-q2_2026.db` to the scripts that produced it.
+`PsgcAssetPackagingTest` asserts it on every test run, along with the file being a SQLite
+database and carrying no `room_master_table` — that absence is what keeps the asset
+independent of Room's `identityHash`, so a schema version bump never means regenerating it.
+To check by hand:
 
 ```powershell
-Get-FileHash app/src/main/assets/psgc/psgc-barangays-q2_2026.csvgz -Algorithm SHA256
+Get-FileHash app/src/main/assets/psgc/psgc-barangays-q2_2026.db -Algorithm SHA256
 ```
+
+`build-psgc-db.py` pins the SQLite page size and inserts in key order, so a rebuild from the
+same CSV is byte-identical rather than merely equivalent.
 
 Because `requirements.txt` pins the generator's dependencies and the gzip header is written
 with `mtime=0`, a rebuild from the same pinned upstream should be byte-identical. A changed

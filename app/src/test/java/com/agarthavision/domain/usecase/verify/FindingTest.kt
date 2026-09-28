@@ -1,9 +1,12 @@
 package com.agarthavision.domain.usecase.verify
 
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,37 +65,68 @@ class FindingTest {
     }
 
     @Test
-    fun `an added finding needs a species and a positive count, and asks no box questions`() {
-        val speciesOnly = VerificationAnswers(species = EggSpecies.ASCARIS)
-        assertFalse("No count yet.", Finding(answers = speciesOnly).isComplete)
-        assertFalse("Zero is not a count.", Finding(answers = speciesOnly.copy(eggCount = 0)).isComplete)
-        // isEgg / isBoxCorrect are never asked of a row with no box, and their absence must
-        // not block it.
-        assertTrue(Finding(answers = speciesOnly.copy(eggCount = 3)).isComplete)
+    fun `OTHER stage needs its free text`() {
+        val blankStage = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            stage = EggStage.OTHER,
+        )
+        assertFalse(Finding(prediction(), blankStage).isComplete)
+        assertTrue(Finding(prediction(), blankStage.copy(otherStageText = "Larvated")).isComplete)
     }
 
-    // ── egg contribution ────────────────────────────────────────────────────
+    @Test
+    fun `OTHER stage display name uses typed free text`() {
+        val otherStage = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+            stage = EggStage.OTHER,
+            otherStageText = "Larvated",
+        )
+        val rows = listOf(Finding(prediction(), otherStage)).toFindingRows()
+        assertEquals(1, rows.size)
+        assertEquals("Larvated", rows[0].stageDisplayName)
+    }
 
     @Test
-    fun `a confirmed box is worth exactly one egg and a rejected box none`() {
+    fun `an added finding needs a species and a positive total, and asks no box questions`() {
+        val speciesOnly = VerificationAnswers(species = EggSpecies.ASCARIS)
+        assertFalse("No total yet.", Finding(answers = speciesOnly).isComplete)
+        assertFalse("Zero is not a total.", Finding(answers = speciesOnly.copy(fieldTotal = 0)).isComplete)
+        // isEgg / isBoxCorrect are never asked of a row with no box, and their absence must
+        // not block it.
+        assertTrue(Finding(answers = speciesOnly.copy(fieldTotal = 3)).isComplete)
+    }
+
+    // ── what a row is worth ─────────────────────────────────────────────────
+
+    @Test
+    fun `only a kept box counts as an egg`() {
         val confirmed = Finding(
             prediction(),
             VerificationAnswers(
                 isEgg = true,
                 isBoxCorrect = true,
                 species = EggSpecies.ASCARIS,
-                // A typed count on a box row is ignored - the box is one egg.
-                eggCount = 99,
+                // A total on a box row is meaningless - the box is one egg, and the medtech
+                // does not get to edit that.
+                fieldTotal = 99,
             ),
         )
-        assertEquals(1, confirmed.eggContribution)
-        assertEquals(0, Finding(prediction(), VerificationAnswers(isEgg = false)).eggContribution)
+        assertTrue(confirmed.countsAsEgg)
+        assertFalse(Finding(prediction(), VerificationAnswers(isEgg = false)).countsAsEgg)
+        // An added row is never "one egg" - it speaks for its whole species.
+        assertFalse(Finding(answers = VerificationAnswers(fieldTotal = 3)).countsAsEgg)
     }
 
     // ── grouping ────────────────────────────────────────────────────────────
 
     @Test
-    fun `boxes and added rows of the same species sum into one row`() {
+    fun `an added total speaks for the whole species, boxes included`() {
+        // The regression this guards: the total used to be added to the boxes, so a medtech
+        // who counted 5 Ascaris against 2 boxed ones got a row of 7.
         val ascaris = VerificationAnswers(
             isEgg = true,
             isBoxCorrect = true,
@@ -101,8 +135,8 @@ class FindingTest {
         val findings = listOf(
             Finding(prediction(), ascaris),
             Finding(prediction(), ascaris),
-            // The medtech saw three more Ascaris the model never boxed.
-            Finding(answers = ascaris.copy(eggCount = 3)),
+            // The medtech counted five Ascaris in the field, two of which the model boxed.
+            Finding(answers = ascaris.copy(fieldTotal = 5)),
         )
 
         val rows = findings.toFindingRows()
@@ -110,6 +144,53 @@ class FindingTest {
         assertEquals(1, rows.size)
         assertEquals("Ascaris lumbricoides", rows[0].species)
         assertEquals(5, rows[0].eggCount)
+        assertEquals(2, findings.boxedCountOf("Ascaris lumbricoides"))
+        assertEquals(3, findings.unboxedCountOf("Ascaris lumbricoides"))
+    }
+
+    @Test
+    fun `a species with no total of its own falls back to its boxes`() {
+        val ascaris = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+        )
+        val findings = listOf(Finding(prediction(), ascaris), Finding(prediction(), ascaris))
+
+        assertEquals(2, findings.fieldTotalOf("Ascaris lumbricoides"))
+        assertEquals(0, findings.unboxedCountOf("Ascaris lumbricoides"))
+        assertEquals(2, findings.toFindingRows()[0].eggCount)
+    }
+
+    @Test
+    fun `a total below the boxes and drawn eggs holds submit`() {
+        val ascaris = VerificationAnswers(
+            isEgg = true,
+            isBoxCorrect = true,
+            species = EggSpecies.ASCARIS,
+        )
+        val drawn = ImageBox(x = 5f, y = 5f, width = 2f, height = 2f)
+        val findings = listOf(
+            Finding(prediction(), ascaris),
+            Finding(prediction(), ascaris),
+            Finding(answers = ascaris.copy(fieldTotal = 4, drawnBoxes = listOf(drawn))),
+        )
+
+        // Two boxes kept plus one egg the medtech located by hand.
+        assertEquals(3, findings.floorFor("Ascaris lumbricoides"))
+        assertTrue(findings.totalsAreConsistent())
+
+        val lowered = findings.map { finding ->
+            if (finding.prediction == null) {
+                finding.copy(answers = finding.answers.copy(fieldTotal = 2))
+            } else {
+                finding
+            }
+        }
+        assertFalse(
+            "Two eggs cannot be fewer than the two boxed plus the one drawn.",
+            lowered.totalsAreConsistent(),
+        )
     }
 
     @Test
@@ -171,6 +252,38 @@ class FindingTest {
         assertTrue(emptyList<Finding>().toFindingRows().isEmpty())
     }
 
+    /**
+     * The regression a species-only key would reintroduce: an unstaged box and a staged added
+     * card of the same species are different findings now, not one double-counted row.
+     */
+    @Test
+    fun `an unstaged box and a staged added card of one species are separate rows, not one`() {
+        val unstagedBox = Finding(
+            prediction(),
+            VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+        )
+        val stagedAdded = Finding(
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 3,
+            ),
+        )
+        val findings = listOf(unstagedBox, stagedAdded)
+
+        val rows = findings.toFindingRows()
+        assertEquals(2, rows.size)
+        val noStageRow = rows.first { it.stage == null }
+        val cfRow = rows.first { it.stage == EggStage.CORTICATED_FERTILIZED }
+        assertEquals("The boxed egg, uncounted by the CF card.", 1, noStageRow.eggCount)
+        assertEquals("The CF card's own total, unaffected by the unstaged box.", 3, cfRow.eggCount)
+
+        assertEquals(1, findings.floorFor("Ascaris lumbricoides"))
+        assertEquals(0, findings.floorFor("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+        assertEquals(0, findings.unboxedCountOf("Ascaris lumbricoides"))
+        assertEquals(3, findings.unboxedCountOf("Ascaris lumbricoides", EggStage.CORTICATED_FERTILIZED))
+    }
+
     @Test
     fun `free-text species groups under its typed label`() {
         val other = VerificationAnswers(
@@ -182,5 +295,63 @@ class FindingTest {
         val rows = listOf(Finding(prediction(), other)).toFindingRows()
         assertEquals(1, rows.size)
         assertEquals("Enterobius", rows[0].species)
+    }
+
+    // ── primary-pin resolution (14zcqnthz6e) ──────────────────────────
+
+    /**
+     * Running the resolution twice on an already-resolved list must be a no-op: `onSubmit` reads
+     * the election it just wrote back on the very next submit, and if a second pass could still
+     * move the election around, the pin would not actually be stable within a session.
+     */
+    @Test
+    fun `withResolvedPrimaryPins is idempotent`() {
+        val findings = listOf(
+            Finding(
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.CORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                ),
+            ),
+            Finding(
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.DECORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                ),
+            ),
+        )
+
+        val once = findings.withResolvedPrimaryPins()
+        val twice = once.withResolvedPrimaryPins()
+
+        assertEquals(once, twice)
+        assertEquals(true, once[0].answers.isPrimaryAdded)
+        assertEquals(false, once[1].answers.isPrimaryAdded)
+    }
+
+    /** A model box is never a candidate for a pin — the election is only among added cards. */
+    @Test
+    fun `withResolvedPrimaryPins never touches a model box`() {
+        val boxed = Finding(
+            prediction(),
+            VerificationAnswers(isEgg = true, isBoxCorrect = true, species = EggSpecies.ASCARIS),
+        )
+        val added = Finding(
+            answers = VerificationAnswers(
+                species = EggSpecies.ASCARIS,
+                stage = EggStage.CORTICATED_FERTILIZED,
+                fieldTotal = 1,
+            ),
+        )
+
+        val resolved = listOf(boxed, added).withResolvedPrimaryPins()
+
+        assertNull(
+            "A model box carries no isPrimaryAdded pin - the concept does not apply to it.",
+            resolved[0].answers.isPrimaryAdded,
+        )
+        assertEquals(true, resolved[1].answers.isPrimaryAdded)
     }
 }

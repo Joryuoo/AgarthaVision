@@ -84,13 +84,11 @@ nothing verified is deletable (`../../constraints.md` C8).
 
 - **The flagged queue is Room-backed, not in-memory.** `FlaggedFrameStore` observes
   `samples WHERE status = 'flagged'` and rebuilds `FlaggedFrame` objects, re-reading the JPEG
-  off disk each time (`data/repository/FlaggedFrameStore.kt:58-74`, `:101-119`). Any older
+  off disk each time (`data/repository/FlaggedFrameStore.kt:59-75`, `:99-117`). Any older
   claim that flagged frames are transient and lost on process death is stale.
-- **The queue is invisible to a never-signed-in device.** The observing flow returns an empty
-  list when the cached identity is null (`data/repository/FlaggedFrameStore.kt:64-71`), and
-  every flagged DAO query filters on `user_id` (`data/local/dao/SampleDao.kt:69`, `:78`). Frames
-  captured with no cached identity are written to Room but never appear in the queue — a real
-  gap against the offline-first intent, not a design decision.
+- **Login is mandatory on first launch.** Because authentication is required before entering
+  the app, a valid cached local identity is guaranteed when opening an active patient session
+  and capturing frames.
 - Inference now runs once per shutter tap, not on a timer. A field costs exactly one
   inference call; there is no idle sampling burning the GPU droplet between taps.
 - **The frame cache outlives the camera binding, and that is handled at the read end.**
@@ -111,8 +109,8 @@ nothing verified is deletable (`../../constraints.md` C8).
 
 - **Sync.** Nothing in capture talks to Supabase. A flagged sample is purely local until
   [`validate`](validate.md) submits it.
-- **EPG or reports.** Every aggregate query excludes `status = 'flagged'`
-  (`data/local/dao/DetectionDao.kt:41`, `data/local/dao/SampleDao.kt:51`). An unverified frame
+- **LPF density ranges or reports.** Every aggregate query excludes `status = 'flagged'`
+  (`data/local/dao/DetectionDao.kt:41`, `data/local/dao/SampleDao.kt:83`). An unverified frame
   counts for nothing — that is `../../constraints.md` C7 enforced structurally.
 - **Detection rows.** None exist yet. Predictions live only as cached JSON on the sample until
   a human rules on them.

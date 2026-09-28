@@ -24,9 +24,11 @@ import javax.inject.Inject
  * Per ADR-007.
  */
 class SupabaseAuthRepository @Inject constructor(
-    private val supabase: SupabaseClient,
+    private val supabaseProvider: dagger.Lazy<SupabaseClient>,
     private val dataStore: DataStore<Preferences>,
 ) : AuthRepository {
+
+    private val supabase: SupabaseClient get() = supabaseProvider.get()
 
     override fun observeLocalIdentity(): Flow<LocalIdentity?> =
         dataStore.data.map { preferences ->

@@ -2,6 +2,8 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.model.LpfDensity
+import com.agarthavision.domain.model.LpfDescriptor
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
@@ -14,14 +16,12 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 private const val SESSION_STARTED_AT = 10_000L
-private const val SESSION_ENDED_AT = 20_000L
+private const val SESSION_PATIENT_ID = "patient-1"
 private const val SAMPLE_TIMESTAMP = 1_000L
 private const val SAMPLE_VERIFIED_AT = 2_000L
 private const val GENERATED_AT_MILLIS = 30_000L
 private const val TOTAL_SAMPLES = 2
 private const val TOTAL_EGGS_CONFIRMED = 3
-private const val ASCARIS_EPG = 48
-private const val TRICHURIS_EPG = 24
 private const val SAMPLE_CONFIDENCE = 0.91f
 private const val SAMPLE_BBOX_X = 0.1f
 private const val SAMPLE_BBOX_Y = 0.2f
@@ -41,8 +41,7 @@ class ReportPdfBuilderTest {
             userId = "user-1",
             deviceId = "device-1",
             startedAt = SESSION_STARTED_AT,
-            endedAt = SESSION_ENDED_AT,
-            notes = null,
+            patientId = SESSION_PATIENT_ID,
             label = "Smear A",
         )
         val samples = listOf(
@@ -57,9 +56,6 @@ class ReportPdfBuilderTest {
                 storagePath = "user-1/sample-1.jpg",
                 inferenceModelVersion = "model-1",
                 isManual = false,
-                latitude = null,
-                longitude = null,
-                accuracyMeters = null,
                 status = SampleStatus.SYNCED,
             ),
         )
@@ -76,7 +72,6 @@ class ReportPdfBuilderTest {
                     bboxH = SAMPLE_BBOX_H,
                     verdict = DetectionVerdict.CONFIRMED,
                     expertClass = "Ascaris lumbricoides",
-                    verifiedByUser = true,
                 ),
             ),
         )
@@ -91,10 +86,10 @@ class ReportPdfBuilderTest {
             positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             // Deliberately unsorted, plus a non-egg finding, to prove buildSpeciesRows both
             // sorts and filters down to recognized egg species only.
-            epgPerSpecies = mapOf(
-                "Trichuris trichiura" to TRICHURIS_EPG,
-                "Ascaris lumbricoides" to ASCARIS_EPG,
-                "Mucus" to 1,
+            lpfPerSpecies = mapOf(
+                "Trichuris trichiura" to LpfDensity(min = 0, max = 1),
+                "Ascaris lumbricoides" to LpfDensity(min = 0, max = 2),
+                "Mucus" to LpfDensity(min = 1, max = 1),
             ),
         )
 
@@ -117,8 +112,18 @@ class ReportPdfBuilderTest {
                 positiveSpecies = listOf("Ascaris lumbricoides", "Trichuris trichiura"),
             ),
             speciesRows = listOf(
-                ReportPdfSpeciesRow(speciesDisplayName = "Ascaris lumbricoides", epg = ASCARIS_EPG),
-                ReportPdfSpeciesRow(speciesDisplayName = "Trichuris trichiura", epg = TRICHURIS_EPG),
+                ReportPdfSpeciesRow(
+                    speciesDisplayName = "Ascaris lumbricoides",
+                    min = 0,
+                    max = 2,
+                    descriptor = LpfDescriptor.RARE,
+                ),
+                ReportPdfSpeciesRow(
+                    speciesDisplayName = "Trichuris trichiura",
+                    min = 0,
+                    max = 1,
+                    descriptor = LpfDescriptor.RARE,
+                ),
             ),
         )
         assertEquals(expected, document)
@@ -134,8 +139,7 @@ class ReportPdfBuilderTest {
                 userId = "user-1",
                 deviceId = "device-1",
                 startedAt = SESSION_STARTED_AT,
-                endedAt = SESSION_ENDED_AT,
-                notes = null,
+                patientId = SESSION_PATIENT_ID,
                 label = null,
             ),
             generatedBy = "user-1",
@@ -143,10 +147,10 @@ class ReportPdfBuilderTest {
             totalSamples = 1,
             totalEggsConfirmed = 0,
             positiveSpecies = emptyList(),
-            epgPerSpecies = mapOf(
-                "Mucus" to 5,
-                "Blood" to 2,
-                "WBC" to 1,
+            lpfPerSpecies = mapOf(
+                "Mucus" to LpfDensity(5, 5),
+                "Blood" to LpfDensity(2, 2),
+                "WBC" to LpfDensity(1, 1),
             ),
         )
 

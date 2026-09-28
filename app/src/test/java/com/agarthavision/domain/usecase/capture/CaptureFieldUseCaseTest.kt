@@ -57,9 +57,11 @@ class CaptureFieldUseCaseTest {
             )
             whenever(inferenceEngine.infer(any())).thenReturn(inferenceResult)
 
+            whenever(flaggedFrameStore.add(any())).thenReturn("sample-1")
+
             val result = useCase(sessionId = "session-1", jpegBytes = ByteArray(5))
 
-            assertEquals(Result.success(FrameSource.MODEL), result)
+            assertEquals(Result.success(CaptureOutcome("sample-1", FrameSource.MODEL)), result)
 
             val frameCaptor = argumentCaptor<FlaggedFrame>()
             verify(flaggedFrameStore).add(frameCaptor.capture())
@@ -82,9 +84,11 @@ class CaptureFieldUseCaseTest {
             )
             whenever(inferenceEngine.infer(any())).thenReturn(inferenceResult)
 
+            whenever(flaggedFrameStore.add(any())).thenReturn("sample-clean")
+
             val result = useCase(sessionId = "session-1", jpegBytes = ByteArray(5))
 
-            assertEquals(Result.success(FrameSource.MODEL), result)
+            assertEquals(Result.success(CaptureOutcome("sample-clean", FrameSource.MODEL)), result)
 
             val frameCaptor = argumentCaptor<FlaggedFrame>()
             verify(flaggedFrameStore).add(frameCaptor.capture())
@@ -98,10 +102,11 @@ class CaptureFieldUseCaseTest {
     fun `unreachable container falls back to a MANUAL frame`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(inferenceEngine.infer(any())).thenAnswer { throw InferenceConnectionException() }
+            whenever(flaggedFrameStore.add(any())).thenReturn("sample-manual")
 
             val result = useCase(sessionId = "session-1", jpegBytes = ByteArray(5))
 
-            assertEquals(Result.success(FrameSource.MANUAL), result)
+            assertEquals(Result.success(CaptureOutcome("sample-manual", FrameSource.MANUAL)), result)
 
             val frameCaptor = argumentCaptor<FlaggedFrame>()
             verify(flaggedFrameStore).add(frameCaptor.capture())

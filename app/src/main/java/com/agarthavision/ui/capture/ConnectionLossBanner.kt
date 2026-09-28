@@ -19,7 +19,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -31,12 +35,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
-import com.agarthavision.ui.components.SvgIcon
 
 private val RedColor = Color(0xFFDC2626)
-private const val WARNING_ICON_PATH =
-    "M 10.29 3.86 L 1.82 18 a 2 2 0 0 0 1.71 3 h 16.94 a 2 2 0 0 0 1.71 -3 " +
-        "L 13.71 3.86 a 2 2 0 0 0 -3.42 0 z M 12 9 v 4 M 12 17 h .01"
 
 /**
  * Collapsed offline indicator — a compact red warning pill, tap to reopen the full banner.
@@ -54,11 +54,12 @@ fun ConnectionLossPill(onExpand: () -> Unit, modifier: Modifier = Modifier) {
             .padding(8.dp),
         contentAlignment = Alignment.Center,
     ) {
-        SvgIcon(
-            pathData = WARNING_ICON_PATH,
-            color = Color.White,
+        Icon(
+            imageVector = Icons.Outlined.Warning,
+            // The pill has no text, so the glyph is the whole control to a screen reader.
+            contentDescription = stringResource(R.string.connection_lost_title),
+            tint = Color.White,
             modifier = Modifier.size(20.dp),
-            strokeWidth = 2f,
         )
     }
 }
@@ -98,11 +99,11 @@ fun ConnectionLossBanner(
                     .background(Color.White.copy(alpha = 0.2f), RoundedCornerShape(8.dp)),
                 contentAlignment = Alignment.Center,
             ) {
-                SvgIcon(
-                    pathData = WARNING_ICON_PATH,
-                    color = Color.White,
+                Icon(
+                    imageVector = Icons.Outlined.Warning,
+                    contentDescription = null,
+                    tint = Color.White,
                     modifier = Modifier.size(18.dp),
-                    strokeWidth = 2f,
                 )
             }
 
@@ -160,11 +161,11 @@ fun ConnectionLossBanner(
                     .clickable { onCollapse() },
                 contentAlignment = Alignment.Center,
             ) {
-                SvgIcon(
-                    pathData = "M 18 6 L 6 18 M 6 6 L 18 18",
-                    color = Color.White,
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.connection_lost_collapse),
+                    tint = Color.White,
                     modifier = Modifier.size(12.dp),
-                    strokeWidth = 2f,
                 )
             }
         }

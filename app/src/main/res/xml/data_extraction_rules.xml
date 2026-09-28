@@ -1,19 +1,22 @@
-<?xml version="1.0" encoding="utf-8"?><!--
-   Sample data extraction rules file; uncomment and customize as necessary.
-   See https://developer.android.com/about/versions/12/backup-restore#xml-changes
-   for details.
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Governs cloud backup and device-to-device transfer on API 31 and above.
+
+    Stated separately from allowBackup because the two controls do not cover the same
+    ground: allowBackup="false" stops cloud backup, but a D2D transfer is negotiated
+    through <device-transfer> and is not governed by that flag. Both halves have to
+    exclude the identity, or restoring a new handset from an old one walks a medtech
+    past the first-run login gate as whoever used the old phone.
 -->
 <data-extraction-rules>
     <cloud-backup>
-        <!-- TODO: Use <include> and <exclude> to control what is backed up.
-        <include .../>
-        <exclude .../>
-        -->
+        <exclude domain="file" path="datastore" />
+        <exclude domain="database" path="agarthavision.db" />
+        <exclude domain="sharedpref" path="." />
     </cloud-backup>
-    <!--
     <device-transfer>
-        <include .../>
-        <exclude .../>
+        <exclude domain="file" path="datastore" />
+        <exclude domain="database" path="agarthavision.db" />
+        <exclude domain="sharedpref" path="." />
     </device-transfer>
-    -->
 </data-extraction-rules>

@@ -1,0 +1,35 @@
+town_code,province_key,note
+0330100000,0305400000,City of Angeles - highly urbanised, no PSGC province_code, placed in Pampanga
+0331400000,0307100000,City of Olongapo - highly urbanised, no PSGC province_code, placed in Zambales
+0431200000,0405600000,City of Lucena - highly urbanised, no PSGC province_code, placed in Quezon
+0631000000,0603000000,City of Iloilo - highly urbanised, no PSGC province_code, placed in Iloilo
+0730600000,0702200000,City of Cebu - highly urbanised, no PSGC province_code, placed in Cebu
+0731100000,0702200000,City of Lapu-Lapu - highly urbanised, no PSGC province_code, placed in Cebu
+0731300000,0702200000,City of Mandaue - highly urbanised, no PSGC province_code, placed in Cebu
+0831600000,0803700000,City of Tacloban - highly urbanised, no PSGC province_code, placed in Leyte
+0931700000,0907300000,City of Zamboanga - highly urbanised, no PSGC province_code, placed in Zamboanga del Sur
+1030500000,1004300000,City of Cagayan De Oro - highly urbanised, no PSGC province_code, placed in Misamis Oriental
+1030900000,1003500000,City of Iligan - highly urbanised, no PSGC province_code, placed in Lanao del Norte
+1130700000,1102400000,City of Davao - highly urbanised, no PSGC province_code, placed in Davao del Sur
+1230800000,1206300000,City of General Santos - highly urbanised, no PSGC province_code, placed in South Cotabato
+1430300000,1401100000,City of Baguio - highly urbanised, no PSGC province_code, placed in Benguet
+1630400000,1600200000,City of Butuan - highly urbanised, no PSGC province_code, placed in Agusan del Norte
+1731500000,1705300000,City of Puerto Princesa - highly urbanised, no PSGC province_code, placed in Palawan
+1830200000,1804500000,City of Bacolod - highly urbanised, no PSGC province_code, placed in Negros Occidental
+1380100000,1300000000,City of Caloocan - NCR has no province level, grouped under pseudo-province NCR
+1380200000,1300000000,City of Las Pinas - NCR has no province level, grouped under pseudo-province NCR
+1380300000,1300000000,City of Makati - NCR has no province level, grouped under pseudo-province NCR
+1380400000,1300000000,City of Malabon - NCR has no province level, grouped under pseudo-province NCR
+1380500000,1300000000,City of Mandaluyong - NCR has no province level, grouped under pseudo-province NCR
+1380600000,1300000000,City of Manila - NCR has no province level, grouped under pseudo-province NCR
+1380700000,1300000000,City of Marikina - NCR has no province level, grouped under pseudo-province NCR
+1380800000,1300000000,City of Muntinlupa - NCR has no province level, grouped under pseudo-province NCR
+1380900000,1300000000,City of Navotas - NCR has no province level, grouped under pseudo-province NCR
+1381000000,1300000000,City of Paranaque - NCR has no province level, grouped under pseudo-province NCR
+1381100000,1300000000,Pasay City - NCR has no province level, grouped under pseudo-province NCR
+1381200000,1300000000,City of Pasig - NCR has no province level, grouped under pseudo-province NCR
+1381300000,1300000000,Quezon City - NCR has no province level, grouped under pseudo-province NCR
+1381400000,1300000000,City of San Juan - NCR has no province level, grouped under pseudo-province NCR
+1381500000,1300000000,City of Taguig - NCR has no province level, grouped under pseudo-province NCR
+1381600000,1300000000,City of Valenzuela - NCR has no province level, grouped under pseudo-province NCR
+1381701000,1300000000,Pateros - NCR has no province level, grouped under pseudo-province NCR

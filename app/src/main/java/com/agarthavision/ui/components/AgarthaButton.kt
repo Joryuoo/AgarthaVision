@@ -63,8 +63,8 @@ fun AgarthaButton(
             enabled = enabled,
             shape = PillShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = colors.accent,
-                contentColor = colors.onAccent,
+                containerColor = colors.brandFill,
+                contentColor = colors.onBrandFill,
             ),
             content = content,
         )

@@ -35,7 +35,9 @@ forever.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0012_polyparasitism_findings.sql`)
+## Shape
+
+**Postgres** (`supabase/migrations/0001_init.sql:272-290`)
 
 | Field | Constraint |
 |---|---|
@@ -49,21 +51,18 @@ forever.
 (`9dcfd5d`) and deprioritised: the four values the CHECK hard-codes were never checked against
 literature, and Ascaris could only be tagged `UNFERTILIZED` — the one stage that is never
 infective — while the embryonated fertilised egg the consultation cared about was
-unselectable. `0012` is applied and frozen under C6, so the column stays; no code path reads or
-writes it, `FindingRow` carries no stage, and the row id derives from `(sample_id, species)`
-alone. **Reviving the ticket needs a migration widening that CHECK before anything is written
-here**, plus a matching change to the id derivation in `VerificationMapper`.
+unselectable. `0001_init.sql` retains the nullable column as a hook for future re-entry;
+no code path reads or writes it, `FindingRow` carries no stage, and the row id derives from
+`(sample_id, species)` alone.
 
 Uniqueness is **two partial indexes**, not one constraint —
 `sample_species_findings_unique_staged` where `stage is not null`, and
-`..._unique_unstaged` where it is null. With `stage` always null, the unstaged index is the one
-in force, and it is exactly the uniqueness the app wants: one row per species per sample. A single `unique nulls not distinct` would have been
-tidier but needs PostgreSQL 15; nothing upserts this table (the client deletes a sample's rows
-and reinserts), so no PostgREST `on_conflict` target is needed and the weaker form costs
-nothing.
+`..._unique_unstaged` where it is null (`0001_init.sql:295-301`). With `stage` always null, the
+unstaged index is the one in force, and it is exactly the uniqueness the app wants: one row per
+species per sample.
 
-RLS is scoped through the parent sample's `user_id`, the same pattern `detections` uses in
-`0001_init.sql:119-139`. There is **no `user_id` on this table**. It carries a DELETE policy,
+RLS is scoped through the parent sample's `user_id`, the same pattern `detections` uses
+(`0001_init.sql:430-454`). There is **no `user_id` on this table**. It carries a DELETE policy,
 which `detections` deliberately does not — see *Does not hit*.
 
 **Room**
@@ -85,6 +84,9 @@ index is a backstop, not the mechanism.
   is *one egg the model boxed*; a finding is *how many of this species and stage are in this
   field*. A frame can have detections and no findings (a clean field the medtech confirmed
   empty), findings and no detections (a manual capture), or both.
+- **Aggregated into** [`Report`](Report.md) — findings across all live samples in a session are
+  aggregated by `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`) into
+  `lpf_per_species` (a min–max density range per species).
 - **Looks like but is not** an aggregate of `detections`. For AI frames the two agree by
   construction, because a confirmed box contributes exactly one egg. For manual frames there
   is nothing to aggregate.
@@ -93,20 +95,17 @@ index is a backstop, not the mechanism.
 
 **Hits**
 
-- `domain/usecase/verify/SubmitVerificationUseCase.kt` — the only writer.
+- `domain/usecase/verify/SubmitVerificationUseCase.kt` — writes findings on sample verification.
 - `data/local/dao/SampleSpeciesFindingDao.kt` — `replaceFindingsForSample` is wholesale, so a
   species removed on re-open actually disappears.
 - `data/supabase/SampleRemoteDataSource.kt` — findings sync delete-then-insert, not upsert, for
   the same reason.
 - The verification screen's "add another species" row and its per-species count input.
+- `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`) and `GenerateSessionReportUseCase.kt` —
+  reads findings to produce the per-species LPF density range for session detail and the PDF report.
 
 **Does not hit**
 
-- **EPG and the session report — not yet.** The obvious wrong guess is that adding this table
-  changed the numbers. It did not: `DetectionDao.getConfirmedEggCountsForSession` still counts
-  detection rows, and the report still reads that. Switching the aggregate over is deliberately
-  a separate change, because it would move every number in the report, the CSV and the
-  Dashboard at once. Tickets 86d4a6jxw (the unit) and 86d4a6jyy (the template) own it.
 - **C8.** Deleting a findings row is not a rejection. A count is the medtech's *current
   statement*, like `samples.user_note` — the things C8 protects, the JPEG and the detection
   rows, are still never deleted. That is why this table has a DELETE policy and `detections`
@@ -115,11 +114,13 @@ index is a backstop, not the mechanism.
 ## Surfaces
 
 Written by the verification screen on submit, and read back by it when a verified sample is
-re-opened for editing. Synced to Supabase with its parent sample. Not yet read by any report or
-aggregate — see *Does not hit*.
+re-opened for editing. Read by `aggregateLpfPerSpecies` to compute the low-power-field range
+for `SessionDetailViewModel` and `GenerateSessionReportUseCase`. Synced to Supabase with its
+parent sample.
 
 ## See
 
-`supabase/migrations/0012_polyparasitism_findings.sql` owns the truth.
-`app/src/main/java/com/agarthavision/data/local/entity/SampleSpeciesFindingEntity.kt` mirrors
-it. Decision record: ticket 86d4ab4tq.
+`supabase/migrations/0001_init.sql:272-305`,
+`app/src/main/java/com/agarthavision/data/local/entity/SampleSpeciesFindingEntity.kt`,
+`app/src/main/java/com/agarthavision/domain/usecase/reports/LpfAggregation.kt`,
+`schema.ts` (`SampleSpeciesFinding`).

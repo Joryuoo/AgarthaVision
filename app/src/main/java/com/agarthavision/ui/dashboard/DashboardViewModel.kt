@@ -1,15 +1,32 @@
 package com.agarthavision.ui.dashboard
 
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.sync.InitialFetchStateStore
-import com.agarthavision.domain.model.Sample
+import com.agarthavision.domain.model.ActivityItem
+import com.agarthavision.domain.model.AgreementBreakdown
+import com.agarthavision.domain.model.CLINICAL_ZONE
+import com.agarthavision.domain.model.FindingsResult
+import com.agarthavision.domain.model.HomeKpis
+import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.ThemeMode
-import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.model.windows
+import com.agarthavision.domain.usecase.home.Change
+import com.agarthavision.domain.usecase.home.NeedsAttention
+import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
+import com.agarthavision.domain.usecase.home.ObserveHomeKpisUseCase
+import com.agarthavision.domain.usecase.home.ObserveNeedsAttentionUseCase
+import com.agarthavision.domain.usecase.home.ObserveRecentActivityUseCase
+import com.agarthavision.domain.usecase.home.badgeText
+import com.agarthavision.domain.usecase.home.countChange
+import com.agarthavision.domain.usecase.home.ratioChange
+import com.agarthavision.domain.usecase.home.spokenText
+import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
@@ -23,38 +40,45 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.time.Clock
 import java.time.Duration
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.domain.model.SessionSummary
+import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
 import javax.inject.Inject
 
 data class DashboardUiState(
     val isLoading: Boolean = true,
-    val userName: String = "M. Santos",
-    val dateString: String = "Wednesday, May 28 · Day 12", // mocked date for now
     val activeSession: ActiveSessionState? = null,
     val kpis: KpiState = KpiState(),
-    val epgSparklineData: List<Float> = emptyList(), // Array of exactly 7 items
+    val kpiTiles: List<KpiTileUi> = emptyList(),
+    val aiBreakdown: AgreementBreakdown = AgreementBreakdown(0, 0, 0, 0),
     val topSpecies: List<SpeciesData> = emptyList(),
+    val findingsTitle: String = "Findings · today",
+    val positiveSmearsCount: Int = 0,
     val pendingReviewCount: Int = 0,
-    val oldestPendingAgo: String = "",
+    val oldestPendingAt: Long? = null,
     val allSynced: Boolean = true,
-    val lastSyncLabel: String = "—",
+    val lastSyncedAt: Long? = null,
     val syncedSamplesCount: Int = 0,
     val isDarkMode: Boolean = false,
-    // ADR-007 offline-access account/sync banner state.
     val isSignedIn: Boolean = false,
     val isOffline: Boolean = false,
     val pendingUploadCount: Int = 0,
     val isSyncing: Boolean = false,
+    val period: HomePeriod = HomePeriod.TODAY,
+    val needsAttention: NeedsAttention = NeedsAttention(0, 0, 0),
+    val recentSessions: List<SessionSummary> = emptyList(),
+    val hasAnySession: Boolean = false,
+    val recentActivity: List<ActivityItem> = emptyList(),
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -62,40 +86,62 @@ data class DashboardUiState(
 }
 
 data class ActiveSessionState(
+    val sessionId: String,
     val label: String,
-    val updatedAtAgo: String,
-    val totalFrames: String,
-    val verifiedFrames: String,
-    val totalEpg: String,
-    val pendingFrames: String,
+    val lastActivityAt: Long,
+    val totalFrames: Int,
+    val pendingFrames: Int,
 )
 
 data class KpiState(
+    val patientsCount: String = "0",
     val sessionsCount: String = "0",
     val samplesCount: String = "0",
-    val verifiedRatio: String = "0%",
-    val epgAvgStatus: String = "Normal"
+    val pendingCount: String = "0",
 )
 
 data class SpeciesData(
     val name: String,
     val ratio: Float,
-    val formattedPercentage: String
+    val formattedPercentage: String,
 )
 
 data class PendingAndSync(
     val pendingCount: Int,
-    val oldestPendingAgo: String,
+    val oldestPendingAt: Long?,
     val allSynced: Boolean,
-    val lastSyncLabel: String,
+    val lastSyncedAt: Long?,
     val syncedSamplesCount: Int,
     val initialFetchDone: Boolean = true,
+)
+
+private data class ContentBundle(
+    val kpis: KpiState,
+    val tiles: List<KpiTileUi>,
+    val aiBreakdown: AgreementBreakdown,
+    val topSpecies: List<SpeciesData>,
+    val findingsTitle: String,
+    val positiveSmearsCount: Int,
+    val selectedPeriod: HomePeriod,
+)
+
+@Suppress("LongParameterList")
+private data class SessionAndSyncBundle(
+    val pendingSync: PendingAndSync,
+    val activeSession: ActiveSessionState?,
+    val accountSync: Triple<Boolean, Boolean, Boolean>,
+    val needsAttention: NeedsAttention,
+    val recentSessions: List<SessionSummary>,
+    val hasAnySession: Boolean,
+    val recentActivity: List<ActivityItem>,
 )
 
 @Suppress("LongParameterList")
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
+    private val savedStateHandle: SavedStateHandle,
+    private val clock: Clock,
     observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     private val connectivityObserver: ConnectivityObserver,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
@@ -104,121 +150,97 @@ class DashboardViewModel @Inject constructor(
     private val sessionManager: SessionManager,
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
-    private val detectionRepository: DetectionRepository,
+    private val patientRepository: PatientRepository,
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
+    observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
+    private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
+    private val observeFindingsUseCase: ObserveFindingsUseCase,
+    private val observeSessionListUseCase: ObserveSessionListUseCase,
+    private val observeRecentActivityUseCase: ObserveRecentActivityUseCase,
 ) : ViewModel() {
 
     private val themeModeFlow = observeThemeModeUseCase()
 
-    // Per ADR-007, drive identity from the cached local identity (survives offline cold
-    // starts) rather than the live Supabase session, so the dashboard renders signed-out.
+    private val period = savedStateHandle.getStateFlow(KEY_PERIOD, HomePeriod.TODAY)
+
+    fun onPeriodSelected(p: HomePeriod) {
+        savedStateHandle[KEY_PERIOD] = p
+    }
+
     private val localIdentityFlow = observeLocalIdentityUseCase()
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+        .distinctUntilChanged()
+        .shareIn(viewModelScope, SharingStarted.Lazily, replay = 1)
 
     private val userIdFlow = localIdentityFlow
         .map { it?.userId }
-        .stateIn(viewModelScope, SharingStarted.Lazily, null)
+        .distinctUntilChanged()
 
-    // KPI State — tolerates a null identity (signed-out / offline) by showing empty stats
-    // instead of stalling the dashboard. Per ADR-007.
     private val kpiStateFlow = userIdFlow.flatMapLatest { userId ->
         if (userId == null) {
             flowOf(KpiState())
         } else {
             combine(
+                patientRepository.observePatientCount(userId, ""),
                 sessionRepository.observeAllSessions(userId),
-                sampleRepository.observeAllSamples(userId)
-            ) { sessions, verifiedSamples ->
-            val totalSessions = sessions.size
-            // Since observeAllSamples only gives verified samples based on its doc,
-            // wait, observeAllSamples docs say: "Observes all verified samples for the given user"
-            val totalSamples = verifiedSamples.size // Rough approximation for now
-            val verifiedRatio = if (totalSamples > 0) "100%" else "0%" // Mock calculation
-
+                sampleRepository.observeAllSamples(userId),
+                sampleRepository.observePendingCount(userId),
+            ) { patients, sessions, verifiedSamples, pending ->
                 KpiState(
-                    sessionsCount = totalSessions.toString(),
-                    samplesCount = totalSamples.toString(),
-                    verifiedRatio = verifiedRatio,
-                    // Non-diagnostic wording only — "Heavy"/"Light" read as WHO clinical
-                    // intensity tiers, which this sample-count heuristic is not. This does not
-                    // touch the separate totalEpg=0 mock bug in activeSessionStateFlow below.
-                    epgAvgStatus = if (totalSamples > 100) "Elevated" else "Baseline"
+                    patientsCount = patients.toString(),
+                    sessionsCount = sessions.size.toString(),
+                    samplesCount = verifiedSamples.size.toString(),
+                    pendingCount = pending.toString(),
                 )
             }
         }
     }
 
-    // Pending Reviews + Sync Status — null identity yields an empty (all-synced) state.
     private val pendingAndSyncFlow = userIdFlow.flatMapLatest { userId ->
         if (userId == null) {
             flowOf(
                 PendingAndSync(
-                    0,
-                    "",
+                    pendingCount = 0,
+                    oldestPendingAt = null,
                     allSynced = true,
-                    lastSyncLabel = "never",
+                    lastSyncedAt = null,
                     syncedSamplesCount = 0,
                     initialFetchDone = true,
                 ),
             )
         } else {
-        combine(
-            flow { emit(sampleRepository.getSamplesPendingSyncIncludingDeleted(userId)) },
-            sampleRepository.observeAllSamples(userId),
-            initialFetchStateStore.observeCompleted(userId),
-        ) { pendingSamples, allSamples, initialFetchDone ->
-            val pendingCount = pendingSamples.size
+            combine(
+                flow { emit(sampleRepository.getSamplesPendingSyncIncludingDeleted(userId)) },
+                sampleRepository.observeAllSamples(userId),
+                initialFetchStateStore.observeCompleted(userId),
+            ) { pendingSamples, allSamples, initialFetchDone ->
+                val pendingCount = pendingSamples.size
+                val oldestPendingMs = pendingSamples.minOfOrNull { it.timestamp }
 
-            // Oldest pending: find the earliest timestamp among unverified flagged samples
-            val oldestPendingMs = pendingSamples.minOfOrNull { it.timestamp }
-            val oldestPendingAgo = if (oldestPendingMs != null) {
-                val diffMs = System.currentTimeMillis() - oldestPendingMs
-                when {
-                    diffMs < MILLIS_PER_MINUTE -> "${diffMs / MILLIS_PER_SECOND}s ago"
-                    diffMs < MILLIS_PER_HOUR -> "${diffMs / MILLIS_PER_MINUTE}m ago"
-                    diffMs < MILLIS_PER_DAY -> "${diffMs / MILLIS_PER_HOUR}h ago"
-                    else -> "${diffMs / MILLIS_PER_DAY}d ago"
+                val unsyncedCount = allSamples.count {
+                    it.status == com.agarthavision.domain.model.SampleStatus.VERIFIED
                 }
-            } else ""
-
-            // Sync status: all synced when no VERIFIED (unsynced) samples exist AND initial
-            // fetch has completed (per 3d: initialFetchDone && unsyncedCount == 0)
-            val unsyncedCount = allSamples.count {
-                it.status == com.agarthavision.domain.model.SampleStatus.VERIFIED
-            }
-            val syncedSamples = allSamples.count {
-                it.status == com.agarthavision.domain.model.SampleStatus.SYNCED
-            }
-            val allSynced = initialFetchDone && unsyncedCount == 0
-
-            // Last sync label: time since the most recently synced sample
-            val lastSyncedMs = allSamples
-                .filter { it.status == com.agarthavision.domain.model.SampleStatus.SYNCED }
-                .maxOfOrNull { it.verifiedAt }
-            val lastSyncLabel = if (lastSyncedMs != null) {
-                val diffMs = System.currentTimeMillis() - lastSyncedMs
-                when {
-                    diffMs < MILLIS_PER_MINUTE -> "just now"
-                    diffMs < MILLIS_PER_HOUR -> "${diffMs / MILLIS_PER_MINUTE}m ago"
-                    diffMs < MILLIS_PER_DAY -> "${diffMs / MILLIS_PER_HOUR}h ago"
-                    else -> "${diffMs / MILLIS_PER_DAY}d ago"
+                val syncedSamples = allSamples.count {
+                    it.status == com.agarthavision.domain.model.SampleStatus.SYNCED
                 }
-            } else "never"
+                val allSynced = initialFetchDone && unsyncedCount == 0
 
-            PendingAndSync(
-                pendingCount     = pendingCount,
-                oldestPendingAgo = oldestPendingAgo,
-                allSynced        = allSynced,
-                lastSyncLabel    = lastSyncLabel,
-                syncedSamplesCount = syncedSamples,
-                initialFetchDone = initialFetchDone,
-            )
-        }
+                val lastSyncedMs = allSamples
+                    .filter { it.status == com.agarthavision.domain.model.SampleStatus.SYNCED }
+                    .maxOfOrNull { it.verifiedAt }
+
+                PendingAndSync(
+                    pendingCount = pendingCount,
+                    oldestPendingAt = oldestPendingMs,
+                    allSynced = allSynced,
+                    lastSyncedAt = lastSyncedMs,
+                    syncedSamplesCount = syncedSamples,
+                    initialFetchDone = initialFetchDone,
+                )
+            }
         }
     }
 
-    // Active Session
     private val activeSessionStateFlow = sessionManager.state.flatMapLatest { state ->
         when (state) {
             is SessionState.Idle -> flowOf(null)
@@ -226,90 +248,87 @@ class DashboardViewModel @Inject constructor(
                 val userId = state.session.userId ?: ""
                 sampleRepository.observeSamplesForSession(state.session.sessionId, userId)
                     .map { samples ->
-                        val now = Instant.now()
-
-                        // "Updated" tracks the session's most recent activity - the latest
-                        // frame capture or verification - not when it started, since the card
-                        // now surfaces recent (not live) sessions. Falls back to the start time
-                        // when a session has no samples yet.
                         val lastActivityMs = samples.maxOfOrNull { maxOf(it.timestamp, it.verifiedAt) }
-                        val lastUpdated = lastActivityMs?.let { Instant.ofEpochMilli(it) }
-                            ?: state.startedAt
+                            ?: state.startedAt.toEpochMilli()
 
-                        // Calculate stats
                         val totalFrames = samples.size
                         val verifiedFrames = samples.count { it.verifiedAt > 0 }
                         val pendingFrames = totalFrames - verifiedFrames
-                        val totalEpg = 0 // Mocked for now, requires deeper join
 
                         ActiveSessionState(
+                            sessionId = state.session.sessionId,
                             label = state.session.label ?: "Active Session",
-                            updatedAtAgo = updatedAgoLabel(lastUpdated, now),
-                            totalFrames = totalFrames.toString(),
-                            verifiedFrames = verifiedFrames.toString(),
-                            totalEpg = totalEpg.toString(), // Mocked
-                            pendingFrames = pendingFrames.toString()
+                            lastActivityAt = lastActivityMs,
+                            totalFrames = totalFrames,
+                            pendingFrames = pendingFrames,
                         )
                     }
             }
         }
     }
 
-    // Historical charts — null identity yields empty species + a flat sparkline.
-    private val historicalDataFlow = userIdFlow.flatMapLatest { userId ->
+    private val findingsFlow = combine(
+        userIdFlow,
+        period,
+    ) { userId, p ->
+        userId to p
+    }.flatMapLatest { (userId, p) ->
         if (userId == null) {
-            flowOf(Pair(emptyList<SpeciesData>(), List(HISTORICAL_DAYS) { 0f }))
+            flowOf(FindingsResult(emptyList(), 0))
         } else {
-        val sevenDaysAgo = Instant.now().minus(Duration.ofDays(HISTORICAL_DAYS.toLong())).toEpochMilli()
-        combine(
-            detectionRepository.observeConfirmedEggCountsSince(userId, sevenDaysAgo),
-            detectionRepository.observeDailyEggCountsSince(userId, sevenDaysAgo)
-        ) { eggCounts, dailyCounts ->
-            // Process Species
-            val totalEggs = eggCounts.sumOf { it.count }.coerceAtLeast(1)
-            val topSpecies = eggCounts.take(TOP_SPECIES_COUNT).map {
-                val ratio = it.count.toFloat() / totalEggs
-                SpeciesData(
-                    name = it.species,
-                    ratio = ratio,
-                    formattedPercentage = "${(ratio * 100).toInt()}%"
-                )
-            }
-
-            // Process Sparkline (7 days)
-            val sparkline = MutableList(HISTORICAL_DAYS) { 0f }
-            val startOfDay = Instant.now()
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-            val dayMs = MILLIS_PER_DAY
-
-            for (daily in dailyCounts) {
-                // Determine which of the last 7 days this timestamp belongs to (0 = oldest, 6 = today)
-                val diffMs = startOfDay - daily.timestamp
-                val daysAgo = if (diffMs < 0) 0 else (diffMs / dayMs).toInt()
-                val index = SPARKLINE_LAST_INDEX - daysAgo
-                if (index in 0..SPARKLINE_LAST_INDEX) {
-                    sparkline[index] += daily.count.toFloat()
-                }
-            }
-
-            // Normalize sparkline data (max = 1f, min = 0f) for the UI Canvas
-            val maxCount = sparkline.maxOrNull() ?: 1f
-            val normalizedSparkline = sparkline.map { if (maxCount > 0) it / maxCount else 0f }
-
-            Pair(topSpecies, normalizedSparkline)
-        }
+            val windows = p.windows(clock.instant(), CLINICAL_ZONE)
+            observeFindingsUseCase(userId, windows.current)
         }
     }
 
-    /** True while a manual "Sync now" pass is running. */
     private val isSyncingFlow = MutableStateFlow(false)
 
-    // ADR-007 account/sync banner: signed-in derives from cached identity; offline from
-    // the connectivity observer; syncing from the manual sync-now action.
+    private val needsAttentionFlow = combine(
+        userIdFlow,
+        sessionManager.state,
+    ) { userId, sessionState ->
+        userId to (sessionState as? SessionState.Active)?.session?.sessionId
+    }.flatMapLatest { (userId, activeSessionId) ->
+        if (userId == null) {
+            flowOf(NeedsAttention(0, 0, 0))
+        } else {
+            observeNeedsAttentionUseCase(userId, activeSessionId)
+        }
+    }
+
+    private val recentSessionsFlow = combine(
+        userIdFlow,
+        sessionManager.state,
+    ) { userId, sessionState ->
+        userId to (sessionState as? SessionState.Active)?.session?.sessionId
+    }.flatMapLatest { (userId, activeSessionId) ->
+        if (userId == null) {
+            flowOf(emptyList<SessionSummary>() to false)
+        } else {
+            val window = HomePeriod.LAST_7_DAYS.windows(clock.instant(), CLINICAL_ZONE).current
+            observeSessionListUseCase(
+                filter = SessionListFilter.ALL,
+                window = window,
+                limit = RECENT_SESSIONS_QUERY_LIMIT,
+            ).map { result ->
+                val filtered = result.items
+                    .filterNot { it.session.id == activeSessionId }
+                    .take(MAX_RECENT_SESSIONS)
+                val hasAny = result.totalCount > 0 || activeSessionId != null
+                filtered to hasAny
+            }
+        }
+    }
+
+    private val recentActivityFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(emptyList<ActivityItem>())
+        } else {
+            val sinceMillis = clock.instant().minus(Duration.ofDays(RECENT_ACTIVITY_WINDOW_DAYS)).toEpochMilli()
+            observeRecentActivityUseCase(userId, RECENT_ACTIVITY_QUERY_LIMIT, sinceMillis)
+        }
+    }
+
     private val accountSyncFlow = combine(
         localIdentityFlow,
         connectivityObserver.isOnline,
@@ -318,50 +337,223 @@ class DashboardViewModel @Inject constructor(
         Triple(identity != null, !online, syncing)
     }
 
-    val uiState: StateFlow<DashboardUiState> = combine(
+    private val homeKpisFlow = combine(
+        userIdFlow,
+        period,
+    ) { userId, p ->
+        userId to p
+    }.flatMapLatest { (userId, p) ->
+        if (userId == null) {
+            flowOf(null)
+        } else {
+            val windows = p.windows(clock.instant(), CLINICAL_ZONE)
+            observeHomeKpisUseCase(userId, windows)
+        }
+    }
+
+    private fun createKpiTiles(kpis: HomeKpis, p: HomePeriod): List<KpiTileUi> {
+        val sessionsChange = countChange(kpis.sessions.current, kpis.sessions.previous)
+        val positiveRateChange = ratioChange(kpis.positiveRate.current, kpis.positiveRate.previous)
+        val toReviewChange = countChange(kpis.toReview.current, kpis.toReview.previous)
+        val aiAgreementChange = ratioChange(kpis.aiAgreement.current, kpis.aiAgreement.previous)
+
+        val sessionsSpoken = sessionsChange.spokenText(p)
+        val sessionsTrend = if (sessionsSpoken.isNotEmpty()) ", $sessionsSpoken" else ""
+        val toReviewSpoken = toReviewChange.spokenText(p)
+        val toReviewTrend = if (toReviewSpoken.isNotEmpty()) ", $toReviewSpoken" else ""
+
+        return listOf(
+            KpiTileUi(
+                kind = KpiKind.SESSIONS,
+                label = "Sessions",
+                value = kpis.sessions.current.toString(),
+                subtitle = if (kpis.patientsInSessions == 1) "1 patient" else "${kpis.patientsInSessions} patients",
+                changeText = sessionsChange.badgeText(p),
+                sparkline = kpis.sessions.sparkline,
+                spokenDescription = "Sessions, ${kpis.sessions.current}, " +
+                    "${kpis.patientsInSessions} patients$sessionsTrend. Opens sessions.",
+            ),
+            buildPositiveRateTile(kpis, p, positiveRateChange),
+            KpiTileUi(
+                kind = KpiKind.TO_REVIEW,
+                label = "To review",
+                value = kpis.toReview.current.toString(),
+                subtitle = if (p == HomePeriod.TODAY) {
+                    "${kpis.verifiedInPeriod} verified today"
+                } else {
+                    "${kpis.verifiedInPeriod} verified in period"
+                },
+                changeText = toReviewChange.badgeText(p),
+                sparkline = kpis.toReview.sparkline,
+                spokenDescription = "To review, ${kpis.toReview.current} frames$toReviewTrend. Opens frames to review.",
+            ),
+            buildAiAgreementTile(kpis, p, aiAgreementChange),
+        )
+    }
+
+    private fun buildPositiveRateTile(kpis: HomeKpis, p: HomePeriod, change: Change): KpiTileUi {
+        val isZero = kpis.positiveRate.current.denominator == 0
+        val value = if (isZero) "—" else "${(kpis.positiveRate.current.value!! * PERCENT_FACTOR).toInt()}%"
+        val subtitle = if (isZero) {
+            "No smears examined yet"
+        } else {
+            "${kpis.positiveRate.current.numerator} of ${kpis.positiveRate.current.denominator} smears"
+        }
+        val spoken = if (isZero) {
+            "Positive rate, no smears examined yet. Opens examined smears."
+        } else {
+            val pct = (kpis.positiveRate.current.value!! * PERCENT_FACTOR).toInt()
+            val num = kpis.positiveRate.current.numerator
+            val den = kpis.positiveRate.current.denominator
+            val prSpoken = change.spokenText(p)
+            val prTrend = if (prSpoken.isNotEmpty()) ", $prSpoken" else ""
+            "Positive rate, $pct percent, $num of $den smears$prTrend. Opens examined smears."
+        }
+        return KpiTileUi(
+            kind = KpiKind.POSITIVE_RATE,
+            label = "Positive rate",
+            value = value,
+            subtitle = subtitle,
+            changeText = change.badgeText(p),
+            sparkline = kpis.positiveRate.sparkline,
+            spokenDescription = spoken,
+        )
+    }
+
+    private fun buildAiAgreementTile(kpis: HomeKpis, p: HomePeriod, change: Change): KpiTileUi {
+        val isZero = kpis.aiAgreement.current.denominator == 0
+        val value = if (isZero) "—" else "${(kpis.aiAgreement.current.value!! * PERCENT_FACTOR).toInt()}%"
+        val subtitle = if (isZero) {
+            "No AI results reviewed yet"
+        } else {
+            "${kpis.aiBreakdown.corrected} of ${kpis.aiAgreement.current.denominator} corrected by you"
+        }
+        val spoken = if (isZero) {
+            "AI agreement, no AI results reviewed yet. Opens AI agreement details."
+        } else {
+            val pct = (kpis.aiAgreement.current.value!! * PERCENT_FACTOR).toInt()
+            val corrected = kpis.aiBreakdown.corrected
+            val den = kpis.aiAgreement.current.denominator
+            val aiSpoken = change.spokenText(p)
+            val aiTrend = if (aiSpoken.isNotEmpty()) ", $aiSpoken" else ""
+            "AI agreement, $pct percent, $corrected of $den corrected by you$aiTrend. Opens AI agreement details."
+        }
+        return KpiTileUi(
+            kind = KpiKind.AI_AGREEMENT,
+            label = "AI agreement",
+            value = value,
+            subtitle = subtitle,
+            changeText = change.badgeText(p),
+            sparkline = kpis.aiAgreement.sparkline,
+            spokenDescription = spoken,
+        )
+    }
+
+    private val kpiTilesFlow = combine(
+        homeKpisFlow,
+        period,
+    ) { kpis, p ->
+        if (kpis == null) {
+            emptyList()
+        } else {
+            createKpiTiles(kpis, p)
+        }
+    }
+
+    private val contentFlow = combine(
         kpiStateFlow,
-        pendingAndSyncFlow,
-        activeSessionStateFlow,
-        historicalDataFlow,
+        kpiTilesFlow,
+        homeKpisFlow,
+        findingsFlow,
+        period,
+    ) { kpis, tiles, homeKpis, findings, selectedPeriod ->
+        val findingsTitle = when (selectedPeriod) {
+            HomePeriod.TODAY -> "Findings · today"
+            HomePeriod.LAST_7_DAYS -> "Findings · last 7 days"
+            HomePeriod.LAST_30_DAYS -> "Findings · last 30 days"
+        }
+        val topSpecies = findings.species.take(TOP_SPECIES_COUNT).map {
+            SpeciesData(
+                name = it.name,
+                ratio = it.ratio,
+                formattedPercentage = it.formattedPercentage,
+            )
+        }
+        ContentBundle(
+            kpis = kpis,
+            tiles = tiles,
+            aiBreakdown = homeKpis?.aiBreakdown ?: AgreementBreakdown(0, 0, 0, 0),
+            topSpecies = topSpecies,
+            findingsTitle = findingsTitle,
+            positiveSmearsCount = findings.positiveSmearsCount,
+            selectedPeriod = selectedPeriod,
+        )
+    }
+
+    private val sessionAndSyncFlow = combine(
+        combine(
+            pendingAndSyncFlow,
+            activeSessionStateFlow,
+            accountSyncFlow,
+            needsAttentionFlow,
+            recentSessionsFlow,
+        ) { pendingSync, activeSession, accountSync, needsAttention, recentData ->
+            SessionAndSyncBundle(
+                pendingSync = pendingSync,
+                activeSession = activeSession,
+                accountSync = accountSync,
+                needsAttention = needsAttention,
+                recentSessions = recentData.first,
+                hasAnySession = recentData.second,
+                recentActivity = emptyList(),
+            )
+        },
+        recentActivityFlow,
+    ) { bundle, recentActivity ->
+        bundle.copy(recentActivity = recentActivity)
+    }
+
+    val uiState: StateFlow<DashboardUiState> = combine(
+        contentFlow,
+        sessionAndSyncFlow,
         themeModeFlow,
-        accountSyncFlow,
-    ) { flows ->
-        @Suppress("UNCHECKED_CAST")
-        val kpis = flows[0] as KpiState
-        @Suppress("UNCHECKED_CAST")
-        val pendingSync = flows[1] as PendingAndSync
-        val activeSession = flows[2] as ActiveSessionState?
-        @Suppress("UNCHECKED_CAST")
-        val speciesAndSparkline = flows[HISTORICAL_DATA_FLOW_INDEX] as Pair<List<SpeciesData>, List<Float>>
-        val (topSpecies, sparkline) = speciesAndSparkline
-        val themeMode = flows[THEME_MODE_FLOW_INDEX] as ThemeMode
-        @Suppress("UNCHECKED_CAST")
-        val accountSync = flows[ACCOUNT_SYNC_FLOW_INDEX] as Triple<Boolean, Boolean, Boolean>
+    ) { content, sessionAndSync, themeMode ->
+        val pendingSync = sessionAndSync.pendingSync
+        val activeSession = sessionAndSync.activeSession
+        val accountSync = sessionAndSync.accountSync
+        val needsAttention = sessionAndSync.needsAttention
         val (isSignedIn, isOffline, isSyncing) = accountSync
         DashboardUiState(
-            isLoading           = false,
-            kpis                = kpis,
-            pendingReviewCount  = pendingSync.pendingCount,
-            oldestPendingAgo    = pendingSync.oldestPendingAgo,
-            allSynced           = pendingSync.allSynced,
-            lastSyncLabel       = pendingSync.lastSyncLabel,
-            syncedSamplesCount  = pendingSync.syncedSamplesCount,
-            activeSession       = activeSession,
-            topSpecies          = topSpecies,
-            epgSparklineData    = sparkline,
-            isDarkMode          = themeMode == ThemeMode.DARK,
-            isSignedIn          = isSignedIn,
-            isOffline           = isOffline,
-            pendingUploadCount  = pendingSync.pendingCount,
-            isSyncing           = isSyncing,
+            isLoading = false,
+            kpis = content.kpis,
+            kpiTiles = content.tiles,
+            aiBreakdown = content.aiBreakdown,
+            pendingReviewCount = pendingSync.pendingCount,
+            oldestPendingAt = pendingSync.oldestPendingAt,
+            allSynced = pendingSync.allSynced,
+            lastSyncedAt = pendingSync.lastSyncedAt,
+            syncedSamplesCount = pendingSync.syncedSamplesCount,
+            activeSession = activeSession,
+            topSpecies = content.topSpecies,
+            findingsTitle = content.findingsTitle,
+            positiveSmearsCount = content.positiveSmearsCount,
+            isDarkMode = themeMode == ThemeMode.DARK,
+            isSignedIn = isSignedIn,
+            isOffline = isOffline,
+            pendingUploadCount = pendingSync.pendingCount,
+            isSyncing = isSyncing,
+            period = content.selectedPeriod,
+            needsAttention = needsAttention,
+            recentSessions = sessionAndSync.recentSessions,
+            hasAnySession = sessionAndSync.hasAnySession,
+            recentActivity = sessionAndSync.recentActivity,
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
-        initialValue = DashboardUiState()
+        initialValue = DashboardUiState(),
     )
 
-    /** Flips the persisted theme between light and dark. */
     fun onToggleTheme() {
         val target = if (uiState.value.isDarkMode) ThemeMode.LIGHT else ThemeMode.DARK
         viewModelScope.launch {
@@ -371,24 +563,6 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Relative "Updated ..." label for the recent-session card: minutes under an hour, whole
-     * hours under a day, whole days beyond that.
-     */
-    private fun updatedAgoLabel(lastUpdated: Instant, now: Instant): String {
-        val elapsed = Duration.between(lastUpdated, now)
-        val minutes = elapsed.toMinutes()
-        val hours = elapsed.toHours()
-        val days = elapsed.toDays()
-        return when {
-            minutes < 1 -> "Updated just now"
-            minutes < MINUTES_PER_HOUR -> "Updated $minutes min ago"
-            hours < HOURS_PER_DAY -> "Updated $hours ${if (hours == 1L) "hr" else "hrs"} ago"
-            else -> "Updated $days ${if (days == 1L) "day" else "days"} ago"
-        }
-    }
-
-    /** Runs a manual pending-sync pass (push + pull). Per ADR-007. */
     fun onSyncNow() {
         if (!uiState.value.canSyncNow) return
         viewModelScope.launch {
@@ -405,21 +579,12 @@ class DashboardViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "DashboardViewModel"
-        const val MILLIS_PER_SECOND = 1_000L
-        const val MILLIS_PER_MINUTE = 60_000L
-        const val MILLIS_PER_HOUR = 3_600_000L
-        const val MILLIS_PER_DAY = 86_400_000L
-        const val MINUTES_PER_HOUR = 60L
-        const val HOURS_PER_DAY = 24L
-        const val HISTORICAL_DAYS = 7
         const val TOP_SPECIES_COUNT = 3
-        const val SPARKLINE_LAST_INDEX = HISTORICAL_DAYS - 1
-
-        // Positional indices into the combine(...) `flows` array above (kpiStateFlow=0,
-        // pendingAndSyncFlow=1, activeSessionStateFlow=2, historicalDataFlow=3,
-        // themeModeFlow=4, accountSyncFlow=5).
-        const val HISTORICAL_DATA_FLOW_INDEX = 3
-        const val THEME_MODE_FLOW_INDEX = 4
-        const val ACCOUNT_SYNC_FLOW_INDEX = 5
+        const val KEY_PERIOD = "dashboard_period"
+        const val PERCENT_FACTOR = 100
+        const val RECENT_SESSIONS_QUERY_LIMIT = 6
+        const val MAX_RECENT_SESSIONS = 5
+        const val RECENT_ACTIVITY_QUERY_LIMIT = 5
+        const val RECENT_ACTIVITY_WINDOW_DAYS = 7L
     }
 }

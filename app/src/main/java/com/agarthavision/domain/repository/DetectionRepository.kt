@@ -20,18 +20,26 @@ interface DetectionRepository {
     fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>>
 
     /**
-     * Observes daily egg counts (grouped by sample locally) over a specific time window.
-     */
-    fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>>
-
-    /**
      * Bulk-fetches distinct species labels for the given set of session IDs, grouped
      * into a [Map] keyed by session ID. Species within each list are sorted ascending.
      */
     suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>>
-}
 
-data class DailyEggCount(
-    val timestamp: Long,
-    val count: Int,
-)
+    /**
+     * Observes prediction-backed model rulings verified in the given time window.
+     */
+    fun observeModelRulingsBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.ModelRuling>> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes session-species detection rows for findings within a time window.
+     */
+    fun observeSessionFindingsBetween(
+        userId: String,
+        startMillis: Long,
+        endMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionFinding>> = kotlinx.coroutines.flow.emptyFlow()
+}

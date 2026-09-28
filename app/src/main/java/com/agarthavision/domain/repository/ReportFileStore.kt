@@ -17,4 +17,16 @@ interface ReportFileStore {
      * written file, mirroring [writeCsv].
      */
     suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String
+
+    /**
+     * Reads back a file previously written by [writeCsv] or [writePdf].
+     *
+     * [path] is the opaque string those two return, so both shapes are handled: a MediaStore
+     * `content://` URI (API 29+) and an absolute filesystem path (API 26-28).
+     *
+     * @return the bytes, or null when the file is no longer on this device — which is an
+     *   ordinary outcome, not a failure: shared storage is the medtech's to clear, and a
+     *   report whose file is gone is exactly the case the storage round-trip exists for.
+     */
+    suspend fun readBytes(path: String): ByteArray?
 }

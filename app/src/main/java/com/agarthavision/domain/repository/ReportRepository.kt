@@ -1,3 +1,5 @@
+@file:Suppress("LongParameterList", "TooManyFunctions")
+
 package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.Report
@@ -26,6 +28,40 @@ interface ReportRepository {
     fun observeCountForSession(sessionId: String, userId: String): Flow<Int>
 
     /**
+     * Observes one page of all reports for [userId] ordered by `generatedAt` DESC.
+     */
+    fun observeAll(userId: String, limit: Int, offset: Int): Flow<List<Report>>
+
+    /**
+     * Observes the total number of reports for [userId], ignoring any page limit.
+     */
+    fun observeAllCount(userId: String): Flow<Int>
+
+    /**
+     * Observes filtered reports across all sessions for [userId].
+     */
+    fun observeFiltered(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+        limit: Int,
+        offset: Int,
+    ): Flow<List<Report>>
+
+    /**
+     * Observes the total number of filtered reports for [userId].
+     */
+    fun observeFilteredCount(
+        userId: String,
+        startMillis: Long?,
+        endMillis: Long?,
+        species: String?,
+        query: String = "",
+    ): Flow<Int>
+
+    /**
      * Loads a single report by id, or `null` if it doesn't exist.
      */
     suspend fun getById(reportId: String): Report?
@@ -40,4 +76,9 @@ interface ReportRepository {
      * Updates the cloud-sync state of a report after a sync attempt.
      */
     suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus)
+
+    /**
+     * Observes the count of reports pending sync or whose sync failed for [userId].
+     */
+    fun observeUnsyncedCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.flowOf(0)
 }

@@ -38,9 +38,6 @@ class DeleteFlaggedSampleUseCaseTest {
                 deviceId = "device-1",
                 timestamp = 123L,
                 imagePath = "/data/samples/sample-1.jpg",
-                gpsLatitude = null,
-                gpsLongitude = null,
-                gpsAccuracy = null,
                 status = SampleStatus.FLAGGED.value,
             )
             whenever(sampleDao.getSampleById("sample-1")).thenReturn(sample)

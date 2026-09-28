@@ -1,12 +1,16 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.data.inference.decodePredictions
 import com.agarthavision.data.local.entity.SampleEntity
+import com.agarthavision.data.local.mapper.toSamplePredictions
 import com.agarthavision.domain.model.SampleStatus
+import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -21,6 +25,7 @@ class SyncSampleUseCase @Inject constructor(
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
     private val remoteDataSource: SampleRemoteDataSource,
+    private val gson: Gson,
 ) {
     /**
      * Uploads the sample JPEG, inserts remote metadata rows, and updates local sync state.
@@ -38,10 +43,17 @@ class SyncSampleUseCase @Inject constructor(
 
         return runCatching {
             val imageBytes = loadAndResizeJpeg(sample)
+            // Decoded inside the runCatching: an unreadable column fails this sample's push and
+            // marks it sync_failed, loudly, rather than pushing the sample with its model output
+            // silently dropped.
+            val predictions = gson.decodePredictions(sample.predictionsJson)
+                .orEmpty()
+                .toSamplePredictions(sampleId)
             val storagePath = remoteDataSource.syncSample(
                 sample = sample,
                 detections = detections,
                 findings = findings,
+                predictions = predictions,
                 imageBytes = imageBytes,
             )
             sampleDao.updateSyncMetadata(
@@ -50,6 +62,7 @@ class SyncSampleUseCase @Inject constructor(
                 storagePath = storagePath,
             )
         }.onFailure {
+            Log.e(TAG, "Sync sample failed for $sampleId", it)
             sampleDao.updateStatus(sampleId, SampleStatus.SYNC_FAILED.value)
         }
     }
@@ -85,6 +98,7 @@ class SyncSampleUseCase @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "SyncSampleUseCase"
         private const val SYNC_IMAGE_SIZE_PX = 640
         private const val JPEG_QUALITY = 80
     }

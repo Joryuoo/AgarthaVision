@@ -6,7 +6,6 @@ import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.DailyEggCount
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.flow.Flow
@@ -113,8 +112,6 @@ private class DetailDetectionRepository(
     override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
         flowOf(emptyList())
 
-    override fun observeDailyEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<DailyEggCount>> =
-        flowOf(emptyList())
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
@@ -130,9 +127,6 @@ private fun detailSample(userId: String?): Sample =
         sessionId = "session-1",
         filePath = "/tmp/sample-1.jpg",
         storagePath = userId?.let { "$it/sample-1.jpg" },
-        latitude = 10.0,
-        longitude = 20.0,
-        accuracyMeters = 5f,
         status = SampleStatus.SYNCED,
     )
 
@@ -148,5 +142,4 @@ private fun detailDetection(sampleId: String): Detection =
         bboxH = 0.4f,
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = null,
-        verifiedByUser = true,
     )

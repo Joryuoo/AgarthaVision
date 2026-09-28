@@ -27,8 +27,25 @@ interface SampleSpeciesFindingDao {
     )
     suspend fun getFindingsForSample(sampleId: String): List<SampleSpeciesFindingEntity>
 
+    @Query(
+        """
+        SELECT f.* FROM sample_species_findings f
+        JOIN samples s ON s.sample_id = f.sample_id
+        WHERE s.session_id = :sessionId
+          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND s.deleted_at is null
+        """,
+    )
+    suspend fun getFindingsForSession(
+        sessionId: String,
+        userId: String?,
+    ): List<SampleSpeciesFindingEntity>
+
     @Query("DELETE FROM sample_species_findings WHERE sample_id = :sampleId")
     suspend fun deleteFindingsForSample(sampleId: String)
+
+    @Query("DELETE FROM sample_species_findings WHERE sample_id IN (:sampleIds)")
+    suspend fun deleteFindingsForSamples(sampleIds: List<String>)
 
     /**
      * Replaces a sample's findings wholesale.
@@ -46,5 +63,29 @@ interface SampleSpeciesFindingDao {
     ) {
         deleteFindingsForSample(sampleId)
         insertFindings(findings)
+    }
+
+    /**
+     * [replaceFindingsForSample] across a batch, for the pull path.
+     *
+     * **The sample ids are the scope, not the findings.** A sample the server holds no findings
+     * for is a clean field, and its local rows have to go — passing only the ids that appear in
+     * [findings] would leave a stale count on exactly the sample whose species were all removed.
+     * So the delete is keyed on every id in [sampleIds], and [findings] is whatever came back
+     * for them.
+     *
+     * The caller chunks [sampleIds] to stay under the SQLite host-parameter limit (E5), the same
+     * bound the remote fetches are chunked by.
+     */
+    @Transaction
+    suspend fun replaceFindingsForSamples(
+        sampleIds: List<String>,
+        findings: List<SampleSpeciesFindingEntity>,
+    ) {
+        if (sampleIds.isEmpty()) return
+        deleteFindingsForSamples(sampleIds)
+        if (findings.isNotEmpty()) {
+            insertFindings(findings)
+        }
     }
 }

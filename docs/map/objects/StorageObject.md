@@ -85,6 +85,6 @@ includes them.
 
 ## See
 
-`supabase/migrations/0003_storage_rls.sql`,
+`supabase/migrations/0001_init.sql` (and historical `legacy-dev/0003_storage_rls.sql`),
 `app/src/main/java/com/agarthavision/data/supabase/SampleRemoteDataSource.kt:28-55`,
-`data/supabase/SyncSampleUseCase.kt:51-83`, `schema.ts:508-544`.
+`data/supabase/SyncSampleUseCase.kt:51-83`, `schema.ts` (`StorageObject`).

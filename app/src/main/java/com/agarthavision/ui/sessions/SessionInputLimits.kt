@@ -1,10 +1,16 @@
 package com.agarthavision.ui.sessions
 
-/** Longest session label the New Session sheet accepts; sized for one line of the card title. */
-internal const val SESSION_LABEL_MAX_LENGTH = 20
-
-/** Longest session note accepted by the New Session sheet and the end-session dialog. */
-internal const val SESSION_NOTE_MAX_LENGTH = 200
+/**
+ * Longest session label the New Session sheet accepts.
+ *
+ * **32, not 20.** The generated label `C.G.-0730600000-001` is exactly 20 characters, so at
+ * the old cap it fitted with no room at all and the first character a medtech typed while
+ * editing was silently dropped — the field looked like it had simply ignored the keystroke.
+ * 32 leaves room to edit, and room for a sequence that has run past three digits.
+ *
+ * `SESSION_NOTE_MAX_LENGTH` is gone with the note itself (PB-09).
+ */
+internal const val SESSION_LABEL_MAX_LENGTH = 32
 
 /**
  * Bounds a text-field edit to [maxLength] the way Android's `LengthFilter` does: the text the

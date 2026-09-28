@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.domain.model.SessionSyncStatus
 import javax.inject.Inject
@@ -35,7 +36,12 @@ class SyncSessionUseCase @Inject constructor(
             remoteDataSource.upsertSession(session)
             sessionDao.updateSupabaseStatus(sessionId, SessionSyncStatus.SYNCED.value)
         }.onFailure {
+            Log.e(TAG, "Sync session failed for $sessionId", it)
             sessionDao.updateSupabaseStatus(sessionId, SessionSyncStatus.SYNC_FAILED.value)
         }
+    }
+
+    private companion object {
+        const val TAG = "SyncSessionUseCase"
     }
 }

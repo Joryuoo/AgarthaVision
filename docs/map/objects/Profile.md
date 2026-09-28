@@ -38,9 +38,10 @@ Documented shape: `schema.ts:146-158`.
 
 ## Connected to
 
+- **Creates / links** → [`Patient`](Patient.md) via `patients.created_by` and `patient_users`.
 - **Owns** → [`Session`](Session.md), [`Sample`](Sample.md), [`Report`](Report.md) via
-  `user_id` (`schema.ts:558-574`).
-- **Owned by** `auth.users`, 1 → 0..1 (`schema.ts:551-556`).
+  `user_id`.
+- **Owned by** `auth.users`, 1 → 0..1.
 - **Scopes** [`StorageObject`](StorageObject.md) — Storage RLS keys off `auth.uid()`, not off
   `profiles`.
 - **Looks like but is not** `LocalIdentity`. That is a DataStore cache of the last signed-in

@@ -8,5 +8,5 @@ package com.agarthavision.domain.model
 data class RecordsTotals(
     val sessionCount: Int = 0,
     val totalSamples: Int = 0,
-    val totalEpg: Int = 0,
+    val totalEggs: Int = 0,
 )

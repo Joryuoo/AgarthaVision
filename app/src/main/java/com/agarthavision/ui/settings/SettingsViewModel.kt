@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PendingSyncCounts
@@ -12,10 +13,11 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.auth.SignOutUseCase
 import com.agarthavision.domain.usecase.settings.ObservePendingSyncCountsUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
-import com.agarthavision.domain.usecase.settings.ObserveUnlinkedSessionCountUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
+import com.agarthavision.domain.sync.LastSyncStore
+import com.agarthavision.domain.sync.SyncCompletion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,16 +43,25 @@ data class SettingsUiState(
     val identity: LocalIdentity? = null,
     val isSignedIn: Boolean = false,
     val isOffline: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.LIGHT,
     val isDarkMode: Boolean = false,
-    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0),
+    val pendingSyncCounts: PendingSyncCounts = PendingSyncCounts(0, 0, 0, 0, 0),
     val isSyncing: Boolean = false,
-    val unlinkedSessions: Int = 0,
     val initialFetchDone: Boolean = true,
+    val lastFetchIncomplete: Boolean = false,
+    val lastSyncCompletion: SyncCompletion? = null,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
         get() = isSignedIn && !isOffline && !isSyncing
 }
+
+private data class SyncTuple(
+    val syncing: Boolean,
+    val initialFetchDone: Boolean,
+    val fetchIncomplete: Boolean,
+    val lastSync: SyncCompletion?,
+)
 
 /**
  * Backs the production Settings screen: account (identity, sign-in/sign-out), Data &
@@ -69,8 +80,9 @@ class SettingsViewModel @Inject constructor(
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
     private val signOutUseCase: SignOutUseCase,
-    private val observeUnlinkedSessionCountUseCase: ObserveUnlinkedSessionCountUseCase,
     private val initialFetchStateStore: InitialFetchStateStore,
+    private val fetchOutcomeStore: FetchOutcomeStore,
+    private val lastSyncStore: LastSyncStore,
 ) : ViewModel() {
 
     private val events = MutableSharedFlow<SettingsEvent>()
@@ -81,7 +93,7 @@ class SettingsViewModel @Inject constructor(
 
     private val pendingSyncFlow = identityFlow.flatMapLatest { identity ->
         if (identity == null) {
-            flowOf(PendingSyncCounts(0, 0, 0, 0))
+            flowOf(PendingSyncCounts(0, 0, 0, 0, 0))
         } else {
             observePendingSyncCountsUseCase(identity.userId)
         }
@@ -96,27 +108,35 @@ class SettingsViewModel @Inject constructor(
         identity?.let { initialFetchStateStore.observeCompleted(it.userId) } ?: flowOf(true)
     }
 
+    // Whether the last pull left an entity type unfetched. Read from a store rather than held
+    // here because the pass that fails is usually the worker's, with this screen not in memory.
+    private val lastFetchIncompleteFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { fetchOutcomeStore.observeIncomplete(it.userId) } ?: flowOf(false)
+    }
+
+    private val lastSyncFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { lastSyncStore.observe(it.userId) } ?: flowOf(null)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(
-            isSyncingFlow,
-            observeUnlinkedSessionCountUseCase(),
-            initialFetchDoneFlow,
-        ) { s, u, f -> Triple(s, u, f) },
-    ) { identity, online, themeMode, pendingSync, (syncing, unlinked, initialFetchDone) ->
+        combine(isSyncingFlow, initialFetchDoneFlow, lastFetchIncompleteFlow, lastSyncFlow, ::SyncTuple),
+    ) { identity, online, themeMode, pendingSync, tuple ->
         SettingsUiState(
             isLoading = false,
             identity = identity,
             isSignedIn = identity != null,
             isOffline = !online,
+            themeMode = themeMode,
             isDarkMode = themeMode == ThemeMode.DARK,
             pendingSyncCounts = pendingSync,
-            isSyncing = syncing,
-            unlinkedSessions = unlinked,
-            initialFetchDone = initialFetchDone,
+            isSyncing = tuple.syncing,
+            initialFetchDone = tuple.initialFetchDone,
+            lastFetchIncomplete = tuple.fetchIncomplete,
+            lastSyncCompletion = tuple.lastSync,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -124,14 +144,19 @@ class SettingsViewModel @Inject constructor(
         initialValue = SettingsUiState(),
     )
 
+    /** Persists the chosen theme mode. */
+    fun onSelectTheme(mode: ThemeMode) {
+        viewModelScope.launch {
+            setThemeModeUseCase(mode).onFailure { error ->
+                Log.e(TAG, "Failed to persist theme mode $mode", error)
+            }
+        }
+    }
+
     /** Flips the persisted theme between light and dark. */
     fun onToggleTheme() {
         val target = if (uiState.value.isDarkMode) ThemeMode.LIGHT else ThemeMode.DARK
-        viewModelScope.launch {
-            setThemeModeUseCase(target).onFailure { error ->
-                Log.e(TAG, "Failed to persist theme mode $target", error)
-            }
-        }
+        onSelectTheme(target)
     }
 
     /** Runs a manual pending-sync pass (push + pull). */

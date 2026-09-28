@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+
 package com.agarthavision.ui.records
 
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Download
 import com.agarthavision.ui.icons.RemoveCircle
 import androidx.compose.ui.res.stringResource
@@ -67,12 +70,17 @@ internal fun ReportsSection(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // A report covers verified samples only, so with none there is nothing to report on
+        // (86d4bzm9k). A sample verified as negative still counts: that is a result.
+        val canGenerate = state.session.verifiedSamples.isNotEmpty()
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
+            // The subtitle can now be a full sentence; weight lets it wrap instead of pushing
+            // the button out, and the gap keeps the two apart when it does.
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.report_section_title),
                     fontSize = 13.sp,
@@ -80,10 +88,10 @@ internal fun ReportsSection(
                     color = AgarthaTheme.colors.textPrimary,
                 )
                 Text(
-                    text = if (state.totalReports == 0) {
-                        stringResource(R.string.report_empty)
-                    } else {
-                        stringResource(R.string.report_generated_count, state.totalReports)
+                    text = when {
+                        !canGenerate -> stringResource(R.string.report_needs_verified_sample)
+                        state.totalReports == 0 -> stringResource(R.string.report_empty)
+                        else -> stringResource(R.string.report_generated_count, state.totalReports)
                     },
                     fontSize = 12.sp,
                     color = AgarthaTheme.colors.textSecondary,
@@ -92,7 +100,11 @@ internal fun ReportsSection(
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(isGenerating = state.isGenerating, onClick = state.onGenerate)
+            GenerateReportButton(
+                isGenerating = state.isGenerating,
+                enabled = canGenerate,
+                onClick = state.onGenerate,
+            )
         }
 
         state.reports.forEach { report ->
@@ -153,41 +165,25 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
     }
 }
 
-@Composable
-private fun ReportStatusPill(status: ReportSyncStatus) {
-    val colors = AgarthaTheme.colors
-    val (bg, fg, label) = when (status) {
-        ReportSyncStatus.SYNCED -> Triple(colors.successTint, colors.successText, R.string.report_status_synced)
-        ReportSyncStatus.SYNC_FAILED -> Triple(colors.dangerTint, colors.dangerText, R.string.report_status_failed)
-        ReportSyncStatus.PENDING -> Triple(colors.warningTint, colors.warningText, R.string.report_status_pending)
-    }
-    Box(
-        modifier = Modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(
-            text = stringResource(label),
-            color = fg,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
 
 @Composable
-private fun GenerateReportButton(isGenerating: Boolean, onClick: (ExportFormat) -> Unit) {
+private fun GenerateReportButton(
+    isGenerating: Boolean,
+    enabled: Boolean,
+    onClick: (ExportFormat) -> Unit,
+) {
     val colors = AgarthaTheme.colors
     var menuExpanded by remember { mutableStateOf(false) }
+    val clickable = enabled && !isGenerating
     Box {
         Box(
             modifier = Modifier
                 .size(34.dp)
                 .background(
-                    if (isGenerating) colors.borderStrong else colors.accent,
+                    if (clickable) colors.accent else colors.borderStrong,
                     RoundedCornerShape(999.dp),
                 )
-                .clickable(enabled = !isGenerating, onClick = { menuExpanded = true }),
+                .clickable(enabled = clickable, onClick = { menuExpanded = true }),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -233,6 +229,7 @@ internal fun SampleTile(
     sample: SampleUi,
     onClick: () -> Unit,
 ) {
+    val species = sample.speciesLabel()
     Box(
         modifier = Modifier
             .aspectRatio(1f)
@@ -240,8 +237,14 @@ internal fun SampleTile(
             .background(AppColors.MicroscopeBrush)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
-                contentDescription = "Sample ${sample.id}, ${sample.species}" +
-                    (sample.confidence?.let { ", $it percent confidence" } ?: ", manual capture")
+                // No confidence and not manual means the medtech rejected every box: no eggs,
+                // which the species label already says. It is not a manual capture.
+                val provenance = when {
+                    sample.confidence != null -> ", ${sample.confidence} percent confidence"
+                    sample.source == SampleSource.Manual -> ", manual capture"
+                    else -> ""
+                }
+                contentDescription = "Sample ${sample.id}, $species$provenance"
             },
     ) {
         SubcomposeAsyncImage(
@@ -265,11 +268,97 @@ internal fun SampleTile(
             )
         }
         SpeciesBadge(
-            text = sample.species,
+            text = species,
             isManual = sample.source == SampleSource.Manual,
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(6.dp),
+        )
+    }
+}
+
+@Composable
+internal fun SampleRow(
+    sample: SampleUi,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(colors.surface, RoundedCornerShape(10.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = sample.timeLabel,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.textSecondary,
+                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                )
+                val sourceLabel = if (sample.source == SampleSource.Ai) {
+                    sample.confidence?.let { "$it%" } ?: "AI"
+                } else {
+                    "Manual"
+                }
+                Box(
+                    modifier = Modifier
+                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Text(
+                        text = sourceLabel,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.textSecondary,
+                    )
+                }
+                if (sample.isEdited) {
+                    Box(
+                        modifier = Modifier
+                            .background(colors.warningTint, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.badge_edited),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.warningText,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            val species = sample.speciesLabel()
+            val fontStyle = if (species.isBinomial()) {
+                androidx.compose.ui.text.font.FontStyle.Italic
+            } else {
+                androidx.compose.ui.text.font.FontStyle.Normal
+            }
+            Text(
+                text = species,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontStyle = fontStyle,
+                color = colors.textPrimary,
+            )
+        }
+        Icon(
+            imageVector = AgarthaIcons.ChevronRight,
+            contentDescription = null,
+            modifier = Modifier.size(16.dp),
+            tint = colors.textTertiary,
         )
     }
 }
@@ -345,5 +434,10 @@ internal fun EmptyStateGraphic() {
     }
 }
 
-private fun Instant.formatReportDateTime(): String =
-    atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))
+/**
+ * What a sample card calls the sample. A null species means the model boxed something and the
+ * medtech rejected all of it, which is a negative result and says so rather than going blank.
+ */
+@Composable
+private fun SampleUi.speciesLabel(): String =
+    species ?: stringResource(R.string.session_detail_sample_no_eggs)

@@ -1,12 +1,21 @@
 package com.agarthavision.ui.verify
 
 import app.cash.turbine.test
+import com.agarthavision.domain.inference.ImageBox
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.repository.FlaggedFrameStore
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.data.local.mapper.addedDetectionIdFor
+import com.agarthavision.data.local.mapper.toDetectionEntities
+import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.verify.Finding
+import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
+import com.agarthavision.domain.usecase.verify.VerificationAnswers
+import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,7 +23,6 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -22,13 +30,19 @@ import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
+// One subject, one fixture. Splitting by concern would duplicate the ViewModel setup across
+// files and make the question-chain cases harder to read against each other.
+@Suppress("LargeClass")
 class VerificationViewModelTest {
 
     @get:Rule
@@ -40,7 +54,17 @@ class VerificationViewModelTest {
     }
     private val submitVerificationUseCase: SubmitVerificationUseCase = mock()
 
-    private fun viewModel() = VerificationViewModel(flaggedFrameStore, submitVerificationUseCase)
+    // Stubbed to answer with nothing: these suites are not about suggestions, but the free-text
+    // handlers query the index now and an unstubbed mock would answer null.
+    private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase = mock {
+        onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+    }
+
+    private fun viewModel() = VerificationViewModel(
+        flaggedFrameStore,
+        submitVerificationUseCase,
+        searchSpeciesSuggestions,
+    )
 
     private fun makeFrame(predictions: Int = 2): FlaggedFrame {
         val preds = List(predictions) {
@@ -67,6 +91,11 @@ class VerificationViewModelTest {
             predictions = preds,
         )
     }
+
+    /** A frame whose model class this app cannot map to an EggSpecies, so nothing seeds. */
+    private fun unmappableFrame() = makeFrame(predictions = 1).copy(
+        predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
+    )
 
     private fun makeManualFrame(sampleId: String) =
         makeIdentifiedFrame(sampleId).copy(source = FrameSource.MANUAL, predictions = emptyList())
@@ -140,13 +169,31 @@ class VerificationViewModelTest {
             assertFalse(vm.state.value.isSubmitting)
         }
 
+    /**
+     * The governing principle of the screen, stated as a test.
+     *
+     * Every answer opens pre-filled from model output, so a medtech whose model was right
+     * submits without typing or tapping anything. Ten fields a smear, most of them correct: the
+     * taps this saves are the whole economics of the change.
+     */
     @Test
-    fun `canSubmit is false when answers are incomplete`() =
+    fun `a frame the model got right submits with zero taps`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
+            vm.setFrame(makeFrame(predictions = 3))
             advanceUntilIdle()
+
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    @Test
+    fun `canSubmit is false while a row has no species the app can pre-fill`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // An unmappable model class seeds no species, so the row is genuinely unanswered.
+            val vm = viewModel()
+            vm.setFrame(unmappableFrame())
+            advanceUntilIdle()
+
             assertFalse(vm.state.value.canSubmit)
         }
 
@@ -154,10 +201,24 @@ class VerificationViewModelTest {
     fun `canSubmit is true when all answers are complete`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
-            val frame = makeFrame(predictions = 1)
-            vm.setFrame(frame)
+            vm.setFrame(unmappableFrame())
             vm.onQ1Selected(false) // complete after Q1=No
             advanceUntilIdle()
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    /**
+     * A clean field is a real negative result and the most common one in surveillance. It has
+     * nothing to fill in, so it must be recordable as it stands.
+     */
+    @Test
+    fun `a clean field submits as it stands`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            advanceUntilIdle()
+
+            assertTrue(vm.state.value.findings.isEmpty())
             assertTrue(vm.state.value.canSubmit)
         }
 
@@ -204,24 +265,41 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `changing an earlier answer resets the species confirmation`() =
+    fun `a misplaced box keeps the species confirmation`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
             vm.onSpeciesConfirmed(true)
 
+            // The box is in the wrong place after all - but it holds the same egg, so what Q3
+            // said about that egg still stands. See QuestionChainResetTest.
+            vm.onQ2Selected(false)
+            advanceUntilIdle()
+            assertEquals(true, vm.state.value.findings[0].answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, vm.state.value.findings[0].answers.species)
+        }
+
+    /**
+     * Re-affirming an answer a row already holds changes nothing.
+     *
+     * Without this, a stray tap on a pre-filled "Yes" would wipe the pre-filled species beneath
+     * it - clearing later answers is correct when an earlier one *changes*, and this is not a
+     * change. It would hand the medtech back exactly the work the pre-fill saved them.
+     */
+    @Test
+    fun `re-affirming a pre-filled answer keeps the species under it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onQ1Selected(true)
             vm.onQ2Selected(true)
             advanceUntilIdle()
-            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
-            assertEquals(null, vm.state.value.findings[0].answers.species)
 
-            vm.onSpeciesConfirmed(true)
-            vm.onQ1Selected(true)
-            advanceUntilIdle()
-            assertEquals(null, vm.state.value.findings[0].answers.speciesConfirmed)
-            assertEquals(null, vm.state.value.findings[0].answers.species)
+            val answers = vm.state.value.findings[0].answers
+            assertEquals(EggSpecies.ASCARIS, answers.species)
+            assertEquals(true, answers.speciesConfirmed)
+            assertTrue(vm.state.value.canSubmit)
         }
 
     @Test
@@ -518,7 +596,7 @@ class VerificationViewModelTest {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
 
-            vm.onAddFinding()
+            vm.onAddSpecies()
             advanceUntilIdle()
 
             val findings = vm.state.value.findings
@@ -532,7 +610,7 @@ class VerificationViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onRemoveFinding(1)
             advanceUntilIdle()
@@ -556,70 +634,113 @@ class VerificationViewModelTest {
         }
 
     @Test
-    fun `a typed egg count lands on the added finding`() =
+    fun `a typed field total lands on the added species`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
+            vm.onAddSpecies()
 
             vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
-            vm.onEggCountChanged(1, "4")
+            vm.onFieldTotalChanged(1, "4")
             advanceUntilIdle()
 
             val added = vm.state.value.findings[1].answers
             assertEquals(EggSpecies.HOOKWORM, added.species)
-            assertEquals(4, added.eggCount)
-            assertEquals(true, added.speciesTouched)
+            assertEquals(4, added.fieldTotal)
         }
 
     @Test
-    fun `a non-numeric egg count clears rather than crashing`() =
+    fun `a non-numeric field total clears rather than crashing`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onAddFinding()
-            vm.onEggCountChanged(1, "4")
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "4")
 
-            vm.onEggCountChanged(1, "abc")
+            vm.onFieldTotalChanged(1, "abc")
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[1].answers.eggCount)
+            assertNull(vm.state.value.findings[1].answers.fieldTotal)
         }
 
     @Test
-    fun `re-picking the species already showing still counts as touched`() =
+    fun `the total is taken as typed, not clamped up to the floor`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Once the field is pre-filled from the model, this re-pick is the only signal
-            // separating "I agree" from "I never looked" - and detections is the corpus.
+            // The floor is usually above the first digit of the number being typed - heading
+            // for 23 against nine boxed eggs, a clamp would snap "2" to 9 and the 3 would land
+            // on the wrong number. Submit holds instead, and says why.
             val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
+            vm.setFrame(makeFrame(predictions = 2))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
 
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(2, "1")
             advanceUntilIdle()
 
-            assertEquals(true, vm.state.value.findings[0].answers.speciesTouched)
+            assertEquals(1, vm.state.value.findings[2].answers.fieldTotal)
+            assertFalse(
+                "One egg is fewer than the two boxes already kept for this species.",
+                vm.state.value.canSubmit,
+            )
+
+            vm.onFieldTotalChanged(2, "12")
+            advanceUntilIdle()
+            assertTrue(vm.state.value.canSubmit)
+        }
+
+    /**
+     * Two cards naming the same species stay separate right after the second is picked, because
+     * Hookworm has a stage question of its own that has not been answered yet — merging on
+     * species alone would be exactly the silent merge this ticket fixes. Giving the second card
+     * the same stage as the first is what settles its key, and settling is what merges it: this
+     * mirrors the two-Hookworm-cards case AC2 covers with Ascaris.
+     */
+    @Test
+    fun `naming a species another card already holds merges once the stage settles, not before`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(0, "3")
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertEquals(
+                "Card 2 has no stage yet, so its key is not settled and nothing merges.",
+                2,
+                vm.state.value.findings.size,
+            )
+
+            vm.onAddedStageSelected(1, EggStage.CORTICATED_FERTILIZED)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals("The two cards became one.", 1, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
         }
 
 
-    // Where the species comes from, and the provenance it needs (86d4ab4tq / 86d4auj84)
+    // Where the species comes from (86d4ab4tq / 86d4auj84)
 
+    /** A box opens fully pre-filled, which is what lets a correct model cost zero taps. */
     @Test
-    fun `a box opens with no species filled in`() =
+    fun `a box opens pre-filled from the model`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // The sheet used to pre-fill the model's class here and flag it untouched. That
-            // was replaced by the explicit "is this egg <species>?" step, which solves the
-            // same problem - the medtech does not retype what the model got right - without
-            // ever putting an unreviewed model answer where a human answer is read from.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
-            assertEquals(null, answers.species)
-            assertFalse(answers.speciesTouched)
+            assertEquals(true, answers.isEgg)
+            assertEquals(true, answers.isBoxCorrect)
+            assertEquals(true, answers.speciesConfirmed)
+            assertEquals(EggSpecies.ASCARIS, answers.species)
         }
 
     @Test
@@ -635,64 +756,862 @@ class VerificationViewModelTest {
 
             val answers = vm.state.value.findings[0].answers
             assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertTrue(
-                "A yes is a deliberate assertion: the medtech read the suggestion and agreed " +
-                    "with it. detections doubles as the retraining corpus, so a species with " +
-                    "no human behind it must never look like one with.",
-                answers.speciesTouched,
-            )
         }
 
     @Test
     fun `changing an earlier answer clears the species rather than re-seeding it`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Re-seeding from the model here would answer the confirm question on the
-            // medtech's behalf - the one thing that step exists to stop.
+            // Re-seeding from the model here would answer the confirm question on the medtech's
+            // behalf a second time, after they have told the screen the box is wrong.
             val vm = viewModel()
             vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
             vm.onSpeciesConfirmed(true)
 
-            vm.onQ1Selected(true)
+            vm.onQ1Selected(false)
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
             assertEquals(null, answers.species)
             assertEquals(null, answers.speciesConfirmed)
-            assertFalse(answers.speciesTouched)
         }
 
     @Test
-    fun `changing the species away and back still reads as touched`() =
+    fun `an unrecognised model class pre-fills no species, but still pre-fills the box`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
+            // fill, so it would look answered while being incomplete. The box questions are
+            // still pre-filled - the model did draw a box, whatever it called what is in it.
             val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1))
-            vm.onQ1Selected(true)
-            vm.onQ2Selected(true)
-
-            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
-            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            vm.setFrame(unmappableFrame())
             advanceUntilIdle()
 
             val answers = vm.state.value.findings[0].answers
-            assertEquals(EggSpecies.ASCARIS, answers.species)
-            assertTrue("Landing back on the model's answer deliberately is still a choice.", answers.speciesTouched)
+            assertNull(answers.species)
+            assertNull("Nothing to confirm, so the picker is offered directly.", answers.speciesConfirmed)
+            assertEquals(true, answers.isEgg)
+            assertEquals(true, answers.isBoxCorrect)
+        }
+
+    // Q4, derived rather than asked
+
+    @Test
+    fun `a frame the medtech added nothing to did not miss an egg`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
         }
 
     @Test
-    fun `an unrecognised model class pre-fills nothing`() =
+    fun `a species the boxes already account for is not a miss`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            // Guessing OTHER would be wrong: OTHER carries a free-text box only a human can
-            // fill, so it would look answered while being incomplete.
+            // One Ascaris boxed, and the medtech says there is one Ascaris in the field. They
+            // agree, so nothing was missed - the row exists but claims no unboxed egg.
             val vm = viewModel()
-            vm.setFrame(makeFrame(predictions = 1).copy(
-                predictions = listOf(Prediction("Schistosoma", 0.8f, 1f, 2f, 3f, 4f)),
-            ))
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "1")
             advanceUntilIdle()
 
-            assertNull(vm.state.value.findings[0].answers.species)
+            assertEquals(false, vm.state.value.missedEgg)
         }
 
+    @Test
+    fun `adding an egg the model never boxed is what says it missed one`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
 
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.missedEgg)
+        }
+
+    @Test
+    fun `taking the added egg away again says it did not`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            assertEquals(true, vm.state.value.missedEgg)
+
+            vm.onRemoveFinding(1)
+            advanceUntilIdle()
+
+            assertEquals(false, vm.state.value.missedEgg)
+        }
+
+    /**
+     * The case a total comparison gets wrong.
+     *
+     * Rejecting one of the model's boxes and adding an egg it missed nets out to the same egg
+     * count, while both things are true. Q4 is read off the added rows rather than off the
+     * totals precisely so this does not silently report that nothing was missed.
+     */
+    @Test
+    fun `a rejected box and an added egg still report a miss`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+
+            vm.onQ1Selected(false)
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertEquals(true, vm.state.value.missedEgg)
+        }
+
+    /**
+     * There is no model claim on a frame captured with the container unreachable, so there is
+     * nothing for it to have missed. Null, not false: `samples.needs_reannotation` is nullable
+     * for exactly this, and false would assert something about a model that never ran.
+     */
+    @Test
+    fun `a frame with no model output has no missed-egg answer at all`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeManualFrame("sample-manual"))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            assertNull(vm.state.value.missedEgg)
+        }
+
+    @Test
+    fun `adding species with no added rows appends and expands the row`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while existing added row has no species is blocked and emits event`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while existing added row has null or 0 field total is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onFieldTotalChanged(0, "0")
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+        }
+
+    @Test
+    fun `adding species while Other row has blank text is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species while total is below floor is blocked`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 2))
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+            vm.onDetectionNext()
+            vm.onQ1Selected(true)
+            vm.onQ2Selected(true)
+            vm.onSpeciesConfirmed(true)
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(2, "1")
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(3, vm.state.value.findings.size)
+            assertEquals(2, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `adding species after a complete row appends and expands the new row`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `a blank custom stage blocks adding another species, filling it in unblocks`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+            vm.onAddedStageSelected(0, EggStage.OTHER)
+
+            vm.events.test {
+                vm.onAddSpecies()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.FinishCurrentSpeciesFirst, awaitItem())
+            }
+            assertEquals(1, vm.state.value.findings.size)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onAddedOtherStageChanged(0, "Embryonated")
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `expanding and collapsing added species updates expandedFindingIndex correctly`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.TRICHURIS)
+            vm.onFieldTotalChanged(2, "1")
+
+            assertEquals(2, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(1)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(0)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onExpandFinding(99)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onCollapseFinding(2)
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+
+            vm.onCollapseFinding(1)
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `removing findings adjusts or clears expandedFindingIndex`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(0, "2")
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.TRICHURIS)
+            vm.onFieldTotalChanged(1, "1")
+
+            vm.onRemoveFinding(0)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.onRemoveFinding(0)
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
+
+    @Test
+    fun `setFrame resets expandedFindingIndex to null`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+
+            vm.setFrame(makeFrame(predictions = 1))
+            assertNull(vm.state.value.expandedFindingIndex)
+        }
+
+    // Species+stage merge/identity (14zcqnthz6e)
+
+    /**
+     * AC1: two cards of the same species with different stages are, and stay, two findings — a
+     * stage is part of the identity now, not a detail under it. Their drawn boxes never mix.
+     */
+    @Test
+    fun `two cards of one species with different stages stay separate with their own boxes`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+            vm.onBeginDraw(0, 0)
+            vm.onBoxDrawn(ImageBox(1f, 1f, 2f, 2f))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.DECORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "2")
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(ImageBox(9f, 9f, 2f, 2f))
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(2, findings.size)
+            assertEquals(listOf(3, 2), findings.map { it.answers.fieldTotal })
+            assertEquals(listOf(1f), findings[0].answers.drawnBoxes.map { it.x })
+            assertEquals(listOf(9f), findings[1].answers.drawnBoxes.map { it.x })
+            assertEquals(1, vm.state.value.expandedFindingIndex)
+        }
+
+    /**
+     * AC2: the same setup, but the second card is given the *same* stage — the settle point folds
+     * it into the first, joining the totals and the boxes with the twin's own kept first.
+     */
+    @Test
+    fun `two cards of one species with the same stage merge, boxes twin-first`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+            vm.onBeginDraw(0, 0)
+            vm.onBoxDrawn(ImageBox(1f, 1f, 2f, 2f))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "2")
+            vm.onBeginDraw(1, 0)
+            vm.onBoxDrawn(ImageBox(9f, 9f, 2f, 2f))
+            vm.onAddedStageSelected(1, EggStage.CORTICATED_FERTILIZED)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(1, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(
+                "The twin's own boxes come first, the renamed card's after.",
+                listOf(1f, 9f),
+                findings[0].answers.drawnBoxes.map { it.x },
+            )
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    /** Merge waits for a stage on a species that has one — naming it alone is not enough. */
+    @Test
+    fun `naming a species on card 2 alone, with no stage yet, does not merge`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            advanceUntilIdle()
+
+            assertEquals(2, vm.state.value.findings.size)
+        }
+
+    /**
+     * AC3: OTHER has no stage question, so "Foo" and "Foo" are the same finding once named — but
+     * still only at a settle point, never while the second one is merely being typed. Different
+     * free text stays different findings.
+     */
+    @Test
+    fun `two Other cards with the same free text merge at a settle point, different text does not`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            vm.onAddedOtherSpeciesChanged(0, "Foo")
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.OTHER)
+            vm.onAddedOtherSpeciesChanged(1, "Foo")
+            vm.onFieldTotalChanged(1, "2")
+            advanceUntilIdle()
+
+            assertEquals("Typing the same name does not merge by itself.", 2, vm.state.value.findings.size)
+
+            vm.onCollapseFinding(1)
+            advanceUntilIdle()
+
+            assertEquals("Collapsing settles it.", 1, vm.state.value.findings.size)
+            assertEquals(5, vm.state.value.findings[0].answers.fieldTotal)
+
+            // "Foo" vs "Bar" never share a key, settle point or not.
+            val vm2 = viewModel()
+            vm2.setFrame(makeFrame(predictions = 0))
+            vm2.onAddSpecies()
+            vm2.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            vm2.onAddedOtherSpeciesChanged(0, "Foo")
+            vm2.onFieldTotalChanged(0, "3")
+            vm2.onAddSpecies()
+            vm2.onAddedSpeciesSelected(1, EggSpecies.OTHER)
+            vm2.onAddedOtherSpeciesChanged(1, "Bar")
+            vm2.onFieldTotalChanged(1, "2")
+            vm2.onCollapseFinding(1)
+            advanceUntilIdle()
+
+            assertEquals(2, vm2.state.value.findings.size)
+        }
+
+    /**
+     * A staged species vs its Other-stage twin never merge, whatever the free text says — CF and
+     * "Other: Larvated" are different stages by construction. Two Other-stage cards do merge, but
+     * only once their trimmed text agrees, and only at a settle point.
+     */
+    @Test
+    fun `an Other stage never merges with a listed stage, but merges its own twin at settle`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.OTHER)
+            vm.onAddedOtherStageChanged(1, "Larvated")
+            vm.onFieldTotalChanged(1, "2")
+            vm.onCollapseFinding(1)
+            advanceUntilIdle()
+
+            assertEquals("CF and Other:Larvated are different stages.", 2, vm.state.value.findings.size)
+
+            val vm2 = viewModel()
+            vm2.setFrame(makeFrame(predictions = 0))
+            vm2.onAddSpecies()
+            vm2.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm2.onAddedStageSelected(0, EggStage.OTHER)
+            vm2.onAddedOtherStageChanged(0, "Larvated")
+            vm2.onFieldTotalChanged(0, "3")
+
+            vm2.onAddSpecies()
+            vm2.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm2.onAddedStageSelected(1, EggStage.OTHER)
+            vm2.onAddedOtherStageChanged(1, " Larvated ")
+            vm2.onFieldTotalChanged(1, "2")
+            advanceUntilIdle()
+
+            assertEquals("Not merged while still typing.", 2, vm2.state.value.findings.size)
+
+            vm2.onCollapseFinding(1)
+            advanceUntilIdle()
+
+            assertEquals("Same text once trimmed, folded at the settle point.", 1, vm2.state.value.findings.size)
+            assertEquals(5, vm2.state.value.findings[0].answers.fieldTotal)
+        }
+
+    /**
+     * Two cards left without a stage on a species that has one are separate right after both are
+     * named — but `onAddSpecies` itself is a settle point, and folds them together before it
+     * appends the new blank card its own tap asked for.
+     */
+    @Test
+    fun `two unstaged cards of a staged species merge on the onAddSpecies settle point`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onFieldTotalChanged(1, "2")
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.findings.size)
+
+            vm.onAddSpecies()
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals("The merged card plus the new blank one onAddSpecies appended.", 2, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(1, findings[1].answers.fieldTotal)
+        }
+
+    // Gap #1: a species switch clears a stage that no longer applies, keeps one that still does
+
+    @Test
+    fun `switching an added card from Ascaris+CF to Other clears the stage, to Trichuris keeps it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+
+            vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            advanceUntilIdle()
+            var answers = vm.state.value.findings[0].answers
+            assertNull("Other has no stage question.", answers.stage)
+            assertEquals("", answers.otherStageText)
+
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onAddedSpeciesSelected(0, EggSpecies.TRICHURIS)
+            advanceUntilIdle()
+
+            answers = vm.state.value.findings[0].answers
+            assertEquals(
+                "CF applies to Trichuris too, so it survives the switch.",
+                EggStage.CORTICATED_FERTILIZED,
+                answers.stage,
+            )
+        }
+
+    @Test
+    fun `switching a model box from Ascaris+CF to Other clears the stage, to Trichuris keeps it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 1))
+            vm.onStageSelected(EggStage.CORTICATED_FERTILIZED)
+
+            vm.onSpeciesSelected(EggSpecies.OTHER)
+            advanceUntilIdle()
+            var answers = vm.state.value.findings[0].answers
+            assertNull(answers.stage)
+            assertEquals("", answers.otherStageText)
+
+            vm.onSpeciesSelected(EggSpecies.ASCARIS)
+            vm.onStageSelected(EggStage.CORTICATED_FERTILIZED)
+            vm.onSpeciesSelected(EggSpecies.TRICHURIS)
+            advanceUntilIdle()
+
+            answers = vm.state.value.findings[0].answers
+            assertEquals(EggStage.CORTICATED_FERTILIZED, answers.stage)
+        }
+
+    /**
+     * Renaming a card into a twin that sits *below* it in the list: the renamed card is removed,
+     * the twin survives holding the combined total, and the expanded index — which was on the
+     * renamed card — follows it to the twin's (now shifted) position.
+     */
+    @Test
+    fun `renaming a card into a twin below it merges into the twin and follows the expanded index`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.HOOKWORM)
+            vm.onAddedStageSelected(1, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "2")
+
+            vm.onExpandFinding(0)
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(1, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(0, vm.state.value.expandedFindingIndex)
+        }
+
+    /** A card expanded elsewhere is not touched by a merge — its index simply shifts down by one. */
+    @Test
+    fun `a merge elsewhere shifts an unrelated expanded index down by one`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onFieldTotalChanged(1, "2")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(2, EggSpecies.HOOKWORM)
+            vm.onFieldTotalChanged(2, "1")
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.expandedFindingIndex)
+
+            // Settles card 1's key to match card 0's, merging them while card 2 stays expanded.
+            vm.onAddedStageSelected(1, EggStage.CORTICATED_FERTILIZED)
+            advanceUntilIdle()
+
+            val findings = vm.state.value.findings
+            assertEquals(2, findings.size)
+            assertEquals(5, findings[0].answers.fieldTotal)
+            assertEquals(1, findings[1].answers.fieldTotal)
+            assertEquals("Card 2 shifted from index 2 to index 1.", 1, vm.state.value.expandedFindingIndex)
+        }
+
+    /** Submit is what finally guarantees at most one card per species+stage reaches the use case. */
+    @Test
+    fun `onSubmit sends two still-unmerged twins to the use case as one consolidated card`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.success("sample-1"))
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.OTHER)
+            vm.onAddedOtherSpeciesChanged(0, "Foo")
+            vm.onFieldTotalChanged(0, "3")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.OTHER)
+            vm.onAddedOtherSpeciesChanged(1, "Foo")
+            vm.onFieldTotalChanged(1, "2")
+            advanceUntilIdle()
+            assertEquals("Nothing has settled them yet.", 2, vm.state.value.findings.size)
+
+            val captor = argumentCaptor<List<Finding>>()
+            vm.onSubmit()
+            advanceUntilIdle()
+
+            verify(submitVerificationUseCase).invoke(any(), captor.capture(), anyOrNull(), anyOrNull())
+            val sent = captor.firstValue
+            assertEquals(1, sent.size)
+            assertEquals(5, sent[0].answers.fieldTotal)
+        }
+
+    // ── primary-pin regressions (14zcqnthz6e) ─────────────────────────
+
+    /**
+     * Bug 1. A card pinned non-primary (`false`) for its old species must not carry that pin
+     * into a species it is renamed to — a stale `false` would make `primaryAddedIndexBySpecies`
+     * treat the new species as "already decided, no primary here" even though this is now its
+     * only card, permanently blocking it from ever becoming primary.
+     */
+    @Test
+    fun `renaming a pinned non-primary card resets its pin and it becomes primary for the new species`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val sampleId = "sample-1"
+            val frame = makeIdentifiedFrame(sampleId, predictions = 0)
+            val vm = viewModel()
+
+            // Reopen-style prior: two Ascaris rows, one already pinned non-primary (`false`),
+            // as OpenVerificationTargetUseCase would set for one of two-or-more added rows.
+            val pinnedNonPrimary = Finding(
+                prediction = null,
+                answers = VerificationAnswers(
+                    species = EggSpecies.ASCARIS,
+                    stage = EggStage.DECORTICATED_FERTILIZED,
+                    fieldTotal = 1,
+                    isPrimaryAdded = false,
+                ),
+            )
+            vm.setFrame(
+                frame,
+                prior = VerificationTarget(
+                    frame = frame,
+                    imageSource = SampleImageSource.RemoteSignedUrl(url = "u", cacheKey = "k"),
+                    findings = listOf(pinnedNonPrimary),
+                    missedEgg = null,
+                    userNote = "",
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(false, vm.state.value.findings[0].answers.isPrimaryAdded)
+
+            // Rename to Hookworm - a species with no prior history or pins at all.
+            vm.onAddedSpeciesSelected(0, EggSpecies.HOOKWORM)
+            advanceUntilIdle()
+
+            assertNull(
+                "The stale non-primary pin from Ascaris must not survive the rename.",
+                vm.state.value.findings[0].answers.isPrimaryAdded,
+            )
+
+            val entity = vm.state.value.findings.toDetectionEntities(sampleId).single()
+            assertEquals(
+                "The lone Hookworm card must resolve to the plain, stage-less id.",
+                addedDetectionIdFor(sampleId, "Hookworm", 0, stageKey = null),
+                entity.detectionId,
+            )
+        }
+
+    /**
+     * Bug 2, the important one. Two fresh same-species cards submitted together in one session
+     * pin their election on success. Removing the primary card afterwards - still the same
+     * session, no DB reopen - and resubmitting must not re-elect the stage-aware survivor as
+     * primary: its id must not flip, or the row already synced under it gets orphaned remotely.
+     */
+    @Test
+    fun `removing a primary card after an in-session submit does not flip its sibling's id on resubmit`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.success("sample-1"))
+            val sampleId = "sample-1"
+            val frame = makeIdentifiedFrame(sampleId, predictions = 0)
+            val vm = viewModel()
+            vm.setFrame(frame)
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.DECORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.findings.size)
+
+            val captor = argumentCaptor<List<Finding>>()
+            vm.onSubmit()
+            advanceUntilIdle()
+            verify(submitVerificationUseCase, times(1)).invoke(any(), captor.capture(), anyOrNull(), anyOrNull())
+            val firstEntities = captor.firstValue.toDetectionEntities(sampleId)
+            val plainId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0, stageKey = null)
+            val bId = addedDetectionIdFor(
+                sampleId,
+                "Ascaris lumbricoides",
+                0,
+                stageKey = "DECORTICATED_FERTILIZED",
+            )
+            assertEquals(setOf(plainId, bId), firstEntities.map { it.detectionId }.toSet())
+
+            // The write-back onSuccess pinned the election onto state - carried forward here as
+            // what a still-open session already holds in memory, never re-derived from disk.
+            vm.setFrame(
+                frame,
+                prior = VerificationTarget(
+                    frame = frame,
+                    imageSource = SampleImageSource.RemoteSignedUrl(url = "u", cacheKey = "k"),
+                    findings = vm.state.value.findings,
+                    missedEgg = null,
+                    userNote = "",
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(2, vm.state.value.findings.size)
+
+            // Remove the card that resolved to the plain id (the CF card, index 0).
+            vm.onRemoveFinding(0)
+            advanceUntilIdle()
+            assertEquals(1, vm.state.value.findings.size)
+
+            vm.onSubmit()
+            advanceUntilIdle()
+            verify(submitVerificationUseCase, times(2)).invoke(any(), captor.capture(), anyOrNull(), anyOrNull())
+            val secondEntity = captor.lastValue.toDetectionEntities(sampleId).single()
+
+            assertEquals(
+                "The surviving sibling's id must stay stage-aware, not flip to the plain id " +
+                    "it never held.",
+                bId,
+                secondEntity.detectionId,
+            )
+        }
+
+    /**
+     * A failed submit must not lock in the primary election it computed - `_state` keeps
+     * whatever pin state it had going in, so a retry re-derives cleanly instead of acting on an
+     * election nothing actually persisted.
+     */
+    @Test
+    fun `a failed submit does not write resolved primary pins back to state`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.failure(RuntimeException("DB error")))
+            val vm = viewModel()
+            vm.setFrame(makeFrame(predictions = 0))
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(0, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(0, EggStage.CORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(0, "1")
+
+            vm.onAddSpecies()
+            vm.onAddedSpeciesSelected(1, EggSpecies.ASCARIS)
+            vm.onAddedStageSelected(1, EggStage.DECORTICATED_FERTILIZED)
+            vm.onFieldTotalChanged(1, "1")
+            advanceUntilIdle()
+
+            assertTrue(
+                "Nothing pinned yet - a fresh session's cards start undecided.",
+                vm.state.value.findings.all { it.answers.isPrimaryAdded == null },
+            )
+
+            vm.onSubmit()
+            advanceUntilIdle()
+
+            assertTrue(
+                "A failed submit must leave the pins undecided, not lock in the election it " +
+                    "computed for a write that never happened.",
+                vm.state.value.findings.all { it.answers.isPrimaryAdded == null },
+            )
+        }
 }

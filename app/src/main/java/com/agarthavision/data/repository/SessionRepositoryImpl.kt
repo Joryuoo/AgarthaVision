@@ -2,12 +2,14 @@ package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.mapper.toDomain
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -34,7 +36,7 @@ class SessionRepositoryImpl @Inject constructor(
                     totalSamples = item.totalSamples,
                     verifiedSamples = item.verifiedSamples,
                     unverifiedSamples = item.unverifiedSamples,
-                    totalEpg = item.totalEpg
+                    totalEggs = item.totalEggs
                 )
             }
         }
@@ -43,22 +45,33 @@ class SessionRepositoryImpl @Inject constructor(
         sessionDao.updateSessionLabel(sessionId, label)
     }
 
-    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> {
-        val entities = if (userId == null) {
-            sessionDao.observeAllLocal()
+    override suspend fun isSessionLabelTaken(
+        patientId: String,
+        label: String,
+        excludingSessionId: String?,
+    ): Boolean = sessionDao.countLabelCollisions(
+        patientId = patientId,
+        label = label,
+        excludingSessionId = excludingSessionId ?: "",
+    ) > 0
+
+    override suspend fun getSessionLabelsForPatient(patientId: String): List<String> =
+        sessionDao.getLabelsForPatient(patientId)
+
+    /**
+     * A signed-out caller sees nothing, not everything.
+     *
+     * This used to fall through to an unfiltered `SELECT * FROM sessions`. On a personal
+     * device that reads as "the sessions on this phone"; on a shared one it is another
+     * medtech's smears. Since login is mandatory on first run there is no legitimate
+     * signed-out reader left, so the null case is empty rather than unscoped.
+     */
+    override fun observeVisibleSessions(userId: String?): Flow<List<Session>> =
+        if (userId == null) {
+            flowOf(emptyList())
         } else {
-            sessionDao.observeOwnedOrUnowned(userId)
+            sessionDao.observeOwnedOrUnowned(userId).map { list -> list.map { it.toDomain() } }
         }
-        return entities.map { list -> list.map { it.toDomain() } }
-    }
-
-    override suspend fun setClaimExempt(sessionId: String, exempt: Boolean) {
-        sessionDao.setClaimExempt(sessionId, exempt)
-    }
-
-    override suspend fun claimSession(sessionId: String, userId: String) {
-        sessionDao.claimSession(sessionId, userId)
-    }
 
     override fun observeSessionRecordsPage(
         userId: String?,
@@ -76,7 +89,7 @@ class SessionRepositoryImpl @Inject constructor(
                         totalSamples = row.totalSamples,
                         verifiedSamples = 0,
                         unverifiedSamples = 0,
-                        totalEpg = row.totalEpg,
+                        totalEggs = row.totalEggs,
                     )
                 }
             }
@@ -93,17 +106,23 @@ class SessionRepositoryImpl @Inject constructor(
                 RecordsTotals(
                     sessionCount = row.sessionCount,
                     totalSamples = row.totalSamples,
-                    totalEpg = row.totalEpg,
+                    totalEggs = row.totalEggs,
                 )
             }
 
     /**
-     * Dispatches to [SessionDao.observeSessionsPage] for signed-in users or
-     * [SessionDao.observeAllLocalPage] for never-logged-in devices, mirroring the
-     * null-userId dispatch in [observeVisibleSessions]. Per ADR-007.
+     * A signed-out caller gets an empty page, for the reason on [observeVisibleSessions].
+     *
+     * This is the path that actually leaked. `LOCAL_SESSIONS_FILTER` carried the patient
+     * scope and the date range but no owner guard at all, so signing out turned the Session
+     * List into every smear recorded under that patient by anyone who had used the device.
+     * `SessionDao.observeAllSessions` had the guard right — `user_id = :userId OR user_id IS
+     * NULL`, with its KDoc saying "never another medtech's data left on a shared phone" —
+     * and the paginated path written later simply did not carry it over.
      */
     override fun observeVisibleSessionsPage(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
@@ -111,13 +130,10 @@ class SessionRepositoryImpl @Inject constructor(
         query: String,
         limit: Int,
     ): Flow<List<SessionWithStats>> = if (userId == null) {
-        sessionDao.observeAllLocalPage(activeSessionId, startMillis, endMillis, query, limit)
-            .map { entities ->
-                entities.map { SessionWithStats(it.toDomain(), 0, 0, 0, 0) }
-            }
+        flowOf(emptyList())
     } else {
         sessionDao.observeSessionsPage(
-            userId, activeSessionId, sinceMillis, startMillis, endMillis, query, limit,
+            userId, patientId, activeSessionId, sinceMillis, startMillis, endMillis, query, limit,
         )
             .map { list ->
                 list.map { item ->
@@ -126,34 +142,103 @@ class SessionRepositoryImpl @Inject constructor(
                         totalSamples = item.totalSamples,
                         verifiedSamples = item.verifiedSamples,
                         unverifiedSamples = item.unverifiedSamples,
-                        totalEpg = item.totalEpg,
+                        totalEggs = item.totalEggs,
                     )
                 }
             }
     }
 
-    /**
-     * Dispatches to [SessionDao.observeSessionsCounts] for signed-in users or
-     * [SessionDao.observeAllLocalCounts] for never-logged-in devices. Per ADR-007.
-     */
+    /** Empty counts for a signed-out caller, matching [observeVisibleSessionsPage]. */
     override fun observeVisibleSessionsCounts(
         userId: String?,
+        patientId: String,
         activeSessionId: String?,
         sinceMillis: Long,
         startMillis: Long?,
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts> = if (userId == null) {
-        sessionDao.observeAllLocalCounts(activeSessionId, startMillis, endMillis, query)
-            .map { row ->
-                SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)
-            }
+        flowOf(SessionsCounts())
     } else {
         sessionDao.observeSessionsCounts(
-            userId, activeSessionId, sinceMillis, startMillis, endMillis, query,
+            userId, patientId, activeSessionId, sinceMillis, startMillis, endMillis, query,
         )
             .map { row ->
                 SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)
             }
     }
+
+    override fun observeSessionSummaries(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+        limit: Int,
+    ): Flow<List<com.agarthavision.domain.model.SessionSummary>> =
+        sessionDao.observeSessionSummaries(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+            limit = limit,
+        ).map { rows ->
+            rows.map { row ->
+                com.agarthavision.domain.model.SessionSummary(
+                    session = row.session.toDomain(),
+                    patient = row.patient.toDomain(),
+                    totalFrames = row.totalSamples,
+                    framesToReview = row.unverifiedSamples,
+                    isPositive = row.isPositive,
+                    lastActivityAt = row.lastActivityAt,
+                )
+            }
+        }
+
+    override fun observeSessionSummaryCount(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+    ): Flow<Int> =
+        sessionDao.observeSessionSummaryCount(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+        )
+
+    override fun observeEmptySessionCount(
+        userId: String,
+        excludeSessionId: String?,
+    ): Flow<Int> =
+        sessionDao.observeEmptySessionCount(userId, excludeSessionId)
+
+    override fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> =
+        sessionDao.observeSessionOutcomesBetween(userId, fromMillis, toMillis).map { rows ->
+            rows.map {
+                com.agarthavision.domain.model.SessionOutcome(
+                    sessionId = it.sessionId,
+                    patientId = it.patientId,
+                    startedAt = it.startedAt,
+                    examined = it.examined,
+                    positive = it.positive,
+                )
+            }
+        }
+
+    override fun observeStartedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.SessionStarted>> =
+        sessionDao.observeStartedActivity(userId, limit).map { rows ->
+            rows.map {
+                ActivityItem.SessionStarted(
+                    sessionId = it.sessionId,
+                    sessionLabel = it.sessionLabel,
+                    occurredAt = it.occurredAt,
+                )
+            }
+        }
 }

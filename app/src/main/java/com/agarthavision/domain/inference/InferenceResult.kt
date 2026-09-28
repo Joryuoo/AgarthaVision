@@ -13,5 +13,6 @@ data class InferenceResult(
     val imageHeight: Int?,
     val modelVersion: String?,
     val engine: InferenceEngineId,
+    val counts: Map<String, Int> = emptyMap(),
     val timings: InferenceTimings = InferenceTimings(),
 )

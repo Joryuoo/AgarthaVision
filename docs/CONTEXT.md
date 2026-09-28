@@ -15,6 +15,7 @@ able to answer it from one file.
 | `features.md` | What ships today; Phase 2 and planned items marked as such |
 | `CHANGELOG.md` | What changed, reconstructed from git history |
 | `file-tree.md` | Annotated tree — what each area is for |
+| `patient-pii-position.md` | Written privacy position on patient PII, RA 10173, consent, retention vs C8, and synthetic validation data (PB-26) |
 | `map/` | The edit map: objects, processes, change impact. See `map/CONTEXT.md` |
 | `_archive/` | Superseded material. Read-only. See `_archive/CONTEXT.md` |
 
