@@ -1,11 +1,14 @@
 package com.agarthavision.ui.verify
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.test.core.app.ApplicationProvider
+import com.agarthavision.R
 import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
@@ -29,6 +32,8 @@ class VerificationPendingInferenceSheetTest {
 
     @get:Rule
     val composeRule = createComposeRule()
+
+    private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
 
     private class Recorder {
         var cancelRequests = 0
@@ -73,12 +78,26 @@ class VerificationPendingInferenceSheetTest {
 
     private fun sheetNode(tag: String) = composeRule.onNodeWithTag(tag).performScrollTo()
 
+    private fun pendingText() = sheetNode(VerifyTestTags.MODEL_OUTPUT_PENDING)
+        .fetchSemanticsNode()
+        .config[SemanticsProperties.Text]
+        .joinToString()
+
     @Test
-    fun `a pending sample shows the indicator and says it is in inference`() {
+    fun `a queued sample shows the indicator and says it is queued, not in inference`() {
         show(InferenceState.QUEUED)
 
         sheetNode(VerifyTestTags.MODEL_OUTPUT_SPINNER).assertExists()
-        sheetNode(VerifyTestTags.MODEL_OUTPUT_PENDING).assertExists()
+        assertEquals(context.getString(R.string.verify_model_queued), pendingText())
+        sheetNode(VerifyTestTags.CANCEL_INFERENCE).assertExists()
+    }
+
+    /** The same split the queue's badge makes, so one frame never reads two ways. */
+    @Test
+    fun `the frame being run says it is in inference`() {
+        show(InferenceState.IN_INFERENCE)
+
+        assertEquals(context.getString(R.string.verify_model_in_inference), pendingText())
         sheetNode(VerifyTestTags.CANCEL_INFERENCE).assertExists()
     }
 

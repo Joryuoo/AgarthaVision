@@ -77,6 +77,8 @@ internal fun ModelOutputSection(
      * produced by a frame still being fetched, which there is nothing to cancel on.
      */
     onCancelInference: (() -> Unit)? = null,
+    /** Whether the pending frame is the one being run, rather than waiting its turn. */
+    isInferenceRunning: Boolean = false,
 ) {
     val colors = AgarthaTheme.colors
     val containerBg = if (output is ModelOutput.Unavailable) {
@@ -98,7 +100,7 @@ internal fun ModelOutputSection(
                 .padding(12.dp),
         ) {
             when (output) {
-                ModelOutput.InProgress -> InferencePending(onCancelInference)
+                ModelOutput.InProgress -> InferencePending(isInferenceRunning, onCancelInference)
 
                 ModelOutput.Unavailable -> Row(
                     modifier = Modifier.fillMaxWidth(),

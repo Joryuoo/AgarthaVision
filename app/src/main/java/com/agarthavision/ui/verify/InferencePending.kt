@@ -22,9 +22,13 @@ import com.agarthavision.ui.theme.AgarthaTheme
 /**
  * The Model Output section while the frame waits for its model output: a spinner, what it is
  * waiting on, and, for a queued frame, the way out of waiting.
+ *
+ * @param isRunning true when this is the one frame the queue is running, false while it waits its
+ *   turn. The same split the queue's badge makes: "In inference" for a frame that is only queued
+ *   would misstate what the system is doing.
  */
 @Composable
-internal fun InferencePending(onCancelInference: (() -> Unit)?) {
+internal fun InferencePending(isRunning: Boolean, onCancelInference: (() -> Unit)?) {
     val colors = AgarthaTheme.colors
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
@@ -40,7 +44,9 @@ internal fun InferencePending(onCancelInference: (() -> Unit)?) {
             )
             if (onCancelInference != null) {
                 Text(
-                    text = stringResource(R.string.verify_model_in_inference),
+                    text = stringResource(
+                        if (isRunning) R.string.verify_model_in_inference else R.string.verify_model_queued,
+                    ),
                     color = colors.textPrimary,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,

@@ -14,7 +14,8 @@ Verify any entry with `git log --oneline --reverse`.
 `14zcqntj6p1`.
 
 - **Pending is visible.** While a sample waits on inference, its Model Output section shows a
-  spinner and "Frame is in inference", read off the frame's own `InferenceState`. There is no
+  spinner and "Queued for inference", or "Frame is in inference" once it is the frame being
+  run: the same split as the queue's badge. Read off the frame's own `InferenceState`. There is no
   second flag. `isResolving` keeps its own meaning (a frame still being fetched), because
   merging the two would conflate a frame with no model output yet and a frame with no image
   yet.

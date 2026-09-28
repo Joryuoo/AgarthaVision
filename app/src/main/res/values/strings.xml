@@ -87,6 +87,7 @@
     -->
     <string name="verify_model_unavailable">No model output. This field is verified by hand: inference was cancelled, or no model could read it. Add the eggs you see below.</string>
     <string name="verify_model_in_inference">Frame is in inference</string>
+    <string name="verify_model_queued">Queued for inference</string>
     <string name="verify_annotation_locked">Annotation unlocks when the model output arrives, or when you cancel inference.</string>
     <string name="verify_cancel_inference">Cancel inference</string>
     <string name="verify_cancel_inference_title">Cancel inference?</string>

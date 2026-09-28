@@ -68,6 +68,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.request.ImageRequest
 import com.agarthavision.R
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
@@ -300,6 +301,7 @@ internal fun VerificationSheetContent(
                         output = frame.modelOutput(),
                         onCancelInference = actions.onCancelInferenceRequested
                             .takeIf { state.isAwaitingInference },
+                        isInferenceRunning = frame.inferenceState == InferenceState.IN_INFERENCE,
                     )
 
                     // 4. Current detection. Only when there is model output with at least one box -
