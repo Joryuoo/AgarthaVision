@@ -76,6 +76,8 @@ the pure-Kotlin `domain/sync/SyncScheduler` port, enqueued as unique work with a
 constraint and exponential backoff. `androidx.hilt:hilt-work` supplies `@HiltWorker`, and
 WorkManager's default initializer is removed in the manifest so `AgarthaVisionApp`'s
 `Configuration.Provider` can hand it the `HiltWorkerFactory`. See `map/processes/sync.md`.
+The inference queue runs through WorkManager the same way (14zcqntj6ny). See
+`map/processes/infer.md`.
 
 Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrofit converter
 (`core/di/InferenceModule.kt:35`, `:69`), **kotlinx.serialization** for Supabase row shapes
@@ -127,8 +129,9 @@ no longer declares. `bun install` from the current `package.json` installs nothi
   image based on `rocm/pytorch:latest` (`inference/Dockerfile:1`), serving on port 8000
   (`inference/Dockerfile:10-11`). Endpoints `GET /health` and `POST /infer`
   (`inference/server.py:29`, `:34`). Bearer-token auth (`inference/server.py:24-27`).
-  Weights baked in at `inference/weights/best.pt`; default model version string
-  `yolo12n-effv2s-v1-cloud-fp32` (`inference/server.py:12`).
+  Weights baked in at `inference/weights/yolo26n-efficientnetv2b0.pt` (YOLO26-nano on an
+  EfficientNetV2-B0 backbone, from the fork's `feat/optimized-inference`); default model version string
+  `yolo26n-effv2b0-v1-cloud-fp32` (`inference/server.py:12`).
 
 ## Build-time configuration
 

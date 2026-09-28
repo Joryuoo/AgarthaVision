@@ -2,6 +2,7 @@ package com.agarthavision.ui.capture
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.camera.CachedFrame
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.connectivity.NetworkMonitor
 import com.agarthavision.core.session.SessionManager
@@ -62,6 +63,9 @@ class CaptureViewModel @Inject constructor(
     val state: StateFlow<CaptureState> = _state.asStateFlow()
 
     private val _events = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = 1)
+
+    /** The cached frame the last tap saved, compared by identity. See [onCapture]. */
+    private var lastSavedFrame: CachedFrame? = null
 
     /**
      * One-shot outcomes of a shutter tap, for the screen to confirm.
@@ -155,6 +159,19 @@ class CaptureViewModel @Inject constructor(
             _state.update { it.copy(errorMessage = "Waiting for a live frame.") }
             return
         }
+        saveOnce(sessionId, cached)
+    }
+
+    /**
+     * Saves [cached] unless the last tap already saved it.
+     *
+     * Nothing locks the shutter between taps any more, so a double tap would otherwise save the
+     * one cached frame twice as two samples. A frame is saved once; the next tap waits for the
+     * analyzer's next frame, which arrives well inside a deliberate second tap.
+     */
+    private fun saveOnce(sessionId: String, cached: CachedFrame) {
+        if (cached === lastSavedFrame) return
+        lastSavedFrame = cached
         viewModelScope.launch {
             _state.update { it.copy(errorMessage = null) }
             // The save takes milliseconds, so the screen no longer locks around it. It must
@@ -163,6 +180,8 @@ class CaptureViewModel @Inject constructor(
             withContext(NonCancellable) { captureFieldUseCase(sessionId, cached.jpegBytes) }
                 .onSuccess { outcome -> _events.emit(CaptureEvent.FrameCaptured(outcome)) }
                 .onFailure { throwable ->
+                    // Nothing was saved, so the same frame may be tried again.
+                    if (lastSavedFrame === cached) lastSavedFrame = null
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
         }

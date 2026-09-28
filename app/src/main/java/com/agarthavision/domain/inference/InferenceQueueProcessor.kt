@@ -2,8 +2,8 @@ package com.agarthavision.domain.inference
 
 import com.agarthavision.domain.repository.InferenceQueueRepository
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.channels.ReceiveChannel
-import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.ComparableTimeMark
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -31,9 +31,10 @@ import kotlin.time.TimeSource
  * Other frames are not held up: a frame waiting out its retry delay is skipped until it is due.
  *
  * **Exactly one consumer, and everything here relies on it.** `requeueInterrupted` at the start
- * of every pass is only safe because nothing else is in flight, and [circuitBreaker] and the
- * retry schedule are plain fields because nothing else touches them. `InProcessInferenceQueue`
- * launches [run] once per process.
+ * of every pass is only safe because nothing else is in flight. `WorkManagerInferenceQueue`
+ * chains passes so they run one after another, and [drain] also holds a lock, so two passes can
+ * never overlap even if two workers were started at once. The instance is a singleton, so
+ * [circuitBreaker] and the retry schedule carry over from one pass to the next.
  *
  * Pure Kotlin (C2). The engines are the two [InferenceEngine]s; which one is which is decided
  * by the caller, in `InferenceModule`.
@@ -55,35 +56,21 @@ class InferenceQueueProcessor(
 
     private val retries = mutableMapOf<String, Retry>()
 
-    /**
-     * Runs the queue until the calling coroutine is cancelled.
-     *
-     * Drains everything that is due, then sleeps until either [wakeUps] delivers (a new capture)
-     * or the earliest retry falls due. [wakeUps] should be conflated: a capture that lands while
-     * a pass is running leaves one pending signal, and the pass after it picks the frame up, so
-     * no wake-up is ever lost.
-     *
-     * Never returns and never throws, other than for cancellation. A pass that fails outright,
-     * on a database error say, is retried after [firstRetryDelay] rather than ending the queue.
-     */
-    suspend fun run(wakeUps: ReceiveChannel<Unit>): Nothing {
-        while (true) {
-            val drained = attempt { drain() }.isSuccess
-            val wait = if (drained) untilNextRetry() else firstRetryDelay
-            when {
-                wait == null -> wakeUps.receive()
-                wait.isPositive() -> withTimeoutOrNull(wait) { wakeUps.receive() }
-            }
-        }
-    }
+    /** Held for a whole pass, and by anything reading [retries]. */
+    private val passLock = Mutex()
 
     /**
      * One pass: every queued frame that is due, oldest first, one at a time.
      *
      * Re-reads the queue after every frame, so a frame captured mid-pass is picked up in the same
      * pass once the older ones are done.
+     *
+     * Throws only when the queue itself cannot be read or reset, on a database error say. A
+     * single frame that fails is handled here and never ends the pass.
      */
-    suspend fun drain(): DrainSummary {
+    suspend fun drain(): DrainSummary = passLock.withLock { drainLocked() }
+
+    private suspend fun drainLocked(): DrainSummary {
         repository.requeueInterrupted()
 
         var summary = DrainSummary()
@@ -106,6 +93,15 @@ class InferenceQueueProcessor(
         // Frames cancelled, deleted or finished elsewhere need no retry schedule any more.
         retries.keys.retainAll(repository.queuedSampleIds().toSet())
         return summary
+    }
+
+    /**
+     * How long until the earliest failed frame is due to be tried again, or null when no frame is
+     * waiting on a retry. Zero or negative when one is already due. The caller schedules the next
+     * pass by it.
+     */
+    suspend fun nextRetryIn(): Duration? = passLock.withLock {
+        retries.values.minOfOrNull { -it.notBefore.elapsedNow() }
     }
 
     private suspend fun process(sampleId: String): FrameOutcome {
@@ -159,10 +155,6 @@ class InferenceQueueProcessor(
             .coerceAtMost(maxRetryDelay)
         retries[sampleId] = Retry(failures, timeSource.markNow() + delay)
     }
-
-    /** How long until the earliest retry is due, or null when nothing is waiting on one. */
-    private fun untilNextRetry(): Duration? =
-        retries.values.minOfOrNull { -it.notBefore.elapsedNow() }
 
     /**
      * [runCatching] that lets cancellation through. Swallowing a [CancellationException] would

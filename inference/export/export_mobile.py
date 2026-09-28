@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-"""Export best.pt to TFLite for the Android app, one model and one manifest per precision.
+"""Export a trained checkpoint to TFLite for the Android app, one model and manifest per precision.
 
 Run this on a machine with the pinned Ultralytics fork installed (see
 requirements-export.txt), not inside the serving container.
 
     python inference/export/export_mobile.py \
-        --weights inference/weights/best.pt \
+        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
         --calib-images path/to/dataset/images/val
 
 Outputs land in inference/export/out/ (gitignored), each named after the build's
 inference_model_version:
 
-    yolo12n-effv2s-v1-tflite-fp16.tflite / .json    fp16 weights, fp32 activations and I/O
-    yolo12n-effv2s-v1-tflite-int8.tflite / .json    int8 weights and activations, fp32 I/O
+    yolo26n-effv2b0-v1-tflite-fp32.tflite / .json   fp32 throughout
+    yolo26n-effv2b0-v1-tflite-fp16.tflite / .json   fp16 weights, fp32 activations and I/O
+    yolo26n-effv2b0-v1-tflite-int8.tflite / .json   int8 weights and activations, fp32 I/O
 
 Copy the pairs you ship into app/src/main/assets/models/.
 
 Version names follow <arch>-v<training-version>-<target>-<precision>. Bump the training
-version whenever best.pt changes, so the same v1 always means the same trained weights.
+version whenever the weights change, so the same v1 always means the same trained weights.
+Pass --version-prefix for any other checkpoint, e.g. yolo26n-mnv4cs-v1-tflite.
 
 Why this does not call Ultralytics' own `format="tflite"`: Ultralytics hands the ONNX to
 onnx2tf, and onnx2tf 2.x's default backend emits a model that is fp16 *end to end* (fp16
@@ -26,7 +28,7 @@ cannot fall back from GPU to CPU, and it will not even load in the reference int
 Ultralytics pins onnx2tf<1.29 to avoid this, but the pin cannot be satisfied alongside the
 TensorFlow this venv needs. So the pipeline is spelled out here instead:
 
-    best.pt --Ultralytics--> ONNX --onnx2tf (tf_converter)--> SavedModel + fp16 TFLite
+    .pt --Ultralytics--> ONNX --onnx2tf (tf_converter)--> SavedModel + fp32/fp16 TFLite
                                                 SavedModel --TFLiteConverter + calibration--> int8
 
 That produces the standard layouts no matter which onnx2tf is installed, and every build is
@@ -52,7 +54,8 @@ DEFAULT_IMGSZ = 640
 DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.7
 DEFAULT_MAX_DET = 300
-DEFAULT_VERSION_PREFIX = "yolo12n-effv2s-v1-tflite"
+DEFAULT_WEIGHTS = "inference/weights/yolo26n-efficientnetv2b0.pt"
+DEFAULT_VERSION_PREFIX = "yolo26n-effv2b0-v1-tflite"
 DEFAULT_CALIB_COUNT = 200
 
 # Ultralytics letterboxes onto (114, 114, 114). The app pads with the same grey.
@@ -65,17 +68,16 @@ NORMALIZED_GEOMETRY_LIMIT = 2.0
 
 # The weight dtype each precision label must actually contain. Checked after export, because
 # a file named fp16 that was really fp32 has shipped before and nothing noticed.
-EXPECTED_WEIGHT_DTYPE = {"fp16": "float16", "int8": "int8"}
+EXPECTED_WEIGHT_DTYPE = {"fp32": "float32", "fp16": "float16", "int8": "int8"}
 
 
 def patch_backbone_pretrained() -> None:
     """Stop the timm backbone downloading ImageNet weights it is about to overwrite.
 
-    EfficientNetV2Backbone.__init__ defaults to pretrained=True, so every reconstruction of
-    the architecture — including the one YOLO() does before loading your checkpoint — pulls
-    ~80MB from HuggingFace. Those weights are then immediately replaced by best.pt's. The
-    download is pure waste, and it makes export fail offline for a reason that has nothing
-    to do with export.
+    The fork's TimmBackbone defaults to pretrained=True, and the model yaml asks for it too, so
+    any reconstruction of the architecture pulls ImageNet weights from HuggingFace, only for
+    the checkpoint's own weights to replace them at once. The download is pure waste, and it
+    makes export fail offline for a reason that has nothing to do with export.
     """
     try:
         from ultralytics.nn.modules import block
@@ -83,18 +85,18 @@ def patch_backbone_pretrained() -> None:
         print("!! Could not import ultralytics.nn.modules.block; skipping the pretrained patch.")
         return
 
-    backbone = getattr(block, "EfficientNetV2Backbone", None)
+    backbone = getattr(block, "TimmBackbone", None)
     if backbone is None:
-        print("!! EfficientNetV2Backbone not found — is this the DMKuZu fork?")
+        print("!! TimmBackbone not found. Is this the DMKuZu fork at the pinned commit?")
         return
 
     original_init = backbone.__init__
 
-    def patched_init(self, pretrained=False):  # noqa: FBT002 - mirrors the original signature
-        original_init(self, pretrained=False)
+    def patched_init(self, model="mobilenetv4_conv_small", pretrained=False, scales=3):  # noqa: ARG001, FBT002
+        original_init(self, model, pretrained=False, scales=scales)
 
     backbone.__init__ = patched_init
-    print("-> Patched EfficientNetV2Backbone to skip the pretrained download.")
+    print("-> Patched TimmBackbone to skip the pretrained download.")
 
 
 def letterbox(path: Path, size: int) -> np.ndarray:
@@ -218,8 +220,8 @@ def build_manifest(names, args, label: str, model_file: str, info: dict) -> dict
 
 
 def export_onnx(model, args) -> Path:
-    # dynamic=False is load-bearing. The backbone is timm's `tf_efficientnetv2_s`, whose
-    # Conv2dSame emulates TensorFlow SAME padding with a runtime F.pad computed from the
+    # dynamic=False is load-bearing. timm's `tf_` EfficientNetV2 backbones use Conv2dSame, which
+    # emulates TensorFlow SAME padding with a runtime F.pad computed from the
     # input's spatial dims. Traced at a fixed size those fold into constant Pad nodes and
     # convert cleanly; with dynamic axes they become shape-dependent ops that onnx2tf
     # mangles. The app feeds a fixed 640x640 anyway.
@@ -275,7 +277,7 @@ def convert_int8(saved_model: Path, target: Path, images: list[Path], imgsz: int
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--weights", default="inference/weights/best.pt", help="Path to best.pt")
+    parser.add_argument("--weights", default=DEFAULT_WEIGHTS, help="Path to the trained .pt checkpoint")
     parser.add_argument("--out", default="inference/export/out", help="Output directory")
     parser.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ, help="Square input size")
     parser.add_argument("--conf", type=float, default=DEFAULT_CONF, help="Decode confidence threshold")
@@ -313,6 +315,13 @@ def main() -> int:
     saved_model = convert_saved_model(onnx_path, out_dir / "saved_model")
 
     builds: dict[str, Path | None] = {}
+
+    # Both come out of the same onnx2tf run. fp32 is the reference the smaller precisions are
+    # measured against, and the build to try first when it is in question whether a phone can
+    # run the model at all.
+    fp32_target = out_dir / f"{args.version_prefix}-fp32.tflite"
+    shutil.copy2(saved_model / f"{onnx_path.stem}_float32.tflite", fp32_target)
+    builds["fp32"] = fp32_target
 
     fp16_target = out_dir / f"{args.version_prefix}-fp16.tflite"
     shutil.copy2(saved_model / f"{onnx_path.stem}_float16.tflite", fp16_target)
