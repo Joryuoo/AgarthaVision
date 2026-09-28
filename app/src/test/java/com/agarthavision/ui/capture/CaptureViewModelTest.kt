@@ -339,11 +339,11 @@ class CaptureViewModelTest {
 
     /**
      * Capture no longer waits on a model, so nothing holds the shutter between taps
-     * (14zcqntj6nz). Two taps in quick succession are two saved frames, each confirmed with its
-     * own id, and neither waits for the other's confirmation.
+     * (14zcqntj6nz). Two taps a cooldown apart are two saved frames, each confirmed with its own
+     * id, and neither waits for the other's confirmation.
      */
     @Test
-    fun `captures in quick succession each confirm with their own sample`() =
+    fun `captures a cooldown apart each confirm with their own sample`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val vm = viewModel()
             sessionState.value = makeActiveState()
@@ -354,6 +354,7 @@ class CaptureViewModelTest {
 
             vm.events.test {
                 vm.onCapture()
+                now += CAPTURE_COOLDOWN_MS
                 // Different bytes, not only a different frame: Mockito matches arrays by content.
                 val second = publishFrame(byteArrayOf(1, 2, 3, 4))
                 whenever(captureFieldUseCase.invoke("session-1", second))
@@ -386,6 +387,30 @@ class CaptureViewModelTest {
             advanceUntilIdle()
 
             verify(captureFieldUseCase, times(1)).invoke("session-1", bytes)
+        }
+
+    /**
+     * The analyzer replaces the cached frame every ~33 ms, so a fast double tap or a burst lands
+     * on new, near-identical frames. Only the first tap inside the cooldown is saved.
+     */
+    @Test
+    fun `taps inside the cooldown save only the first, even on a new frame`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            sessionState.value = makeActiveState()
+            val first = publishFrame()
+            whenever(captureFieldUseCase.invoke(org.mockito.kotlin.any(), org.mockito.kotlin.any()))
+                .thenReturn(Result.success(CaptureOutcome("sample-1")))
+            advanceUntilIdle()
+
+            vm.onCapture()
+            now += CAPTURE_COOLDOWN_MS - 1
+            publishFrame(byteArrayOf(1, 2, 3, 4))
+            vm.onCapture()
+            advanceUntilIdle()
+
+            verify(captureFieldUseCase, times(1)).invoke(org.mockito.kotlin.any(), org.mockito.kotlin.any())
+            verify(captureFieldUseCase).invoke("session-1", first)
         }
 
     /** A save that failed wrote nothing, so tapping again on the same frame must retry it. */
@@ -445,5 +470,8 @@ class CaptureViewModelTest {
 
         /** Comfortably past the window — the gap a real session change leaves. */
         private const val STALE_FRAME_AGE_MS = 5_000L
+
+        /** Mirrors `CaptureViewModel.CAPTURE_COOLDOWN_MS`, which is private to that class. */
+        private const val CAPTURE_COOLDOWN_MS = 750L
     }
 }
