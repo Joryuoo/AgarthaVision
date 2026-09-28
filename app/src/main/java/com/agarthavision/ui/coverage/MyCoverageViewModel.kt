@@ -21,6 +21,7 @@ import com.agarthavision.domain.usecase.coverage.LoadAreaDirectoryUseCase
 import com.agarthavision.domain.usecase.coverage.LoadProvinceBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.LoadTownBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.ObserveMyCoverageUseCase
+import com.agarthavision.domain.usecase.coverage.regionDisplayName
 import com.agarthavision.domain.usecase.coverage.resolveCoverageFitBounds
 import com.agarthavision.domain.usecase.coverage.resolveDataFitBounds
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
@@ -67,6 +68,8 @@ data class SelectedProvince(
      * memory rather than issuing a new DAO query.
      */
     val townCounts: Map<String, AreaCount> = emptyMap(),
+    /** The province's containing region's display name, if known — e.g. "Central Visayas". */
+    val regionName: String? = null,
 )
 
 data class MyCoverageUiState(
@@ -278,6 +281,7 @@ class MyCoverageViewModel @Inject constructor(
                     species = cachedSpecies.orEmpty(),
                     towns = initialGeometry,
                     townCounts = townCounts,
+                    regionName = directory?.provinces?.get(hitArea.code)?.regionCode?.let(::regionDisplayName),
                 ),
             )
         }

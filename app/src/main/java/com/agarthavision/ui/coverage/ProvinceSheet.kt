@@ -1,8 +1,8 @@
 package com.agarthavision.ui.coverage
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,42 +12,48 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.R
 import com.agarthavision.domain.geo.AreaShape
-import com.agarthavision.domain.geo.PositiveRateBin
-import com.agarthavision.domain.geo.fitBounds
-import com.agarthavision.domain.model.AreaCount
 import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.domain.model.SpeciesFinding
-import com.agarthavision.ui.dashboard.coverage.pathFor
+import com.agarthavision.ui.dashboard.coverage.CoverageStatColumn
+import com.agarthavision.ui.dashboard.coverage.RateSwatch
+import com.agarthavision.ui.dashboard.coverage.foldSpecies
+import com.agarthavision.ui.dashboard.coverage.speciesColor
+import com.agarthavision.ui.dashboard.coverage.speciesShortName
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.theme.AgarthaTheme
+import kotlinx.coroutines.launch
 
 private const val TOP_TOWNS_SHOWN = 5
 private const val PERCENT_FACTOR = 100
-private const val PROVINCE_MAP_PADDING_PX = 6f
 
 @Suppress("LongParameterList") // Every parameter is a distinct, independent sheet slot.
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,6 +67,11 @@ fun ProvinceSheet(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
+    val scope = rememberCoroutineScope()
+    val onClose = {
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+        Unit
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -81,6 +92,7 @@ fun ProvinceSheet(
             selected = selected,
             showAllTowns = showAllTowns,
             onShowAllTowns = onShowAllTowns,
+            onClose = onClose,
         )
     }
 }
@@ -98,11 +110,13 @@ internal fun ProvinceSheetContent(
     showAllTowns: Boolean,
     onShowAllTowns: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onClose: () -> Unit = {},
 ) {
     BackHandler(enabled = showAllTowns) { onShowAllTowns(false) }
 
     val colors = AgarthaTheme.colors
     val hasData = (selected.coverage?.count?.smears ?: 0) > 0
+    val stat = selected.coverage?.count?.stat
 
     Column(
         modifier = modifier
@@ -110,16 +124,11 @@ internal fun ProvinceSheetContent(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp, vertical = 8.dp),
     ) {
-        ProvinceMiniMap(selected)
+        SheetHeader(selected = selected, hasData = hasData, onClose = onClose)
         Spacer(Modifier.height(12.dp))
-        Text(selected.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.accent)
+        StatsRow(stat)
         if (hasData) {
-            TownCountLine(selected)
-            Spacer(Modifier.height(6.dp))
-        }
-        RateLine(selected.coverage?.count?.stat)
-        if (hasData) {
-            if (selected.coverage?.count?.stat is AreaStat.Reported) {
+            if (stat is AreaStat.Reported && selected.species.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
                 SpeciesBreakdown(selected.species)
             }
@@ -139,103 +148,67 @@ internal fun ProvinceSheetContent(
 }
 
 @Composable
-private fun ProvinceMiniMap(selected: SelectedProvince) {
+private fun SheetHeader(
+    selected: SelectedProvince,
+    hasData: Boolean,
+    onClose: () -> Unit,
+) {
     val colors = AgarthaTheme.colors
-    val towns = (selected.towns as? TownGeometry.Available)?.set
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(120.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceMuted),
+    val townsWithData = selected.townCounts.values.count { it.stat != AreaStat.NoData }
+    val townsWithDataText = if (hasData && selected.towns is TownGeometry.Available && townsWithData > 0) {
+        pluralStringResource(R.plurals.coverage_towns_with_data, townsWithData, townsWithData)
+    } else {
+        null
+    }
+    val subtitle = listOfNotNull(selected.regionName, townsWithDataText).joinToString(" · ")
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        if (towns != null) {
-            val townPaths = remember(towns) { mutableMapOf<String, Path>() }
-            var cachedSize by remember { mutableStateOf(Pair(0f, 0f)) }
-            val coverageByCode = remember(towns, selected.townCounts) {
-                towns.areas.associate { area ->
-                    val stat = selected.townCounts[area.code]?.stat
-                    area.code to stat
-                }
-            }
-            Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
-                if (size.width != cachedSize.first || size.height != cachedSize.second) {
-                    townPaths.clear()
-                    cachedSize = size.width to size.height
-                }
-                val transform = fitBounds(
-                    bounds = towns.bounds,
-                    widthPx = size.width,
-                    heightPx = size.height,
-                    paddingPx = PROVINCE_MAP_PADDING_PX,
+        Column(modifier = Modifier.weight(1f)) {
+            Text(selected.name, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+            if (subtitle.isNotEmpty()) {
+                Text(
+                    text = subtitle,
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
-                towns.areas.forEach { area ->
-                    val stat = coverageByCode[area.code]
-                    val path = townPaths.getOrPut(area.code) { pathFor(area, transform) }
-                    val fill = when (stat) {
-                        is AreaStat.Reported -> colors.coverageBinColor(PositiveRateBin.of(stat.positiveRate))
-                        else -> colors.coverageNoData
-                    }
-                    drawPath(path, color = fill)
-                }
             }
+        }
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Outlined.Close,
+                contentDescription = stringResource(R.string.coverage_close_sheet),
+                tint = colors.textSecondary,
+            )
         }
     }
 }
 
 @Composable
-private fun TownCountLine(selected: SelectedProvince) {
-    val colors = AgarthaTheme.colors
-    val towns = selected.towns
-    if (towns is TownGeometry.Available) {
-        val withData = selected.townCounts.values.count { it.stat != AreaStat.NoData }
-        Text(
-            text = "$withData towns with data",
-            fontSize = 12.sp,
-            color = colors.textSecondary,
-            modifier = Modifier.padding(top = 2.dp),
-        )
-    }
-}
-
-@Composable
-private fun RateLine(stat: AreaStat?) {
+private fun StatsRow(stat: AreaStat?) {
     val colors = AgarthaTheme.colors
     when (stat) {
         is AreaStat.Reported -> {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(colors.brandFill)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = "${(stat.positiveRate * PERCENT_FACTOR).toInt()}% positive",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.onBrandFill,
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(colors.goldTint)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = "${stat.smears} smears",
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.goldText,
-                    )
-                }
+            Row(modifier = Modifier.fillMaxWidth()) {
+                CoverageStatColumn(
+                    value = "${(stat.positiveRate * PERCENT_FACTOR).toInt()}%",
+                    label = stringResource(R.string.coverage_positive_rate_label),
+                    valueColor = colors.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                CoverageStatColumn(
+                    value = "${stat.positives}",
+                    label = stringResource(R.string.coverage_positive_smears_label),
+                    modifier = Modifier.weight(1f),
+                )
+                CoverageStatColumn(
+                    value = "${stat.smears}",
+                    label = stringResource(R.string.coverage_smears_examined_label),
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
         AreaStat.TooFew -> {
@@ -262,34 +235,60 @@ private fun RateLine(stat: AreaStat?) {
 @Composable
 private fun SpeciesBreakdown(species: List<SpeciesFinding>) {
     val colors = AgarthaTheme.colors
-    val seriesColors = listOf(colors.accent, colors.gold, colors.success)
+    val slices = foldSpecies(species)
 
-    Text("Species mix", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+    Text(
+        text = stringResource(R.string.coverage_species_header),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = colors.textSecondary,
+        letterSpacing = 0.8.sp,
+    )
     Spacer(Modifier.height(8.dp))
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(10.dp)
+            .height(8.dp)
             .clip(RoundedCornerShape(999.dp))
             .background(colors.surfaceMuted),
     ) {
-        species.forEachIndexed { i, finding ->
-            val color = seriesColors.getOrElse(i) { colors.textTertiary }
+        slices.forEach { finding ->
             Box(
                 modifier = Modifier
                     .weight(finding.ratio.coerceAtLeast(0.01f))
-                    .height(10.dp)
-                    .background(color),
+                    .height(8.dp)
+                    .background(speciesColor(finding.name, colors)),
             )
         }
     }
     Spacer(Modifier.height(8.dp))
-    species.forEach { finding ->
-        Text(
-            text = "${finding.name} · ${finding.formattedPercentage}",
-            fontSize = 11.sp,
-            color = colors.textSecondary,
-        )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        slices.forEach { finding ->
+            val shortName = speciesShortName(finding.name)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(speciesColor(finding.name, colors)),
+                )
+                Text(
+                    text = shortName,
+                    fontSize = 12.sp,
+                    fontStyle = if (shortName == "Other") FontStyle.Normal else FontStyle.Italic,
+                    color = colors.textPrimary,
+                )
+                Text(
+                    text = finding.formattedPercentage,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.textPrimary,
+                )
+            }
+        }
     }
 }
 
@@ -315,32 +314,73 @@ private fun TownRanking(
             )
     }
 
-    Text("Towns", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.coverage_towns_header),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.textSecondary,
+            letterSpacing = 0.8.sp,
+        )
+        if (!showAllTowns && ranked.size > TOP_TOWNS_SHOWN) {
+            Row(
+                modifier = Modifier.clickable { onShowAllTowns(true) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.coverage_all_towns, ranked.size),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.accent,
+                )
+                Icon(
+                    imageVector = AgarthaIcons.ChevronRight,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(14.dp),
+                )
+            }
+        }
+    }
     Spacer(Modifier.height(8.dp))
 
     if (showAllTowns) {
         LazyColumn(modifier = Modifier.fillMaxWidth().height(280.dp)) {
-            items(ranked) { (area, stat) -> TownRow(area.name, stat) }
+            items(ranked) { (area, stat) -> TownRow(area.name, stat, selected.townCounts[area.code]?.smears ?: 0) }
         }
     } else {
-        ranked.take(TOP_TOWNS_SHOWN).forEach { (area, stat) -> TownRow(area.name, stat) }
-        if (ranked.size > TOP_TOWNS_SHOWN) {
-            Spacer(Modifier.height(8.dp))
-            TextButton(onClick = { onShowAllTowns(true) }) {
-                Text("View all ${ranked.size} towns")
-            }
+        ranked.take(TOP_TOWNS_SHOWN).forEach { (area, stat) ->
+            TownRow(area.name, stat, selected.townCounts[area.code]?.smears ?: 0)
         }
     }
 }
 
 @Composable
-private fun TownRow(name: String, stat: AreaStat) {
+private fun TownRow(name: String, stat: AreaStat, smears: Int) {
     val colors = AgarthaTheme.colors
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(name, fontSize = 13.sp, color = colors.textPrimary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RateSwatch(stat = stat, size = 12.dp)
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(name, fontSize = 14.sp, color = colors.textPrimary)
+                if (smears > 0) {
+                    Text(
+                        text = "$smears smears",
+                        fontSize = 11.sp,
+                        color = colors.textSecondary,
+                    )
+                }
+            }
+        }
         Text(
             text = when (stat) {
                 is AreaStat.Reported -> "${(stat.positiveRate * PERCENT_FACTOR).toInt()}%"
@@ -348,7 +388,8 @@ private fun TownRow(name: String, stat: AreaStat) {
                 AreaStat.NoData -> "No data"
             },
             fontSize = 13.sp,
-            color = colors.textSecondary,
+            fontWeight = if (stat is AreaStat.Reported) FontWeight.Bold else FontWeight.Normal,
+            color = if (stat is AreaStat.Reported) colors.textPrimary else colors.textTertiary,
         )
     }
 }

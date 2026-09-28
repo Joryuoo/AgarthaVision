@@ -88,7 +88,7 @@ class ProvinceSheetTest {
             }
         }
 
-        composeRule.onNodeWithText("View all 8 towns").assertExists().performScrollTo().performClick()
+        composeRule.onNodeWithText("All 8").assertExists().performScrollTo().performClick()
         composeRule.waitForIdle()
 
         assert(requestedShowAll == true)
@@ -113,7 +113,7 @@ class ProvinceSheetTest {
             }
         }
 
-        composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
+        composeRule.onNodeWithText("All 8").assertDoesNotExist()
         composeRule.onNodeWithText("Town 1").performScrollTo().assertExists()
     }
 
@@ -140,7 +140,7 @@ class ProvinceSheetTest {
             }
         }
 
-        composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
+        composeRule.onNodeWithText("All 8").assertDoesNotExist()
     }
 
     @Test
@@ -166,6 +166,6 @@ class ProvinceSheetTest {
         composeRule.onNodeWithText("No smears from this province in this period").assertExists()
         composeRule.onNodeWithText("towns with data", substring = true).assertDoesNotExist()
         composeRule.onNodeWithText("Town 1").assertDoesNotExist()
-        composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
+        composeRule.onNodeWithText("All 8").assertDoesNotExist()
     }
 }
