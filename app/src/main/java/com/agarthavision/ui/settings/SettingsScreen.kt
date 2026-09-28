@@ -154,6 +154,7 @@ private fun SettingsContent(
                             initialFetchDone = state.initialFetchDone,
                             isFetching = state.isSyncing,
                             lastFetchIncomplete = state.lastFetchIncomplete,
+                            lastSyncError = state.lastSyncError,
                         ),
                         lastSyncMillis = state.lastSyncCompletion?.completedAtMillis,
                         onSyncNowClick = actions.onSyncNowClick,
