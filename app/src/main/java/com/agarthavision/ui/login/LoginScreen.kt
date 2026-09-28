@@ -235,8 +235,9 @@ private fun AppMark() {
             .border(1.dp, colors.border, RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
+        val logoRes = if (colors.isDark) R.drawable.ic_logo_dark else R.drawable.ic_logo_light
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_logo),
+            painter = androidx.compose.ui.res.painterResource(id = logoRes),
             contentDescription = "AgarthaVision Logo",
             modifier = Modifier.fillMaxSize()
         )

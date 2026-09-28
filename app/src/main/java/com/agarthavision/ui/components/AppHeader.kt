@@ -58,8 +58,9 @@ fun AppHeader(
             .padding(top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val logoRes = if (colors.isDark) R.drawable.ic_logo_dark else R.drawable.ic_logo_light
         Image(
-            painter = painterResource(id = R.drawable.ic_logo),
+            painter = painterResource(id = logoRes),
             contentDescription = stringResource(R.string.app_name),
             modifier = Modifier
                 .size(48.dp)
