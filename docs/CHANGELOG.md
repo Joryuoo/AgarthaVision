@@ -22,6 +22,10 @@ the background inference queue, so there is nothing left for the shutter to wait
 - **A double tap saves one sample.** The busy state was also what stopped a second tap from
   saving the same cached frame again. `CaptureViewModel` now saves each cached frame once, by
   identity; the next tap takes the analyzer's next frame. A failed save can be retried.
+- **Taps less than 750 ms apart save once (2026-09-29).** Identity alone was not enough: the
+  analyzer replaces the frame every ~33 ms, so a fast double tap lands on a new, near-identical
+  frame, and rapid tapping saved 9 samples of one field in 1.25 s on a Redmi Note 11. The
+  cooldown drops those taps. Moving to the next field takes far longer than 750 ms.
 - **The save still survives leaving the screen.** It runs under `NonCancellable`, so a medtech
   who leaves in the milliseconds it takes loses only the confirmation, not the frame.
 - **One confirmation for every tap.** `CaptureOutcome` no longer carries a source. Whether a

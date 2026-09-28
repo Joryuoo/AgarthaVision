@@ -64,8 +64,11 @@ class CaptureViewModel @Inject constructor(
 
     private val _events = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = 1)
 
-    /** The cached frame the last tap saved, compared by identity. See [onCapture]. */
+    /** The cached frame the last tap saved, compared by identity. See [saveOnce]. */
     private var lastSavedFrame: CachedFrame? = null
+
+    /** When the last saved tap landed, on [clock]. See [saveOnce]. */
+    private var lastSavedAtMs: Long? = null
 
     /**
      * One-shot outcomes of a shutter tap, for the screen to confirm.
@@ -163,15 +166,22 @@ class CaptureViewModel @Inject constructor(
     }
 
     /**
-     * Saves [cached] unless the last tap already saved it.
+     * Saves [cached] unless the last tap already saved it, or landed less than
+     * [CAPTURE_COOLDOWN_MS] ago.
      *
-     * Nothing locks the shutter between taps any more, so a double tap would otherwise save the
-     * one cached frame twice as two samples. A frame is saved once; the next tap waits for the
-     * analyzer's next frame, which arrives well inside a deliberate second tap.
+     * Nothing locks the shutter between taps any more. Refusing the same cached frame twice is
+     * not enough on its own: the analyzer replaces the frame about every 33 ms, so the second
+     * tap of a double tap usually finds a new, near-identical frame, and rapid tapping saved
+     * nine samples of one field in 1.25 s on a Redmi Note 11. The cooldown drops those extra
+     * taps. It is far shorter than moving the slide to a new field, so it never costs a
+     * deliberate capture.
      */
     private fun saveOnce(sessionId: String, cached: CachedFrame) {
-        if (cached === lastSavedFrame) return
+        val tappedAtMs = clock.elapsedRealtimeMs()
+        val inCooldown = lastSavedAtMs?.let { tappedAtMs - it < CAPTURE_COOLDOWN_MS } == true
+        if (cached === lastSavedFrame || inCooldown) return
         lastSavedFrame = cached
+        lastSavedAtMs = tappedAtMs
         viewModelScope.launch {
             _state.update { it.copy(errorMessage = null) }
             // The save takes milliseconds, so the screen no longer locks around it. It must
@@ -180,8 +190,11 @@ class CaptureViewModel @Inject constructor(
             withContext(NonCancellable) { captureFieldUseCase(sessionId, cached.jpegBytes) }
                 .onSuccess { outcome -> _events.emit(CaptureEvent.FrameCaptured(outcome)) }
                 .onFailure { throwable ->
-                    // Nothing was saved, so the same frame may be tried again.
-                    if (lastSavedFrame === cached) lastSavedFrame = null
+                    // Nothing was saved, so the same frame may be tried again, at once.
+                    if (lastSavedFrame === cached) {
+                        lastSavedFrame = null
+                        lastSavedAtMs = null
+                    }
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
         }
@@ -223,6 +236,13 @@ class CaptureViewModel @Inject constructor(
          * threshold costs nothing in normal use and fails closed in all of them.
          */
         private const val MAX_FRAME_AGE_MS = 1_000L
+
+        /**
+         * The shortest gap between two saved taps. Long enough to drop a double tap or a burst
+         * (about 150 ms apart when tapping fast), short enough that moving to the next field,
+         * which takes well over a second, is never refused.
+         */
+        private const val CAPTURE_COOLDOWN_MS = 750L
     }
 }
 
