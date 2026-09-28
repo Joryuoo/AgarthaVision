@@ -295,8 +295,8 @@ internal fun QueueEmptyState(
                 onClick = onViewRecords,
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accent,
-                    contentColor = colors.onAccent,
+                    containerColor = colors.brandFill,
+                    contentColor = colors.onBrandFill,
                 ),
             ) {
                 Text(
@@ -349,10 +349,10 @@ private fun QueueFilterChip(
     Box(
         modifier = Modifier
             .clip(CircleShape)
-            .background(if (selected) colors.accent else colors.surface)
+            .background(if (selected) colors.brandFill else colors.surface)
             .border(
                 1.dp,
-                if (selected) colors.accent else colors.border,
+                if (selected) colors.brandFill else colors.border,
                 CircleShape,
             )
             .clickable(onClick = onClick)
@@ -363,7 +363,7 @@ private fun QueueFilterChip(
             text = label,
             fontSize = 13.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) colors.onAccent else colors.textSecondary,
+            color = if (selected) colors.onBrandFill else colors.textSecondary,
             style = InterBaseStyle,
         )
     }
@@ -463,7 +463,7 @@ private fun FrameRow(
                         ),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = if (isAI) colors.accent else colors.warningText,
+                        color = if (isAI) colors.onAccentTint else colors.warningText,
                         style = InterBaseStyle,
                     )
                 }

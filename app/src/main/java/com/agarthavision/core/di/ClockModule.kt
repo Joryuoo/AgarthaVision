@@ -18,4 +18,8 @@ object ClockModule {
      */
     @Provides
     fun provideElapsedClock(): ElapsedClock = ElapsedClock { SystemClock.elapsedRealtime() }
+
+    @Provides
+    fun provideClock(): java.time.Clock =
+        java.time.Clock.system(com.agarthavision.domain.model.CLINICAL_ZONE)
 }

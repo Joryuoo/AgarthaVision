@@ -279,21 +279,21 @@ private fun SelectionRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colors.accent, RoundedCornerShape(Spacing.md))
+            .background(colors.brandFill, RoundedCornerShape(Spacing.md))
             .padding(horizontal = Spacing.lg, vertical = Spacing.md),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
     ) {
         OptionText(
             option = selected,
-            titleColor = colors.onAccent,
-            subtitleColor = colors.onAccent.copy(alpha = 0.8f),
+            titleColor = colors.onBrandFill,
+            subtitleColor = colors.onBrandFill.copy(alpha = 0.8f),
             modifier = Modifier.weight(1f),
         )
         Box(
             modifier = Modifier
                 .size(28.dp)
-                .background(colors.onAccent.copy(alpha = 0.18f), CircleShape)
+                .background(colors.onBrandFill.copy(alpha = 0.18f), CircleShape)
                 .clickable(onClick = onClear)
                 .semantics { contentDescription = clearLabel },
             contentAlignment = Alignment.Center,
@@ -302,7 +302,7 @@ private fun SelectionRow(
                 imageVector = Icons.Outlined.Close,
                 // The enclosing Box already carries `clearLabel` as its semantics.
                 contentDescription = null,
-                tint = colors.onAccent,
+                tint = colors.onBrandFill,
                 modifier = Modifier.size(14.dp),
             )
         }

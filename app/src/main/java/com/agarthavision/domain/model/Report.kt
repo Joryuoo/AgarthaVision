@@ -33,4 +33,5 @@ data class Report(
     val pdfFilePath: String?,
     val supabaseStatus: ReportSyncStatus,
     val sessionLabel: String? = null,
+    val patientName: String? = null,
 )

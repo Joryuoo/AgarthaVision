@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,7 +48,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
-            AgarthaVisionTheme(darkTheme = themeMode == ThemeMode.DARK) {
+            val isDark = when (themeMode) {
+                ThemeMode.LIGHT -> false
+                ThemeMode.DARK -> true
+                ThemeMode.SYSTEM -> isSystemInDarkTheme()
+            }
+            AgarthaVisionTheme(darkTheme = isDark) {
                 // Loading never reaches composition: the splash is still up. Rendering the
                 // Dashboard for it would defeat the condition above.
                 if (authGate != AuthGate.Loading) {

@@ -1,4 +1,4 @@
-@file:Suppress("LongParameterList")
+@file:Suppress("LongParameterList", "TooManyFunctions")
 
 package com.agarthavision.domain.repository
 
@@ -76,4 +76,9 @@ interface ReportRepository {
      * Updates the cloud-sync state of a report after a sync attempt.
      */
     suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus)
+
+    /**
+     * Observes the count of reports pending sync or whose sync failed for [userId].
+     */
+    fun observeUnsyncedCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.flowOf(0)
 }

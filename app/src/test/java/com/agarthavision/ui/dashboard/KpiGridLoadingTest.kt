@@ -58,7 +58,7 @@ class KpiGridLoadingTest {
                         .width(300.dp)
                         .background(backdrop)
                 ) {
-                    KpiGrid(kpis = KpiState(), isLoading = true)
+                    KpiGrid(tiles = emptyList(), isLoading = true)
                 }
             }
         }
@@ -100,7 +100,7 @@ class KpiGridLoadingTest {
                         .width(300.dp)
                         .background(backdrop)
                 ) {
-                    KpiGrid(kpis = KpiState(), isLoading = isLoading)
+                    KpiGrid(tiles = emptyList(), isLoading = isLoading)
                 }
             }
         }
@@ -125,7 +125,7 @@ class KpiGridLoadingTest {
                         .width(300.dp)
                         .background(backdrop)
                 ) {
-                    KpiGrid(kpis = KpiState(), isLoading = false)
+                    KpiGrid(tiles = emptyList(), isLoading = false)
                 }
             }
         }
@@ -159,7 +159,7 @@ class KpiGridLoadingTest {
                         .width(300.dp)
                         .background(backdrop)
                 ) {
-                    KpiGrid(kpis = KpiState(), isLoading = true)
+                    KpiGrid(tiles = emptyList(), isLoading = true)
                 }
             }
         }

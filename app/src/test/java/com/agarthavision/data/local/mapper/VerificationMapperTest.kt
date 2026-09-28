@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -554,5 +555,39 @@ class VerificationMapperTest {
         assertTrue(predictionIdFor("sample-1", 0) != detectionIdFor("sample-1", 0))
         assertEquals(predictionIdFor("sample-1", 3), predictionIdFor("sample-1", 3))
         assertTrue(predictionIdFor("sample-1", 0) != predictionIdFor("sample-1", 1))
+    }
+
+    @Test
+    fun `isPredictionBacked returns true when detectionId matches derived ordinal id in range`() {
+        val sampleId = "sample-123"
+        val id0 = detectionIdFor(sampleId, 0)
+        val id2 = detectionIdFor(sampleId, 2)
+
+        assertTrue(isPredictionBacked(id0, sampleId, detectionsInSample = 3))
+        assertTrue(isPredictionBacked(id2, sampleId, detectionsInSample = 3))
+    }
+
+    @Test
+    fun `isPredictionBacked returns false when ordinal exceeds detectionsInSample`() {
+        val sampleId = "sample-123"
+        val id3 = detectionIdFor(sampleId, 3)
+
+        assertFalse(isPredictionBacked(id3, sampleId, detectionsInSample = 3))
+    }
+
+    @Test
+    fun `isPredictionBacked returns false for hand-added detection id`() {
+        val sampleId = "sample-123"
+        val addedId = addedDetectionIdFor(sampleId, "Ascaris lumbricoides", 0)
+
+        assertFalse(isPredictionBacked(addedId, sampleId, detectionsInSample = 5))
+    }
+
+    @Test
+    fun `isPredictionBacked returns false when detectionsInSample is 0`() {
+        val sampleId = "sample-123"
+        val id0 = detectionIdFor(sampleId, 0)
+
+        assertFalse(isPredictionBacked(id0, sampleId, detectionsInSample = 0))
     }
 }

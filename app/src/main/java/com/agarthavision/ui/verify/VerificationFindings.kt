@@ -425,15 +425,15 @@ private fun AddedFindingSummary(
             .fillMaxWidth()
             .padding(bottom = 6.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(colors.accent)
+            .background(colors.brandFill)
     }
     val speciesColor = when {
-        !isUnfinished -> colors.onAccent
+        !isUnfinished -> colors.onBrandFill
         species == null -> colors.textTertiary
         else -> colors.textPrimary
     }
-    val stageColor = if (isUnfinished) colors.textSecondary else colors.onAccent
-    val countColor = if (isUnfinished) colors.textPrimary else colors.onAccent
+    val stageColor = if (isUnfinished) colors.textSecondary else colors.onBrandFill
+    val countColor = if (isUnfinished) colors.textPrimary else colors.onBrandFill
 
     Row(
         modifier = cardModifier
