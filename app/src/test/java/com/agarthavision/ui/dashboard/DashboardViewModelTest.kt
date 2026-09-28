@@ -106,7 +106,9 @@ class DashboardViewModelTest {
     }
     private val patientRepository: PatientRepository = mock<PatientRepository>().also {
         whenever(
-            it.observePatientCount(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()),
+            it.observePatientCount(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(),
+            ),
         ).thenReturn(flowOf(0))
     }
     private val themeModeFlow = MutableStateFlow(ThemeMode.LIGHT)
@@ -326,7 +328,7 @@ class DashboardViewModelTest {
         // a sample count dressed as a clinical intensity on a screen used during validation.
         whenever(
             patientRepository.observePatientCount(
-                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(),
             ),
         ).thenReturn(flowOf(3))
         whenever(sampleRepository.observePendingCount(any())).thenReturn(flowOf(4))
@@ -370,7 +372,7 @@ class DashboardViewModelTest {
             whenever(observeLocalIdentityUseCase.invoke()).thenReturn(identityFlow)
             whenever(
                 patientRepository.observePatientCount(
-                    any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+                    any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(),
                 ),
             ).thenReturn(flowOf(3))
 

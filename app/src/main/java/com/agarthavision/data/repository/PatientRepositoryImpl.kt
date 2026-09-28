@@ -40,6 +40,8 @@ class PatientRepositoryImpl @Inject constructor(
         barangayCode: String?,
         minBirthdate: Long?,
         maxBirthdate: Long?,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
     ): Flow<List<Patient>> =
         // Always from the top: the list accumulates rather than paging, as Records and
         // Sessions do. The DAO keeps its offset for a caller that one day wants real pages.
@@ -53,6 +55,8 @@ class PatientRepositoryImpl @Inject constructor(
             barangayCode = barangayCode,
             minBirthdate = minBirthdate,
             maxBirthdate = maxBirthdate,
+            todayStartMillis = todayStartMillis,
+            sevenDaysAgoMillis = sevenDaysAgoMillis,
         ).map { entities ->
             entities.map { it.toDomain() }
         }
@@ -65,6 +69,9 @@ class PatientRepositoryImpl @Inject constructor(
         barangayCode: String?,
         minBirthdate: Long?,
         maxBirthdate: Long?,
+        sort: PatientSort,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
     ): Flow<Int> =
         patientDao.observePatientCount(
             userId = userId,
@@ -73,6 +80,9 @@ class PatientRepositoryImpl @Inject constructor(
             barangayCode = barangayCode,
             minBirthdate = minBirthdate,
             maxBirthdate = maxBirthdate,
+            sort = sort.name,
+            todayStartMillis = todayStartMillis,
+            sevenDaysAgoMillis = sevenDaysAgoMillis,
         )
 
     override suspend fun getPatientById(patientId: String): Patient? =
@@ -161,10 +171,24 @@ class PatientRepositoryImpl @Inject constructor(
             }
         }
 
+    /**
+     * Chunked so the bound `IN (:patientIds)` list never approaches SQLite's default
+     * `SQLITE_MAX_VARIABLE_NUMBER` (999 on API 26-29, minSdk here). The list passed in grows
+     * with every loaded page from offset 0 (see [observePatients]'s doc on why offset stays
+     * 0), so a medtech who scrolls through roughly 100+ pages in one sitting would otherwise
+     * eventually crash this call. [CHUNK_SIZE] leaves headroom under 999 for the query's own
+     * non-list bind parameters.
+     */
     override suspend fun getPatientActivitySummaries(
         patientIds: List<String>,
     ): Map<String, com.agarthavision.data.local.dao.PatientActivitySummary> {
         if (patientIds.isEmpty()) return emptyMap()
-        return patientDao.getPatientActivitySummaries(patientIds).associateBy { it.patientId }
+        return patientIds.chunked(CHUNK_SIZE)
+            .flatMap { chunk -> patientDao.getPatientActivitySummaries(chunk) }
+            .associateBy { it.patientId }
+    }
+
+    private companion object {
+        const val CHUNK_SIZE = 900
     }
 }

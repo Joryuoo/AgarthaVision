@@ -94,6 +94,19 @@ class RecentSessionsRowTest {
         lastActivityAt = 1_000L,
     )
 
+    /**
+     * Stubs `observePatientCount` to always return 0, regardless of the bucket-sort filter
+     * (`sort`/`todayStartMillis`/`sevenDaysAgoMillis`) a caller passes — this test doesn't
+     * exercise Patients sorting, only that the Dashboard KPI wiring doesn't crash.
+     */
+    private fun stubPatientCount(patientRepository: PatientRepository) {
+        whenever(
+            patientRepository.observePatientCount(
+                any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull(),
+            ),
+        ).thenReturn(flowOf(0))
+    }
+
     private fun createViewModel(): DashboardViewModel {
         val clock = Clock.fixed(Instant.parse("2026-09-27T10:00:00Z"), CLINICAL_ZONE)
         val observeLocalIdentityUseCase: ObserveLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
@@ -118,11 +131,7 @@ class RecentSessionsRowTest {
                 whenever(it.getSamplesPendingSyncIncludingDeleted(any())).thenReturn(emptyList())
             }
         }
-        val patientRepository: PatientRepository = mock<PatientRepository>().also {
-            whenever(
-                it.observePatientCount(any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()),
-            ).thenReturn(flowOf(0))
-        }
+        val patientRepository: PatientRepository = mock<PatientRepository>().also(::stubPatientCount)
         val observeThemeModeUseCase: ObserveThemeModeUseCase = mock<ObserveThemeModeUseCase>().also {
             whenever(it.invoke()).thenReturn(MutableStateFlow(ThemeMode.LIGHT))
         }
