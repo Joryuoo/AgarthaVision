@@ -31,11 +31,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -86,21 +89,31 @@ fun MyCoverageCard(
 
     val theme = AgarthaTheme.colors
     val shape = RoundedCornerShape(16.dp)
+    val isLoading = state is MyCoverageCardUiState.Loading
 
-    Box(
-        modifier = modifier
-            .testTag("myCoverageCard")
-            .clip(shape)
-            .background(theme.surface, shape)
-            .border(1.dp, theme.border, shape)
-            .clickable { onOpen(period) }
-            .semantics(mergeDescendants = true) {
-                role = Role.Button
-                contentDescription = contentDescriptionFor(state)
-            }
-            .padding(16.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.testTag("myCoverageCard")) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(shape)
+                .background(if (isLoading) Color.Transparent else theme.surface, shape)
+                .border(1.dp, if (isLoading) Color.Transparent else theme.border, shape)
+                .clickable { onOpen(period) }
+                .semantics(mergeDescendants = true) {
+                    role = Role.Button
+                    contentDescription = contentDescriptionFor(state)
+                }
+                .padding(16.dp)
+                .then(
+                    if (isLoading) {
+                        Modifier
+                            .alpha(0f)
+                            .clearAndSetSemantics {}
+                    } else {
+                        Modifier
+                    },
+                ),
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -132,7 +145,9 @@ fun MyCoverageCard(
             Spacer(Modifier.height(8.dp))
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 when (val s = state) {
-                    is MyCoverageCardUiState.Loading -> SkeletonBox(modifier = Modifier.fillMaxSize())
+                    // The whole-card SkeletonBox overlay (below) covers the loading state;
+                    // this content stays alpha(0f) so nothing needs to render here.
+                    is MyCoverageCardUiState.Loading -> Unit
                     is MyCoverageCardUiState.Empty -> EmptyState(
                         icon = Icons.Outlined.Map,
                         title = "No smears in this period",
@@ -171,6 +186,12 @@ fun MyCoverageCard(
                     }
                 }
             }
+        }
+        if (isLoading) {
+            SkeletonBox(
+                modifier = Modifier.matchParentSize(),
+                shape = shape,
+            )
         }
     }
 }
