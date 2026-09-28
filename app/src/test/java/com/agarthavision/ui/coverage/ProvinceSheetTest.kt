@@ -1,6 +1,7 @@
 package com.agarthavision.ui.coverage
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -141,6 +142,31 @@ class ProvinceSheetTest {
         }
 
         composeRule.onNodeWithText("All 8").assertDoesNotExist()
+    }
+
+    @Test
+    fun `tapping the close button invokes onClose`() {
+        val selected = SelectedProvince(
+            code = "CEB",
+            name = "Cebu",
+            coverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(smears = 2, positives = 0)),
+        )
+
+        var closed = false
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                ProvinceSheetContent(
+                    selected = selected,
+                    showAllTowns = false,
+                    onShowAllTowns = {},
+                    onClose = { closed = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Close").performClick()
+
+        assert(closed)
     }
 
     @Test

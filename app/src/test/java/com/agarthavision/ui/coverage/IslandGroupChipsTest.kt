@@ -72,6 +72,44 @@ class IslandGroupChipsTest {
     }
 
     @Test
+    fun `clicking a zero-count chip does not invoke onSelect`() {
+        var invoked = false
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                IslandGroupChips(
+                    counts = mapOf(IslandGroup.LUZON to 3, IslandGroup.VISAYAS to 0),
+                    total = 3,
+                    selected = null,
+                    onSelect = { invoked = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Visayas").assertIsNotEnabled().performClick()
+
+        assert(!invoked)
+    }
+
+    @Test
+    fun `clicking a disabled All does not invoke onSelect`() {
+        var invoked = false
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                IslandGroupChips(
+                    counts = emptyMap(),
+                    total = 0,
+                    selected = null,
+                    onSelect = { invoked = true },
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("All").assertIsNotEnabled().performClick()
+
+        assert(!invoked)
+    }
+
+    @Test
     fun `All is enabled when total is nonzero even if every group is 0`() {
         composeRule.setContent {
             AgarthaVisionTheme {

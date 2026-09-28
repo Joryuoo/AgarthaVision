@@ -159,4 +159,55 @@ class MyCoverageCameraTest {
 
         assertEquals(1f, next.scale, 0.0001f)
     }
+
+    @Test
+    fun `zoomAroundCenter zooms toward the viewport center, keeping its map point on screen`() {
+        val current = ViewTransform(scale = 2f, tx = 10f, ty = -5f)
+        val width = 400f
+        val height = 800f
+        val centerMap = current.toMap(width / 2f, height / 2f)
+
+        val zoomedIn = zoomAroundCenter(current, width, height, zoomInFactor(), 0.1f, 100f)
+
+        assertEquals(current.scale * zoomInFactor(), zoomedIn.scale, 0.0001f)
+        val screenAfter = zoomedIn.toScreen(centerMap.first, centerMap.second)
+        assertEquals(width / 2f, screenAfter.first, 0.001f)
+        assertEquals(height / 2f, screenAfter.second, 0.001f)
+    }
+
+    @Test
+    fun `zoomAroundCenter in then out returns to (approximately) the original transform`() {
+        val current = ViewTransform(scale = 2f, tx = 10f, ty = -5f)
+        val width = 400f
+        val height = 800f
+        val minScale = 0.1f
+        val maxScale = 100f
+
+        val zoomedIn = zoomAroundCenter(current, width, height, zoomInFactor(), minScale, maxScale)
+        val backOut = zoomAroundCenter(zoomedIn, width, height, zoomOutFactor(), minScale, maxScale)
+
+        assertEquals(current.scale, backOut.scale, 0.001f)
+        assertEquals(current.tx, backOut.tx, 0.01f)
+        assertEquals(current.ty, backOut.ty, 0.01f)
+    }
+
+    @Test
+    fun `zoomAroundCenter clamps at maxScale on repeated zoom in`() {
+        var transform = ViewTransform(scale = 30f, tx = 0f, ty = 0f)
+        repeat(10) {
+            transform = zoomAroundCenter(transform, 400f, 800f, zoomInFactor(), 0.1f, 40f)
+        }
+
+        assertEquals(40f, transform.scale, 0.0001f)
+    }
+
+    @Test
+    fun `zoomAroundCenter clamps at minScale on repeated zoom out`() {
+        var transform = ViewTransform(scale = 2f, tx = 0f, ty = 0f)
+        repeat(10) {
+            transform = zoomAroundCenter(transform, 400f, 800f, zoomOutFactor(), 0.8f, 40f)
+        }
+
+        assertEquals(0.8f, transform.scale, 0.0001f)
+    }
 }
