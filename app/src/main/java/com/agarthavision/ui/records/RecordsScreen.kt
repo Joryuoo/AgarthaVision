@@ -895,7 +895,7 @@ internal fun ReportCard(
             .border(1.dp, colors.border, RoundedCornerShape(12.dp))
             .clip(RoundedCornerShape(12.dp))
             .clickable(onClick = onSessionClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -911,7 +911,7 @@ internal fun ReportCard(
             ReportStatusBadge(status = report.supabaseStatus)
         }
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
 
         Text(
             text = formatReportSubtitle(report.generatedAt, report.patientName),
@@ -919,7 +919,7 @@ internal fun ReportCard(
             color = colors.textSecondary,
         )
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
 
         if (report.positiveSpecies.isEmpty()) {
             Text(
@@ -930,7 +930,7 @@ internal fun ReportCard(
         } else {
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 report.positiveSpecies.forEach { speciesName ->
@@ -939,7 +939,7 @@ internal fun ReportCard(
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(4.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -963,9 +963,9 @@ internal fun ReportCard(
         val hasPdf = report.pdfFilePath != null
         val hasCsv = report.csvFilePath != null
         if (hasPdf || hasCsv) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(6.dp))
             HorizontalDivider(color = colors.border, thickness = 1.dp)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
