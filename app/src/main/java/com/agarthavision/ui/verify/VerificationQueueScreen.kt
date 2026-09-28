@@ -467,6 +467,7 @@ private fun FrameRow(
                         style = InterBaseStyle,
                     )
                 }
+                // Non-prose dot separator glyph exempt from strings.xml localization (C11).
                 Text("·", fontSize = 12.sp, color = colors.textTertiary, style = InterBaseStyle)
                 Text(timeStr, fontSize = 12.sp, color = colors.textSecondary, style = InterTabularStyle)
             }

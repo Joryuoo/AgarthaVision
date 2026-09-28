@@ -302,7 +302,11 @@ fun SessionsScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("New session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.session_picker_create),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                     }
                 }
             }
@@ -634,7 +638,12 @@ private fun SessionCard(
                         .clickable { actions.onViewReportClick() }
                         .padding(horizontal = 9.dp, vertical = 4.dp)
                 ) {
-                    Text("$eggs eggs", color = badgeColor, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        pluralStringResource(R.plurals.sessions_eggs_count, eggs, eggs),
+                        color = badgeColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
         }
@@ -837,7 +846,11 @@ private fun NewSessionSheet(
                         contentColor = colors.textPrimary
                     )
                 ) {
-                    Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        stringResource(R.string.session_picker_dialog_cancel),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
                 Button(
                     onClick = {
@@ -858,7 +871,11 @@ private fun NewSessionSheet(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        Text("Start session", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            stringResource(R.string.session_picker_dialog_start),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.ArrowForward,

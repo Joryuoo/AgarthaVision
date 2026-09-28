@@ -28,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.agarthavision.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.ui.icons.AgarthaIcons
@@ -196,7 +198,7 @@ private fun SingleDatePickerDialog(
                 },
             ) {
                 Text(
-                    text = "OK",
+                    text = stringResource(R.string.date_range_picker_ok),
                     color = if (isEnabled) {
                         if (colors.isDark) colors.accent else colors.brandFill
                     } else {
@@ -210,7 +212,7 @@ private fun SingleDatePickerDialog(
         dismissButton = {
             TextButton(onClick = onDismiss) {
                 Text(
-                    text = "Cancel",
+                    text = stringResource(R.string.date_range_picker_cancel),
                     color = colors.textPrimary,
                     fontWeight = FontWeight.Medium,
                     fontSize = 15.sp,

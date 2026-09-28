@@ -11,6 +11,7 @@ import io.github.jan.supabase.createSupabaseClient
 import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.storage.Storage
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * Provides the app-wide [SupabaseClient] with Auth, Postgrest, and Storage plugins
@@ -27,8 +28,11 @@ object SupabaseModule {
             supabaseUrl = BuildConfig.SUPABASE_URL,
             supabaseKey = BuildConfig.SUPABASE_ANON_KEY,
         ) {
+            requestTimeout = HTTP_TIMEOUT
             install(Auth)
             install(Postgrest)
             install(Storage)
         }
+
+    private val HTTP_TIMEOUT = 30.seconds
 }

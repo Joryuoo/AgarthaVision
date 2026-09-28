@@ -220,18 +220,28 @@ class FetchRemoteDataUseCase @Inject constructor(
      */
     private suspend fun pullPatients(): Int {
         var fetched = 0
-        val patients = patientRemoteDataSource.fetchPatients()
-        for (remote in patients) {
-            val local = patientDao.getPatientById(remote.patientId)
-            if (local == null || local.supabaseStatus == PatientSyncStatus.SYNCED.value) {
-                patientDao.upsertPatient(remote)
-                fetched++
+        var offset = 0L
+        while (true) {
+            val page = patientRemoteDataSource.fetchPatients(offset, PAGE_SIZE.toLong())
+            for (remote in page) {
+                val local = patientDao.getPatientById(remote.patientId)
+                if (local == null || local.supabaseStatus == PatientSyncStatus.SYNCED.value) {
+                    patientDao.upsertPatient(remote)
+                    fetched++
+                }
             }
+            if (page.size < PAGE_SIZE) break
+            offset += PAGE_SIZE.toLong()
         }
 
-        val links = patientRemoteDataSource.fetchPatientLinks()
-        if (links.isNotEmpty()) {
-            patientDao.linkPatientsToUsers(links)
+        var linkOffset = 0L
+        while (true) {
+            val linksPage = patientRemoteDataSource.fetchPatientLinks(linkOffset, PAGE_SIZE.toLong())
+            if (linksPage.isNotEmpty()) {
+                patientDao.linkPatientsToUsers(linksPage)
+            }
+            if (linksPage.size < PAGE_SIZE) break
+            linkOffset += PAGE_SIZE.toLong()
         }
         return fetched
     }
@@ -252,14 +262,19 @@ class FetchRemoteDataUseCase @Inject constructor(
      */
     private suspend fun pullSessions(userId: String): Int {
         var fetched = 0
-        val sessions = sessionRemoteDataSource.fetchSessions(userId)
-        for (remote in sessions) {
-            val local = sessionDao.getSessionById(remote.sessionId)
-            // E4 guard: only write when absent or already synced; skip pending/sync_failed
-            if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                upsertSessionReconcilingLabel(remote)
-                fetched++
+        var offset = 0L
+        while (true) {
+            val page = sessionRemoteDataSource.fetchSessions(userId, offset, PAGE_SIZE.toLong())
+            for (remote in page) {
+                val local = sessionDao.getSessionById(remote.sessionId)
+                // E4 guard: only write when absent or already synced; skip pending/sync_failed
+                if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
+                    upsertSessionReconcilingLabel(remote)
+                    fetched++
+                }
             }
+            if (page.size < PAGE_SIZE) break
+            offset += PAGE_SIZE.toLong()
         }
         return fetched
     }
@@ -454,14 +469,19 @@ class FetchRemoteDataUseCase @Inject constructor(
     /** Reports are FK children of sessions — pull them last. Returns rows inserted. */
     private suspend fun pullReports(userId: String): Int {
         var fetched = 0
-        val reports = reportRemoteDataSource.fetchReports(userId)
-        for (remote in reports) {
-            // E4 guard: skip if local row is pending or sync_failed
-            val local = reportDao.getReportById(remote.reportId)
-            if (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value) {
-                reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
-                fetched++
+        var offset = 0L
+        while (true) {
+            val page = reportRemoteDataSource.fetchReports(userId, offset, PAGE_SIZE.toLong())
+            for (remote in page) {
+                // E4 guard: skip if local row is pending or sync_failed
+                val local = reportDao.getReportById(remote.reportId)
+                if (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value) {
+                    reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
+                    fetched++
+                }
             }
+            if (page.size < PAGE_SIZE) break
+            offset += PAGE_SIZE.toLong()
         }
         return fetched
     }

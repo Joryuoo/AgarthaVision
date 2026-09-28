@@ -174,4 +174,53 @@ class UnsavedChangesTest {
 
             assertEquals("c", vm.state.value.frame?.sampleId)
         }
+
+    @Test
+    fun `editing an already verified sample without changes exits without prompting`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val priorTarget = com.agarthavision.domain.usecase.verify.VerificationTarget(
+                frame = frames[1],
+                imageSource = com.agarthavision.domain.usecase.records.SampleImageSource.Local("path"),
+                findings = emptyList(),
+                missedEgg = null,
+                userNote = "Existing note",
+            )
+            vm.setFrame(frames[1], prior = priorTarget)
+
+            vm.events.test {
+                vm.onCancel()
+                advanceUntilIdle()
+
+                assertEquals(VerificationEvent.Dismiss, awaitItem())
+                assertNull(vm.state.value.pendingLeave)
+            }
+        }
+
+    @Test
+    fun `editing an already verified sample with new changes asks before leaving`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val priorTarget = com.agarthavision.domain.usecase.verify.VerificationTarget(
+                frame = frames[1],
+                imageSource = com.agarthavision.domain.usecase.records.SampleImageSource.Local("path"),
+                findings = emptyList(),
+                missedEgg = null,
+                userNote = "Existing note",
+            )
+            vm.setFrame(frames[1], prior = priorTarget)
+
+            vm.onUserNoteChanged("Updated note")
+
+            vm.events.test {
+                vm.onCancel()
+                advanceUntilIdle()
+                expectNoEvents()
+                assertEquals(LeaveIntent.EXIT, vm.state.value.pendingLeave)
+
+                vm.onConfirmLeave()
+                advanceUntilIdle()
+                assertEquals(VerificationEvent.Dismiss, awaitItem())
+            }
+        }
 }
