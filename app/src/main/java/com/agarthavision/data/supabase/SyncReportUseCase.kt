@@ -30,6 +30,7 @@ class SyncReportUseCase @Inject constructor(
      * otherwise [Result.failure] after marking the local row
      * [ReportSyncStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(reportId: String): Result<Unit> {
         val report = reportDao.getReportById(reportId)
         if (report == null) {
@@ -50,7 +51,8 @@ class SyncReportUseCase @Inject constructor(
             val failureClass = classifyFailure(throwable)
             Log.e(
                 TAG,
-                "[SyncFailed][Report:$reportId][Session:${report.sessionId}][Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                "[SyncFailed][Report:$reportId][Session:${report.sessionId}]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNC_FAILED.value)
@@ -99,11 +101,20 @@ class SyncReportUseCase @Inject constructor(
         )
     }
 
-    private fun classifyFailure(throwable: Throwable): String = when {
-        throwable is java.net.UnknownHostException || throwable is java.io.IOException -> "NETWORK_ERROR"
-        throwable is IllegalStateException && throwable.message?.contains("session", ignoreCase = true) == true -> "UNAUTHENTICATED"
-        throwable.message?.contains("foreign key constraint", ignoreCase = true) == true -> "FOREIGN_KEY_VIOLATION"
-        else -> throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException ||
+                throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException &&
+                msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

@@ -26,6 +26,7 @@ class SyncPatientUseCase @Inject constructor(
      * @return [Result.success] when the row reaches [PatientSyncStatus.SYNCED], otherwise
      * [Result.failure] after marking the local row [PatientSyncStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(patientId: String): Result<Unit> {
         val patient = patientDao.getPatientById(patientId)
         if (patient == null) {
@@ -45,18 +46,26 @@ class SyncPatientUseCase @Inject constructor(
             val failureClass = classifyFailure(throwable)
             Log.e(
                 TAG,
-                "[SyncFailed][Patient:$patientId][Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                "[SyncFailed][Patient:$patientId][Class:$failureClass] " +
+                    "Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNC_FAILED.value)
         }
     }
 
-    private fun classifyFailure(throwable: Throwable): String = when {
-        throwable is java.net.UnknownHostException || throwable is java.io.IOException -> "NETWORK_ERROR"
-        throwable is IllegalStateException && throwable.message?.contains("session", ignoreCase = true) == true -> "UNAUTHENTICATED"
-        throwable.message?.contains("foreign key constraint", ignoreCase = true) == true -> "FOREIGN_KEY_VIOLATION"
-        else -> throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException || throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException && msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

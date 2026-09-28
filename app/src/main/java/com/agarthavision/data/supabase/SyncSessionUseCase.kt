@@ -49,7 +49,8 @@ class SyncSessionUseCase @Inject constructor(
                 val patientSyncResult = syncPatientUseCase(session.patientId)
                 if (patientSyncResult.isFailure) {
                     val cause = patientSyncResult.exceptionOrNull()
-                    throw IllegalStateException("Parent patient ${session.patientId} failed to sync prior to session $sessionId", cause)
+                    val msg = "Parent patient ${session.patientId} failed to sync prior to session $sessionId"
+                    throw IllegalStateException(msg, cause)
                 }
             }
 
@@ -59,19 +60,28 @@ class SyncSessionUseCase @Inject constructor(
             val failureClass = classifyFailure(throwable)
             Log.e(
                 TAG,
-                "[SyncFailed][Session:$sessionId][Patient:${session.patientId}][Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                "[SyncFailed][Session:$sessionId][Patient:${session.patientId}]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )
             sessionDao.updateSupabaseStatus(sessionId, SessionSyncStatus.SYNC_FAILED.value)
         }
     }
 
-    private fun classifyFailure(throwable: Throwable): String = when {
-        throwable is java.net.UnknownHostException || throwable is java.io.IOException -> "NETWORK_ERROR"
-        throwable is IllegalStateException && throwable.message?.contains("Parent patient", ignoreCase = true) == true -> "PARENT_PATIENT_SYNC_FAILED"
-        throwable is IllegalStateException && throwable.message?.contains("session", ignoreCase = true) == true -> "UNAUTHENTICATED"
-        throwable.message?.contains("foreign key constraint", ignoreCase = true) == true -> "FOREIGN_KEY_VIOLATION"
-        else -> throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException || throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException && msg.contains("Parent patient", ignoreCase = true) ->
+                "PARENT_PATIENT_SYNC_FAILED"
+            throwable is IllegalStateException && msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

@@ -34,6 +34,7 @@ class SyncSampleUseCase @Inject constructor(
      * @return [Result.success] when the sample reaches [SampleStatus.SYNCED], otherwise
      * [Result.failure] after marking the local sample [SampleStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(sampleId: String): Result<Unit> {
         // Including deleted: a tombstoned sample still has to push its tombstone, and reading
         // it through the filtered accessor would make the delete local-only.
@@ -57,7 +58,9 @@ class SyncSampleUseCase @Inject constructor(
                 val sessionSyncResult = syncSessionUseCase(sample.sessionId)
                 if (sessionSyncResult.isFailure) {
                     val cause = sessionSyncResult.exceptionOrNull()
-                    throw IllegalStateException("Parent session ${sample.sessionId} failed to sync prior to sample $sampleId", cause)
+                    val msg = "Parent session ${sample.sessionId} failed to sync " +
+                        "prior to sample $sampleId"
+                    throw IllegalStateException(msg, cause)
                 }
             }
 
@@ -84,7 +87,8 @@ class SyncSampleUseCase @Inject constructor(
             val failureClass = classifyFailure(throwable)
             Log.e(
                 TAG,
-                "[SyncFailed][Sample:$sampleId][Session:${sample.sessionId}][Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                "[SyncFailed][Sample:$sampleId][Session:${sample.sessionId}]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )
             sampleDao.updateStatus(sampleId, SampleStatus.SYNC_FAILED.value)
@@ -121,13 +125,26 @@ class SyncSampleUseCase @Inject constructor(
         }
     }
 
-    private fun classifyFailure(throwable: Throwable): String = when {
-        throwable is java.io.FileNotFoundException || throwable.message?.contains("image does not exist", ignoreCase = true) == true -> "FILE_NOT_FOUND"
-        throwable is IllegalStateException && throwable.message?.contains("Parent session", ignoreCase = true) == true -> "PARENT_SESSION_SYNC_FAILED"
-        throwable is IllegalStateException && throwable.message?.contains("user session", ignoreCase = true) == true -> "UNAUTHENTICATED"
-        throwable is java.net.UnknownHostException || throwable is java.io.IOException -> "NETWORK_ERROR"
-        throwable.message?.contains("foreign key constraint", ignoreCase = true) == true -> "FOREIGN_KEY_VIOLATION"
-        else -> throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.io.FileNotFoundException ||
+                msg.contains("image does not exist", ignoreCase = true) ->
+                "FILE_NOT_FOUND"
+            throwable is IllegalStateException &&
+                msg.contains("Parent session", ignoreCase = true) ->
+                "PARENT_SESSION_SYNC_FAILED"
+            throwable is IllegalStateException &&
+                msg.contains("user session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            throwable is java.net.UnknownHostException ||
+                throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

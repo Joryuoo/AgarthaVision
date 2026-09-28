@@ -202,6 +202,9 @@ class SyncUseCasesTest {
         val result = syncReportUseCase("rep-1")
 
         assertTrue(result.isFailure)
-        verify(reportDao).updateSupabaseStatus("rep-1", com.agarthavision.domain.model.ReportSyncStatus.SYNC_FAILED.value)
+        verify(reportDao).updateSupabaseStatus(
+            "rep-1",
+            com.agarthavision.domain.model.ReportSyncStatus.SYNC_FAILED.value,
+        )
     }
 }
