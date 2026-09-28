@@ -11,6 +11,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,7 +22,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Map
@@ -41,32 +41,40 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agarthavision.R
 import com.agarthavision.domain.geo.BoundarySet
 import com.agarthavision.domain.geo.ViewTransform
 import com.agarthavision.domain.geo.fitBounds
+import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.dashboard.PeriodToggle
+import com.agarthavision.ui.dashboard.coverage.CoverageLegend
 import com.agarthavision.ui.dashboard.coverage.drawProvinces
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 
 private const val MAP_PADDING_PX = 16f
 private const val MIN_SCALE_FACTOR = 0.8f
 private const val MAX_SCALE_FACTOR = 40f
 private const val CAMERA_ANIM_MS = 350
+private const val PERCENT_FACTOR = 100
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -92,15 +100,15 @@ fun MyCoverageScreen(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = AgarthaIcons.ArrowBackIosNew,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.nav_back),
                     tint = colors.textPrimary,
                     modifier = Modifier.size(20.dp),
                 )
             }
             Spacer(Modifier.width(Spacing.xs))
             Text(
-                text = "My coverage",
-                fontSize = 18.sp,
+                text = stringResource(R.string.coverage_title),
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
                 modifier = Modifier.weight(1f),
@@ -131,14 +139,20 @@ fun MyCoverageScreen(
             ) {
                 EmptyState(
                     icon = Icons.Outlined.Map,
-                    title = "No smears in this period",
-                    body = "Smears you examine will appear here by province.",
+                    title = stringResource(R.string.coverage_empty_title),
+                    body = stringResource(R.string.coverage_empty_body),
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
         } else {
             val provinces = state.provinces
             if (provinces != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md, vertical = Spacing.xs),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    CoverageLegend(label = stringResource(R.string.coverage_positive_rate))
+                }
                 CoverageMap(
                     provinces = provinces,
                     state = state,
@@ -152,13 +166,10 @@ fun MyCoverageScreen(
             } else {
                 Box(modifier = Modifier.fillMaxWidth().weight(1f))
             }
-
-            CoverageLegend(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs))
         }
 
         Text(
-            text = "Administrative boundaries: OCHA Philippines Common Operational Datasets " +
-                "(COD-AB), CC BY-IGO 3.0.",
+            text = stringResource(R.string.coverage_attribution),
             fontSize = 9.sp,
             color = colors.textTertiary,
             modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.xs),
@@ -178,36 +189,6 @@ fun MyCoverageScreen(
     }
 }
 
-@Composable
-private fun CoverageLegend(modifier: Modifier = Modifier) {
-    val colors = AgarthaTheme.colors
-    Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        val bins = listOf("0-10%", "10-20%", "20-30%", "30-40%", "40%+")
-        bins.forEachIndexed { index, label ->
-            val fill = colors.coverageBinColor(index)
-            LegendSwatch(fill, label)
-        }
-        LegendSwatch(colors.coverageTooFew, "Too few")
-        LegendSwatch(colors.coverageNoData, "No data")
-    }
-}
-
-@Composable
-private fun LegendSwatch(color: Color, label: String) {
-    val colors = AgarthaTheme.colors
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(10.dp)
-                .clip(CircleShape)
-                .background(color)
-                .border(0.5.dp, colors.borderStrong, CircleShape),
-        )
-        Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 9.sp, color = colors.textSecondary)
-    }
-}
-
 /** Camera as scale + translation, kept as [Animatable]s so [LaunchedEffect]s can animate them. */
 private class MapCamera(
     val scale: Animatable<Float, AnimationVector1D>,
@@ -217,6 +198,8 @@ private class MapCamera(
     val transform: ViewTransform get() = ViewTransform(scale.value, tx.value, ty.value)
 }
 
+// Camera setup, gesture wiring, and the callout/controls overlay are one cohesive unit.
+@Suppress("CyclomaticComplexMethod")
 @Composable
 private fun CoverageMap(
     provinces: BoundarySet,
@@ -273,50 +256,163 @@ private fun CoverageMap(
     }
     val pathCache = remember { mutableMapOf<String, Path>() }
     var lastTransform by remember { mutableStateOf<ViewTransform?>(null) }
+    val mapShape = RoundedCornerShape(8.dp)
+    val mapBg = colors.surfaceVariant
 
-    Canvas(
+    fun animateTo(transform: ViewTransform) {
+        val anim = tween<Float>(CAMERA_ANIM_MS, easing = FastOutSlowInEasing)
+        coroutineScope.launch { camera.scale.animateTo(transform.scale, anim) }
+        coroutineScope.launch { camera.tx.animateTo(transform.tx, anim) }
+        coroutineScope.launch { camera.ty.animateTo(transform.ty, anim) }
+    }
+
+    Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(colors.surfaceMuted)
-            .onSizeChanged { size -> canvasSize = size.width.toFloat() to size.height.toFloat() }
-            .pointerInput(Unit) {
-                detectTransformGestures { centroid, pan, zoom, _ ->
-                    val next = nextCameraTransform(
-                        current = camera.transform,
-                        centroid = centroid,
-                        pan = pan,
-                        zoom = zoom,
-                        minScale = minScale,
-                        maxScale = maxScale,
-                    )
-                    coroutineScope.launch { camera.scale.snapTo(next.scale) }
-                    coroutineScope.launch { camera.tx.snapTo(next.tx) }
-                    coroutineScope.launch { camera.ty.snapTo(next.ty) }
+            .clip(mapShape)
+            .background(mapBg, mapShape),
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { size -> canvasSize = size.width.toFloat() to size.height.toFloat() }
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val next = nextCameraTransform(
+                            current = camera.transform,
+                            centroid = centroid,
+                            pan = pan,
+                            zoom = zoom,
+                            minScale = minScale,
+                            maxScale = maxScale,
+                        )
+                        coroutineScope.launch { camera.scale.snapTo(next.scale) }
+                        coroutineScope.launch { camera.tx.snapTo(next.tx) }
+                        coroutineScope.launch { camera.ty.snapTo(next.ty) }
+                    }
                 }
+                .pointerInput(provinces) {
+                    detectTapGestures { offset ->
+                        val (mapX, mapY) = camera.transform.toMap(offset.x, offset.y)
+                        onTap(mapX, mapY)
+                    }
+                },
+        ) {
+            val currentTransform = camera.transform
+            if (lastTransform != currentTransform) {
+                pathCache.clear()
+                lastTransform = currentTransform
             }
-            .pointerInput(provinces) {
-                detectTapGestures { offset ->
-                    val (mapX, mapY) = camera.transform.toMap(offset.x, offset.y)
-                    onTap(mapX, mapY)
+            drawProvinces(
+                provinces = provinces,
+                coverageByCode = coverageByCode,
+                transform = currentTransform,
+                colors = colors,
+                highlightCode = state.selected?.code,
+                highlightColor = colors.textPrimary,
+                pathCache = pathCache,
+            )
+        }
+
+        val selected = state.selected
+        val selectedArea = selected?.let { provinces.byCode[it.code] }
+        if (selected != null && selectedArea != null) {
+            val (canvasWidth, canvasHeight) = canvasSize
+            SelectedCallout(
+                name = selected.name,
+                stat = selected.coverage?.count?.stat,
+                labelX = selectedArea.labelX,
+                labelY = selectedArea.labelY,
+                transformProvider = { camera.transform },
+                canvasWidth = canvasWidth,
+                canvasHeight = canvasHeight,
+            )
+        }
+
+        val canZoomIn = camera.scale.value < maxScale - ZOOM_EPSILON
+        val canZoomOut = camera.scale.value > minScale + ZOOM_EPSILON
+        MapControls(
+            onZoomIn = {
+                val (w, h) = canvasSize
+                if (w > 0f && h > 0f) {
+                    animateTo(zoomAroundCenter(camera.transform, w, h, zoomInFactor(), minScale, maxScale))
                 }
             },
-    ) {
-        val currentTransform = camera.transform
-        if (lastTransform != currentTransform) {
-            pathCache.clear()
-            lastTransform = currentTransform
-        }
-        drawProvinces(
-            provinces = provinces,
-            coverageByCode = coverageByCode,
-            transform = currentTransform,
-            colors = colors,
-            highlightCode = state.selected?.code,
-            highlightColor = colors.accent,
-            pathCache = pathCache,
+            onZoomOut = {
+                val (w, h) = canvasSize
+                if (w > 0f && h > 0f) {
+                    animateTo(zoomAroundCenter(camera.transform, w, h, zoomOutFactor(), minScale, maxScale))
+                }
+            },
+            onRecenter = {
+                val (w, h) = canvasSize
+                if (w > 0f && h > 0f) {
+                    val target = selected?.let { provinces.byCode[it.code]?.bounds }
+                        ?: state.initialFit
+                        ?: provinces.bounds
+                    animateTo(fitBounds(target, w, h, MAP_PADDING_PX))
+                }
+            },
+            canZoomIn = canZoomIn,
+            canZoomOut = canZoomOut,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(Spacing.sm),
         )
     }
 }
+
+private const val ZOOM_EPSILON = 0.0001f
+
+/**
+ * A small pill near the selected province's label point showing its name and rate. Reads
+ * [transformProvider] inside [Modifier.layout] so camera animation only triggers relayout, not
+ * recomposition of this composable.
+ */
+@Suppress("LongParameterList") // Every parameter is a distinct, independent callout-placement input.
+@Composable
+private fun BoxScope.SelectedCallout(
+    name: String,
+    stat: AreaStat?,
+    labelX: Float,
+    labelY: Float,
+    transformProvider: () -> ViewTransform,
+    canvasWidth: Float,
+    canvasHeight: Float,
+) {
+    val colors = AgarthaTheme.colors
+    val text = buildAnnotatedString {
+        append("$name ")
+        if (stat is AreaStat.Reported) {
+            withStyle(SpanStyle(fontWeight = FontWeight.Bold)) {
+                append("${(stat.positiveRate * PERCENT_FACTOR).toInt()}%")
+            }
+        } else {
+            append("· ${stringResource(R.string.coverage_too_few)}")
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .layout { measurable, constraints ->
+                val placeable = measurable.measure(constraints)
+                val (sx, sy) = transformProvider().toScreen(labelX, labelY)
+                val maxX = (canvasWidth - placeable.width).coerceAtLeast(0f)
+                val maxY = (canvasHeight - placeable.height).coerceAtLeast(0f)
+                val x = (sx - placeable.width / 2f).coerceIn(0f, maxX)
+                val y = (sy - placeable.height - CALLOUT_OFFSET_PX).coerceIn(0f, maxY)
+                layout(placeable.width, placeable.height) {
+                    placeable.placeRelative(x.roundToInt(), y.roundToInt())
+                }
+            }
+            .clip(RoundedCornerShape(999.dp))
+            .background(colors.brandFill)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Text(text = text, fontSize = 12.sp, color = colors.onBrandFill)
+    }
+}
+
+private const val CALLOUT_OFFSET_PX = 8f
 
 /**
  * Given the [current] camera transform and one [detectTransformGestures] callback's [centroid],
