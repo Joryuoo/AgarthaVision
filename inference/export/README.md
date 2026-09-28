@@ -1,12 +1,14 @@
 # Exporting the model for on-device inference
 
-`best.pt` is a PyTorch checkpoint. It runs where PyTorch runs (a droplet, a Kaggle notebook)
+A trained `.pt` is a PyTorch checkpoint. It runs where PyTorch runs (a droplet, a Kaggle notebook)
 and nowhere else. Android has no PyTorch, so running on the phone means **exporting**:
 rewriting the same trained weights into LiteRT's format, once, on a computer.
 
 ```
-best.pt ──[ export_mobile.py ]──▶ yolo12n-effv2s-v1-tflite-fp16.tflite + .json
-(PyTorch, server only)            yolo12n-effv2s-v1-tflite-int8.tflite + .json   (run on the phone)
+yolo26n-efficientnetv2b0.pt ──[ export_mobile.py ]──▶ yolo26n-effv2b0-v1-tflite-fp32.tflite + .json
+(PyTorch, server only)                                 yolo26n-effv2b0-v1-tflite-fp16.tflite + .json
+                                                       yolo26n-effv2b0-v1-tflite-int8.tflite + .json
+                                                       (run on the phone)
 ```
 
 Nothing about training changes. This is a format translation.
@@ -18,27 +20,33 @@ Nothing about training changes. This is a format translation.
 
 | Path | Version |
 |---|---|
-| Cloud (`server.py`, PyTorch) | `yolo12n-effv2s-v1-cloud-fp32` |
-| On device | `yolo12n-effv2s-v1-tflite-fp16`, `yolo12n-effv2s-v1-tflite-int8` |
+| Cloud (`server.py`, PyTorch) | `yolo26n-effv2b0-v1-cloud-fp32` |
+| On device | `yolo26n-effv2b0-v1-tflite-fp32` (shipped), `-tflite-fp16`, `-tflite-int8` |
 | No model result | `manual` |
 
-`yolo12n-effv2s` is the architecture `best.pt` was trained from (`effnet-v12.yaml`): an
-EfficientNetV2-S backbone with a YOLOv12-nano `A2C2f` neck and a standard `Detect` head. **Bump
-`v1` whenever `best.pt` changes**, in `export_mobile.py`'s `DEFAULT_VERSION_PREFIX`, in
-`server.py` and the notebook, and in `OnDeviceModels`, so the same `v1` always means the same
-weights.
+`yolo26n-effv2b0` is the architecture `yolo26n-efficientnetv2b0.pt` was trained from
+(`yolo26n-efficientnetv2b0.yaml` in the fork): timm's `tf_efficientnetv2_b0` backbone
+(`TimmBackbone`) under a YOLO26-nano neck and `Detect` head. **Bump `v1` whenever the weights
+change**, in `export_mobile.py`'s `DEFAULT_VERSION_PREFIX`, in `server.py` and the notebook, and in
+`OnDeviceModels`, so the same `v1` always means the same weights.
+
+A different backbone is a different architecture, so it gets its own prefix and its own `v1`.
+The MobileNetV4-Conv-Small candidate, `yolo26n-mobilenetv4convsmall.pt`, is
+`yolo26n-mnv4cs-v1-…`: export it with `--weights inference/weights/yolo26n-mobilenetv4convsmall.pt
+--version-prefix yolo26n-mnv4cs-v1-tflite`.
 
 ---
 
 ## Setup
 
 Export must run against **the pinned fork**, not stock `ultralytics`. Stock has never heard
-of `EfficientNetV2Backbone` and cannot reconstruct `best.pt` at all.
+of `TimmBackbone` and cannot reconstruct these checkpoints at all. Nor can the fork's older
+`main` (`c2b1563`): the pin is `feat/optimized-inference`, `1fd2043`.
 
 ```bash
 python -m venv .venv-export && source .venv-export/bin/activate
 pip install -r inference/export/requirements-export.txt
-git lfs install && git lfs pull      # best.pt is a 133-byte pointer until you do this
+git lfs install && git lfs pull      # each .pt is a ~130-byte pointer until you do this
 ```
 
 The TensorFlow stack this pulls in is large. It is deliberately kept out of
@@ -48,11 +56,11 @@ The TensorFlow stack this pulls in is large. It is deliberately kept out of
 
 ```bash
 python inference/export/export_mobile.py \
-    --weights inference/weights/best.pt \
+    --weights inference/weights/yolo26n-efficientnetv2b0.pt \
     --calib-images path/to/dataset/images/val
 ```
 
-Without `--calib-images` only fp16 is built. Calibrate int8 on held-out frames: 200 by default,
+Without `--calib-images` only fp32 and fp16 are built. Calibrate int8 on held-out frames: 200 by default,
 spread across the directory so every species is represented.
 
 Outputs land in `inference/export/out/` (gitignored). To ship, copy each `.tflite` and its
@@ -69,8 +77,8 @@ normalised box geometry.
 
 ```bash
 python inference/export/parity_check.py \
-    --weights inference/weights/best.pt \
-    --model inference/export/out/yolo12n-effv2s-v1-tflite-fp16.tflite \
+    --weights inference/weights/yolo26n-efficientnetv2b0.pt \
+    --model inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
     --images path/to/dataset/images/val
 ```
 
@@ -79,9 +87,9 @@ python inference/export/parity_check.py \
 ```bash
 python inference/export/accuracy_report.py \
     --data path/to/data.yaml \
-    --manifest inference/export/out/yolo12n-effv2s-v1-tflite-fp16.json \
-    --models inference/export/out/yolo12n-effv2s-v1-tflite-fp16.tflite \
-             inference/export/out/yolo12n-effv2s-v1-tflite-int8.tflite
+    --manifest inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.json \
+    --models inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
+             inference/export/out/yolo26n-effv2b0-v1-tflite-int8.tflite
 ```
 
 Point `--data` at a **held-out** split. Absolute mAP measured on training images is
@@ -98,7 +106,7 @@ adb logcat -d -s OnDeviceParity OnDeviceInference
 ```
 
 The fixture script shapes frames exactly as the capture screen does and records what the cloud
-returns for them. The test runs both bundled precisions on the phone against that reference
+returns for them. The test runs the bundled model on the phone against that reference
 and logs median and p90 latency per precision. Fixtures are patient-adjacent imagery and stay
 gitignored.
 
@@ -130,25 +138,31 @@ input, then three sigmoid class scores. The manifest's `box_coordinates: "normal
 app's decoder to scale them. The first on-device attempt read them as pixels and matched zero
 boxes against the cloud.
 
-**Not end-to-end.** There is no one-to-one head (`end2end` is unset in `effnet-v12.yaml`), so
-the app runs NMS itself, with the container's defaults: conf 0.25, IoU 0.7, class-aware, at
+**Not end-to-end.** YOLO26 can train a one-to-one head that needs no NMS, but these weights
+were trained with it off (the checkpoint's `Detect.end2end` is false), so the output is the
+same `[1, 7, 8400]` as before and the app runs NMS itself, with the container's defaults: conf 0.25, IoU 0.7, class-aware, at
 most 300 boxes.
 
-**`dynamic=False` is load-bearing.** timm's `tf_efficientnetv2_s` uses `Conv2dSame`, which
+**`dynamic=False` is load-bearing.** timm's `tf_efficientnetv2_b0` uses `Conv2dSame`, which
 emulates TensorFlow SAME padding with a runtime `F.pad` computed from the input's dims. Traced
 at a fixed size those fold into constant `Pad` nodes; with dynamic axes they become
 shape-dependent ops that onnx2tf mangles. The app feeds a fixed 640x640 anyway.
 
-**`pretrained=True` is the backbone's constructor default.** Every reconstruction downloads
-~80 MB of ImageNet weights that `best.pt` immediately overwrites. `patch_backbone_pretrained()`
+**`pretrained=True` is the backbone's constructor default,** and the model yaml asks for it.
+Every reconstruction downloads ImageNet weights that the checkpoint immediately overwrites. `patch_backbone_pretrained()`
 disables it, so export neither wastes the bandwidth nor fails offline.
 
 **int8 versus squeeze-excite.** EfficientNetV2's SE blocks and SiLU activations are the
 textbook int8 accuracy sink. If int8 disappoints, look there before assuming the export is bad.
 
-**The GPU may not take the whole graph.** The neck's `A2C2f` blocks use attention
+**The GPU may not take the whole graph.** The neck's `C2PSA` block uses attention
 (`BATCH_MATMUL`, `SOFTMAX`). LiteRT places ops the GPU cannot run on the CPU, which works but
 costs speed. The first attempt's GPU delegate rejected its graph outright over a dynamic-sized
 tensor; the per-frame log says which accelerators actually loaded.
 
-Sizes as exported: fp16 ≈ 39 MB (the fp32 graph is ≈ 79 MB).
+Sizes as exported, `yolo26n-effv2b0-v1`: fp32 ≈ 27 MB, fp16 ≈ 13.5 MB. The previous
+EfficientNetV2-S model was ≈ 79 MB and ≈ 39 MB.
+
+**Parity, 2026-09-28**, against the PyTorch checkpoint on the 20 parity fixtures: fp32 matched
+22 of 22 detections with IoU 1.0000 and no confidence change; fp16 matched 22 of 22 with IoU
+0.9972 and a mean confidence change of 0.0003.
