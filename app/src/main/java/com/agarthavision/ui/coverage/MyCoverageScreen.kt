@@ -57,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.domain.geo.BoundarySet
 import com.agarthavision.domain.geo.ViewTransform
+import com.agarthavision.domain.geo.clampedToBounds
 import com.agarthavision.domain.geo.fitBounds
 import com.agarthavision.domain.model.AreaStat
 import com.agarthavision.ui.components.EmptyState
@@ -277,7 +278,8 @@ private fun CoverageMap(
                 .onSizeChanged { size -> canvasSize = size.width.toFloat() to size.height.toFloat() }
                 .pointerInput(Unit) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
-                        val next = nextCameraTransform(
+                        val (w, h) = canvasSize
+                        val raw = nextCameraTransform(
                             current = camera.transform,
                             centroid = centroid,
                             pan = pan,
@@ -285,6 +287,11 @@ private fun CoverageMap(
                             minScale = minScale,
                             maxScale = maxScale,
                         )
+                        val next = if (w > 0f && h > 0f) {
+                            raw.clampedToBounds(provinces.bounds, w, h)
+                        } else {
+                            raw
+                        }
                         coroutineScope.launch { camera.scale.snapTo(next.scale) }
                         coroutineScope.launch { camera.tx.snapTo(next.tx) }
                         coroutineScope.launch { camera.ty.snapTo(next.ty) }
@@ -334,13 +341,15 @@ private fun CoverageMap(
             onZoomIn = {
                 val (w, h) = canvasSize
                 if (w > 0f && h > 0f) {
-                    animateTo(zoomAroundCenter(camera.transform, w, h, zoomInFactor(), minScale, maxScale))
+                    val next = zoomAroundCenter(camera.transform, w, h, zoomInFactor(), minScale, maxScale)
+                    animateTo(next.clampedToBounds(provinces.bounds, w, h))
                 }
             },
             onZoomOut = {
                 val (w, h) = canvasSize
                 if (w > 0f && h > 0f) {
-                    animateTo(zoomAroundCenter(camera.transform, w, h, zoomOutFactor(), minScale, maxScale))
+                    val next = zoomAroundCenter(camera.transform, w, h, zoomOutFactor(), minScale, maxScale)
+                    animateTo(next.clampedToBounds(provinces.bounds, w, h))
                 }
             },
             onRecenter = {

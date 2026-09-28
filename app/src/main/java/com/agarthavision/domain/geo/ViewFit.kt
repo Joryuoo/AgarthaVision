@@ -47,3 +47,31 @@ fun fitBounds(
 
     return ViewTransform(scale = scale, tx = tx, ty = ty)
 }
+
+/**
+ * Clamps this transform's translation so [bounds], drawn at this transform's [ViewTransform.scale],
+ * can never be panned or zoomed entirely off the `viewportWidth` x `viewportHeight` screen.
+ *
+ * For one axis, let `a` be the translation that pins [bounds]'s min edge to screen `0` and `b` be
+ * the translation that pins its max edge to the viewport's far edge. When the scaled bounds are
+ * smaller than the viewport, `[a, b]` is the range that keeps the whole box on screen (any tighter
+ * and part of the viewport would show past the map's edge); when the scaled bounds are larger,
+ * `[b, a]` is the range that keeps the viewport fully covered by the map (any looser and an edge
+ * would pull inward, exposing empty space beyond it). Either way `tx`/`ty` is clamped to
+ * `[min(a, b), max(a, b)]`, so a free pan/zoom gesture can never carry the map fully out of view.
+ */
+fun ViewTransform.clampedToBounds(
+    bounds: GeoBounds,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): ViewTransform {
+    fun clampAxis(minCoord: Float, maxCoord: Float, viewportSize: Float, t: Float): Float {
+        val pinMin = -minCoord * scale
+        val pinMax = viewportSize - maxCoord * scale
+        return t.coerceIn(minOf(pinMin, pinMax), maxOf(pinMin, pinMax))
+    }
+    return copy(
+        tx = clampAxis(bounds.minX, bounds.maxX, viewportWidth, tx),
+        ty = clampAxis(bounds.minY, bounds.maxY, viewportHeight, ty),
+    )
+}

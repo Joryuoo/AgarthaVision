@@ -74,4 +74,48 @@ class ViewFitTest {
             assertEquals("y round-trip for ($x, $y)", y, backY, epsilon)
         }
     }
+
+    @Test
+    fun `clampedToBounds pulls a fully panned-away map back into view`() {
+        val bounds = GeoBounds(minX = 0f, minY = 0f, maxX = 10f, maxY = 10f)
+        val fitted = fitBounds(bounds, widthPx = 400f, heightPx = 400f, paddingPx = 0f, minSpan = 0f)
+
+        // A huge pan that would otherwise carry the whole map far off both edges of the screen.
+        val panned = fitted.copy(tx = fitted.tx + 5000f, ty = fitted.ty - 5000f)
+        val clamped = panned.clampedToBounds(bounds, 400f, 400f)
+
+        val (minScreenX, minScreenY) = clamped.toScreen(bounds.minX, bounds.minY)
+        val (maxScreenX, maxScreenY) = clamped.toScreen(bounds.maxX, bounds.maxY)
+        assertTrue("map's right edge must still reach onto the screen", maxOf(minScreenX, maxScreenX) >= 0f)
+        assertTrue("map's left edge must not clear the screen's right edge", minOf(minScreenX, maxScreenX) <= 400f)
+        assertTrue("map's bottom edge must still reach onto the screen", maxOf(minScreenY, maxScreenY) >= 0f)
+        assertTrue("map's top edge must not clear the screen's bottom edge", minOf(minScreenY, maxScreenY) <= 400f)
+    }
+
+    @Test
+    fun `clampedToBounds keeps a zoomed-in map covering the viewport with no gaps`() {
+        val bounds = GeoBounds(minX = 0f, minY = 0f, maxX = 10f, maxY = 10f)
+        // Zoomed in well past a viewport-covering scale, then dragged so far it would otherwise
+        // expose empty space beyond the map's edge (e.g. after zooming out from a corner).
+        val zoomedIn = ViewTransform(scale = 200f, tx = 5000f, ty = 5000f)
+        val clamped = zoomedIn.clampedToBounds(bounds, 400f, 400f)
+
+        val (minScreenX, minScreenY) = clamped.toScreen(bounds.minX, bounds.minY)
+        val (maxScreenX, maxScreenY) = clamped.toScreen(bounds.maxX, bounds.maxY)
+        assertTrue("left edge should not expose empty space", minOf(minScreenX, maxScreenX) <= epsilon)
+        assertTrue("right edge should not expose empty space", maxOf(minScreenX, maxScreenX) >= 400f - epsilon)
+        assertTrue("top edge should not expose empty space", minOf(minScreenY, maxScreenY) <= epsilon)
+        assertTrue("bottom edge should not expose empty space", maxOf(minScreenY, maxScreenY) >= 400f - epsilon)
+    }
+
+    @Test
+    fun `clampedToBounds is a no-op for an already-fitted transform`() {
+        val bounds = GeoBounds(minX = -5f, minY = -8f, maxX = 12f, maxY = 20f)
+        val fitted = fitBounds(bounds, widthPx = 400f, heightPx = 400f, paddingPx = 0f, minSpan = 0f)
+
+        val clamped = fitted.clampedToBounds(bounds, 400f, 400f)
+
+        assertEquals(fitted.tx, clamped.tx, epsilon)
+        assertEquals(fitted.ty, clamped.ty, epsilon)
+    }
 }
