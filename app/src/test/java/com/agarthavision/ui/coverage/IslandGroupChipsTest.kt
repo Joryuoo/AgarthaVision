@@ -33,7 +33,7 @@ class IslandGroupChipsTest {
             }
         }
 
-        composeRule.onNodeWithText("Visayas · 0").assertIsNotEnabled()
+        composeRule.onNodeWithText("Visayas").assertIsNotEnabled()
     }
 
     @Test
@@ -50,7 +50,7 @@ class IslandGroupChipsTest {
             }
         }
 
-        composeRule.onNodeWithText("Luzon · 3").assertIsEnabled().performClick()
+        composeRule.onNodeWithText("Luzon").assertIsEnabled().performClick()
 
         assert(selected == IslandGroup.LUZON)
     }
@@ -68,7 +68,7 @@ class IslandGroupChipsTest {
             }
         }
 
-        composeRule.onNodeWithText("All · 0").assertIsNotEnabled()
+        composeRule.onNodeWithText("All").assertIsNotEnabled()
     }
 
     @Test
@@ -84,6 +84,6 @@ class IslandGroupChipsTest {
             }
         }
 
-        composeRule.onNodeWithText("All · 5").assertIsEnabled()
+        composeRule.onNodeWithText("All").assertIsEnabled()
     }
 }
