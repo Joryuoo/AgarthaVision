@@ -94,10 +94,6 @@ private fun Chip(
         isSelected -> colors.onBrandFill
         else -> colors.textPrimary
     }
-    val badgeBackground = when {
-        isSelected -> colors.onBrandFill.copy(alpha = 0.2f)
-        else -> colors.surfaceVariant
-    }
     val badgeTextColor = when {
         !isEnabled -> colors.textTertiary
         isSelected -> colors.onBrandFill
@@ -137,19 +133,12 @@ private fun Chip(
                 fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                 color = labelColor,
             )
-            Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(999.dp))
-                    .background(badgeBackground, RoundedCornerShape(999.dp))
-                    .padding(horizontal = 6.dp, vertical = 1.dp),
-            ) {
-                Text(
-                    text = "$count",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = badgeTextColor,
-                )
-            }
+            Text(
+                text = "$count",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = badgeTextColor,
+            )
         }
     }
 }
