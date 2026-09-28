@@ -83,6 +83,9 @@ object AppColors {
     val AmberBright = Color(0xFFFBBF24)
     val AmberTintDark = Color(0xFFFBBF24).copy(alpha = 0.14f)
 
+    // Coverage map canvas background (Light) — cool off-white, distinct from surfaceVariant
+    val CoverageMapBackground = Color(0xFFF2F7FA)
+
     // Coverage map scale (Dark) — hotspots glow instead of sinking into dark background
     val DarkCoverageBin0   = Color(0xFF3A2226)
     val DarkCoverageBin1   = Color(0xFF5C1C26)

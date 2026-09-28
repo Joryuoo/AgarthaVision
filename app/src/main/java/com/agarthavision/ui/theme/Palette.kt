@@ -86,6 +86,8 @@ data class AgarthaColors(
     val coverageNoData: Color,
     /** Coverage map too-few fill. */
     val coverageTooFew: Color,
+    /** Coverage map canvas background (distinct from [surfaceVariant] for map-specific tuning). */
+    val mapBackground: Color,
 ) {
     /** Helper to get coverage bin color by bin index (0..4). */
     fun coverageBinColor(bin: Int): Color =
@@ -137,6 +139,7 @@ val LightAgarthaColors = AgarthaColors(
     ),
     coverageNoData = AppColors.Gray200,
     coverageTooFew = AppColors.Gray100,
+    mapBackground = AppColors.CoverageMapBackground,
 )
 
 /** Dark-mode palette — warm charcoal surfaces, brightened accent/semantic colors. */
@@ -184,6 +187,7 @@ val DarkAgarthaColors = AgarthaColors(
     ),
     coverageNoData = AppColors.DarkCoverageNoData,
     coverageTooFew = AppColors.DarkCoverageTooFew,
+    mapBackground = AppColors.DarkSurfaceAlt,
 )
 
 /** CompositionLocal carrying the active [AgarthaColors]; provided by AgarthaVisionTheme. */

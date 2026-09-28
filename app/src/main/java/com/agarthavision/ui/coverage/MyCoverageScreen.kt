@@ -258,7 +258,7 @@ private fun CoverageMap(
     val pathCache = remember { mutableMapOf<String, Path>() }
     var lastTransform by remember { mutableStateOf<ViewTransform?>(null) }
     val mapShape = RoundedCornerShape(8.dp)
-    val mapBg = colors.surfaceVariant
+    val mapBg = colors.mapBackground
 
     fun animateTo(transform: ViewTransform) {
         val anim = tween<Float>(CAMERA_ANIM_MS, easing = FastOutSlowInEasing)
