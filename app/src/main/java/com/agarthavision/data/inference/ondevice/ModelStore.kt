@@ -11,20 +11,18 @@ import javax.inject.Singleton
 
 /**
  * The on-device models bundled in `assets/models/`, each a `<model_version>.tflite` with a
- * `<model_version>.json` manifest beside it.
- *
- * Both precisions are bundled so they can be measured on the same phone. [SHIPPED] is the one
- * the app runs.
+ * `<model_version>.json` manifest beside it. [SHIPPED] is the one the app runs.
  */
 object OnDeviceModels {
-    const val FP16 = "yolo12n-effv2s-v1-tflite-fp16"
-    const val INT8 = "yolo12n-effv2s-v1-tflite-int8"
+    /** YOLO26-nano on an EfficientNetV2-B0 backbone, full precision. */
+    const val EFFV2B0_FP32 = "yolo26n-effv2b0-v1-tflite-fp32"
 
     /**
-     * The build production inference uses. fp16 until the on-phone benchmark shows int8 keeps
-     * parity and is meaningfully faster.
+     * The build production inference uses. fp32 first, to see whether the phone runs the
+     * EfficientNetV2-B0 model at all before trading any accuracy for size or speed with fp16
+     * or int8 (`inference/export/README.md`).
      */
-    const val SHIPPED = FP16
+    const val SHIPPED = EFFV2B0_FP32
 }
 
 /** A compiled model ready to run, and what it was compiled for. */

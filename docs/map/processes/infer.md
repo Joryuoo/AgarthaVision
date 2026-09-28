@@ -75,7 +75,7 @@ returns. The model output arrives later.
    the row becomes `ready` like any other: a clean field is a normal negative result.
 6. **Write it back.** Any answer, detections or none, lands on the row through
    `InferenceQueueRepository.complete`: the predictions as `predictions_json`, the engine's own
-   version name (`…-cloud-fp32` or `…-tflite-fp16`), and the image dimensions. The predictions
+   version name (`…-cloud-fp32` or `…-tflite-fp32`), and the image dimensions. The predictions
    are domain `Prediction` values by this point, not the wire DTO —
    `RemoteInferenceEngine` maps them (`data/inference/PredictionMapper.kt`), so nothing under
    `domain/` imports a response type.

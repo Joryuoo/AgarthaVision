@@ -369,7 +369,7 @@ class InferenceQueueProcessorTest {
     }
 
     private companion object {
-        const val CLOUD_VERSION = "yolo12n-effv2s-v1-cloud-fp32"
-        const val DEVICE_VERSION = "yolo12n-effv2s-v1-tflite-fp16"
+        const val CLOUD_VERSION = "yolo26n-effv2b0-v1-cloud-fp32"
+        const val DEVICE_VERSION = "yolo26n-effv2b0-v1-tflite-fp32"
     }
 }

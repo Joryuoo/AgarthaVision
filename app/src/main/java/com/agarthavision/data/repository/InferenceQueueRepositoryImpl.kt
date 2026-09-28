@@ -41,7 +41,7 @@ class InferenceQueueRepositoryImpl @Inject constructor(
             // Through the DTO, like capture always wrote it, so the column's shape does not
             // depend on which engine answered. Null for a clean field, as before.
             predictionsJson = gson.encodePredictions(result.predictions),
-            // The engine's own version name, `…-cloud-fp32` or `…-tflite-fp16`, so every result
+            // The engine's own version name, `…-cloud-fp32` or `…-tflite-fp32`, so every result
             // says which engine produced it. "unknown" only for an old container that sends none.
             modelVersion = result.modelVersion ?: UNKNOWN_MODEL_VERSION,
             imageWidth = result.imageWidth,
