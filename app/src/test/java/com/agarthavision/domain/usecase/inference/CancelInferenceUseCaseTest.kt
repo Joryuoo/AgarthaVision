@@ -41,7 +41,7 @@ class CancelInferenceUseCaseTest {
         predictions = emptyList(),
         imageWidth = 640,
         imageHeight = 480,
-        modelVersion = "yolo12n-effv2s-v1-cloud-fp32",
+        modelVersion = "yolo26n-effv2b0-v1-cloud-fp32",
         engine = InferenceEngineId.REMOTE,
     )
 }

@@ -2,18 +2,15 @@ package com.agarthavision.domain.inference
 
 import com.agarthavision.domain.inference.InferenceQueueProcessor.DrainSummary
 import com.agarthavision.domain.repository.InferenceQueueRepository
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TestTimeSource
@@ -275,46 +272,53 @@ class InferenceQueueProcessorTest {
         assertEquals(mapOf("a" to 1), repository.completions)
     }
 
-    // ── the run loop ─────────────────────────────────────────────────────────────────────────
+    // ── passes and retries, as the worker drives them ──────────────────────────────────────────
 
     @Test
-    fun `the loop drains on start and again on every wake-up`() = runTest {
+    fun `with nothing failed there is no retry to schedule`() = runTest {
         repository.add("a", capturedAt = 100)
-        val wakeUps = Channel<Unit>(Channel.CONFLATED)
-        backgroundScope.launch { processor(testScheduler.timeSource).run(wakeUps) }
+        val processor = processor()
+        processor.drain()
 
-        runCurrent()
-        assertEquals(listOf("a"), cloud.calls)
-
-        repository.add("b", capturedAt = 200)
-        runCurrent()
-        assertEquals("asleep until woken", listOf("a"), cloud.calls)
-
-        wakeUps.trySend(Unit)
-        runCurrent()
-        assertEquals(listOf("a", "b"), cloud.calls)
+        assertNull(processor.nextRetryIn())
     }
 
     @Test
-    fun `the loop wakes itself when a retry falls due`() = runTest {
+    fun `the next retry is when the earliest failed frame falls due`() = runTest {
         repository.add("broken", capturedAt = 100)
         cloud.failEverything = true
         device.failEverything = true
-        val wakeUps = Channel<Unit>(Channel.CONFLATED)
-        backgroundScope.launch { processor(testScheduler.timeSource).run(wakeUps) }
+        val processor = processor()
+        processor.drain()
+        assertEquals(30.seconds, processor.nextRetryIn())
 
-        runCurrent()
-        assertEquals(1, device.calls.size)
+        time += 10.seconds
+        assertEquals(20.seconds, processor.nextRetryIn())
 
-        advanceBy(29.seconds)
-        assertEquals(1, device.calls.size)
-
-        advanceBy(1.seconds)
-        assertEquals(2, device.calls.size)
+        time += 20.seconds
+        processor.drain()
+        assertEquals("doubled after the second failure", 1.minutes, processor.nextRetryIn())
     }
 
     @Test
-    fun `the loop survives a pass that throws, and tries again`() = runTest {
+    fun `a frame that stops failing leaves no retry behind`() = runTest {
+        repository.add("flaky", capturedAt = 100)
+        cloud.failEverything = true
+        device.failEverything = true
+        val processor = processor()
+        processor.drain()
+
+        cloud.failEverything = false
+        device.failEverything = false
+        time += 30.seconds
+        processor.drain()
+
+        assertEquals(InferenceState.READY, repository.stateOf("flaky"))
+        assertNull(processor.nextRetryIn())
+    }
+
+    @Test
+    fun `a pass that cannot read the queue throws, and the next pass carries on`() = runTest {
         repository.add("a", capturedAt = 100)
         var failNextListing = true
         val flaky = object : InferenceQueueRepository by repository {
@@ -331,25 +335,41 @@ class InferenceQueueProcessorTest {
             cloudEngine = cloud,
             deviceEngine = device,
             circuitBreaker = breaker,
-            timeSource = testScheduler.timeSource,
-            firstRetryDelay = 30.seconds,
+            timeSource = time,
         )
-        backgroundScope.launch { processor.run(Channel<Unit>(Channel.CONFLATED)) }
 
-        runCurrent()
+        assertTrue(runCatching { processor.drain() }.isFailure)
         assertTrue(cloud.calls.isEmpty())
 
-        advanceBy(30.seconds)
+        processor.drain()
         assertEquals(listOf("a"), cloud.calls)
     }
 
-    private fun TestScope.advanceBy(duration: Duration) {
-        advanceTimeBy(duration)
+    @Test
+    fun `two passes started together never overlap`() = runTest {
+        repository.add("a", capturedAt = 100)
+        val release = CompletableDeferred<Unit>()
+        cloud.onInfer = { release.await() }
+        val processor = processor()
+
+        launch { processor.drain() }
         runCurrent()
+        launch { processor.drain() }
+        runCurrent()
+
+        // Without the lock the second pass would have put "a" back in the queue mid-flight and
+        // sent it to the cloud a second time.
+        assertEquals(InferenceState.IN_INFERENCE, repository.stateOf("a"))
+        assertEquals(listOf("a"), cloud.calls)
+
+        release.complete(Unit)
+        runCurrent()
+        assertEquals(mapOf("a" to 1), repository.completions)
+        assertEquals(listOf("a"), cloud.calls)
     }
 
     private companion object {
-        const val CLOUD_VERSION = "yolo12n-effv2s-v1-cloud-fp32"
-        const val DEVICE_VERSION = "yolo12n-effv2s-v1-tflite-fp16"
+        const val CLOUD_VERSION = "yolo26n-effv2b0-v1-cloud-fp32"
+        const val DEVICE_VERSION = "yolo26n-effv2b0-v1-tflite-fp32"
     }
 }

@@ -70,7 +70,7 @@ class VerificationPendingInferenceTest {
 
     private fun ready() = pending().copy(
         predictions = listOf(Prediction("Ascaris lumbricoides", 0.9f, 100f, 100f, 40f, 40f)),
-        inferenceModelVersion = "yolo12n-effv2s-v1-tflite-fp16",
+        inferenceModelVersion = "yolo26n-effv2b0-v1-tflite-fp32",
         inferenceState = InferenceState.READY,
     )
 

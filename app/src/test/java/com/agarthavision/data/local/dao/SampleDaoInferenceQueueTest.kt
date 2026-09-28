@@ -86,11 +86,11 @@ class SampleDaoInferenceQueueTest {
         sampleDao.upsertSample(sample("a"))
         repository.claim("a")
 
-        assertTrue(repository.complete("a", result(modelVersion = "yolo12n-effv2s-v1-tflite-fp16")))
+        assertTrue(repository.complete("a", result(modelVersion = "yolo26n-effv2b0-v1-tflite-fp32")))
 
         val row = sampleDao.getSampleById("a")!!
         assertEquals(InferenceState.READY, row.effectiveInferenceState())
-        assertEquals("yolo12n-effv2s-v1-tflite-fp16", row.inferenceModelVersion)
+        assertEquals("yolo26n-effv2b0-v1-tflite-fp32", row.inferenceModelVersion)
         assertEquals(640, row.imageWidth)
         assertEquals(480, row.imageHeight)
         assertTrue(row.predictionsJson!!.contains("Ascaris lumbricoides"))
@@ -310,7 +310,7 @@ class SampleDaoInferenceQueueTest {
                 height = 40f,
             ),
         ),
-        modelVersion: String = "yolo12n-effv2s-v1-cloud-fp32",
+        modelVersion: String = "yolo26n-effv2b0-v1-cloud-fp32",
     ) = InferenceResult(
         predictions = predictions,
         imageWidth = 640,

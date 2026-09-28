@@ -65,8 +65,8 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
     lateinit var supabaseClient: Lazy<SupabaseClient>
 
     /**
-     * Lazy so building it, which builds both inference engines and the Retrofit client under
-     * them, happens off the main thread in [onCreate].
+     * Lazy so it is built, and WorkManager first touched, off the main thread in [onCreate],
+     * after Hilt has assigned [workerFactory].
      */
     @Inject
     lateinit var inferenceQueue: Lazy<InferenceQueue>
@@ -108,7 +108,8 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         }
 
         // App start resumes the inference queue. Frames the last process queued, or was running
-        // when it died, are still in Room; without this they would wait for the next capture.
+        // when it died, are still in Room on the phone. WorkManager may already have picked them
+        // up in the background; if not, this queues a pass rather than waiting for a capture.
         applicationScope.launch {
             runCatching { inferenceQueue.get().start() }
                 .onFailure { Log.w(TAG, "Failed to start the inference queue", it) }
