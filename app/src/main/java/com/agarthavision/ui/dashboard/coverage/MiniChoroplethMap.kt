@@ -32,7 +32,7 @@ import com.agarthavision.ui.theme.AgarthaColors
 private const val MAP_PADDING_PX = 12f
 private const val HATCH_LINE_SPACING_PX = 6f
 private const val STROKE_WIDTH_PX = 1.2f
-private const val HIGHLIGHT_STROKE_WIDTH_PX = 2.5f
+private const val HIGHLIGHT_STROKE_WIDTH_DP = 2f
 
 /**
  * A minimal, static (no gestures) province choropleth for the My coverage card. Gestures and
@@ -68,10 +68,7 @@ internal fun MiniChoroplethMap(
             lastTransform = transform
         }
         if (showCentroidDots) {
-            provinces.areas.forEach { area ->
-                val path = pathCache.getOrPut(area.code) { pathFor(area, transform) }
-                drawArea(path, null, colors)
-            }
+            drawProvinces(provinces, coverageByCode, transform, colors, pathCache = pathCache)
             val maxSmears = coverageByCode.values.maxOfOrNull { it.count.smears }?.coerceAtLeast(1) ?: 1
             val minRadiusPx = 3.5f.dp.toPx()
             val maxRadiusPx = 7.5f.dp.toPx()
@@ -164,7 +161,7 @@ internal fun DrawScope.drawProvinces(
     if (highlightCode != null && highlightColor != null) {
         provinces.byCode[highlightCode]?.let { area ->
             val path = pathCache?.getOrPut(area.code) { pathFor(area, transform) } ?: pathFor(area, transform)
-            drawPath(path, color = highlightColor, style = Stroke(HIGHLIGHT_STROKE_WIDTH_PX))
+            drawPath(path, color = highlightColor, style = Stroke(HIGHLIGHT_STROKE_WIDTH_DP.dp.toPx()))
         }
     }
 }
