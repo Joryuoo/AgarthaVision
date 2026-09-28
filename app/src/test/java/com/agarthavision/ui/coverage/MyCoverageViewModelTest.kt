@@ -358,6 +358,36 @@ class MyCoverageViewModelTest {
     }
 
     @Test
+    fun `period change with All filter nudges cameraTarget to the new data fit, not the whole country`() = runTest {
+        // Regression guard for the withCoverage(newFit) refactor: MyCoverageViewModel.withCoverage
+        // now takes `newFit` as an explicit parameter instead of computing it internally, and both
+        // call sites (the init{} coverage collector and onPeriodChange) must keep computing it the
+        // same way. If onPeriodChange's copy of that computation ever drifts from the collector's,
+        // this is the "All resetting to the whole country instead of the data-fitted view" bug the
+        // withCoverage doc comment describes.
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
+        val observeMyCoverageUseCase: ObserveMyCoverageUseCase = mock()
+        whenever(observeMyCoverageUseCase.invoke(any(), eq(HomePeriod.TODAY), any())).thenReturn(
+            flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+        )
+        val davCoverage = ProvinceCoverage("DAV", "Davao del Sur", IslandGroup.MINDANAO, AreaCount(5, 1))
+        whenever(observeMyCoverageUseCase.invoke(any(), eq(HomePeriod.LAST_30_DAYS), any())).thenReturn(
+            flowOf(Result.success(coverage(listOf(davCoverage), CoverageFraming.SingleProvince("DAV")))),
+        )
+        val vm = buildViewModel(observeMyCoverageUseCase = observeMyCoverageUseCase)
+        advanceUntilIdle()
+        assertEquals(cebuShape.bounds, vm.uiState.value.initialFit)
+        assertNull(vm.uiState.value.islandFilter)
+
+        vm.onPeriodChange(HomePeriod.LAST_30_DAYS)
+        advanceUntilIdle()
+
+        assertEquals(davaoShape.bounds, vm.uiState.value.initialFit)
+        assertEquals(davaoShape.bounds, vm.uiState.value.cameraTarget)
+        assertNotEquals(provinces.bounds, vm.uiState.value.cameraTarget)
+    }
+
+    @Test
     fun `onMapTap only surfaces town counts belonging to the tapped province`() = runTest {
         // Four towns across three provinces mixed into one coverage.townCounts map — tapping
         // Cebu must only show Cebu's towns, not Davao's or Bohol's.

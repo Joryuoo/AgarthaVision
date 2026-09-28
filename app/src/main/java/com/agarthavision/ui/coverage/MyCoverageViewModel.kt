@@ -182,7 +182,8 @@ class MyCoverageViewModel @Inject constructor(
                             val coverage = coverageResult.getOrThrow()
                             coverageCache[period] = coverage
                             if (coverage != current.coverage) speciesCache.clear()
-                            current.withCoverage(coverage, provinces, period)
+                            val newFit = provinces?.let { resolveDataFitBounds(coverage, it) }
+                            current.withCoverage(coverage, provinces, period, newFit)
                         }
                         else -> current.copy(
                             period = period,
@@ -197,19 +198,20 @@ class MyCoverageViewModel @Inject constructor(
     }
 
     /**
-     * Applies a newly (re)loaded [coverage] to this state, recomputing [MyCoverageUiState.initialFit]
-     * via [resolveDataFitBounds]. If the fit changed after the very first load and the current
-     * filter is "All", also nudges [MyCoverageUiState.cameraTarget] back to the new fit so the map
-     * doesn't stay parked on a stale one (bug: "All" resetting to the whole country instead of the
-     * data-fitted view). Skipped on the first fit (`initialFit == null`) to avoid racing the
-     * screen's initial camera snap.
+     * Applies a newly (re)loaded [coverage] to this state, given a [newFit] already resolved via
+     * [resolveDataFitBounds] (callers compute it just before calling this). If the fit changed
+     * after the very first load and the current filter is "All", also nudges
+     * [MyCoverageUiState.cameraTarget] back to the new fit so the map doesn't stay parked on a
+     * stale one (bug: "All" resetting to the whole country instead of the data-fitted view).
+     * Skipped on the first fit (`initialFit == null`) to avoid racing the screen's initial camera
+     * snap.
      */
     private fun MyCoverageUiState.withCoverage(
         coverage: MyCoverage,
         provinces: BoundarySet?,
         period: HomePeriod,
+        newFit: GeoBounds?,
     ): MyCoverageUiState {
-        val newFit = provinces?.let { resolveDataFitBounds(coverage, it) }
         val updated = copy(
             period = period,
             isLoading = false,
@@ -230,7 +232,10 @@ class MyCoverageViewModel @Inject constructor(
         periodFlow.value = period
         speciesCache.clear()
         coverageCache[period]?.let { cachedCoverage ->
-            _uiState.update { current -> current.withCoverage(cachedCoverage, current.provinces, period) }
+            _uiState.update { current ->
+                val newFit = current.provinces?.let { resolveDataFitBounds(cachedCoverage, it) }
+                current.withCoverage(cachedCoverage, current.provinces, period, newFit)
+            }
         }
     }
 

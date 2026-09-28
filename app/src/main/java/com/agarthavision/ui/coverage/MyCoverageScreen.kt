@@ -69,6 +69,8 @@ import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 import kotlin.math.roundToInt
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 
 private const val MAP_PADDING_PX = 16f
@@ -224,6 +226,20 @@ private fun CoverageMap(
     var canvasSize by remember { mutableStateOf(Pair(0f, 0f)) }
     var initialized by remember { mutableStateOf(false) }
 
+    // A single launch per call (instead of one per animated property) so that gesture-driven and
+    // button-driven camera updates don't flood the main-thread coroutine queue; the three
+    // Animatables still animate concurrently via the inner asyncs, just under one parent job.
+    fun animateTo(transform: ViewTransform) {
+        val anim = tween<Float>(CAMERA_ANIM_MS, easing = FastOutSlowInEasing)
+        coroutineScope.launch {
+            awaitAll(
+                async { camera.scale.animateTo(transform.scale, anim) },
+                async { camera.tx.animateTo(transform.tx, anim) },
+                async { camera.ty.animateTo(transform.ty, anim) },
+            )
+        }
+    }
+
     LaunchedEffect(state.initialFit, canvasSize, provinces) {
         val fit = state.initialFit ?: return@LaunchedEffect
         val (w, h) = canvasSize
@@ -244,11 +260,7 @@ private fun CoverageMap(
         val target = state.cameraTarget ?: return@LaunchedEffect
         val (w, h) = canvasSize
         if (w <= 0f || h <= 0f) return@LaunchedEffect
-        val transform = fitBounds(target, w, h, MAP_PADDING_PX)
-        val anim = tween<Float>(CAMERA_ANIM_MS, easing = FastOutSlowInEasing)
-        coroutineScope.launch { camera.scale.animateTo(transform.scale, anim) }
-        coroutineScope.launch { camera.tx.animateTo(transform.tx, anim) }
-        coroutineScope.launch { camera.ty.animateTo(transform.ty, anim) }
+        animateTo(fitBounds(target, w, h, MAP_PADDING_PX))
         onCameraTargetConsumed()
     }
 
@@ -259,13 +271,6 @@ private fun CoverageMap(
     var lastTransform by remember { mutableStateOf<ViewTransform?>(null) }
     val mapShape = RoundedCornerShape(8.dp)
     val mapBg = colors.mapBackground
-
-    fun animateTo(transform: ViewTransform) {
-        val anim = tween<Float>(CAMERA_ANIM_MS, easing = FastOutSlowInEasing)
-        coroutineScope.launch { camera.scale.animateTo(transform.scale, anim) }
-        coroutineScope.launch { camera.tx.animateTo(transform.tx, anim) }
-        coroutineScope.launch { camera.ty.animateTo(transform.ty, anim) }
-    }
 
     Box(
         modifier = modifier
@@ -292,9 +297,15 @@ private fun CoverageMap(
                         } else {
                             raw
                         }
-                        coroutineScope.launch { camera.scale.snapTo(next.scale) }
-                        coroutineScope.launch { camera.tx.snapTo(next.tx) }
-                        coroutineScope.launch { camera.ty.snapTo(next.ty) }
+                        // snapTo is immediate (no animation frames), so applying all three inside
+                        // one coroutine — instead of one launch per property per pointer-move
+                        // frame — produces the same visible result while cutting per-frame
+                        // coroutine churn ~3x during an active pinch/pan.
+                        coroutineScope.launch {
+                            camera.scale.snapTo(next.scale)
+                            camera.tx.snapTo(next.tx)
+                            camera.ty.snapTo(next.ty)
+                        }
                     }
                 }
                 .pointerInput(provinces) {
