@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.stateIn
 data class RecordsState(
     val reports: List<Report> = emptyList(),
     val totalReports: Int = 0,
+    val unsyncedReports: Int = 0,
     val isLoading: Boolean = true,
     val selectedSpecies: EggSpecies? = null,
     val startDate: LocalDate? = null,
@@ -79,6 +80,7 @@ class RecordsViewModel @Inject constructor(
         RecordsState(
             reports = result.items,
             totalReports = result.totalCount,
+            unsyncedReports = result.unsyncedCount,
             isLoading = false,
             selectedSpecies = q.species,
             startDate = q.startDate,

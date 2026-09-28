@@ -2,6 +2,11 @@
 
 package com.agarthavision.ui.records
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,21 +24,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Inbox
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -46,14 +57,22 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -61,19 +80,19 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.components.ScreenHeader
-import com.agarthavision.ui.components.SearchInput
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.FileOpen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.DialogShape
 import com.agarthavision.ui.theme.Spacing
+import java.time.Instant
 
 private const val REPORTS_SKELETON_COUNT = 6
 private const val STATS_REPORTS_WEIGHT = 0.25f
@@ -91,6 +110,7 @@ fun RecordsScreen(
     viewModel: RecordsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val colors = AgarthaTheme.colors
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
     var shareError by remember { mutableStateOf<Int?>(null) }
@@ -112,6 +132,32 @@ fun RecordsScreen(
     }
 
     val listState = rememberLazyListState()
+    var isFiltersVisible by rememberSaveable { mutableStateOf(true) }
+
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                val delta = available.y
+                if (delta < -8f) {
+                    isFiltersVisible = false
+                } else if (delta > 8f) {
+                    isFiltersVisible = true
+                }
+                return Offset.Zero
+            }
+        }
+    }
+
+    val isFiltersRetracted by remember {
+        derivedStateOf {
+            !isFiltersVisible && (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0)
+        }
+    }
+
+    LaunchedEffect(state.selectedSpecies, state.startDate, state.endDate, state.searchQuery) {
+        isFiltersVisible = true
+    }
+
     val shouldLoadMore by remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
@@ -122,109 +168,296 @@ fun RecordsScreen(
         if (shouldLoadMore) viewModel.onLoadMore()
     }
 
+    val nowMillis = remember { System.currentTimeMillis() }
+    val todayStartMillis = remember(nowMillis) {
+        Instant.ofEpochMilli(nowMillis).atZone(CLINICAL_ZONE).toLocalDate()
+            .atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli()
+    }
+    val sevenDaysAgoMillis = remember(nowMillis) {
+        nowMillis - 7 * 24 * 60 * 60 * 1000L
+    }
+
+    val groupedReports = remember(state.reports, state.startDate, state.endDate, todayStartMillis, sevenDaysAgoMillis) {
+        val hasDateFilter = state.startDate != null || state.endDate != null
+        val today = mutableListOf<Report>()
+        val thisWeek = mutableListOf<Report>()
+        val earlier = mutableListOf<Report>()
+        for (report in state.reports) {
+            val t = report.generatedAt.toEpochMilli()
+            when {
+                t >= todayStartMillis -> today.add(report)
+                t >= sevenDaysAgoMillis -> thisWeek.add(report)
+                hasDateFilter -> earlier.add(report)
+            }
+        }
+        buildList {
+            if (today.isNotEmpty()) add("TODAY" to today)
+            if (thisWeek.isNotEmpty()) add("THIS WEEK" to thisWeek)
+            if (earlier.isNotEmpty()) add("EARLIER" to earlier)
+        }
+    }
+
     Scaffold(
-        topBar = {
-            ScreenHeader(
-                title = stringResource(R.string.reports_title),
-                purpose = stringResource(R.string.reports_subtitle_purpose),
-                status = stringResource(
-                    if (!state.isNarrowed) {
-                        R.string.reports_scope_all
-                    } else {
-                        R.string.reports_scope_filtered
-                    },
-                ),
-            )
-        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        containerColor = AgarthaTheme.colors.background,
+        containerColor = colors.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
     ) { inner ->
-        LazyColumn(
-            state = listState,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(inner),
-            contentPadding = PaddingValues(bottom = Spacing.md),
+                .padding(inner)
+                .background(colors.background),
         ) {
-            item {
-                Spacer(Modifier.height(Spacing.xs))
-                SearchInput(
-                    value = state.searchQuery,
-                    onValueChange = viewModel::onSearchChanged,
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .widthIn(max = 480.dp)
+                    .align(Alignment.TopCenter),
+            ) {
+                // 1. Header (tight padding)
+                ReportsScreenHeader(
+                    total = state.totalReports,
+                    unsynced = state.unsyncedReports,
                 )
-            }
 
-            item {
-                Spacer(Modifier.height(Spacing.md))
-                val selected = state.selectedSpecies
-                val activeFilter = when (selected) {
-                    null -> stringResource(R.string.records_species_all)
-                    EggSpecies.OTHER -> stringResource(R.string.records_species_others)
-                    else -> selected.displayName
-                }
-                StatsRow(
-                    reportsCount = if (state.isLoading) "—" else state.totalReports.toString(),
-                    activeFilter = activeFilter,
-                    onSpeciesFilterClick = { showSpeciesDialog = true },
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-            item {
-                Spacer(Modifier.height(Spacing.xs))
-                DateRangeFilterBar(
-                    startDate = state.startDate,
-                    endDate = state.endDate,
-                    onRangeSelected = viewModel::onDateRangeSelected,
-                    modifier = Modifier.padding(horizontal = Spacing.xl),
-                )
-            }
-            item { Spacer(Modifier.height(Spacing.xs)) }
-
-            when {
-                state.isLoading -> items(REPORTS_SKELETON_COUNT) {
-                    ReportCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
-                }
-                state.reports.isEmpty() -> item {
-                    ReportsEmptyState(narrowed = state.isNarrowed)
-                }
-                else -> {
-                    items(state.reports, key = { it.id }) { report ->
-                        ReportCard(
-                            report = report,
-                            onSessionClick = { onSessionClick(report.sessionId) },
-                            onOpenPdf = {
-                                shareError = viewReportPdf(context, report.pdfFilePath)
-                            },
-                            onOpenCsv = {
-                                shareError = viewReportCsv(context, report.csvFilePath)
-                            },
-                            onSharePdf = {
-                                shareError = shareReportPdf(context, report.pdfFilePath)
-                            },
-                            onShareCsv = {
-                                shareError = shareReportCsv(context, report.csvFilePath)
-                            },
-                            modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                // 2. Search Bar
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(colors.surfaceVariant)
+                            .padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Search,
+                            contentDescription = null,
+                            tint = colors.textSecondary,
+                            modifier = Modifier.size(20.dp),
                         )
-                    }
-                    if (state.canLoadMore) {
-                        item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = Spacing.md),
-                                contentAlignment = Alignment.Center,
+                        Spacer(modifier = Modifier.width(10.dp))
+                        BasicTextField(
+                            value = state.searchQuery,
+                            onValueChange = viewModel::onSearchChanged,
+                            modifier = Modifier.weight(1f),
+                            textStyle = TextStyle(
+                                fontSize = 15.sp,
+                                color = colors.textPrimary,
+                            ),
+                            singleLine = true,
+                            cursorBrush = SolidColor(colors.accent),
+                            decorationBox = { innerTextField ->
+                                if (state.searchQuery.isEmpty()) {
+                                    Text(
+                                        text = stringResource(R.string.reports_search_placeholder),
+                                        fontSize = 15.sp,
+                                        color = colors.textTertiary,
+                                    )
+                                }
+                                innerTextField()
+                            },
+                        )
+                        if (state.searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { viewModel.onSearchChanged("") },
+                                modifier = Modifier.size(24.dp),
                             ) {
-                                CircularProgressIndicator(
-                                    color = AgarthaTheme.colors.accent,
-                                    modifier = Modifier.size(24.dp),
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = null,
+                                    tint = colors.textSecondary,
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         }
                     }
                 }
+
+                // 3. StatsRow & DateRangeFilterBar (retractable when scrolling down)
+                AnimatedVisibility(
+                    visible = !isFiltersRetracted,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut(),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 4.dp),
+                    ) {
+                        val selected = state.selectedSpecies
+                        val activeFilter = when (selected) {
+                            null -> stringResource(R.string.records_species_all)
+                            EggSpecies.OTHER -> stringResource(R.string.records_species_others)
+                            else -> selected.displayName
+                        }
+                        StatsRow(
+                            reportsCount = if (state.isLoading) "—" else state.totalReports.toString(),
+                            activeFilter = activeFilter,
+                            onSpeciesFilterClick = { showSpeciesDialog = true },
+                        )
+                        Spacer(Modifier.height(Spacing.xs))
+                        DateRangeFilterBar(
+                            startDate = state.startDate,
+                            endDate = state.endDate,
+                            onRangeSelected = viewModel::onDateRangeSelected,
+                        )
+                    }
+                }
+
+                // 4. LazyColumn list of reports
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .nestedScroll(nestedScrollConnection),
+                    contentPadding = PaddingValues(bottom = Spacing.md),
+                ) {
+                    when {
+                        state.isLoading && state.reports.isEmpty() -> items(REPORTS_SKELETON_COUNT) {
+                            ReportCardSkeleton(modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp))
+                        }
+                        groupedReports.isEmpty() -> {
+                            item {
+                                val isDefaultDate = state.startDate == null && state.endDate == null
+                                val hasOlderRecords = isDefaultDate && state.reports.isNotEmpty()
+                                if (hasOlderRecords) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = Spacing.xl, vertical = Spacing.xxxl),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        EmptyState(
+                                            icon = Icons.Outlined.Inbox,
+                                            title = "No recent reports",
+                                            body = "No reports found for today or this week. " +
+                                                "Select a date range to view earlier reports.",
+                                        )
+                                    }
+                                } else {
+                                    ReportsEmptyState(narrowed = state.isNarrowed)
+                                }
+                            }
+                        }
+                        else -> {
+                            groupedReports.forEach { (sectionTitle, items) ->
+                                item(key = "section_$sectionTitle") {
+                                    Text(
+                                        text = sectionTitle,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 0.8.sp,
+                                        color = colors.textSecondary,
+                                        modifier = Modifier.padding(
+                                            start = 20.dp,
+                                            end = 20.dp,
+                                            top = 10.dp,
+                                            bottom = 4.dp,
+                                        ),
+                                    )
+                                }
+                                items(items, key = { it.id }) { report ->
+                                    ReportCard(
+                                        report = report,
+                                        onSessionClick = { onSessionClick(report.sessionId) },
+                                        onOpenPdf = {
+                                            shareError = viewReportPdf(context, report.pdfFilePath)
+                                        },
+                                        onOpenCsv = {
+                                            shareError = viewReportCsv(context, report.csvFilePath)
+                                        },
+                                        onSharePdf = {
+                                            shareError = shareReportPdf(context, report.pdfFilePath)
+                                        },
+                                        onShareCsv = {
+                                            shareError = shareReportCsv(context, report.csvFilePath)
+                                        },
+                                        modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
+                                    )
+                                }
+                            }
+                            if (state.canLoadMore) {
+                                item(key = "load_more_indicator") {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = Spacing.md),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = AgarthaTheme.colors.accent,
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportsScreenHeader(
+    total: Int,
+    unsynced: Int,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 2.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.reports_title),
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (colors.isDark) Color.White else Color.Black,
+            letterSpacing = (-0.5).sp,
+            lineHeight = 34.sp,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(top = 1.dp),
+        ) {
+            val reportText = if (total == 1) "1 report" else "$total reports"
+            Text(
+                text = reportText,
+                fontSize = 14.sp,
+                color = colors.textSecondary,
+                fontWeight = FontWeight.Medium,
+            )
+            Text(
+                text = " · ",
+                fontSize = 14.sp,
+                color = colors.textSecondary,
+                fontWeight = FontWeight.Medium,
+            )
+            if (unsynced > 0) {
+                Text(
+                    text = "$unsynced not synced",
+                    fontSize = 14.sp,
+                    color = colors.goldText,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else {
+                Text(
+                    text = stringResource(R.string.settings_sync_all_synced),
+                    fontSize = 14.sp,
+                    color = colors.textSecondary,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }

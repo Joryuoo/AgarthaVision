@@ -169,6 +169,12 @@ interface ReportDao {
     fun observeFailedCount(userId: String): Flow<Int>
 
     /**
+     * Live count of owned reports not yet synced or whose sync failed.
+     */
+    @Query("SELECT COUNT(*) FROM reports WHERE user_id = :userId AND supabase_status IN ('pending', 'sync_failed')")
+    fun observeUnsyncedCount(userId: String): Flow<Int>
+
+    /**
      * Claims reports belonging to the given sessions for [userId], marking them pending
      * sync. Only touches currently-unowned rows so it is idempotent. Per ADR-007.
      */

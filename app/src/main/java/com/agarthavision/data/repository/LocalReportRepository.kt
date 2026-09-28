@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+ 
 package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.ReportDao
@@ -75,4 +77,7 @@ class LocalReportRepository @Inject constructor(
     override suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus) {
         reportDao.updateSupabaseStatus(reportId, status.value)
     }
+
+    override fun observeUnsyncedCount(userId: String): Flow<Int> =
+        reportDao.observeUnsyncedCount(userId)
 }

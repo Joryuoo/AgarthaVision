@@ -337,7 +337,7 @@
     <string name="reports_empty_body">Reports appear here once generated from session details.</string>
     <string name="reports_no_match_title">No matching reports</string>
     <string name="reports_no_match_body">Try adjusting your filters or search query.</string>
-    <string name="reports_search_placeholder">Search reports by id, session, or species</string>
+    <string name="reports_search_placeholder">Search by ID, session, or species</string>
     <string name="reports_open_pdf">Open PDF</string>
     <string name="reports_open_csv">Open CSV</string>
     <string name="reports_share_pdf">Share PDF</string>
