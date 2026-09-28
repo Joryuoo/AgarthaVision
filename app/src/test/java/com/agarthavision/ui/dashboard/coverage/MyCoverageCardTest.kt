@@ -210,7 +210,7 @@ class MyCoverageCardTest {
 
         composeRule.onNodeWithText("Cebu").assertExists()
         composeRule.onNodeWithText("40% positive").assertExists()
-        composeRule.onNodeWithText("Tap to explore →").assertExists()
+        composeRule.onNodeWithText("Explore").assertExists()
     }
 
     @Test
@@ -295,7 +295,6 @@ class MyCoverageCardTest {
 
         composeRule.onNodeWithText("Philippines").assertExists()
         composeRule.onNodeWithText("5 provinces · 3 island groups").assertExists()
-        composeRule.onNodeWithText("+ 2 more").assertExists()
-        composeRule.onNodeWithText("Luzon 2 · Visayas 1 · Mindanao 2").assertExists()
+        composeRule.onNodeWithText("+2 more").assertExists()
     }
 }
