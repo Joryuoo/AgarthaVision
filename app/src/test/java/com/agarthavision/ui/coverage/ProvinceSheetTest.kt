@@ -142,4 +142,30 @@ class ProvinceSheetTest {
 
         composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
     }
+
+    @Test
+    fun `a province with zero smears shows only the empty-state message, no town list`() {
+        val towns = BoundarySet(
+            areas = (1..8).map { townShape("T$it", "Town $it") },
+            bounds = GeoBounds(0f, 0f, 1f, 1f),
+        )
+        val selected = SelectedProvince(
+            code = "CEB",
+            name = "Cebu",
+            coverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(smears = 0, positives = 0)),
+            towns = TownGeometry.Available(towns),
+            townCounts = mapOf("T1" to AreaCount(smears = 10, positives = 2)),
+        )
+
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                ProvinceSheetContent(selected = selected, showAllTowns = false, onShowAllTowns = {})
+            }
+        }
+
+        composeRule.onNodeWithText("No smears from this province in this period").assertExists()
+        composeRule.onNodeWithText("towns with data", substring = true).assertDoesNotExist()
+        composeRule.onNodeWithText("Town 1").assertDoesNotExist()
+        composeRule.onNodeWithText("View all 8 towns").assertDoesNotExist()
+    }
 }

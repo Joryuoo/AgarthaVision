@@ -16,7 +16,7 @@ import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.MyCoverage
 import com.agarthavision.domain.model.ProvinceCoverage
-import com.agarthavision.domain.repository.CoverageRepository
+import com.agarthavision.domain.model.SpeciesFinding
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.coverage.LoadAreaDirectoryUseCase
 import com.agarthavision.domain.usecase.coverage.LoadProvinceBoundariesUseCase
@@ -24,20 +24,24 @@ import com.agarthavision.domain.usecase.coverage.LoadTownBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.ObserveMyCoverageUseCase
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import com.agarthavision.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Clock
 import java.time.Instant
@@ -93,6 +97,7 @@ class MyCoverageViewModelTest {
     private fun coverage(
         provincesCoverage: List<ProvinceCoverage> = emptyList(),
         framing: CoverageFraming = CoverageFraming.Empty,
+        townCounts: Map<String, AreaCount> = emptyMap(),
     ) = MyCoverage(
         period = HomePeriod.TODAY,
         totals = AreaCount(smears = provincesCoverage.sumOf { it.count.smears }, positives = 0),
@@ -100,6 +105,7 @@ class MyCoverageViewModelTest {
         provinces = provincesCoverage,
         islandGroupCounts = provincesCoverage.groupingBy { it.islandGroup }.eachCount(),
         framing = framing,
+        townCounts = townCounts,
     )
 
     @Suppress("LongParameterList") // Every parameter is a distinct, independently-overridable fixture default.
@@ -119,9 +125,6 @@ class MyCoverageViewModelTest {
         observeFindingsUseCase: ObserveFindingsUseCase = mock<ObserveFindingsUseCase>().also {
             whenever(it.invoke(any(), any(), any())).thenReturn(flowOf(FindingsResult(emptyList(), 0)))
         },
-        coverageRepository: CoverageRepository = mock<CoverageRepository>().also {
-            whenever(it.observeTownCoverage(any(), any())).thenReturn(flowOf(emptyList()))
-        },
     ) = MyCoverageViewModel(
         savedStateHandle = savedStateHandle,
         clock = clock,
@@ -131,7 +134,6 @@ class MyCoverageViewModelTest {
         loadTownBoundariesUseCase = loadTownBoundariesUseCase,
         loadAreaDirectoryUseCase = loadAreaDirectoryUseCase,
         observeFindingsUseCase = observeFindingsUseCase,
-        coverageRepository = coverageRepository,
     )
 
     @Test
@@ -180,16 +182,75 @@ class MyCoverageViewModelTest {
         assertEquals(provinces.bounds, vm.uiState.value.cameraTarget)
     }
 
+    // --- Bug 1: "All" must return to the data-fitted initial fit, not always the whole country ---
+
     @Test
-    fun `onIslandFilter with null (All) targets the whole country`() = runTest {
-        val vm = buildViewModel()
+    fun `initialFit is data-fitted to provinces with data, not the whole country`() = runTest {
+        val wideCountryBounds = GeoBounds(0f, 0f, 50f, 50f)
+        val wideProvinces = BoundarySet(areas = listOf(cebuShape, davaoShape), bounds = wideCountryBounds)
+        val loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadProvinceBoundariesUseCase.invoke()).thenReturn(Result.success(wideProvinces))
+        }
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
+        val vm = buildViewModel(
+            loadProvinceBoundariesUseCase = loadProvinceBoundariesUseCase,
+            observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
+                whenever(it.invoke(any(), any(), any())).thenReturn(
+                    flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+                )
+            },
+        )
         advanceUntilIdle()
 
+        assertEquals(cebuShape.bounds, vm.uiState.value.initialFit)
+        assertNotEquals(wideCountryBounds, vm.uiState.value.initialFit)
+    }
+
+    @Test
+    fun `initialFit falls back to the whole country when no province has data`() = runTest {
+        val wideCountryBounds = GeoBounds(0f, 0f, 50f, 50f)
+        val wideProvinces = BoundarySet(areas = listOf(cebuShape, davaoShape), bounds = wideCountryBounds)
+        val loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadProvinceBoundariesUseCase.invoke()).thenReturn(Result.success(wideProvinces))
+        }
+        val vm = buildViewModel(loadProvinceBoundariesUseCase = loadProvinceBoundariesUseCase)
+        advanceUntilIdle()
+
+        assertEquals(wideCountryBounds, vm.uiState.value.initialFit)
+    }
+
+    @Test
+    fun `onIslandFilter null after a group filter restores the original initialFit, not the whole country`() = runTest {
+        val wideCountryBounds = GeoBounds(0f, 0f, 50f, 50f)
+        val wideProvinces = BoundarySet(areas = listOf(cebuShape, davaoShape), bounds = wideCountryBounds)
+        val loadProvinceBoundariesUseCase: LoadProvinceBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadProvinceBoundariesUseCase.invoke()).thenReturn(Result.success(wideProvinces))
+        }
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
+        val vm = buildViewModel(
+            loadProvinceBoundariesUseCase = loadProvinceBoundariesUseCase,
+            observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
+                whenever(it.invoke(any(), any(), any())).thenReturn(
+                    flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+                )
+            },
+        )
+        advanceUntilIdle()
+
+        val originalInitialFit = vm.uiState.value.initialFit
+        assertEquals(cebuShape.bounds, originalInitialFit)
+
         vm.onIslandFilter(IslandGroup.VISAYAS)
+        assertEquals(cebuShape.bounds, vm.uiState.value.cameraTarget)
+
         vm.onIslandFilter(null)
 
         assertNull(vm.uiState.value.islandFilter)
-        assertEquals(provinces.bounds, vm.uiState.value.cameraTarget)
+        assertEquals(originalInitialFit, vm.uiState.value.cameraTarget)
+        assertNotEquals(wideCountryBounds, vm.uiState.value.cameraTarget)
     }
 
     @Test
@@ -298,8 +359,8 @@ class MyCoverageViewModelTest {
 
     @Test
     fun `onMapTap only surfaces town counts belonging to the tapped province`() = runTest {
-        // Three provinces' worth of towns mixed in one directory and one observeTownCoverage
-        // result — tapping Cebu must only show Cebu's towns, not Davao's or Bohol's.
+        // Four towns across three provinces mixed into one coverage.townCounts map — tapping
+        // Cebu must only show Cebu's towns, not Davao's or Bohol's.
         val mixedDirectory = AreaDirectory(
             towns = mapOf(
                 "TOWN-CEB-1" to TownRef("TOWN-CEB-1", "Cebu City", "CEB", true),
@@ -317,15 +378,12 @@ class MyCoverageViewModelTest {
         kotlinx.coroutines.runBlocking {
             whenever(loadAreaDirectoryUseCase.invoke()).thenReturn(Result.success(mixedDirectory))
         }
-        val mixedTownRows = listOf(
-            com.agarthavision.domain.model.TownCoverage("TOWN-CEB-1", smearCount = 10, positiveCount = 4),
-            com.agarthavision.domain.model.TownCoverage("TOWN-CEB-2", smearCount = 8, positiveCount = 1),
-            com.agarthavision.domain.model.TownCoverage("TOWN-DAV-1", smearCount = 20, positiveCount = 9),
-            com.agarthavision.domain.model.TownCoverage("TOWN-BOH-1", smearCount = 6, positiveCount = 2),
+        val mixedTownCounts = mapOf(
+            "TOWN-CEB-1" to AreaCount(10, 4),
+            "TOWN-CEB-2" to AreaCount(8, 1),
+            "TOWN-DAV-1" to AreaCount(20, 9),
+            "TOWN-BOH-1" to AreaCount(6, 2),
         )
-        val coverageRepository: CoverageRepository = mock<CoverageRepository>().also {
-            whenever(it.observeTownCoverage(any(), any())).thenReturn(flowOf(mixedTownRows))
-        }
         val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
         kotlinx.coroutines.runBlocking {
             whenever(loadTownBoundariesUseCase.invoke(eq("CEB"))).thenReturn(Result.success(null))
@@ -334,11 +392,18 @@ class MyCoverageViewModelTest {
         val vm = buildViewModel(
             observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
                 whenever(it.invoke(any(), any(), any())).thenReturn(
-                    flowOf(Result.success(coverage(listOf(cebCoverage), CoverageFraming.SingleProvince("CEB")))),
+                    flowOf(
+                        Result.success(
+                            coverage(
+                                listOf(cebCoverage),
+                                CoverageFraming.SingleProvince("CEB"),
+                                mixedTownCounts,
+                            ),
+                        ),
+                    ),
                 )
             },
             loadAreaDirectoryUseCase = loadAreaDirectoryUseCase,
-            coverageRepository = coverageRepository,
             loadTownBoundariesUseCase = loadTownBoundariesUseCase,
         )
         advanceUntilIdle()
@@ -370,12 +435,17 @@ class MyCoverageViewModelTest {
     }
 
     @Test
-    fun `tapping an already loaded province reuses cached province details`() = runTest {
+    fun `tapping an already loaded province a second time does not refetch cached species`() = runTest {
         val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
         val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
         kotlinx.coroutines.runBlocking {
             whenever(loadTownBoundariesUseCase.invoke(eq("CEB"))).thenReturn(Result.success(null))
         }
+        val resolvedSpecies = listOf(SpeciesFinding("Aedes aegypti", 4, 1f, "100%"))
+        val observeFindingsUseCase: ObserveFindingsUseCase = mock()
+        whenever(observeFindingsUseCase.invoke(any(), any(), any())).thenReturn(
+            flowOf(FindingsResult(resolvedSpecies, 4)),
+        )
         val vm = buildViewModel(
             observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
                 whenever(it.invoke(any(), any(), any())).thenReturn(
@@ -383,21 +453,66 @@ class MyCoverageViewModelTest {
                 )
             },
             loadTownBoundariesUseCase = loadTownBoundariesUseCase,
+            observeFindingsUseCase = observeFindingsUseCase,
         )
         advanceUntilIdle()
 
-        vm.onMapTap(0.5f, 0.5f) // hits Cebu
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu, triggers a species load (stat is Reported)
         advanceUntilIdle()
-
-        val firstSelected = vm.uiState.value.selected
-        assertNotNull(firstSelected)
+        val firstSpecies = vm.uiState.value.selected?.species
+        assertEquals(resolvedSpecies, firstSpecies)
 
         vm.onDismissSheet()
-        assertNull(vm.uiState.value.selected)
-
-        vm.onMapTap(0.5f, 0.5f) // hits Cebu again
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu again — species should come straight from the cache
         advanceUntilIdle()
 
-        assertSame(firstSelected, vm.uiState.value.selected)
+        assertEquals(resolvedSpecies, vm.uiState.value.selected?.species)
+        verify(observeFindingsUseCase, times(1)).invoke(any(), any(), any())
+    }
+
+    @Test
+    fun `species cache is populated even after navigating away before the load finishes`() = runTest {
+        val cebCoverage = ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4))
+        val davCoverage = ProvinceCoverage("DAV", "Davao del Sur", IslandGroup.MINDANAO, AreaCount(20, 9))
+        val deferred = CompletableDeferred<FindingsResult>()
+        val observeFindingsUseCase: ObserveFindingsUseCase = mock()
+        whenever(observeFindingsUseCase.invoke(any(), any(), any())).thenReturn(
+            flow { emit(deferred.await()) },
+        )
+        val loadTownBoundariesUseCase: LoadTownBoundariesUseCase = mock()
+        kotlinx.coroutines.runBlocking {
+            whenever(loadTownBoundariesUseCase.invoke(any())).thenReturn(Result.success(null))
+        }
+        val vm = buildViewModel(
+            observeMyCoverageUseCase = mock<ObserveMyCoverageUseCase>().also {
+                whenever(it.invoke(any(), any(), any())).thenReturn(
+                    flowOf(Result.success(coverage(listOf(cebCoverage, davCoverage), CoverageFraming.Country))),
+                )
+            },
+            loadTownBoundariesUseCase = loadTownBoundariesUseCase,
+            observeFindingsUseCase = observeFindingsUseCase,
+        )
+        advanceUntilIdle()
+
+        vm.onMapTap(0.5f, 0.5f) // hits Cebu, kicks off a species load that never resolves yet
+        advanceUntilIdle()
+        assertEquals("CEB", vm.uiState.value.selected?.code)
+        assertTrue(vm.uiState.value.selected?.species.isNullOrEmpty())
+
+        vm.onMapTap(5.5f, 5.5f) // navigate away before Cebu's load completes — hits Davao
+        advanceUntilIdle()
+        assertEquals("DAV", vm.uiState.value.selected?.code)
+
+        val resolvedSpecies = listOf(SpeciesFinding("Aedes aegypti", 4, 1f, "100%"))
+        deferred.complete(FindingsResult(resolvedSpecies, 4))
+        advanceUntilIdle()
+
+        // Cebu's late completion must not clobber the current (Davao) selection.
+        assertEquals("DAV", vm.uiState.value.selected?.code)
+
+        vm.onMapTap(0.5f, 0.5f) // tap Cebu again — should read from cache, not be stuck empty
+        advanceUntilIdle()
+
+        assertEquals(resolvedSpecies, vm.uiState.value.selected?.species)
     }
 }

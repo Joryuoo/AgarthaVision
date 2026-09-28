@@ -3,6 +3,7 @@ package com.agarthavision.ui.coverage
 import androidx.compose.ui.geometry.Offset
 import com.agarthavision.domain.geo.ViewTransform
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -119,5 +120,43 @@ class MyCoverageCameraTest {
         val screenAfter = next.toScreen(mapUnderCentroidBefore.first, mapUnderCentroidBefore.second)
         assertEquals(centroid.x, screenAfter.first, 0.001f)
         assertEquals(centroid.y, screenAfter.second, 0.001f)
+    }
+
+    @Test
+    fun `zooming out while already below the nominal floor never jumps scale up to the floor`() {
+        // Simulates the reported bug: right after "All" resets to a fit narrower than the
+        // previous zoomed-in view, the camera's current scale can sit below the nominal
+        // `minScale` for the new fit. A zoom-out gesture from there must keep scale going down
+        // (or at least not snap it up to `minScale`), never increase it.
+        val current = ViewTransform(scale = 0.5f, tx = 0f, ty = 0f)
+
+        val next = nextCameraTransform(
+            current = current,
+            centroid = Offset.Zero,
+            pan = Offset.Zero,
+            zoom = 0.9f, // zooming out further
+            minScale = 0.8f, // nominal floor for the new fit, above the current scale
+            maxScale = 40f,
+        )
+
+        assertTrue(next.scale <= current.scale)
+    }
+
+    @Test
+    fun `zooming in while below the nominal floor is still allowed up to maxScale`() {
+        // The defensive clamp only affects the lower bound; zooming in from below-floor should
+        // behave normally, not get stuck.
+        val current = ViewTransform(scale = 0.5f, tx = 0f, ty = 0f)
+
+        val next = nextCameraTransform(
+            current = current,
+            centroid = Offset.Zero,
+            pan = Offset.Zero,
+            zoom = 2f,
+            minScale = 0.8f,
+            maxScale = 40f,
+        )
+
+        assertEquals(1f, next.scale, 0.0001f)
     }
 }

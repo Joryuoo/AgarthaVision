@@ -16,13 +16,13 @@ import com.agarthavision.domain.model.MyCoverage
 import com.agarthavision.domain.model.ProvinceCoverage
 import com.agarthavision.domain.model.SpeciesFinding
 import com.agarthavision.domain.model.windows
-import com.agarthavision.domain.repository.CoverageRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.coverage.LoadAreaDirectoryUseCase
 import com.agarthavision.domain.usecase.coverage.LoadProvinceBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.LoadTownBoundariesUseCase
 import com.agarthavision.domain.usecase.coverage.ObserveMyCoverageUseCase
 import com.agarthavision.domain.usecase.coverage.resolveCoverageFitBounds
+import com.agarthavision.domain.usecase.coverage.resolveDataFitBounds
 import com.agarthavision.domain.usecase.home.ObserveFindingsUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -62,9 +62,9 @@ data class SelectedProvince(
      * Per-town smear/positive counts within this province, keyed by town code — not part of the
      * original sketch's [TownGeometry] (which is geometry-only), but the sheet's "towns ranked
      * by positive rate" list needs counts even for a province whose town *geometry* is
-     * [TownGeometry.Unavailable]. Sourced from [CoverageRepository.observeTownCoverage], filtered
-     * to this province via the area directory — reusing data Phase 9 already loads rather than
-     * adding a new DAO query.
+     * [TownGeometry.Unavailable]. Sourced from [MyCoverage.townCounts] (already loaded for the
+     * whole period), filtered to this province via the area directory — reusing data already in
+     * memory rather than issuing a new DAO query.
      */
     val townCounts: Map<String, AreaCount> = emptyMap(),
 )
@@ -75,7 +75,12 @@ data class MyCoverageUiState(
     val error: String? = null,
     val provinces: BoundarySet? = null,
     val coverage: MyCoverage? = null,
-    /** Same rule as `MyCoverageCardViewModel.resolveFitBounds` — see [resolveCoverageFitBounds]. */
+    /**
+     * The union of every province with data (or the whole country if none has data) — see
+     * [resolveDataFitBounds]. Unlike `MyCoverageCardViewModel`'s static card fit (which also
+     * frames a single province or island group via [resolveCoverageFitBounds]), the full-screen
+     * map always starts data-fitted so "All" can return to it after other filters.
+     */
     val initialFit: GeoBounds? = null,
     /** null = "All". */
     val islandFilter: IslandGroup? = null,
@@ -97,7 +102,6 @@ class MyCoverageViewModel @Inject constructor(
     private val loadTownBoundariesUseCase: LoadTownBoundariesUseCase,
     private val loadAreaDirectoryUseCase: LoadAreaDirectoryUseCase,
     private val observeFindingsUseCase: ObserveFindingsUseCase,
-    private val coverageRepository: CoverageRepository,
 ) : ViewModel() {
 
     private val initialPeriod: HomePeriod = savedStateHandle.get<String>("period")?.let { raw ->
@@ -123,10 +127,19 @@ class MyCoverageViewModel @Inject constructor(
     val uiState: StateFlow<MyCoverageUiState> = _uiState.asStateFlow()
 
     private var directory: AreaDirectory? = loadAreaDirectoryUseCase.cachedOrNull()
+        set(value) {
+            field = value
+            townCodesByProvince = null
+        }
     private var currentUserId: String? = null
 
     private val coverageCache = mutableMapOf<HomePeriod, MyCoverage>()
-    private val cachedProvinceDetails = mutableMapOf<String, SelectedProvince>()
+
+    /** Completed, successful species lookups only — never a failure or a partial/loading state. */
+    private val speciesCache = mutableMapOf<String, List<SpeciesFinding>>()
+
+    /** Lazily built from [directory], reset whenever [directory] is (re)assigned. */
+    private var townCodesByProvince: Map<String, Set<String>>? = null
 
     init {
         viewModelScope.launch {
@@ -165,14 +178,8 @@ class MyCoverageViewModel @Inject constructor(
                         coverageResult.isSuccess -> {
                             val coverage = coverageResult.getOrThrow()
                             coverageCache[period] = coverage
-                            current.copy(
-                                period = period,
-                                isLoading = false,
-                                error = null,
-                                provinces = provinces,
-                                coverage = coverage,
-                                initialFit = provinces?.let { resolveCoverageFitBounds(coverage, it) },
-                            )
+                            if (coverage != current.coverage) speciesCache.clear()
+                            current.withCoverage(coverage, provinces, period)
                         }
                         else -> current.copy(
                             period = period,
@@ -186,37 +193,55 @@ class MyCoverageViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Applies a newly (re)loaded [coverage] to this state, recomputing [MyCoverageUiState.initialFit]
+     * via [resolveDataFitBounds]. If the fit changed after the very first load and the current
+     * filter is "All", also nudges [MyCoverageUiState.cameraTarget] back to the new fit so the map
+     * doesn't stay parked on a stale one (bug: "All" resetting to the whole country instead of the
+     * data-fitted view). Skipped on the first fit (`initialFit == null`) to avoid racing the
+     * screen's initial camera snap.
+     */
+    private fun MyCoverageUiState.withCoverage(
+        coverage: MyCoverage,
+        provinces: BoundarySet?,
+        period: HomePeriod,
+    ): MyCoverageUiState {
+        val newFit = provinces?.let { resolveDataFitBounds(coverage, it) }
+        val updated = copy(
+            period = period,
+            isLoading = false,
+            error = null,
+            provinces = provinces,
+            coverage = coverage,
+            initialFit = newFit ?: initialFit,
+        )
+        return if (initialFit != null && newFit != null && newFit != initialFit) {
+            updated.copy(cameraTarget = computeCameraTarget(updated.islandFilter, updated))
+        } else {
+            updated
+        }
+    }
+
     fun onPeriodChange(period: HomePeriod) {
         // Local to this screen only — does not write back to Home's period (D13).
         periodFlow.value = period
-        cachedProvinceDetails.clear()
+        speciesCache.clear()
         coverageCache[period]?.let { cachedCoverage ->
-            _uiState.update { current ->
-                current.copy(
-                    period = period,
-                    coverage = cachedCoverage,
-                    initialFit = current.provinces?.let { resolveCoverageFitBounds(cachedCoverage, it) }
-                        ?: current.initialFit,
-                )
-            }
+            _uiState.update { current -> current.withCoverage(cachedCoverage, current.provinces, period) }
         }
     }
 
     fun onIslandFilter(group: IslandGroup?) {
         val state = _uiState.value
-        val target = computeCameraTarget(group, state.provinces, state.coverage)
+        val target = computeCameraTarget(group, state)
         _uiState.update { it.copy(islandFilter = group, cameraTarget = target) }
     }
 
-    @Suppress("ReturnCount") // Three simple guard/fallback returns read more clearly than nesting.
-    private fun computeCameraTarget(
-        group: IslandGroup?,
-        provinces: BoundarySet?,
-        coverage: MyCoverage?,
-    ): GeoBounds? {
-        if (provinces == null) return null
-        if (group == null) return provinces.bounds
-        val codes = coverage?.provinces?.filter { it.islandGroup == group }?.map { it.code } ?: emptyList()
+    @Suppress("ReturnCount") // Two simple guard/fallback returns read more clearly than nesting.
+    private fun computeCameraTarget(group: IslandGroup?, state: MyCoverageUiState): GeoBounds? {
+        val provinces = state.provinces ?: return null
+        if (group == null) return state.initialFit ?: provinces.bounds
+        val codes = state.coverage?.provinces?.filter { it.islandGroup == group }?.map { it.code } ?: emptyList()
         val bounds = codes.mapNotNull { provinces.byCode[it]?.bounds }
         return bounds.reduceOrNull(GeoBounds::union) ?: provinces.bounds
     }
@@ -226,85 +251,72 @@ class MyCoverageViewModel @Inject constructor(
     }
 
     fun onMapTap(mapX: Float, mapY: Float) {
-        val provinces = _uiState.value.provinces ?: return
+        val state = _uiState.value
+        val provinces = state.provinces ?: return
         val hitArea = hitTest(provinces, mapX, mapY) ?: return
 
-        val cached = cachedProvinceDetails[hitArea.code]
-        if (cached != null) {
-            _uiState.update { it.copy(selected = cached) }
+        val coverage = state.coverage
+        val provinceCoverage = coverage?.provinces?.firstOrNull { it.code == hitArea.code }
+        val townCodeIndex = townCodesByProvince ?: buildTownCodeIndex(directory).also { townCodesByProvince = it }
+        val townCodes = townCodeIndex[hitArea.code].orEmpty()
+        val townCounts = coverage?.townCounts?.filterKeys { it in townCodes }.orEmpty()
+        val cachedSpecies = speciesCache[hitArea.code]
+
+        val cachedTowns = loadTownBoundariesUseCase.cachedOrNull(hitArea.code)
+        val initialGeometry = if (cachedTowns != null) {
+            TownGeometry.Available(cachedTowns)
         } else {
-            val coverage = _uiState.value.coverage
-            val provinceCoverage = coverage?.provinces?.firstOrNull { it.code == hitArea.code }
-            val townCodes = directory?.towns
-                ?.filterValues { it.provinceKey == hitArea.code }
-                ?.keys
-                ?: emptySet()
+            TownGeometry.Loading
+        }
 
-            val cachedTowns = loadTownBoundariesUseCase.cachedOrNull(hitArea.code)
-            val initialGeometry = if (cachedTowns != null) {
-                TownGeometry.Available(cachedTowns)
-            } else {
-                TownGeometry.Loading
-            }
+        _uiState.update {
+            it.copy(
+                selected = SelectedProvince(
+                    code = hitArea.code,
+                    name = hitArea.name,
+                    coverage = provinceCoverage,
+                    species = cachedSpecies.orEmpty(),
+                    towns = initialGeometry,
+                    townCounts = townCounts,
+                ),
+            )
+        }
 
-            _uiState.update {
-                it.copy(
-                    selected = SelectedProvince(
-                        code = hitArea.code,
-                        name = hitArea.name,
-                        coverage = provinceCoverage,
-                        towns = initialGeometry,
-                    ),
-                )
-            }
-
-            loadSelectedProvinceDetails(hitArea.code, provinceCoverage, townCodes)
+        val needsSpecies = cachedSpecies == null && provinceCoverage?.count?.stat is AreaStat.Reported
+        val needsGeometry = cachedTowns == null
+        if (needsSpecies || needsGeometry) {
+            loadSelectedProvinceDetails(hitArea.code, needsSpecies, needsGeometry, townCodes)
         }
     }
 
     private fun loadSelectedProvinceDetails(
         provinceCode: String,
-        provinceCoverage: ProvinceCoverage?,
+        needsSpecies: Boolean,
+        needsGeometry: Boolean,
         townCodes: Set<String>,
     ) {
         val userId = currentUserId
         val period = _uiState.value.period
         val windows = period.windows(clock.instant(), CLINICAL_ZONE)
 
-        viewModelScope.launch {
-            val species = if (userId != null && provinceCoverage?.count?.stat is AreaStat.Reported) {
+        if (needsSpecies && userId != null) {
+            viewModelScope.launch {
                 runCatching { observeFindingsUseCase(userId, windows.current, townCodes).first().species }
-                    .getOrDefault(emptyList())
-            } else {
-                emptyList()
+                    .onSuccess { species ->
+                        speciesCache[provinceCode] = species
+                        updateSelected(provinceCode) { it.copy(species = species) }
+                    }
             }
-            val townCounts = if (userId != null) {
-                runCatching {
-                    coverageRepository.observeTownCoverage(userId, windows.current).first()
-                        .filter { it.townCode != null && it.townCode in townCodes }
-                        .groupBy { it.townCode }
-                        .mapNotNull { (townCode, rows) ->
-                            townCode?.let {
-                                it to AreaCount(
-                                    smears = rows.sumOf { row -> row.smearCount },
-                                    positives = rows.sumOf { row -> row.positiveCount },
-                                )
-                            }
-                        }
-                        .toMap()
-                }.getOrDefault(emptyMap())
-            } else {
-                emptyMap()
-            }
-            updateSelected(provinceCode) { it.copy(species = species, townCounts = townCounts) }
         }
 
-        viewModelScope.launch {
-            val townGeometry = loadTownBoundariesUseCase(provinceCode).fold(
-                onSuccess = { set -> if (set != null) TownGeometry.Available(set) else TownGeometry.Unavailable },
-                onFailure = { TownGeometry.Unavailable },
-            )
-            updateSelected(provinceCode) { it.copy(towns = townGeometry) }
+        if (needsGeometry) {
+            viewModelScope.launch {
+                val townGeometry = loadTownBoundariesUseCase(provinceCode).fold(
+                    onSuccess = { set -> if (set != null) TownGeometry.Available(set) else TownGeometry.Unavailable },
+                    onFailure = { TownGeometry.Unavailable },
+                )
+                updateSelected(provinceCode) { it.copy(towns = townGeometry) }
+            }
         }
     }
 
@@ -312,9 +324,7 @@ class MyCoverageViewModel @Inject constructor(
         _uiState.update { state ->
             val selected = state.selected
             if (selected != null && selected.code == provinceCode) {
-                val updated = transform(selected)
-                cachedProvinceDetails[provinceCode] = updated
-                state.copy(selected = updated)
+                state.copy(selected = transform(selected))
             } else {
                 state
             }
@@ -329,3 +339,10 @@ class MyCoverageViewModel @Inject constructor(
         _uiState.update { it.copy(showAllTowns = show) }
     }
 }
+
+/** Every town code grouped by its parent province code, from [directory]'s flat town list. */
+private fun buildTownCodeIndex(directory: AreaDirectory?): Map<String, Set<String>> =
+    directory?.towns?.values
+        ?.groupBy({ it.provinceKey }, { it.code })
+        ?.mapValues { it.value.toSet() }
+        .orEmpty()

@@ -10,6 +10,7 @@ import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.MyCoverage
 import com.agarthavision.domain.model.ProvinceCoverage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class CoverageFitTest {
@@ -91,6 +92,39 @@ class CoverageFitTest {
     fun `empty framing falls back to country bounds`() {
         val coverage = coverageOf(framing = CoverageFraming.Empty)
         val fit = resolveCoverageFitBounds(coverage, provinces)
+        assertEquals(countryBounds, fit)
+    }
+
+    @Test
+    fun `resolveDataFitBounds returns the single province with data`() {
+        val coverage = coverageOf(
+            framing = CoverageFraming.SingleProvince("CEB"),
+            provincesList = listOf(
+                ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4)),
+            ),
+        )
+        val fit = resolveDataFitBounds(coverage, provinces)
+        assertEquals(cebuShape.bounds, fit)
+    }
+
+    @Test
+    fun `resolveDataFitBounds unions every province with data regardless of framing`() {
+        val coverage = coverageOf(
+            framing = CoverageFraming.Country,
+            provincesList = listOf(
+                ProvinceCoverage("CEB", "Cebu", IslandGroup.VISAYAS, AreaCount(10, 4)),
+                ProvinceCoverage("BOH", "Bohol", IslandGroup.VISAYAS, AreaCount(5, 2)),
+            ),
+        )
+        val fit = resolveDataFitBounds(coverage, provinces)
+        assertEquals(cebuShape.bounds.union(boholShape.bounds), fit)
+        assertNotEquals(countryBounds, fit)
+    }
+
+    @Test
+    fun `resolveDataFitBounds falls back to the whole country when no province has data`() {
+        val coverage = coverageOf(framing = CoverageFraming.Empty)
+        val fit = resolveDataFitBounds(coverage, provinces)
         assertEquals(countryBounds, fit)
     }
 }

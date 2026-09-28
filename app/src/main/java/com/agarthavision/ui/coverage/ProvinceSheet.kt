@@ -102,6 +102,7 @@ internal fun ProvinceSheetContent(
     BackHandler(enabled = showAllTowns) { onShowAllTowns(false) }
 
     val colors = AgarthaTheme.colors
+    val hasData = (selected.coverage?.count?.smears ?: 0) > 0
 
     Column(
         modifier = modifier
@@ -112,23 +113,27 @@ internal fun ProvinceSheetContent(
         ProvinceMiniMap(selected)
         Spacer(Modifier.height(12.dp))
         Text(selected.name, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colors.accent)
-        TownCountLine(selected)
-        Spacer(Modifier.height(6.dp))
+        if (hasData) {
+            TownCountLine(selected)
+            Spacer(Modifier.height(6.dp))
+        }
         RateLine(selected.coverage?.count?.stat)
-        if (selected.coverage?.count?.stat is AreaStat.Reported) {
+        if (hasData) {
+            if (selected.coverage?.count?.stat is AreaStat.Reported) {
+                Spacer(Modifier.height(16.dp))
+                SpeciesBreakdown(selected.species)
+            }
+            if (selected.towns is TownGeometry.Unavailable) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Town outlines aren't available for this province. Figures below are still complete.",
+                    fontSize = 12.sp,
+                    color = colors.textSecondary,
+                )
+            }
             Spacer(Modifier.height(16.dp))
-            SpeciesBreakdown(selected.species)
+            TownRanking(selected, showAllTowns, onShowAllTowns)
         }
-        if (selected.towns is TownGeometry.Unavailable) {
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = "Town outlines aren't available for this province. Figures below are still complete.",
-                fontSize = 12.sp,
-                color = colors.textSecondary,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        TownRanking(selected, showAllTowns, onShowAllTowns)
         Spacer(Modifier.height(24.dp))
     }
 }
@@ -296,19 +301,19 @@ private fun TownRanking(
 ) {
     val colors = AgarthaTheme.colors
     val towns = selected.towns as? TownGeometry.Available ?: return
-    val ranked = towns.set.areas
-        .map { area -> area to (selected.townCounts[area.code]?.stat ?: AreaStat.NoData) }
-        .sortedWith(
-            compareBy<Pair<AreaShape, AreaStat>> { (_, stat) ->
-                when (stat) {
-                    is AreaStat.Reported -> 0
-                    AreaStat.TooFew -> 1
-                    AreaStat.NoData -> 2
-                }
-            }.thenByDescending { (_, stat) -> (stat as? AreaStat.Reported)?.positiveRate ?: 0.0 },
-        )
-
-    val hasData = (selected.coverage?.count?.smears ?: 0) > 0 || ranked.any { it.second != AreaStat.NoData }
+    val ranked = remember(towns.set, selected.townCounts) {
+        towns.set.areas
+            .map { area -> area to (selected.townCounts[area.code]?.stat ?: AreaStat.NoData) }
+            .sortedWith(
+                compareBy<Pair<AreaShape, AreaStat>> { (_, stat) ->
+                    when (stat) {
+                        is AreaStat.Reported -> 0
+                        AreaStat.TooFew -> 1
+                        AreaStat.NoData -> 2
+                    }
+                }.thenByDescending { (_, stat) -> (stat as? AreaStat.Reported)?.positiveRate ?: 0.0 },
+            )
+    }
 
     Text("Towns", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = colors.textPrimary)
     Spacer(Modifier.height(8.dp))
@@ -319,7 +324,7 @@ private fun TownRanking(
         }
     } else {
         ranked.take(TOP_TOWNS_SHOWN).forEach { (area, stat) -> TownRow(area.name, stat) }
-        if (hasData && ranked.size > TOP_TOWNS_SHOWN) {
+        if (ranked.size > TOP_TOWNS_SHOWN) {
             Spacer(Modifier.height(8.dp))
             TextButton(onClick = { onShowAllTowns(true) }) {
                 Text("View all ${ranked.size} towns")

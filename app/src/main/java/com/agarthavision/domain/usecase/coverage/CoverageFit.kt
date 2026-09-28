@@ -27,3 +27,9 @@ fun resolveCoverageFitBounds(coverage: MyCoverage, provinces: BoundarySet): GeoB
         }
     }
 }
+
+/** Union of every province with data; whole country only when none has data. Full-screen map only. */
+fun resolveDataFitBounds(coverage: MyCoverage, provinces: BoundarySet): GeoBounds =
+    coverage.provinces.mapNotNull { provinces.byCode[it.code]?.bounds }
+        .reduceOrNull(GeoBounds::union)
+        ?: provinces.bounds

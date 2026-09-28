@@ -235,16 +235,19 @@ private fun CoverageMap(
             ty = Animatable(0f),
         )
     }
-    var baseScale by remember { mutableStateOf(1f) }
+    var minScale by remember { mutableStateOf(0f) }
+    var maxScale by remember { mutableStateOf(Float.MAX_VALUE) }
     var canvasSize by remember { mutableStateOf(Pair(0f, 0f)) }
     var initialized by remember { mutableStateOf(false) }
 
-    LaunchedEffect(state.initialFit, canvasSize) {
+    LaunchedEffect(state.initialFit, canvasSize, provinces) {
         val fit = state.initialFit ?: return@LaunchedEffect
         val (w, h) = canvasSize
         if (w <= 0f || h <= 0f) return@LaunchedEffect
         val transform = fitBounds(fit, w, h, MAP_PADDING_PX)
-        baseScale = transform.scale
+        val countryScale = fitBounds(provinces.bounds, w, h, MAP_PADDING_PX).scale
+        minScale = minOf(countryScale, transform.scale) * MIN_SCALE_FACTOR
+        maxScale = transform.scale * MAX_SCALE_FACTOR
         if (!initialized) {
             camera.scale.snapTo(transform.scale)
             camera.tx.snapTo(transform.tx)
@@ -278,8 +281,6 @@ private fun CoverageMap(
             .onSizeChanged { size -> canvasSize = size.width.toFloat() to size.height.toFloat() }
             .pointerInput(Unit) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
-                    val minScale = baseScale * MIN_SCALE_FACTOR
-                    val maxScale = baseScale * MAX_SCALE_FACTOR
                     val next = nextCameraTransform(
                         current = camera.transform,
                         centroid = centroid,
@@ -340,7 +341,10 @@ internal fun nextCameraTransform(
     minScale: Float,
     maxScale: Float,
 ): ViewTransform {
-    val newScale = (current.scale * zoom).coerceIn(minScale, maxScale)
+    // A zoom-out gesture must never increase scale when the camera already sits below the floor
+    // (e.g. right after "All" resets to a fit narrower than the previous zoomed-in view).
+    val lower = minOf(minScale, current.scale)
+    val newScale = (current.scale * zoom).coerceIn(lower, maxScale)
     val appliedZoom = if (current.scale == 0f) 1f else newScale / current.scale
     val newTx = centroid.x * (1 - appliedZoom) + current.tx * appliedZoom + pan.x
     val newTy = centroid.y * (1 - appliedZoom) + current.ty * appliedZoom + pan.y
