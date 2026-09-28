@@ -30,7 +30,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.PersonAdd
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material.icons.outlined.AssignmentLate
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
@@ -264,19 +266,11 @@ fun PatientsScreen(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .offset(x = 4.dp, y = (-4).dp)
-                                .size(18.dp)
+                                .offset(x = 2.dp, y = (-2).dp)
+                                .size(9.dp)
                                 .clip(CircleShape)
                                 .background(colors.brandFill),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = state.activeFilterCount.toString(),
-                                color = colors.onBrandFill,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
+                        )
                     }
                 }
             }
@@ -453,14 +447,19 @@ fun PatientsScreen(
         }
 
         if (state.patients.isNotEmpty()) {
-            NewPatientButton(
-                onClick = viewModel::onCreatePatient,
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
+                    .fillMaxSize()
                     .widthIn(max = 480.dp)
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = Spacing.lg),
-            )
+                    .align(Alignment.TopCenter),
+            ) {
+                NewPatientButton(
+                    onClick = viewModel::onCreatePatient,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 20.dp, bottom = 20.dp),
+                )
+            }
         }
     }
 
@@ -890,28 +889,31 @@ private fun NewPatientButton(
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
-    Button(
+    ExtendedFloatingActionButton(
         onClick = onClick,
-        modifier = modifier.height(49.dp),
-        shape = CircleShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = colors.brandFill,
-            contentColor = colors.onBrandFill,
+        icon = {
+            Icon(
+                imageVector = Icons.Outlined.PersonAdd,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+        text = {
+            Text(
+                text = stringResource(R.string.patients_new),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        },
+        shape = RoundedCornerShape(16.dp),
+        containerColor = colors.brandFill,
+        contentColor = colors.onBrandFill,
+        elevation = FloatingActionButtonDefaults.elevation(
+            defaultElevation = 4.dp,
+            pressedElevation = 6.dp,
         ),
-    ) {
-        Icon(
-            imageVector = Icons.Outlined.Add,
-            contentDescription = null,
-            tint = colors.onBrandFill,
-            modifier = Modifier.size(18.dp),
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = stringResource(R.string.patients_new),
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
+        modifier = modifier,
+    )
 }
 
 private fun formatSpeciesShortName(raw: String): String {
