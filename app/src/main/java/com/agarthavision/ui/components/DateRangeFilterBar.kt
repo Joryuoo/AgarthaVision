@@ -28,7 +28,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.DateRange
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -86,16 +88,24 @@ fun DateRangeFilterBar(
 
     editing?.let { end ->
         val initial = if (end == RangeEnd.START) startDate ?: endDate else endDate ?: startDate
+        val dialogTitle = if (end == RangeEnd.START) "Select start date" else "Select end date"
         SingleDatePickerDialog(
+            title = dialogTitle,
             initialDate = initial,
             onDismiss = { editing = null },
             onConfirm = { picked ->
-                val (newStart, newEnd) = when (end) {
-                    RangeEnd.START -> picked to (endDate?.takeIf { it >= picked } ?: picked)
-                    RangeEnd.END -> (startDate?.takeIf { it <= picked } ?: picked) to picked
+                when (end) {
+                    RangeEnd.START -> {
+                        val newEnd = endDate?.takeIf { it >= picked } ?: picked
+                        onRangeSelected(picked, newEnd)
+                        editing = RangeEnd.END
+                    }
+                    RangeEnd.END -> {
+                        val newStart = startDate?.takeIf { it <= picked } ?: picked
+                        onRangeSelected(newStart, picked)
+                        editing = null
+                    }
                 }
-                onRangeSelected(newStart, newEnd)
-                editing = null
             },
         )
     }
@@ -154,40 +164,88 @@ private fun ClearChip(onClick: () -> Unit) {
 }
 
 /**
- * Standard Material3 single-month calendar dialog. Confirm is a no-op when nothing is
- * selected so the caller never receives a null date.
+ * Standard Material3 single-month calendar dialog with high-contrast buttons and title.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SingleDatePickerDialog(
+    title: String,
     initialDate: LocalDate?,
     onDismiss: () -> Unit,
     onConfirm: (LocalDate) -> Unit,
 ) {
+    val colors = AgarthaTheme.colors
     val pickerState = rememberDatePickerState(
         initialSelectedDateMillis = initialDate?.toUtcMillis(),
         selectableDates = remember { PastOrTodayDates(LocalDate.now()) },
     )
-    // Material3 defaults dialogs to shapes.extraLarge, which is this app's
-    // 999.dp pill token - the picker renders as an ellipse without this.
     DatePickerDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
+        colors = androidx.compose.material3.DatePickerDefaults.colors(
+            containerColor = colors.surfaceHigh,
+        ),
         confirmButton = {
+            val isEnabled = pickerState.selectedDateMillis != null
             TextButton(
-                enabled = pickerState.selectedDateMillis != null,
+                enabled = isEnabled,
                 onClick = {
                     pickerState.selectedDateMillis
                         ?.let { Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate() }
                         ?.let(onConfirm)
                 },
-            ) { Text("OK") }
+            ) {
+                Text(
+                    text = "OK",
+                    color = if (isEnabled) {
+                        if (colors.isDark) colors.accent else colors.brandFill
+                    } else {
+                        colors.textTertiary
+                    },
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                )
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) {
+                Text(
+                    text = "Cancel",
+                    color = colors.textPrimary,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 15.sp,
+                )
+            }
         },
     ) {
-        DatePicker(state = pickerState)
+        DatePicker(
+            state = pickerState,
+            title = {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.textPrimary,
+                    modifier = Modifier.padding(start = 24.dp, top = 20.dp, end = 24.dp),
+                )
+            },
+            colors = androidx.compose.material3.DatePickerDefaults.colors(
+                containerColor = colors.surfaceHigh,
+                titleContentColor = colors.textPrimary,
+                headlineContentColor = colors.textPrimary,
+                weekdayContentColor = colors.textSecondary,
+                subheadContentColor = colors.textPrimary,
+                yearContentColor = colors.textPrimary,
+                currentYearContentColor = colors.accent,
+                selectedYearContentColor = colors.onBrandFill,
+                selectedYearContainerColor = colors.brandFill,
+                dayContentColor = colors.textPrimary,
+                selectedDayContentColor = colors.onBrandFill,
+                selectedDayContainerColor = colors.brandFill,
+                todayContentColor = colors.accent,
+                todayDateBorderColor = colors.accent,
+            ),
+        )
     }
 }
 

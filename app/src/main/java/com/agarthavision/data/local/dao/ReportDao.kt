@@ -60,9 +60,10 @@ interface ReportDao {
 
     @Query(
         """
-        SELECT r.*, s.label AS session_label
+        SELECT r.*, s.label AS session_label, p.lastname AS patient_lastname, p.firstname AS patient_firstname
         FROM reports r
         LEFT JOIN sessions s ON r.session_id = s.session_id
+        LEFT JOIN patients p ON s.patient_id = p.patient_id
         WHERE r.user_id = :userId
           AND (:startMillis IS NULL OR r.generated_at >= :startMillis)
           AND (:endMillis IS NULL OR r.generated_at <= :endMillis)
@@ -73,6 +74,8 @@ interface ReportDao {
             OR r.positive_species_json LIKE '%' || :query || '%' ESCAPE '\'
             OR r.session_id LIKE '%' || :query || '%' ESCAPE '\'
             OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%' ESCAPE '\')
+            OR (p.lastname IS NOT NULL AND p.lastname LIKE '%' || :query || '%' ESCAPE '\')
+            OR (p.firstname IS NOT NULL AND p.firstname LIKE '%' || :query || '%' ESCAPE '\')
           )
         ORDER BY r.generated_at DESC
         LIMIT :limit OFFSET :offset
@@ -93,6 +96,7 @@ interface ReportDao {
         SELECT COUNT(*)
         FROM reports r
         LEFT JOIN sessions s ON r.session_id = s.session_id
+        LEFT JOIN patients p ON s.patient_id = p.patient_id
         WHERE r.user_id = :userId
           AND (:startMillis IS NULL OR r.generated_at >= :startMillis)
           AND (:endMillis IS NULL OR r.generated_at <= :endMillis)
@@ -103,6 +107,8 @@ interface ReportDao {
             OR r.positive_species_json LIKE '%' || :query || '%' ESCAPE '\'
             OR r.session_id LIKE '%' || :query || '%' ESCAPE '\'
             OR (s.label IS NOT NULL AND s.label LIKE '%' || :query || '%' ESCAPE '\')
+            OR (p.lastname IS NOT NULL AND p.lastname LIKE '%' || :query || '%' ESCAPE '\')
+            OR (p.firstname IS NOT NULL AND p.firstname LIKE '%' || :query || '%' ESCAPE '\')
           )
         """,
     )
@@ -194,4 +200,6 @@ interface ReportDao {
 data class ReportWithSessionLabel(
     @Embedded val report: ReportEntity,
     @ColumnInfo(name = "session_label") val sessionLabel: String? = null,
+    @ColumnInfo(name = "patient_lastname") val patientLastname: String? = null,
+    @ColumnInfo(name = "patient_firstname") val patientFirstname: String? = null,
 )

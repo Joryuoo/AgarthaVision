@@ -56,7 +56,10 @@ class LocalReportRepository @Inject constructor(
         offset: Int,
     ): Flow<List<Report>> =
         reportDao.observeFilteredReports(userId, startMillis, endMillis, species, query, limit, offset).map { rows ->
-            rows.map { it.report.toDomain(gson, it.sessionLabel) }
+            rows.map { row ->
+                val patientName = formatMaskedPatientName(row.patientLastname, row.patientFirstname)
+                row.report.toDomain(gson, row.sessionLabel, patientName)
+            }
         }
 
     override fun observeFilteredCount(
@@ -81,3 +84,17 @@ class LocalReportRepository @Inject constructor(
     override fun observeUnsyncedCount(userId: String): Flow<Int> =
         reportDao.observeUnsyncedCount(userId)
 }
+
+private fun formatMaskedPatientName(lastname: String?, firstname: String?): String? {
+    if (lastname.isNullOrBlank()) return null
+    val last = lastname.trim()
+    val maskedLast = if (last.length <= 2) {
+        last
+    } else {
+        val middleBullets = "•".repeat(last.length - 2)
+        "${last.first()}$middleBullets${last.last()}"
+    }
+    val initial = firstname?.trim()?.firstOrNull()?.uppercaseChar()
+    return if (initial != null) "$maskedLast, $initial." else maskedLast
+}
+
