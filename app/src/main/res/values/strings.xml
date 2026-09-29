@@ -22,22 +22,128 @@
     <string name="dashboard_sign_in">Sign in</string>
     <string name="dashboard_sync_now">Sync now</string>
     <string name="dashboard_syncing">Syncing…</string>
-    <string name="dashboard_pending_upload">%1$d item(s) pending upload</string>
+    <plurals name="dashboard_pending_upload">
+        <item quantity="one">%1$d item pending upload</item>
+        <item quantity="other">%1$d items pending upload</item>
+    </plurals>
+    <plurals name="dashboard_frame_count">
+        <item quantity="one">%1$d frame</item>
+        <item quantity="other">%1$d frames</item>
+    </plurals>
     <string name="dashboard_all_synced">All records synced</string>
-    <string name="dashboard_todays_findings">Today\'s findings</string>
-    <plurals name="dashboard_frames_count">
-        <item quantity="one"> frame</item>
-        <item quantity="other"> frames</item>
-    </plurals>
-    <plurals name="dashboard_species_detected_count">
-        <item quantity="one">%1$d species detected</item>
-        <item quantity="other">%1$d species detected</item>
-    </plurals>
     <!-- Toasts for the header sync button -->
     <string name="dashboard_sync_toast_signed_out">Sign in to sync your records</string>
     <string name="dashboard_sync_toast_offline">You\'re offline — sync will resume when you reconnect</string>
     <string name="dashboard_sync_toast_started">Syncing your records…</string>
     <string name="dashboard_sync_toast_rate_limited">Hold on — you just synced</string>
+
+    <!-- Recent activity -->
+    <plurals name="activity_verified_frames">
+        <item quantity="one">Verified %1$d frame</item>
+        <item quantity="other">Verified %1$d frames</item>
+    </plurals>
+    <plurals name="activity_captured_frames">
+        <item quantity="one">Captured %1$d frame</item>
+        <item quantity="other">Captured %1$d frames</item>
+    </plurals>
+    <string name="activity_added_patient">Added patient %1$s</string>
+    <plurals name="activity_synced_items">
+        <item quantity="one">Synced %1$d item</item>
+        <item quantity="other">Synced %1$d items</item>
+    </plurals>
+    <string name="activity_started_session">Started a session</string>
+    <plurals name="coverage_unlocated_smears">
+        <item quantity="one">%1$d smear has a location not in the bundled map data</item>
+        <item quantity="other">%1$d smears have a location not in the bundled map data</item>
+    </plurals>
+
+    <!-- My coverage -->
+    <string name="coverage_title">My coverage</string>
+    <string name="coverage_explore">Explore</string>
+    <string name="coverage_positive_rate">Positive rate</string>
+    <string name="coverage_too_few">Too few</string>
+    <string name="coverage_positive_rate_label">positive rate</string>
+    <string name="coverage_positive_smears_label">positive smears</string>
+    <string name="coverage_smears_examined_label">smears examined</string>
+    <string name="coverage_species_header">SPECIES IN POSITIVE SMEARS</string>
+    <string name="coverage_towns_header">TOWNS</string>
+    <string name="coverage_all_towns">All %1$d</string>
+    <string name="coverage_zoom_in">Zoom in</string>
+    <string name="coverage_zoom_out">Zoom out</string>
+    <string name="coverage_recenter">Recenter</string>
+    <string name="coverage_close_sheet">Close</string>
+    <string name="coverage_empty_title">No smears in this period</string>
+    <string name="coverage_empty_body">Smears you examine will appear here by province.</string>
+    <string name="coverage_attribution">Administrative boundaries: OCHA Philippines Common Operational Datasets (COD-AB), CC BY-IGO 3.0.</string>
+    <plurals name="coverage_towns_with_data">
+        <item quantity="one">%1$d town with data</item>
+        <item quantity="other">%1$d towns with data</item>
+    </plurals>
+    <string name="coverage_more_provinces">+%1$d more</string>
+    <string name="activity_empty">No activity yet</string>
+    <string name="activity_title">Recent activity</string>
+
+    <!-- Relative time -->
+    <string name="time_just_now">Just now</string>
+    <plurals name="time_minutes_ago">
+        <item quantity="one">%1$d minute ago</item>
+        <item quantity="other">%1$d minutes ago</item>
+    </plurals>
+    <plurals name="time_hours_ago">
+        <item quantity="one">%1$d hour ago</item>
+        <item quantity="other">%1$d hours ago</item>
+    </plurals>
+    <plurals name="time_days_ago">
+        <item quantity="one">%1$d day ago</item>
+        <item quantity="other">%1$d days ago</item>
+    </plurals>
+    <string name="time_short_minutes_ago">%1$d m ago</string>
+    <string name="time_short_hours_ago">%1$d h ago</string>
+    <string name="time_short_days_ago">%1$d d ago</string>
+
+    <!-- Periods -->
+    <string name="period_today">Today</string>
+    <string name="period_7_days">7 days</string>
+    <string name="period_30_days">30 days</string>
+
+    <!-- Needs attention strip -->
+    <string name="attention_title">Needs attention</string>
+    <plurals name="attention_unsynced_summary">
+        <item quantity="one">%1$d unsynced</item>
+        <item quantity="other">%1$d unsynced</item>
+    </plurals>
+    <plurals name="attention_to_review_summary">
+        <item quantity="one">%1$d to review</item>
+        <item quantity="other">%1$d to review</item>
+    </plurals>
+    <plurals name="attention_unsynced">
+        <item quantity="one">%1$d unsynced item</item>
+        <item quantity="other">%1$d unsynced items</item>
+    </plurals>
+    <plurals name="attention_to_review">
+        <item quantity="one">%1$d frame to review</item>
+        <item quantity="other">%1$d frames to review</item>
+    </plurals>
+    <plurals name="attention_empty_sessions">
+        <item quantity="one">%1$d session with no frames</item>
+        <item quantity="other">%1$d sessions with no frames</item>
+    </plurals>
+
+    <!-- KPI tiles -->
+    <string name="kpi_label_sessions">Sessions</string>
+    <string name="kpi_label_positive_rate">Positive rate</string>
+    <string name="kpi_label_to_review">To review</string>
+    <string name="kpi_label_ai_agreement">AI agreement</string>
+    <plurals name="kpi_patients_count">
+        <item quantity="one">%1$d patient</item>
+        <item quantity="other">%1$d patients</item>
+    </plurals>
+    <string name="kpi_no_smears_examined">No smears examined yet</string>
+    <string name="kpi_smears_ratio">%1$d of %2$d smears</string>
+    <string name="kpi_no_ai_reviewed">No AI results reviewed yet</string>
+    <string name="kpi_ai_corrected_ratio">%1$d of %2$d corrected by you</string>
+    <string name="kpi_verified_today">%1$d verified today</string>
+    <string name="kpi_verified_period">%1$d verified in period</string>
 
     <!-- Sessions link-to-account control (ADR-007 offline access) -->
 
@@ -261,7 +367,7 @@
     <string name="reports_empty_body">Reports appear here once generated from session details.</string>
     <string name="reports_no_match_title">No matching reports</string>
     <string name="reports_no_match_body">Try adjusting your filters or search query.</string>
-    <string name="reports_search_placeholder">Search reports by id, session, or species</string>
+    <string name="reports_search_placeholder">Search by ID, session, or species</string>
     <string name="reports_open_pdf">Open PDF</string>
     <string name="reports_open_csv">Open CSV</string>
     <string name="reports_share_pdf">Share PDF</string>
@@ -439,7 +545,7 @@
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name.</string>
-    <string name="patients_new">New Patient</string>
+    <string name="patients_new">New patient</string>
     <!-- Content description on the row's edit affordance; %1$s is the patient's name. -->
     <string name="patients_edit_desc">Edit %1$s</string>
     <string name="patients_edit_action">Edit</string>
@@ -455,6 +561,9 @@
     <string name="patients_sex_unknown">Sex not recorded</string>
     <string name="patients_sort_label">Sort by</string>
     <string name="patients_sort_recent">Recent activity</string>
+    <string name="patients_sort_today">Today</string>
+    <string name="patients_sort_this_week">This week</string>
+    <string name="patients_sort_earlier">Earlier</string>
     <string name="patients_sort_lastname">Last name</string>
     <string name="patients_sort_firstname">First name</string>
     <string name="patients_filters_title">Filters</string>
@@ -538,6 +647,24 @@
     <string name="settings_sync_incomplete_badge">Sync incomplete</string>
     <string name="settings_sync_incomplete">Some data could not be downloaded. Retrying automatically.</string>
     <string name="settings_appearance_dark_mode">Dark mode</string>
+    <string name="settings_signed_in_as_label">Signed in as</string>
+    <string name="settings_role_medtech">Medtech</string>
+    <string name="settings_items_not_uploaded">%1$d items not uploaded</string>
+    <string name="settings_one_item_not_uploaded">1 item not uploaded</string>
+    <string name="settings_all_items_uploaded">All items uploaded</string>
+    <string name="settings_last_synced_today">Last synced today, %1$s</string>
+    <string name="settings_last_synced_yesterday">Last synced yesterday, %1$s</string>
+    <string name="settings_last_synced_at">Last synced %1$s</string>
+    <string name="settings_not_synced_yet">Not synced yet</string>
+    <string name="settings_status_synced">Synced</string>
+    <string name="settings_status_pending">%1$d pending</string>
+    <string name="settings_theme_label">Theme</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_sign_out_warning_items">%1$d items haven\’t uploaded yet. Signing out now would discard them, so sync first.</string>
+    <string name="settings_sign_out_warning_one">1 item hasn\’t uploaded yet. Signing out now would discard it, so sync first.</string>
+    <string name="settings_sign_out_warning_none">All items are synced. Signing out is safe.</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>

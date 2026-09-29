@@ -42,6 +42,10 @@ class ObservePendingSyncCountsUseCase @Inject constructor(
                 pendingSamples = values[2],
                 pendingReports = values[3],
                 failed = values[4] + values[5] + values[6] + values[7],
+                failedPatients = values[4],
+                failedSessions = values[5],
+                failedSamples = values[6],
+                failedReports = values[7],
             )
         }
 }

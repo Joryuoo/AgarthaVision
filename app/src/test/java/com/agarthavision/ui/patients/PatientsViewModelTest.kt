@@ -13,6 +13,9 @@ import com.agarthavision.domain.usecase.patients.PatientsQuery
 import com.agarthavision.domain.usecase.patients.PatientsResult
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.util.MainDispatcherRule
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -54,6 +57,7 @@ class PatientsViewModelTest {
         observePatientsUseCase = observePatientsUseCase,
         observeLocalIdentityUseCase = ObserveLocalIdentityUseCase(authRepository),
         searchBarangaysUseCase = searchBarangaysUseCase,
+        clock = Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC),
     )
 
     @Test

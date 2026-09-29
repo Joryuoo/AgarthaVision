@@ -6,6 +6,7 @@ import androidx.room.Query
 import androidx.room.Update
 import androidx.room.Upsert
 import androidx.room.Embedded
+import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import kotlinx.coroutines.flow.Flow
 
@@ -331,11 +332,108 @@ interface SessionDao {
         query: String,
     ): Flow<SessionsCountsRow>
 
-    // `observeAllLocalPage` and `observeAllLocalCounts` are gone with LOCAL_SESSIONS_FILTER,
-    // for the reason above. That filter carried the patient scope and the date range but no
-    // owner guard at all, so a signed-out Session List showed every smear recorded under the
-    // patient by anyone who had used the device.
+    @Query(
+        """
+        SELECT s.*,
+          p.patient_id AS p_patient_id, p.lastname AS p_lastname, p.firstname AS p_firstname,
+          p.middle_name AS p_middle_name, p.sex AS p_sex, p.birthdate AS p_birthdate,
+          p.psgc_barangay_code AS p_psgc_barangay_code, p.created_by AS p_created_by,
+          p.created_at AS p_created_at, p.updated_at AS p_updated_at, p.supabase_status AS p_supabase_status,
+          (SELECT COUNT(*) FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null) AS totalSamples,
+          (SELECT COUNT(*) FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status = 'flagged') AS unverifiedSamples,
+          EXISTS (SELECT 1 FROM samples sa JOIN detections d ON d.sample_id = sa.sample_id
+                  WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged'
+                    AND d.verdict != 'false_positive') AS isPositive,
+          MAX(s.started_at, COALESCE((SELECT MAX(MAX(sa.timestamp, sa.verified_at)) FROM samples sa
+              WHERE sa.session_id = s.session_id AND sa.deleted_at is null), 0)) AS lastActivityAt
+        FROM sessions s JOIN patients p ON p.patient_id = s.patient_id
+        WHERE s.user_id = :userId
+          AND (:filter = 'to_review' OR ((:fromMillis IS NULL OR s.started_at >= :fromMillis) AND (:toMillis IS NULL OR s.started_at < :toMillis)))
+          AND (:filter != 'to_review' OR EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id
+                AND sa.deleted_at is null AND sa.status = 'flagged'
+                AND (:fromMillis IS NULL OR sa.timestamp >= :fromMillis) AND (:toMillis IS NULL OR sa.timestamp < :toMillis)))
+          AND (:filter != 'no_frames' OR NOT EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null))
+          AND (:filter NOT IN ('examined','positive') OR EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id
+                AND sa.deleted_at is null AND sa.status != 'flagged'))
+          AND (:filter != 'positive' OR EXISTS (SELECT 1 FROM samples sa JOIN detections d ON d.sample_id = sa.sample_id
+                WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged' AND d.verdict != 'false_positive'))
+        ORDER BY lastActivityAt DESC
+        LIMIT :limit
+        """,
+    )
+    fun observeSessionSummaries(
+        userId: String,
+        filter: String,
+        fromMillis: Long?,
+        toMillis: Long?,
+        limit: Int,
+    ): Flow<List<SessionSummaryRow>>
+
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM sessions s JOIN patients p ON p.patient_id = s.patient_id
+        WHERE s.user_id = :userId
+          AND (:filter = 'to_review' OR ((:fromMillis IS NULL OR s.started_at >= :fromMillis) AND (:toMillis IS NULL OR s.started_at < :toMillis)))
+          AND (:filter != 'to_review' OR EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id
+                AND sa.deleted_at is null AND sa.status = 'flagged'
+                AND (:fromMillis IS NULL OR sa.timestamp >= :fromMillis) AND (:toMillis IS NULL OR sa.timestamp < :toMillis)))
+          AND (:filter != 'no_frames' OR NOT EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null))
+          AND (:filter NOT IN ('examined','positive') OR EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id
+                AND sa.deleted_at is null AND sa.status != 'flagged'))
+          AND (:filter != 'positive' OR EXISTS (SELECT 1 FROM samples sa JOIN detections d ON d.sample_id = sa.sample_id
+                WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged' AND d.verdict != 'false_positive'))
+        """,
+    )
+    fun observeSessionSummaryCount(
+        userId: String,
+        filter: String,
+        fromMillis: Long?,
+        toMillis: Long?,
+    ): Flow<Int>
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM sessions s
+        WHERE s.user_id = :userId
+          AND (:excludeSessionId IS NULL OR s.session_id != :excludeSessionId)
+          AND NOT EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null)
+        """,
+    )
+    fun observeEmptySessionCount(userId: String, excludeSessionId: String?): Flow<Int>
+
+    @Query(
+        """
+        SELECT s.session_id AS sessionId, s.patient_id AS patientId, s.started_at AS startedAt,
+          EXISTS (SELECT 1 FROM samples sa WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged') AS examined,
+          EXISTS (SELECT 1 FROM samples sa JOIN detections d ON d.sample_id = sa.sample_id
+                  WHERE sa.session_id = s.session_id AND sa.deleted_at is null AND sa.status != 'flagged'
+                    AND d.verdict != 'false_positive') AS positive
+        FROM sessions s WHERE s.user_id = :userId AND s.started_at >= :fromMillis AND s.started_at < :toMillis
+        """,
+    )
+    fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<SessionOutcomeRow>>
+
+    @Query(
+        """
+        SELECT session_id AS sessionId, label AS sessionLabel, started_at AS occurredAt
+        FROM sessions
+        WHERE user_id = :userId
+        ORDER BY started_at DESC LIMIT :limit
+        """,
+    )
+    fun observeStartedActivity(userId: String, limit: Int): Flow<List<SessionStartedActivityRow>>
 }
+
+data class SessionStartedActivityRow(
+    val sessionId: String,
+    val sessionLabel: String?,
+    val occurredAt: Long,
+)
 
 /**
  * Shared WHERE predicate for the Records paginated page and totals queries.
@@ -429,4 +527,21 @@ data class RecordsTotalsRow(
     @ColumnInfo(name = "sessionCount") val sessionCount: Int,
     @ColumnInfo(name = "totalSamples") val totalSamples: Int,
     @ColumnInfo(name = "totalEggs") val totalEggs: Int,
+)
+
+data class SessionSummaryRow(
+    @Embedded val session: SessionEntity,
+    @Embedded(prefix = "p_") val patient: PatientEntity,
+    val totalSamples: Int,
+    val unverifiedSamples: Int,
+    val isPositive: Boolean,
+    val lastActivityAt: Long,
+)
+
+data class SessionOutcomeRow(
+    val sessionId: String,
+    val patientId: String,
+    val startedAt: Long,
+    val examined: Boolean,
+    val positive: Boolean,
 )

@@ -10,6 +10,9 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.data.supabase.SyncSessionUseCase
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.LastSyncStore
+import com.agarthavision.domain.sync.SyncCompletion
+import java.time.Clock
 import javax.inject.Inject
 
 /**
@@ -60,6 +63,8 @@ class SyncPendingDataUseCase @Inject constructor(
     private val syncSessionUseCase: SyncSessionUseCase,
     private val syncSampleUseCase: SyncSampleUseCase,
     private val syncReportUseCase: SyncReportUseCase,
+    private val lastSyncStore: LastSyncStore,
+    private val clock: Clock,
 ) {
     /**
      * Runs one sync pass.
@@ -87,6 +92,14 @@ class SyncPendingDataUseCase @Inject constructor(
         }
         val reportsSynced = reportDao.getReportsPendingSync(userId).count { report ->
             syncReportUseCase(report.reportId).isSuccess
+        }
+
+        val totalSynced = patientsSynced + sessionsSynced + samplesSynced + reportsSynced
+        if (totalSynced > 0) {
+            lastSyncStore.record(
+                userId,
+                SyncCompletion(clock.millis(), totalSynced),
+            )
         }
 
         SyncSummary.Ran(

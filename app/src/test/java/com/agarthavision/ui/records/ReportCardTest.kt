@@ -2,6 +2,7 @@ package com.agarthavision.ui.records
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.agarthavision.R
@@ -18,11 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Compose tests for [ReportCard], covering ticket 14zcqnthuad's swap of the
- * old text-button [ActionChip]s for icon-based [ReportIconAction]s.
- *
- * [ReportCard] is `internal` (widened from `private`) solely to allow direct
- * invocation from this test module, matching the precedent in StatusPillTest.
+ * Compose tests for [ReportCard].
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36], qualifiers = "w411dp-h891dp")
@@ -72,33 +69,34 @@ class ReportCardTest {
     }
 
     @Test
-    fun `report with both pdf and csv renders all four icon actions`() {
+    fun `report with both pdf and csv renders pdf, csv and share actions`() {
         setCard(baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"))
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_pdf)).assertExists()
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_csv)).assertExists()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
+
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.reports_share_pdf)).assertExists()
+        composeRule.onNodeWithText(context.getString(R.string.reports_share_csv)).assertExists()
     }
 
     @Test
-    fun `report with only pdf renders pdf actions and no csv actions`() {
+    fun `report with only pdf renders pdf action and no csv action`() {
         setCard(baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = null))
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_pdf)).assertExists()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertDoesNotExist()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_csv)).assertDoesNotExist()
     }
 
     @Test
-    fun `report with only csv renders csv actions and no pdf actions`() {
+    fun `report with only csv renders csv action and no pdf action`() {
         setCard(baseReport(pdfFilePath = null, csvFilePath = "/tmp/report.csv"))
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_csv)).assertExists()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertDoesNotExist()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_pdf)).assertDoesNotExist()
     }
 
     @Test
@@ -113,21 +111,37 @@ class ReportCardTest {
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).performClick()
 
         assertEquals("expected one onOpenPdf click, got $openPdfClicks", 1, openPdfClicks)
-        assertEquals("onSessionClick should not fire from icon click, got $sessionClicks", 0, sessionClicks)
+        assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
     }
 
     @Test
-    fun `clicking Share CSV invokes onShareCsv only, not onSessionClick`() {
+    fun `clicking Share with only CSV invokes onShareCsv directly, not onSessionClick`() {
         var shareCsvClicks = 0
         var sessionClicks = 0
         setCard(
-            baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"),
+            baseReport(pdfFilePath = null, csvFilePath = "/tmp/report.csv"),
             CardActions(onSessionClick = { sessionClicks++ }, onShareCsv = { shareCsvClicks++ }),
         )
 
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_share_csv)).performClick()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
 
         assertEquals("expected one onShareCsv click, got $shareCsvClicks", 1, shareCsvClicks)
-        assertEquals("onSessionClick should not fire from icon click, got $sessionClicks", 0, sessionClicks)
+        assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
+    }
+
+    @Test
+    fun `clicking Share with both options opens menu and clicking share pdf invokes onSharePdf`() {
+        var sharePdfClicks = 0
+        var sessionClicks = 0
+        setCard(
+            baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"),
+            CardActions(onSessionClick = { sessionClicks++ }, onSharePdf = { sharePdfClicks++ }),
+        )
+
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
+        composeRule.onNodeWithText(context.getString(R.string.reports_share_pdf)).performClick()
+
+        assertEquals("expected one onSharePdf click, got $sharePdfClicks", 1, sharePdfClicks)
+        assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
     }
 }

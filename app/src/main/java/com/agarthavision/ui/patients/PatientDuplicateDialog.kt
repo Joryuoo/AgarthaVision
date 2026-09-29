@@ -31,7 +31,7 @@ internal fun DiscardConfirmDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         textContentColor = AgarthaTheme.colors.textPrimary,
         title = { Text(stringResource(R.string.patient_form_discard_title)) },
@@ -73,7 +73,7 @@ internal fun SameBarangayDuplicateDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         textContentColor = AgarthaTheme.colors.textPrimary,
         title = { Text(stringResource(R.string.patient_form_same_duplicate_title)) },
@@ -130,7 +130,7 @@ internal fun DifferentBarangayDuplicateDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = DialogShape,
-        containerColor = AgarthaTheme.colors.surface,
+        containerColor = AgarthaTheme.colors.surfaceHigh,
         titleContentColor = AgarthaTheme.colors.textPrimary,
         textContentColor = AgarthaTheme.colors.textPrimary,
         title = { Text(stringResource(R.string.patient_form_duplicate_title)) },

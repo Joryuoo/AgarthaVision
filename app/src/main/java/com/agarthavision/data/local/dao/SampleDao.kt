@@ -304,6 +304,12 @@ interface SampleDao {
     )
     fun observeFailedCount(userId: String): Flow<Int>
 
+    @Query(
+        "SELECT COUNT(*) FROM samples " +
+            "WHERE user_id = :userId AND status = 'flagged' AND deleted_at is null",
+    )
+    fun observeFlaggedCount(userId: String): Flow<Int>
+
     /**
      * Claims samples belonging to the given sessions for [userId]. Only touches
      * currently-unowned rows so it is idempotent. Per ADR-007.
@@ -316,6 +322,41 @@ interface SampleDao {
         """,
     )
     suspend fun claimSamplesForSessions(sessionIds: List<String>, userId: String)
+
+    @Query(
+        """
+        SELECT sample_id AS sampleId, status, timestamp AS capturedAt, verified_at AS verifiedAt
+        FROM samples WHERE user_id = :userId AND deleted_at is null
+          AND ((timestamp >= :fromMillis AND timestamp < :toMillis) OR (verified_at >= :fromMillis AND verified_at < :toMillis))
+        """,
+    )
+    fun observeSampleTimesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<SampleTimeRow>>
+
+    @Query(
+        """
+        SELECT sa.session_id AS sessionId, se.label AS sessionLabel, COUNT(*) AS frameCount, MAX(sa.timestamp) AS occurredAt
+        FROM samples sa JOIN sessions se ON se.session_id = sa.session_id
+        WHERE sa.user_id = :userId AND sa.deleted_at is null
+        GROUP BY sa.session_id, strftime('%Y-%m-%d', sa.timestamp/1000, 'unixepoch', '+8 hours')
+        ORDER BY occurredAt DESC LIMIT :limit
+        """,
+    )
+    fun observeCaptureActivity(userId: String, limit: Int): Flow<List<SessionSampleActivityRow>>
+
+    @Query(
+        """
+        SELECT sa.session_id AS sessionId, se.label AS sessionLabel, COUNT(*) AS frameCount, MAX(sa.verified_at) AS occurredAt
+        FROM samples sa JOIN sessions se ON se.session_id = sa.session_id
+        WHERE sa.user_id = :userId AND sa.deleted_at is null AND sa.status != 'flagged' AND sa.verified_at > 0
+        GROUP BY sa.session_id, strftime('%Y-%m-%d', sa.verified_at/1000, 'unixepoch', '+8 hours')
+        ORDER BY occurredAt DESC LIMIT :limit
+        """,
+    )
+    fun observeVerifyActivity(userId: String, limit: Int): Flow<List<SessionSampleActivityRow>>
 
     // ── The background inference queue ──────────────────────────────────────────────────
     //
@@ -451,6 +492,20 @@ interface SampleDao {
     )
     suspend fun cancelInference(sampleId: String): Int
 }
+
+data class SessionSampleActivityRow(
+    val sessionId: String,
+    val sessionLabel: String?,
+    val frameCount: Int,
+    val occurredAt: Long,
+)
+
+data class SampleTimeRow(
+    val sampleId: String,
+    val status: String,
+    val capturedAt: Long,
+    val verifiedAt: Long,
+)
 
 // QueueSampleRow is gone with the union query above. It existed to carry a correlated
 // count of confirmed detections alongside each sample, which only ever meant anything for a
