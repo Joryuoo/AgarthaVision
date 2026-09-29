@@ -1,10 +1,12 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.usecase.patients.PatientSort
 import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for locally persisted patients.
@@ -34,6 +36,10 @@ interface PatientRepository {
      * use, and their repository methods take no offset either. There was an `offset`
      * parameter here that every caller passed 0, which reads as a paging control that works
      * and is not one.
+     *
+     * [todayStartMillis] and [sevenDaysAgoMillis] bound `sort`'s TODAY/THIS_WEEK/EARLIER
+     * bucket in SQL (see `PatientDao.observePatients`); both are required whenever [sort] is
+     * one of those three and ignored otherwise.
      */
     @Suppress("LongParameterList")
     fun observePatients(
@@ -45,9 +51,17 @@ interface PatientRepository {
         barangayCode: String? = null,
         minBirthdate: Long? = null,
         maxBirthdate: Long? = null,
+        todayStartMillis: Long? = null,
+        sevenDaysAgoMillis: Long? = null,
     ): Flow<List<Patient>>
 
-    /** Total matching [observePatients] under the same filter, for the pager. */
+    /**
+     * Total matching [observePatients] under the same filter, for the pager.
+     *
+     * [sort] and the bucket bounds must match the [observePatients] call this backs, so
+     * `canLoadMore` reflects the same TODAY/THIS_WEEK/EARLIER predicate rather than every
+     * patient regardless of it.
+     */
     @Suppress("LongParameterList")
     fun observePatientCount(
         userId: String,
@@ -56,6 +70,9 @@ interface PatientRepository {
         barangayCode: String? = null,
         minBirthdate: Long? = null,
         maxBirthdate: Long? = null,
+        sort: PatientSort = PatientSort.RECENT,
+        todayStartMillis: Long? = null,
+        sevenDaysAgoMillis: Long? = null,
     ): Flow<Int>
 
     /** Loads one patient by identifier, or null when it is not on this device. */
@@ -106,4 +123,13 @@ interface PatientRepository {
      * Returns existing patient codenames matching [prefix] (e.g. "M24") visible to [userId].
      */
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
+
+    fun observeAddedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.PatientAdded>> = emptyFlow()
+
+    suspend fun getPatientActivitySummaries(
+        patientIds: List<String>,
+    ): Map<String, com.agarthavision.data.local.dao.PatientActivitySummary> = emptyMap()
 }

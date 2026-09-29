@@ -460,7 +460,7 @@ internal fun VerificationSheetContent(
             AlertDialog(
                 onDismissRequest = actions.onDismissLeave,
                 shape = DialogShape,
-                containerColor = AgarthaTheme.colors.surface,
+                containerColor = AgarthaTheme.colors.surfaceHigh,
                 titleContentColor = AgarthaTheme.colors.textPrimary,
                 textContentColor = AgarthaTheme.colors.textPrimary,
                 title = {

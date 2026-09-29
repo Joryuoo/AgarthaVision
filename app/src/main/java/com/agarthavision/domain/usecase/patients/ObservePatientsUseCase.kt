@@ -1,6 +1,8 @@
 package com.agarthavision.domain.usecase.patients
 
 import com.agarthavision.core.util.escapeLike
+import com.agarthavision.core.util.sevenDaysAgoMillis
+import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.CLINICAL_ZONE
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Sex
@@ -15,6 +17,9 @@ import kotlinx.coroutines.flow.flowOf
 /** Sort order for the patient list. */
 enum class PatientSort {
     RECENT,
+    TODAY,
+    THIS_WEEK,
+    EARLIER,
     LAST_NAME,
     FIRST_NAME,
 }
@@ -44,6 +49,9 @@ data class PatientsQuery(
 data class PatientListItem(
     val patient: Patient,
     val barangayName: String?,
+    val unverifiedCount: Int = 0,
+    val positiveSpecies: String? = null,
+    val lastActivityAt: Long? = null,
 )
 
 /**
@@ -93,6 +101,17 @@ class ObservePatientsUseCase @Inject constructor(
         // and must not disagree. Without it a surname containing `_` is a wildcard and a
         // query of `%` matches every patient on the device.
         val needle = escapeLike(query.query)
+
+        // Only computed (and only passed through) for the three sorts that actually filter by
+        // bucket in SQL — TODAY/THIS_WEEK/EARLIER. RECENT keeps its existing semantics (an
+        // unfiltered SQL page, bucketed and Earlier-dropped client-side in PatientsScreen), so
+        // it must not pick up a bucket predicate here.
+        val isBucketSort = query.sort == PatientSort.TODAY ||
+            query.sort == PatientSort.THIS_WEEK ||
+            query.sort == PatientSort.EARLIER
+        val todayStartMillis = if (isBucketSort) startOfTodayMillis(asOf) else null
+        val sevenDaysAgoMillis = if (isBucketSort) sevenDaysAgoMillis(asOf) else null
+
         val page = patientRepository.observePatients(
             userId = userId,
             query = needle,
@@ -102,6 +121,8 @@ class ObservePatientsUseCase @Inject constructor(
             barangayCode = query.barangayCode,
             minBirthdate = minBirthdate,
             maxBirthdate = maxBirthdate,
+            todayStartMillis = todayStartMillis,
+            sevenDaysAgoMillis = sevenDaysAgoMillis,
         )
         val total = patientRepository.observePatientCount(
             userId = userId,
@@ -110,6 +131,9 @@ class ObservePatientsUseCase @Inject constructor(
             barangayCode = query.barangayCode,
             minBirthdate = minBirthdate,
             maxBirthdate = maxBirthdate,
+            sort = query.sort,
+            todayStartMillis = todayStartMillis,
+            sevenDaysAgoMillis = sevenDaysAgoMillis,
         )
 
         return combine(page, total) { patients, count ->
@@ -128,11 +152,19 @@ class ObservePatientsUseCase @Inject constructor(
      */
     private suspend fun List<Patient>.mapToItems(): List<PatientListItem> {
         val names = mutableMapOf<String, String?>()
+        val summaries = patientRepository.getPatientActivitySummaries(map { it.id }) ?: emptyMap()
         return map { patient ->
             val name = names.getOrPut(patient.psgcBarangayCode) {
                 psgcRepository.getBarangay(patient.psgcBarangayCode)?.name
             }
-            PatientListItem(patient = patient, barangayName = name)
+            val summary = summaries[patient.id]
+            PatientListItem(
+                patient = patient,
+                barangayName = name,
+                unverifiedCount = summary?.unverifiedCount ?: 0,
+                positiveSpecies = summary?.positiveSpecies,
+                lastActivityAt = summary?.lastActivityAt ?: patient.updatedAt.toEpochMilli(),
+            )
         }
     }
 }
