@@ -9,6 +9,69 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27
+
+`14zcqntj6nw` with `14zcqntj6nx`.
+
+**Inference versions name the engine and the precision.** `<arch>-v<training-version>-<target>-<precision>`:
+the cloud reports `yolo12n-effv2s-v1-cloud-fp32` (`server.py`, the notebook), on-device results
+`yolo12n-effv2s-v1-tflite-fp16` or `-int8`. The old `yolov26-efficientnetv2-v1` named the wrong
+architecture: `best.pt` was trained from `effnet-v12.yaml`, a YOLOv12-nano neck on EfficientNetV2-S,
+and its head is not NMS-free.
+
+**The export tooling is ported from `feat/offline-inference` and fixed.** Two faults behind the
+2026-09-06 deferral were export faults, not the phone's:
+
+- The "fp16" file was byte-identical to fp32 (78 MB). onnx2tf 2.x also emits a model that is fp16
+  end to end, which LiteRT's CPU kernels reject. `export_mobile.py` now drives onnx2tf's
+  `tf_converter` backend and TensorFlow's converter itself, and refuses a build whose dtypes,
+  I/O or box geometry do not match its name. fp16 is 39.4 MB, int8 22.8 MB.
+- The TFLite head emits box geometry normalised to 0..1, and the old decoder read it as pixels:
+  the "zero boxes matched" result. Manifests now say `box_coordinates: normalized`.
+
+Both builds ship in `app/src/main/assets/models/` through Git LFS, each with a manifest named after
+its version. Model artifacts are no longer ignored there; capture fixtures still are.
+
+**`OnDeviceInferenceEngine`** (`data/inference/ondevice/`), on LiteRT 2.2's `CompiledModel` API.
+It compiles once, GPU first with CPU placement for unsupported ops, and runs on one thread.
+Preprocessing is Ultralytics' letterbox, and decoding runs NMS with the container's defaults. A
+missing or refused model reports unavailable instead of crashing. It is provided but not routed
+to yet: capture still calls the cloud only.
+
+Measured on a Redmi Note 11 against the cloud model's answers for the same 20 capture-shaped
+frames (`OnDeviceInferenceParityTest`):
+
+| | fp16 | int8 |
+|---|---|---|
+| Matched / missed / invented | 20 / 0 / 0 | 20 / 0 / 0 |
+| Mean IoU, mean confidence delta | 0.994, 0.0007 | 0.918, 0.027 |
+| Infer median (p90) | 4,885 ms (4,904) | 4,836 ms (4,856) |
+
+All 829 ops run on the GPU in one partition, against 20.8 s per frame on CPU last time. int8 buys
+no speed on the GPU and costs box accuracy, so fp16 is `OnDeviceModels.SHIPPED`. On the desktop,
+fp16 matched all 607 of `best.pt`'s detections across the 600 val images (mean IoU 0.993).
+
+**Build:** `android.uniquePackageNames=false`, because `litert` and `litert-api` share a namespace
+that AGP 9 rejects ([LiteRT#6965](https://github.com/google-ai-edge/LiteRT/issues/6965)).
+
+**2026-09-28: new weights, YOLO26-nano on EfficientNetV2-B0.** `best.pt` is replaced by
+`inference/weights/yolo26n-efficientnetv2b0.pt` (val mAP50-95 0.913), which the cloud and the phone
+both run. `yolo26n-mobilenetv4convsmall.pt` (0.901) is committed beside it as the next on-device
+candidate. Versions are now `yolo26n-effv2b0-v1-cloud-fp32` and `yolo26n-effv2b0-v1-tflite-fp32`.
+The tables above measure the old model.
+
+- **Fork pin `c2b1563` → `1fd2043`** (`feat/optimized-inference`) in `requirements.txt`, the export
+  requirements and the notebook. The old pin has no `TimmBackbone` and cannot load either file.
+- **The phone ships fp32**, 26.9 MB, to see whether it runs the B0 model at all before trading
+  accuracy for size. The old fp16 and int8 builds are removed. `export_mobile.py` now also writes
+  the fp32 build, and patches `TimmBackbone` instead of `EfficientNetV2Backbone`.
+- **Output layout unchanged.** These heads were trained with YOLO26's one-to-one branch off, so
+  the TFLite output is still `[1, 7, 8400]` normalised, and the decoder and its NMS stand as they are.
+- **Parity on the desktop**, 20 capture-shaped frames: fp32 matched 22 of 22 of the PyTorch
+  checkpoint's detections at IoU 1.0000; fp16 22 of 22 at 0.9972. Not yet measured on the phone.
+
+---
+
 ## feat/home-and-ui-redesign — offline province/town boundary geometry · 2026-09-27
 
 `14zcqntj3bv` (Phase 8 of 10). No boundary data existed anywhere in the repo — the on-device
@@ -19,6 +82,8 @@ renumbering to join a 2023-vintage shapefile onto the current q2_2026 PSGC datas
 result into two custom quantized binary assets well inside their 200 KB/900 KB budgets. New
 pure-Kotlin `domain/geo` primitives (projection, hit-testing, view-fit, choropleth binning) and
 a `BoundaryRepository` read them — no Room table, no schema change, no map UI yet.
+
+---
 
 ## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24
 

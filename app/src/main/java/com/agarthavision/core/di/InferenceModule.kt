@@ -2,6 +2,11 @@ package com.agarthavision.core.di
 
 import com.agarthavision.BuildConfig
 import com.agarthavision.data.inference.RemoteInferenceEngine
+import com.agarthavision.data.inference.ondevice.FramePreprocessor
+import com.agarthavision.data.inference.ondevice.ModelStore
+import com.agarthavision.data.inference.ondevice.OnDeviceInferenceEngine
+import com.agarthavision.data.inference.ondevice.OnDeviceModels
+import com.agarthavision.data.inference.ondevice.YoloOutputDecoder
 import com.agarthavision.data.remote.InferenceApi
 import com.agarthavision.domain.inference.InferenceEngine
 import com.google.gson.Gson
@@ -81,6 +86,21 @@ object InferenceModule {
     @Singleton
     fun provideInferenceApi(retrofit: Retrofit): InferenceApi =
         retrofit.create(InferenceApi::class.java)
+
+    /**
+     * The on-device engine, running the precision chosen in [OnDeviceModels.SHIPPED].
+     *
+     * Provided but not yet bound as the app's [InferenceEngine]: routing between the cloud and
+     * this engine belongs to the background inference queue.
+     */
+    @Provides
+    @Singleton
+    fun provideOnDeviceInferenceEngine(
+        modelStore: ModelStore,
+        preprocessor: FramePreprocessor,
+        decoder: YoloOutputDecoder,
+    ): OnDeviceInferenceEngine =
+        OnDeviceInferenceEngine(modelStore, preprocessor, decoder, OnDeviceModels.SHIPPED)
 }
 
 /**

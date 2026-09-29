@@ -3,4 +3,4 @@ uvicorn[standard]
 pillow
 numpy
 timm
-git+https://github.com/DMKuZu/ultralytics@c2b156345e2e1468f6113b60813ddb7eeab969d1
+git+https://github.com/DMKuZu/ultralytics@1fd204363ca9b9ae65047916afa564d8ed3be019

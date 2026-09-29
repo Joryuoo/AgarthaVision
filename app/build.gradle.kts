@@ -39,6 +39,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    androidResources {
+        // The on-device model is memory-mapped straight out of the APK. A compressed asset
+        // would have to be inflated into the heap first, all ~40 MB of it.
+        noCompress += listOf("tflite")
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -127,6 +133,8 @@ dependencies {
     implementation(libs.camerax.mlkit)
     implementation(libs.camerax.extensions)
     implementation("androidx.compose.material:material-icons-extended")
+    // On-device inference
+    implementation(libs.litert)
     // Core
     implementation(libs.core.ktx)
     implementation(libs.core.splashscreen)

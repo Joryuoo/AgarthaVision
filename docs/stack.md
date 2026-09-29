@@ -41,6 +41,7 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | Prefs | DataStore Preferences | 1.1.2 | `libs.versions.toml:12` |
 | Background | WorkManager | 2.10.0 | `libs.versions.toml:11` |
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
+| On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `libs.versions.toml:34` |
 
 **Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
 
@@ -124,8 +125,9 @@ no longer declares. `bun install` from the current `package.json` installs nothi
   image based on `rocm/pytorch:latest` (`inference/Dockerfile:1`), serving on port 8000
   (`inference/Dockerfile:10-11`). Endpoints `GET /health` and `POST /infer`
   (`inference/server.py:29`, `:34`). Bearer-token auth (`inference/server.py:24-27`).
-  Weights baked in at `inference/weights/best.pt`; default model version string
-  `yolov26-efficientnetv2-v1` (`inference/server.py:11`).
+  Weights baked in at `inference/weights/yolo26n-efficientnetv2b0.pt` (YOLO26-nano on an
+  EfficientNetV2-B0 backbone, from the fork's `feat/optimized-inference`); default model version string
+  `yolo26n-effv2b0-v1-cloud-fp32` (`inference/server.py:12`).
 
 ## Build-time configuration
 

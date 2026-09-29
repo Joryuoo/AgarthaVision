@@ -44,14 +44,15 @@ temp-backup/
 screenshots/
 
 .claude/
-# Model artifacts and capture fixtures are build outputs and patient-adjacent
-# imagery, not source. Kept out of git regardless of which branch produced them.
-app/src/main/assets/models/*.tflite
+# Capture fixtures are patient-adjacent imagery, not source. Kept out of git regardless of
+# which branch produced them. The shipped on-device models in app/src/main/assets/models/
+# ARE committed, through Git LFS (see the .gitattributes there), so every build carries
+# offline inference.
 app/src/main/assets/models/*.onnx
-app/src/main/assets/models/model_manifest.json
 app/src/androidTest/assets/fixtures/*.jpg
 app/src/androidTest/assets/fixtures/*.jpeg
 app/src/androidTest/assets/fixtures/*.png
+app/src/androidTest/assets/fixtures/*.json
 inference/export/out/
 inference/weights/*.onnx
 inference/weights/*_saved_model/

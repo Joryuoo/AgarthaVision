@@ -105,7 +105,7 @@ docker run -p 8000:8000 -e INFERENCE_API_KEY=<secret> agartha-inference
 ```
 
 Environment it reads: `INFERENCE_API_KEY` (required), `WEIGHTS_PATH`
-(default `weights/best.pt`), `MODEL_VERSION` (default `yolov26-efficientnetv2-v1`) —
+(default `weights/yolo26n-efficientnetv2b0.pt`), `MODEL_VERSION` (default `yolo26n-effv2b0-v1-cloud-fp32`) —
 `inference/server.py:9-11`. Check it with `GET /health`; it returns 200 once the model has
 loaded (`inference/server.py:29-31`).
 

@@ -12,8 +12,8 @@ egg detection. Runs on a DigitalOcean MI300X AMD GPU droplet.
 
 - Docker (DMKuZu only — teammates do not need this)
 - GHCR write access: `docker login ghcr.io -u <github-username> -p <PAT>`
-- `git lfs install` run once on your machine (for `weights/best.pt`)
-- `best.pt` from Tabada placed at `inference/weights/best.pt`
+- `git lfs install` run once on your machine (for `weights/yolo26n-efficientnetv2b0.pt`)
+- The trained weights from Tabada at `inference/weights/yolo26n-efficientnetv2b0.pt`
 
 ---
 
@@ -50,7 +50,7 @@ ssh root@<droplet-ip> "pip install -e /app/ultralytics"
 
 ```bash
 # From your local machine (repo root):
-scp inference/weights/best.pt root@<droplet-ip>:/root/app/weights/
+scp inference/weights/yolo26n-efficientnetv2b0.pt root@<droplet-ip>:/root/app/weights/
 scp inference/server.py root@<droplet-ip>:/root/app/
 ```
 
@@ -131,7 +131,7 @@ docker run \
   --group-add video \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
-  -e MODEL_VERSION="yolov26-efficientnetv2-v1" \
+  -e MODEL_VERSION="yolo26n-effv2b0-v1-cloud-fp32" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
@@ -143,7 +143,8 @@ docker run \
 |----------|----------|---------|-------------|
 | `INFERENCE_API_KEY` | Yes | — | Bearer token checked on every `POST /infer` |
 | `CONFIDENCE_THRESHOLD` | No | `0.4` | Minimum confidence to include a detection in the response |
-| `WEIGHTS_PATH` | No | `weights/best.pt` | Path to the model weights file |
+| `WEIGHTS_PATH` | No | `weights/yolo26n-efficientnetv2b0.pt` | Path to the model weights file |
+| `MODEL_VERSION` | No | `yolo26n-effv2b0-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
 
 ---
 
@@ -188,9 +189,13 @@ Matches `InferenceResponseDto` in the Android app exactly:
 
 ## Updating the model weights
 
-When Tabada produces a new `best.pt`:
+When Tabada produces new weights:
 
-1. Replace `inference/weights/best.pt` (tracked via Git LFS)
-2. Commit: `git commit -m "chore(inference): update model weights vX"`
-3. Rebuild and push: `docker build ... && docker push ... ghcr.io/DMKuZu/agartha-inference:v2`
-4. Restart the droplet with the new image tag
+1. Replace `inference/weights/yolo26n-efficientnetv2b0.pt` (tracked via Git LFS)
+2. Bump the training version (`v1` → `v2`) in `MODEL_VERSION`'s default in `server.py` and the
+   notebook, so cloud results from the new weights are distinguishable
+3. Re-export the on-device models under the same version and replace them in
+   `app/src/main/assets/models/` (`export/README.md`)
+4. Commit: `git commit -m "chore(inference): update model weights vX"`
+5. Rebuild and push: `docker build ... && docker push ... ghcr.io/DMKuZu/agartha-inference:v2`
+6. Restart the droplet with the new image tag
