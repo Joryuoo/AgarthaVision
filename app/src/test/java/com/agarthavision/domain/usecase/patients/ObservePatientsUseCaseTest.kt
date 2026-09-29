@@ -177,7 +177,7 @@ class ObservePatientsUseCaseTest {
         assertTrue(result.items.isEmpty())
         assertEquals(0, result.total)
         verify(patientRepository, never()).observePatients(
-            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
+            any(), any(), any(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(),
         )
     }
 

@@ -7,4 +7,5 @@ package com.agarthavision.domain.model
 enum class ThemeMode {
     LIGHT,
     DARK,
+    SYSTEM,
 }

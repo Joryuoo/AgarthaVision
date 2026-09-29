@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,11 +55,12 @@ fun AppHeader(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 24.dp)
-            .padding(top = 20.dp, bottom = 12.dp),
+            .padding(top = 4.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        val logoRes = if (colors.isDark) R.drawable.ic_logo_dark else R.drawable.ic_logo_light
         Image(
-            painter = painterResource(id = R.drawable.ic_logo),
+            painter = painterResource(id = logoRes),
             contentDescription = stringResource(R.string.app_name),
             modifier = Modifier
                 .size(48.dp)
@@ -67,7 +69,7 @@ fun AppHeader(
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = stringResource(R.string.app_name),
-            color = colors.accent,
+            color = if (colors.isDark) Color.White else Color.Black,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = (-0.5).sp
@@ -115,14 +117,14 @@ fun AppHeader(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
-                        .background(colors.accent)
+                        .background(colors.brandFill)
                         .clickable(onClick = onSync),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = AgarthaIcons.Sync,
                         contentDescription = stringResource(R.string.dashboard_sync_now),
-                        tint = colors.onAccent,
+                        tint = colors.onBrandFill,
                         modifier = Modifier
                             .size(17.dp)
                             .rotate(if (isSyncing) spin else 0f),

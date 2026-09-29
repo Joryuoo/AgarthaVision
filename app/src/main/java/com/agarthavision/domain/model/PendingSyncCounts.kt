@@ -16,6 +16,10 @@ data class PendingSyncCounts(
     val pendingSamples: Int,
     val pendingReports: Int,
     val failed: Int,
+    val failedPatients: Int = 0,
+    val failedSessions: Int = 0,
+    val failedSamples: Int = 0,
+    val failedReports: Int = 0,
 ) {
     /** Total rows still awaiting upload, across all four types. */
     val totalPending: Int
