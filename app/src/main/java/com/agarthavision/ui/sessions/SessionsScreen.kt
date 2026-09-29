@@ -159,7 +159,7 @@ fun SessionsScreen(
                 state.patient?.let { patient ->
                     PatientPreviewCard(
                         patient = patient,
-                        barangayName = state.barangayName,
+                        barangayAddress = state.barangayAddress,
                         counts = PatientPreviewCounts(
                             totalCount = state.totalCount,
                             unverifiedCount = state.unverifiedCount,
@@ -376,9 +376,9 @@ private fun AppBar(onBack: () -> Unit) {
 /**
  * Patient identity preview card shown below the app bar.
  *
- * Establishes immediate clinical context (full name, age, sex, barangay) so the medtech
- * can verify they are reading smears for the correct patient without navigating back.
- * Persists while scrolling the session list below.
+ * Establishes immediate clinical context (full name, age, sex, barangay address) so the
+ * medtech can verify they are reading smears for the correct patient without navigating
+ * back. Persists while scrolling the session list below.
  */
 /** Counts + loading state for [PatientPreviewCard] — bundled since they always travel together. */
 private data class PatientPreviewCounts(
@@ -390,7 +390,7 @@ private data class PatientPreviewCounts(
 @Composable
 private fun PatientPreviewCard(
     patient: Patient,
-    barangayName: String?,
+    barangayAddress: String?,
     counts: PatientPreviewCounts,
     modifier: Modifier = Modifier,
 ) {
@@ -405,7 +405,7 @@ private fun PatientPreviewCard(
         null -> stringResource(R.string.patients_sex_unknown)
     }
     val ageSex = stringResource(R.string.patient_preview_age_sex, ageText, sexLabel)
-    val barangay = barangayName ?: patient.psgcBarangayCode
+    val barangay = barangayAddress ?: patient.psgcBarangayCode
 
     Column(
         modifier = modifier
@@ -468,7 +468,7 @@ private fun PatientPreviewCard(
                 lineHeight = 16.sp,
             ),
             color = colors.onBrandFill.copy(alpha = 0.9f),
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         if (counts.isLoading) {

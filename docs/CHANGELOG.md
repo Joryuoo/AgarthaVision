@@ -9,6 +9,18 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feature/patient-report-and-address-pdf-only — session card shows the full address; barangay search takes commas · 2026-09-29
+
+`14zcqntj2tm`.
+
+- **`PsgcBarangay.fullAddress`** ("Lahug, City of Cebu" / "Adams, Adams, Ilocos Norte") is now
+  the single display form for a patient's location. The session patient card reads it instead of
+  the bare barangay name.
+- **Barangay search accepts a comma.** "lahug, city of cebu" still matches every typed segment,
+  but ranks by the segment before the comma alone, so it is not diluted by what follows.
+  `PsgcSearchQuery.parse` returns both the full term list and the name-ranking terms;
+  `PsgcBarangayDao.search` and the repository's cache key follow.
+
 ## feat/server-micro-batching — the inference server queues, batches and uses both GPUs · 2026-09-27
 
 `14zcqntj6p2`.

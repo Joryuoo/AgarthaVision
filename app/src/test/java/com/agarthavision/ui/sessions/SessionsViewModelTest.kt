@@ -1142,7 +1142,7 @@ class SessionsViewModelTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `state emits patient and resolved barangay name when patient exists`() =
+    fun `state emits patient and resolved barangay address when patient exists`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patient = defaultTestPatient
             val patientRepo = mock<PatientRepository> {
@@ -1168,13 +1168,43 @@ class SessionsViewModelTest {
                 val settled = expectMostRecentItem()
                 assertEquals("Dela Cruz, Juan D.", settled.patient?.displayName)
                 assertEquals(Sex.MALE, settled.patient?.sex)
-                assertEquals("Poblacion", settled.barangayName)
+                assertEquals("Poblacion, Cebu City, Cebu", settled.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     @Test
-    fun `state has null patient and null barangayName when patient is not found`() =
+    fun `state omits the province in the barangay address for a chartered city`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = defaultTestPatient
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn flowOf(patient)
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "City of Cebu",
+                    provinceName = null,
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals("Poblacion, City of Cebu", settled.barangayAddress)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state has null patient and null barangayAddress when patient is not found`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patientRepo = mock<PatientRepository> {
                 on { observePatientById("unknown-patient") } doReturn flowOf(null)
@@ -1189,7 +1219,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertNull(settled.patient)
-                assertNull(settled.barangayName)
+                assertNull(settled.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -1226,7 +1256,7 @@ class SessionsViewModelTest {
             vm.state.test {
                 advanceUntilIdle()
                 val initial = expectMostRecentItem()
-                assertEquals("Poblacion", initial.barangayName)
+                assertEquals("Poblacion, Cebu City, Cebu", initial.barangayAddress)
 
                 patientSource.value = defaultTestPatient.copy(
                     lastname = "Santos",
@@ -1235,7 +1265,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 val updated = expectMostRecentItem()
                 assertEquals("Santos, Juan D.", updated.patient?.displayName)
-                assertEquals("San Roque", updated.barangayName)
+                assertEquals("San Roque, Cebu City, Cebu", updated.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }

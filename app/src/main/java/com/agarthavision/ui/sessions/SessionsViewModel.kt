@@ -67,8 +67,11 @@ data class SessionsState(
     val suggestedLabel: String = "",
     /** The patient whose session list this is, or null while loading. */
     val patient: Patient? = null,
-    /** The barangay name resolved from [Patient.psgcBarangayCode], or null. */
-    val barangayName: String? = null,
+    /**
+     * The full address ([com.agarthavision.domain.model.PsgcBarangay.fullAddress]) resolved
+     * from [Patient.psgcBarangayCode], or null when the code is unknown.
+     */
+    val barangayAddress: String? = null,
 )
 
 sealed interface SessionsEvent {
@@ -175,16 +178,16 @@ class SessionsViewModel @Inject constructor(
     ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
-     * Observes the patient entity and resolves their barangay name for the preview header.
+     * Observes the patient entity and resolves their barangay address for the preview header.
      */
     private val patientFlow: Flow<Pair<Patient?, String?>> = if (patientId.isNullOrBlank()) {
         flowOf(null to null)
     } else {
         patientRepository.observePatientById(patientId).map { patient ->
-            val barangayName = patient?.psgcBarangayCode?.let { code ->
-                psgcRepository.getBarangay(code)?.name
+            val barangayAddress = patient?.psgcBarangayCode?.let { code ->
+                psgcRepository.getBarangay(code)?.fullAddress
             }
-            patient to barangayName
+            patient to barangayAddress
         }
     }
 
@@ -267,10 +270,10 @@ class SessionsViewModel @Inject constructor(
     val state: StateFlow<SessionsState> = combine(
         sessionsStateFlow,
         patientFlow,
-    ) { sessionsState, (patient, barangayName) ->
+    ) { sessionsState, (patient, barangayAddress) ->
         sessionsState.copy(
             patient = patient,
-            barangayName = barangayName,
+            barangayAddress = barangayAddress,
         )
     }.stateIn(
         scope = viewModelScope,

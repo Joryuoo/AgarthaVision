@@ -94,6 +94,40 @@ class PsgcRepositoryCacheTest {
     }
 
     // -------------------------------------------------------------------------
+    // Comma changes the name-ranking terms, so it must be part of the cache key
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `a comma changes the cache key even for the same words`() = runTest {
+        val fakeDao = FakePsgcBarangayDao(emptyList())
+        val repository = PsgcRepositoryImpl(fakeDao)
+
+        repository.searchBarangays("lahug cebu", limit = 80)
+        repository.searchBarangays("lahug, cebu", limit = 80)
+
+        assertEquals(
+            "the comma narrows name ranking, so it must not collapse into the no-comma key",
+            2,
+            fakeDao.searchCallCount,
+        )
+    }
+
+    @Test
+    fun `equivalent comma queries differing in case and spacing hit the cache`() = runTest {
+        val fakeDao = FakePsgcBarangayDao(emptyList())
+        val repository = PsgcRepositoryImpl(fakeDao)
+
+        repository.searchBarangays("lahug, cebu", limit = 80)
+        repository.searchBarangays("Lahug ,  Cebu", limit = 80)
+
+        assertEquals(
+            "case and whitespace variants of the same comma query collapse to one cache key",
+            1,
+            fakeDao.searchCallCount,
+        )
+    }
+
+    // -------------------------------------------------------------------------
     // Cache returns correct data — not just a hit/miss boolean
     // -------------------------------------------------------------------------
 
@@ -136,6 +170,7 @@ class PsgcRepositoryCacheTest {
         override suspend fun search(
             terms: List<String>,
             limit: Int,
+            nameTerms: List<String>,
         ): List<PsgcBarangayEntity> {
             searchCallCount++
             return results.take(limit)
