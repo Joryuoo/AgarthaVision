@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt
+---
+
 # PsgcBarangay
 
 **One sentence.** A barangay from the Philippine Standard Geographic Code — the unit of
@@ -19,7 +27,7 @@ to record, in clinic or on field collection.
 
 **One column, not four.** A barangay code resolves upward to city/municipality, province and
 region through the code itself, so `patients` carries only the barangay code
-(`supabase/migrations/0001_init.sql:98-100`). The parent names in this table exist so the picker
+(`supabase/migrations/0001_init.sql:100`). The parent names in this table exist so the picker
 can be read and searched, not so patient or session rows denormalise them.
 
 **Bundled, not fetched.** Medtechs collect in far-flung areas with no cellular signal — the
@@ -34,12 +42,11 @@ against.
 ## Shape
 
 **Postgres** — none. The only remote trace is `patients.psgc_barangay_code`
-(`supabase/migrations/0001_init.sql:98-100`), NOT NULL, with
+(`supabase/migrations/0001_init.sql:100`), NOT NULL, with
 `CHECK (psgc_barangay_code ~ '^[0-9]{10}$')`, plus the index
-`patients_psgc_barangay_idx` (`:108`).
+`patients_barangay_idx` (`:107`).
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt:25-68`),
-schema v10 (`core/database/AgarthaDatabase.kt:46`)
+**Room** (`PsgcBarangayEntity`), added at Room version 10.
 
 | Field | Constraint |
 |---|---|
@@ -51,7 +58,7 @@ schema v10 (`core/database/AgarthaDatabase.kt:46`)
 | `search_text` | NOT NULL, pre-lowercased search haystack |
 
 No index, deliberately. Every query is a primary-key lookup or the infix `LIKE` in
-`data/local/dao/PsgcBarangayDao.kt:50-53`, and a leading-wildcard `LIKE` cannot use one.
+`PsgcBarangayDao.kt::search`, and a leading-wildcard `LIKE` cannot use one.
 
 ### The vintage is pinned — and it is a convention, not a detail
 
@@ -119,7 +126,7 @@ phase adds is the offline data and the pure-Kotlin/Room plumbing to read it.
 
 **Changing the vintage again** is a dataset swap plus four constants, with no migration: see
 `tools/psgc/README.md`. `PsgcSeeder` re-seeds when `PsgcDataset.VINTAGE` changes
-(`data/local/psgc/PsgcSeeder.kt:72-75`); `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT`
+(`PsgcSeeder.kt::needsSeed`); `ASSET_SHA256`, `BARANGAY_COUNT` and `REGION_COUNT`
 move with it, and `PsgcAssetPackagingTest` and `PsgcDatasetIntegrityTest` fail until they do.
 
 ### Aggregate before display — the privacy rule
@@ -130,7 +137,7 @@ permission the medtech holds:
 1. **The admin map shows per-unit prevalence, never rows.** A barangay with one or two smears
    is effectively an identified patient, so `public.barangay_prevalence()` withholds figures
    below a minimum cell size and returns the row with `suppressed = true`
-   (`supabase/migrations/0001_init.sql:576-633`). That lets the map
+   (`supabase/migrations/0001_init.sql:559-628`). That lets the map
    distinguish "too few to report" from "no data" without disclosing the count. The threshold
    is deliberately **not** a parameter — a caller must not be able to lower it.
 2. **The map stays an admin surveillance view.** The patient-facing report stays clinical,
@@ -139,7 +146,7 @@ permission the medtech holds:
 Access is an RPC rather than a view because it has to be decided per row-owner, and `GRANT`
 cannot tell an admin from a medtech — both hold the `authenticated` role. The function is
 `security definer` behind an `is_admin()` guard
-(`supabase/migrations/0001_init.sql:578-581`).
+(`supabase/migrations/0001_init.sql:569`, `:579`).
 
 ## Connected to
 
@@ -148,7 +155,7 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 - **Aggregated with** [`Session`](Session.md), [`Sample`](Sample.md) and [`Detection`](Detection.md) by
   `public.barangay_prevalence()`, which counts *sessions* (one smear, one specimen) joined
   through `patients`, treating a smear as positive on any detection that is not `FALSE_POSITIVE`
-  — the same rule the app's egg count uses (`data/local/dao/DetectionDao.kt:43`).
+  — the same rule the app's egg count uses (`DetectionDao.kt::getConfirmedEggCountsForSession`).
 - **Not** PostGIS. Because the map keys on PSGC, the choropleth is a `GROUP BY`, not a spatial
   query, so the extension is deliberately not enabled.
 
@@ -156,12 +163,13 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 
 **Hits**
 - `PsgcSeeder`. The seed gate is `count() == 0 || storedVintage != VINTAGE`
-  (`data/local/psgc/PsgcSeeder.kt:72-75`). **Both halves are load-bearing** — see "Does not
-  hit" below.
-- The bundled SQLite asset. `PsgcSeeder` stages it out of assets and moves the rows with one
-  `INSERT ... SELECT` over an `ATTACH`, which replaced gunzipping a CSV and building 42,010
-  entities in Kotlin — about a minute on a low-end device. `ATTACH` is issued outside a
-  transaction because SQLite rejects it inside one; the replacement still gets its own.
+  (`PsgcSeeder.kt::needsSeed`). **Both halves are load-bearing** — see "Does not hit" below.
+- The bundled SQLite asset. `PsgcSeeder.replaceAll` stages it out of assets, opens it as a plain
+  read-only `SQLiteDatabase` outside Room's pool, and inserts the rows in chunks inside one
+  `withTransaction`, so an interrupted copy cannot leave half a country. It deliberately does
+  **not** `ATTACH` the file: ATTACH on a WAL connection disables write-ahead logging, which
+  needs every pooled connection idle, and at startup one never is — the KDoc on `replaceAll`
+  records the crash that caused.
 - The asset generators. `tools/psgc/build-psgc-asset.py` fetches upstream and writes the CSV to
   `tools/psgc/`, which is **not packaged**; `tools/psgc/build-psgc-db.py` reads that committed
   file offline and writes the `.db` the APK ships. Only the first needs the network. Upstream
@@ -172,15 +180,16 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
   which is ASCII-only — 438 barangay names in this vintage carry non-ASCII characters. It was
   folded in Kotlin until 86d4brr1f moved generation off the device; the two were proved
   identical over all 42,010 rows before `PsgcCsvParser` was deleted.
-- Search matches **each whitespace-separated term** (`data/local/dao/PsgcBarangayDao.kt:50-53`).
+- Search matches **each whitespace-separated term** (`PsgcBarangayDao.kt::search`).
   PSA spells the city "City of Cebu", so a contiguous match on "cebu city" — what a medtech
   types — finds nothing.
 
 **Does not hit**
 - Supabase, if you are changing this table's shape. There is no remote counterpart; only
   `patients.psgc_barangay_code` crosses the wire.
-- The vintage record, if you only bump the Room version. `fallbackToDestructiveMigration(dropAllTables = true)`
-  (`core/di/DatabaseModule.kt:54`) wipes this table, and the recorded vintage would then
+- The vintage record, if a Room version bump ever falls back to a destructive rebuild. That
+  still happens for installs older than v22 (`fallbackToDestructiveMigration` in
+  `DatabaseModule.kt::provideDatabase`); it wipes this table, and the recorded vintage would then
   wrongly report the device as seeded. This is why the gate also checks the row count.
 - Capture, verification or reports. Nothing in those flows reads a barangay.
 - Existing patients. The column is NOT NULL with CHECK regex; every patient in the database
@@ -188,7 +197,7 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
 
 ## Surfaces
 
-Written once by `PsgcSeeder`, fired from `AgarthaVisionApp` (`AgarthaVisionApp.kt:29`) — from
+Written once by `PsgcSeeder`, fired from `AgarthaVisionApp.onCreate` — from
 the Application rather than a ViewModel, because nothing on screen waits for it and routing a
 data-layer concern through a ViewModel would breach C1. Read by the barangay picker in the Patient
 Form (`ui/patients/PatientFormScreen.kt`, via `PatientFormViewModel.kt`, `BarangayPickerDelegate.kt`,
@@ -197,7 +206,6 @@ by `public.barangay_prevalence()`.
 
 ## See
 
-`supabase/migrations/0001_init.sql`,
-`app/src/main/java/com/agarthavision/data/local/entity/PsgcBarangayEntity.kt`,
-`app/src/main/java/com/agarthavision/data/local/psgc/`, `tools/psgc/README.md`,
+`supabase/migrations/0001_init.sql`, `data/local/entity/PsgcBarangayEntity.kt`,
+`data/local/psgc/`, `tools/psgc/README.md`,
 `schema.ts` (`PsgcBarangay`), `docs/map/objects/Patient.md`.

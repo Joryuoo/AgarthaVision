@@ -9,17 +9,18 @@ as working.
 ### Auth and identity
 - **Email/password sign-in** through Supabase Auth. No sign-up flow — accounts are
   provisioned in the Supabase dashboard. `ui/login/LoginScreen.kt`,
-  `domain/usecase/auth/SignInUseCase.kt`, `data/repository/SupabaseAuthRepository.kt:54-60`.
+  `domain/usecase/auth/SignInUseCase.kt`, `data/repository/SupabaseAuthRepository.kt::signIn`.
 - **Mandatory login.** Sign-in is required on first launch before accessing patients, sessions,
-  or capture (`ui/navigation/AgarthaNavGraph.kt:115-125`). Unowned local data and deferred-claim
+  or capture: `MainActivity` picks the start destination from `MainViewModel.authGate`
+  (`domain/usecase/auth/ResolveAuthGateUseCase.kt`). Unowned local data and deferred-claim
   flows (`ClaimLocalDataUseCase`, `claim_exempt`) have been removed; all rows have an owner
   from the moment they are created.
 - **Cached local identity.** The signed-in user id, email, and display name are cached in
   DataStore so offline work is attributed to the last medtech
-  (`data/repository/SupabaseAuthRepository.kt:74-86`).
+  (`data/repository/SupabaseAuthRepository.kt::cacheIdentity`).
 - **Sign-out** revokes the Supabase token *and* clears the cached identity, returning the
   device to the signed-out state. `domain/usecase/auth/SignOutUseCase.kt`,
-  `data/repository/SupabaseAuthRepository.kt:64-71`.
+  `data/repository/SupabaseAuthRepository.kt::signOut`.
 
 ### Patients
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
@@ -28,7 +29,7 @@ as working.
 - **Demographics.** Lastname, firstname, optional middle name, sex (`M`/`F`, `domain/model/Sex.kt`),
   and birthdate.
 - **Birthdate over age.** Birthdate is stored (epoch millis at midnight Asia/Manila,
-  `PatientEntity.kt:59`) rather than age, so age is recomputed dynamically per encounter and
+  `PatientEntity.kt::birthdate`) rather than age, so age is recomputed dynamically per encounter and
   never becomes silently stale.
 - **PSGC barangay on the patient.** The 10-digit zero-padded PSGC code
   (`patients.psgc_barangay_code`, checked with `~ '^[0-9]{10}$'`) lives on the patient, not the
@@ -47,12 +48,13 @@ as working.
 ### Sessions
 - **Session = one fecal smear.** A session belongs to a patient (`patient_id` FK) and never ends
   (`core/session/SessionManager.kt`, `data/local/entity/SessionEntity.kt`).
-- **Smear label.** Auto-generated as initials, barangay code, and sequential smear index
-  (e.g., `C.G.-0730600000-001`), editable thereafter.
+- **Smear label.** Auto-generated from the patient as surname abbreviation and first initial, sex
+  and age, and the patient's smear sequence (e.g. `LDNJ-M21-S01`,
+  `domain/session/SessionLabelGenerator.kt`), editable thereafter, unique per patient.
 - **Notes, ended_at, and claim_exempt removed.** Notes were replaced by the Patient entity;
   `ended_at` was dropped because smears remain open; `claim_exempt` was dropped with mandatory
   login.
-- **Session picker and resume** for resuming an open smear (`core/session/SessionManager.kt:79-89`).
+- **Session picker and resume** for resuming an open smear (`core/session/SessionManager.kt::startSession`).
 - **Sign-out detaches rather than ends** (`SessionManager.clearActive`), and the active session is
   restored at launch (`SessionManager.restoreActiveSession`).
 
@@ -73,25 +75,34 @@ as working.
   disconnected on two consecutive failures and surface `ui/capture/ConnectionLossBanner.kt`.
 
 ### Validation (human-in-the-loop)
-- **Model output pre-filling.** A detected box opens with Q1 (is egg: yes), Q2 (box correct: yes),
-  and Q3 (species: model class) pre-filled. Answering is only required when correcting the model.
-  Submitting a pre-filled row is the medtech's confirmation of it.
-- **Derived Q4.** The "missed eggs" flag (`needs_reannotation`) is derived automatically when
-  eggs are added that the model never boxed, rather than asking a separate question.
-- **Always-available Add Egg.** An "Add Egg" button on every frame replaces the old separate manual
-  checklist, allowing findings to be added with or without bounding boxes.
+- **Model output pre-filling, as checkboxes.** Each detected box shows three pre-checked
+  statements: Q1 "There is a parasitic egg in this box", Q2 "The bounding box is correctly
+  placed", Q3 "This egg is <species>" (`ui/verify/VerificationSheet.kt::CheckQuestion`).
+  Answering is only required when correcting the model; submitting an untouched row is the
+  medtech's confirmation of it.
+- **Derived Q4.** The "missed eggs" flag (`needs_reannotation`) is derived automatically when a
+  species' egg count exceeds what the model boxed, rather than asking a separate question.
+- **Add species, counted per field.** "+ Add species" opens one card per species with the
+  field's **total** egg count for that species, floored at what the model already boxed
+  (`domain/usecase/verify/VerificationAnswers.kt::fieldTotal`). "Locate eggs" optionally draws a
+  box for each unboxed egg (`drawnBoxes`); drawing never gates submit.
 - **Per-box verdict questionnaire.** Evaluates to `CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`,
-  or `BOX_INCORRECT` (`data/local/mapper/VerificationMapper.kt:38-45`).
+  or `BOX_INCORRECT` (`data/local/mapper/VerificationMapper.kt::computeVerdict`).
+- **Nothing is annotated while a model is still running.** A frame whose inference is queued or
+  running shows "Frame is in inference", locks Add species, remarks and Submit, and offers
+  "Cancel inference", which turns it into a manual capture (`ui/verify/InferencePending.kt`,
+  `domain/usecase/inference/CancelInferenceUseCase.kt`). Queue rows carry a Queued / In inference
+  / Ready / Manual badge (`ui/verify/InferenceStateBadge.kt`).
 - **Verification queue.** A unified queue screen with `UNVERIFIED` and `VERIFIED` buckets
   (`domain/model/QueueSample.kt:QueueBucket`, `ui/verify/VerificationQueueScreen.kt`,
   `ui/verify/VerificationQueueViewModel.kt`). Supports batch hard-deletion of unverified frames.
-- **Bounding box overlay.** Renders box primitives with interactive drag adjustments
-  (`ui/verify/FrameWithBoxes.kt`).
+- **Bounding box overlay and redraw.** `ui/verify/FrameWithBoxes.kt` renders the boxes;
+  `ui/verify/DrawMode.kt` draws a replacement box, or a box for an added egg.
 - **Tombstoning duplicates.** A duplicate verified sample is tombstoned via `samples.deleted_at`
-  (`supabase/migrations/0013_sample_soft_delete.sql`), hiding it from queries, counts, and reports
+  (`supabase/migrations/0001_init.sql:202`), hiding it from queries, counts, and reports
   while preserving its detections in the retraining corpus (C8). The legacy `is_repeat` flag is
   completely removed.
-- **Per-sample free-text note** (`SampleEntity.kt:97-98`, `data/local/dao/SampleDao.kt`).
+- **Per-sample free-text note** (`SampleEntity.kt::userNote`, `data/local/dao/SampleDao.kt`).
 - **Developmental stage question.** Added and model-box species/stage prompts ask for STH
   developmental stage (`domain/model/EggStage.kt`); `sample_species_findings.stage` and
   `detections.stage` are written and are part of each row's identity, so two cards naming one
@@ -101,9 +112,10 @@ as working.
 - **Verify-time sync**: Resizes JPEG to 640×640, uploads to Storage, upserts sample and detection
   rows, and updates sync status (`data/supabase/SyncSampleUseCase.kt`).
 - **Catch-up pass in FK-safe order**: Pushes in sequence: `patients -> sessions -> samples -> reports`
-  (`domain/usecase/sync/SyncPendingDataUseCase.kt:76-90`).
+  (`domain/usecase/sync/SyncPendingDataUseCase.kt::invoke`).
 - **WorkManager sync worker**: `@HiltWorker` `SyncWorker` enqueued as unique work with network
-  constraints and exponential backoff (`core/sync/SyncScheduler.kt`, `data/sync/SyncWorker.kt`).
+  constraints and exponential backoff (`domain/sync/SyncScheduler.kt`, implemented by
+  `data/sync/WorkManagerSyncScheduler.kt`; `data/sync/SyncWorker.kt`).
 
 ### Records and reports
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
@@ -114,11 +126,15 @@ as working.
   descriptor (*rare / few / moderate / numerous*). Aggregated via `aggregateLpfPerSpecies`
   (`domain/usecase/reports/LpfAggregation.kt`, `domain/usecase/reports/SessionEggCountUseCase.kt`).
 - **Detection count rule:** Counts non-false-positive detections
-  (`data/local/dao/DetectionDao.kt:43`: `d.verdict != 'false_positive'`).
+  (`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`: `d.verdict != 'false_positive'`).
 - **Sample detail with image fallback** — local file first, then 15-minute signed Supabase Storage URL.
-- **PDF-only session reports.** Generated as a PDF artifact on-device via `ReportPdfBuilder.kt` and
-  `ReportPdfRenderer.kt`, stored in `Documents/AgarthaVision/`, and tracked in Room/Supabase
-  (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
+- **Session reports, PDF or CSV.** The medtech picks the format per report
+  (`domain/model/ReportFormat.kt`). PDF is built by `domain/usecase/records/ReportPdfBuilder.kt`
+  and drawn by `data/repository/AndroidReportPdfRenderer.kt`; CSV by
+  `domain/usecase/records/ReportCsvBuilder.kt`. The file is stored in `Documents/AgarthaVision/`,
+  tracked in Room and Supabase, and mirrored to the `reports` Storage bucket so another device
+  can open it (`domain/usecase/records/GenerateSessionReportUseCase.kt`,
+  `data/supabase/SyncReportUseCase.kt`, `data/supabase/RestoreReportFilesUseCase.kt`).
 
 ### Home dashboard
 - **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,
@@ -136,29 +152,33 @@ as working.
   rate, species mix, and towns ranked by positive rate.
 
 ### Shell and appearance
-- **Screens**: Login, Dashboard, Patients, PatientSessions, PatientForm, Capture, Reports,
-  SessionDetail, SampleDetail, VerificationQueue, Settings (`ui/navigation/AgarthaNavGraph.kt:44-89`).
+- **Screens**: the `Screen` routes in `ui/navigation/AgarthaNavGraph.kt` — Login, Dashboard,
+  Patients, PatientSessions, PatientForm, Capture, Reports, VerificationQueue, SessionDetail,
+  SampleDetail, SessionList, MyCoverage, Activity, Settings.
 - **Bottom tab bar with four tabs**: Home, Patients, Reports, Settings
-  (`ui/components/AgarthaBottomBar.kt:53-61`).
+  (`ui/components/AgarthaBottomBar.kt::Tab`).
 - **Light/dark toggle** persisted in DataStore; Capture is exempt and stays dark (`ui/theme/Theme.kt`).
 - **Settings**: account details, sync queue status, manual sync triggers, theme toggle, sign-out.
 
 ### Backend and inference service
-- **Consolidated Postgres migration**: `supabase/migrations/0001_init.sql` on the `agarthavision`
-  project. Pre-patient migrations `0001`–`0013` archived under `supabase/migrations/legacy-dev/`.
+- **Postgres schema**: see [`file-tree.md`](file-tree.md#supabasemigrations) for the migration
+  layout and the `legacy-dev/` archive.
 - **FastAPI inference container**: `GET /health` and `POST /infer`, bearer-token authentication,
-  model weights bundled (`inference/server.py:29`, `:34`, `inference/Dockerfile`).
+  model weights bundled, requests micro-batched on a bounded queue with one worker per GPU
+  (`inference/server.py::health`, `::infer`, `::worker`; `inference/README.md` "Queue and
+  batching").
 
 ## Ghosts — named but not wired
 
 | Ghost | Where it appears | Reality |
 |---|---|---|
-| `validation_records` table | `schema.ts:595-618` | **Not implemented.** No migration creates it; no Room mirror; Phase 2 audit trail |
+| `validation_records` table | `schema.ts` `ValidationRecord` | **Not implemented.** No migration creates it; no Room mirror; Phase 2 audit trail |
 | `administrative` report type | `supabase/migrations/0001_init.sql:313` | The CHECK allows only `'session'` |
 | `samples.status` in Postgres | legacy ERD | Room/domain only — no remote column |
-| `reports.supabase_status` in Postgres | `schema.ts:553` | Room-only column |
+| `reports.supabase_status` in Postgres | `schema.ts` `Report.supabase_status` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | `is_admin()` exists in SQL; no admin UI in the mobile client |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path; self-hosted container is the single inference backend |
+| `observeConfirmedEggCountsSince`, `observeSessionsWithStats` | `DetectionDao`, `SessionDao` and their repositories | Declared and implemented, called by nothing. Both use the confirmed-only counting rule the live report does not |
 | `commitlint` / `lint-staged` | `commitlint.config.js`, `lint-staged.config.js` | Config files committed; `.husky/commit-msg` enforces format directly |
 
 ## Phase 2 — deferred by decision, not oversight

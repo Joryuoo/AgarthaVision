@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
+---
+
 # Patient
 
 **One sentence.** The primary clinical unit a medtech works from — an individual who owns
@@ -32,13 +40,13 @@ had no way to track multiple smears from the same person across time.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0001_init.sql:91-112`)
+**Postgres** (`supabase/migrations/0001_init.sql:78-116`, then `0002_optional_patient_firstname.sql`)
 
 | Field | Constraint |
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `lastname` | NOT NULL text, `CHECK (length(btrim(lastname)) > 0)` |
-| `firstname` | NOT NULL text, `CHECK (length(btrim(firstname)) > 0)` |
+| `firstname` | NOT NULL text. `0002` dropped the non-blank CHECK, because a **codenamed** patient stores `''` here |
 | `middle_name` | nullable text |
 | `sex` | NOT NULL text, `CHECK (sex in ('M', 'F'))` |
 | `birthdate` | NOT NULL date, `CHECK (birthdate <= current_date)` |
@@ -50,17 +58,21 @@ had no way to track multiple smears from the same person across time.
 Indexes on `psgc_barangay_code` (`patients_barangay_idx`) and `(lower(lastname), lower(firstname))`
 (`patients_lastname_idx`).
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt:38-82`)
+**Room** (`PatientEntity`)
 
 PK column is `patient_id`. Key details:
 
 - `sex` maps through `domain/model/Sex.kt` (`M` / `F`).
+- **Codenamed patients.** A patient can be recorded without a name: the codename
+  (`ALPHA-M24`, from `domain/patient/CodenameGenerator.kt`) goes in `lastname` and `firstname`
+  is `''`. The New Patient form starts in codename mode. `CodenameGenerator.isCodename` is how
+  every screen tells the two apart, so a real surname shaped like `M24` would read as a codename.
 - `birthdate` is stored as epoch millis at Philippine midnight.
 - `supabase_status` is Room-only (`pending` / `synced` / `sync_failed`).
 - The join table is mirrored locally by `PatientUserEntity` (`data/local/entity/PatientUserEntity.kt`),
   written alongside the patient so offline-created patients are visible immediately.
 
-Documented shape: `schema.ts:173-222`.
+Documented shape: `schema.ts` (`Patient`).
 
 ## Connected to
 
@@ -83,7 +95,9 @@ Documented shape: `schema.ts:173-222`.
 **Does not hit**
 
 - **Existing session labels or reports.** A patient edit does not cascade to past smears.
-- **Room migration.** Handled by destructive fallback in Phase 1 (`core/di/DatabaseModule.kt:54`).
+- **Supabase.** A Room-only change (a new local column) never reaches Postgres unless
+  `PatientRemoteDataSource`'s insert row names it. A Room change does need a hand-written
+  `Migration` — see [effects](../effects/CONTEXT.md).
 
 ## Surfaces
 
@@ -92,6 +106,6 @@ Written by `PatientFormScreen` on create/edit. Read by `PatientsScreen`, the New
 
 ## See
 
-`supabase/migrations/0001_init.sql:91-149`,
-`app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt`,
-`domain/model/Patient.kt`, `schema.ts:173-222`.
+`supabase/migrations/0001_init.sql:78-149`,
+`data/local/entity/PatientEntity.kt`, `domain/model/Patient.kt`, `schema.ts` (`Patient`).
+Registration flow: [`register-patient`](../processes/register-patient.md).

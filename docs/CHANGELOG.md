@@ -9,6 +9,32 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
+
+`14zcqntjg5f`. Docs only; no code changed.
+
+An audit of `development` @ `feaa4803` found the shelf's structure sound and its content
+drifting: most Kotlin line citations pointed at the wrong code after later edits.
+
+- **Citations by symbol.** Every Kotlin, Gradle, Python, TOML and `schema.ts` citation is now
+  `path::symbol`, never a line number. Only SQL migrations keep `path:line`, since an applied
+  migration never changes. Every legacy migration reference carries its `legacy-dev/` prefix.
+- **Card frontmatter.** Every card under `docs/map/` opens with `type`, `status`
+  (`stub` / `verified` / `stale`), `verified` and `commit`. A PR that touches cited code updates
+  the card or marks it stale (`docs/CONTEXT.md` house rule 5).
+- **Four new process cards:** `sign-in`, `register-patient`, `session-lifecycle`,
+  `delete-sample`, plus effects rows for sign-in, patients, sessions and the Home dashboard.
+- **Drift fixed**, among others: `validate.md` rewritten for the checkbox questions, species-first
+  counting and the pending-inference lock; the Finding card's `stage` is live, not dormant;
+  report files do reach the `reports` bucket; C2, C4, C5 and C6 restated as the code has them;
+  the session label format; the screen list; the `samples` Storage policies re-cited to the
+  consolidated schema.
+- **Code findings recorded, not fixed:** a tombstone never reaches Postgres (`SampleInsertRow`
+  has no `deleted_at`); the Sessions list egg total counts only `confirmed` while the report
+  counts every non-false-positive; four ViewModels call repositories directly (C1).
+- **`connectedAndroidTest` is a non-negotiable now:** it uninstalls the app and wipes unsynced
+  samples. `AGENTS.example.md` gains a tool-agnostic "keep the shelf current" section.
+
 ## feat/server-micro-batching — the inference server queues, batches and uses both GPUs · 2026-09-27
 
 `14zcqntj6p2`.

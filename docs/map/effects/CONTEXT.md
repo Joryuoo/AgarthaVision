@@ -33,13 +33,13 @@ incident, so every bump ships a migration.
 
 **The second non-obvious break:** that same wipe takes `psgc_barangays` with it. Reference
 data has to be re-seedable, not just seeded — which is why `PsgcSeeder` gates on the row
-count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt:63-66`). A gate on
+count *as well as* the recorded vintage (`data/local/psgc/PsgcSeeder.kt::needsSeed`). A gate on
 the vintage alone leaves the picker permanently empty after any future version bump.
 
 ## Changing the surveillance map or the barangay picker
 
-**Open:** `../objects/PsgcBarangay.md` · `../objects/Session.md` ·
-`supabase/migrations/0010_session_psgc_barangay.sql` · `tools/psgc/README.md` ·
+**Open:** `../objects/PsgcBarangay.md` · `../objects/Patient.md` (the barangay code lives on the
+patient, `supabase/migrations/0001_init.sql:100`) · `tools/psgc/README.md` ·
 `tools/geo/README.md`.
 
 **The non-obvious break:** the PSGC vintage is pinned, and the code list and any boundary
@@ -57,30 +57,78 @@ parameter. Do not add a barangay to the patient-facing report.
 
 ## Changing RLS, auth, or ownership
 
-**Open:** `Profile.md` · `StorageObject.md` · `supabase/migrations/0004_fix_profiles_rls_recursion.sql` ·
-`../processes/sync.md`.
+**Open:** `../objects/Profile.md` · `../objects/StorageObject.md` · `supabase/migrations/0001_init.sql`
+(policies from line 352) · `../processes/sync.md`.
 
-Every table's admin path resolves through `public.is_admin(uuid)` — except `reports`, which
-reintroduced an inline `(select role from profiles …)` subquery
-(`supabase/migrations/0008_reports.sql:36-38`). **Patch both styles or admin reads diverge by
+In the consolidated schema every table's admin path, `reports` included, resolves through
+`public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`). The dev and prod
+projects still run the legacy history, where `reports` reintroduced an inline
+`(select role from profiles …)` subquery (`supabase/migrations/legacy-dev/0008_reports.sql:36-38`).
+**A policy change made on those projects has to patch both styles or admin reads diverge by
 table.**
 
 **The non-obvious break:** the Storage object key *is* the permission check. The INSERT policy
 compares `(storage.foldername(name))[1]` against `auth.uid()`
-(`supabase/migrations/0003_storage_rls.sql:16-19`), and the client builds that path from the
-live session (`data/supabase/SampleRemoteDataSource.kt:35`). Change either and every upload
-403s.
+(`supabase/migrations/0001_init.sql:506-511`), and the client builds that path from the
+signed-in user (`data/supabase/SampleRemoteDataSource.kt::syncSample`, `storagePath`). Change
+either and every upload 403s.
+
+## Changing sign-in, sign-out, or the login gate
+
+**Open:** `../processes/sign-in.md` · `../objects/Profile.md`.
+
+**The non-obvious break:** the gate reads the **cached** identity, not live auth, and only on
+first run (`ResolveAuthGateUseCase`). Gate on `isAuthenticated()` instead and a medtech offline
+with an expired token is locked out of their own device.
+
+**The second one:** sign-out **deletes** the medtech's unsynced patients, sessions, samples and
+reports (`DiscardUnsyncedDataUseCase`), and it must run before `signOut` clears the id it is
+scoped by. Reorder `SignOutUseCase` and it silently discards nothing — and leaves another
+medtech's rows stranded on the device.
+
+## Changing patients or the patient form
+
+**Open:** `../processes/register-patient.md` · `../objects/Patient.md`.
+
+**The non-obvious break:** a patient is visible only through `patient_users`. The local insert
+writes the patient and its creator link in one transaction
+(`PatientDao::insertPatientWithCreatorLink`); split them and a freshly saved patient vanishes
+from its own creator's list.
+
+**Also easy to miss:** a codenamed patient keeps the codename in `lastname` and `''` in
+`firstname`, and every screen tells the two apart with `CodenameGenerator.isCodename`. A new
+codename shape must still match that regex, and so must every codename already stored.
+
+## Changing sessions or the active session
+
+**Open:** `../processes/session-lifecycle.md` · `../objects/Session.md`.
+
+**The non-obvious break:** capture files each frame under `SessionState.Active`'s id, and that
+id is restored at launch from `ActiveSessionIdStore`. Anything that can leave the pointer on the
+wrong smear files one patient's images under another's.
+
+**Also easy to miss:** label uniqueness per patient is enforced on the device only (Room index
+plus the ViewModel pre-check); Postgres does not constrain it.
+
+## Changing the Home dashboard or My coverage
+
+**Open:** `domain/usecase/home/` · `domain/usecase/coverage/` · `../objects/PsgcBarangay.md`.
+
+**The non-obvious break:** Home counts come from their own queries —
+`SessionRepository.observeSessionOutcomesBetween`, `DetectionRepository.observeModelRulingsBetween`
+and `observeSessionFindingsBetween` — not from the report pipeline, so a change to the report's
+counting rule does not move the Home tiles, and vice versa.
 
 ## Changing the capture pipeline
 
 **Open:** `../processes/capture.md` · `core/camera/FrameSampler.kt` · `core/camera/CameraManager.kt`.
 
 **The non-obvious break:** the flagged queue is **Room-backed**, not in-memory
-(`data/repository/FlaggedFrameStore.kt:58-74`), and it is filtered by `user_id`, so it is
+(`data/repository/FlaggedFrameStore.kt::state`), and it is filtered by `user_id`, so it is
 invisible on a device that has never signed in. Also: there is no `ImageCapture` use case —
-manual capture reads a cached JPEG from the analysis stream
-(`ui/capture/CaptureViewModel.kt`), so anything that stops populating `FrameSampler.latestFrame`
-breaks manual capture without touching manual-capture code.
+the shutter reads a cached JPEG from the analysis stream (`ui/capture/CaptureViewModel.kt::onCapture`),
+so anything that stops populating `FrameSampler.latestFrame` breaks capture without touching
+capture code.
 
 **The other one:** that cache is process-scoped and is **never reset**, so it routinely holds a
 frame from a previous session or a previous camera binding. What keeps it safe is the freshness
@@ -99,33 +147,43 @@ Client and server must move together, and they are versioned independently — t
 container image, the client is an APK.
 
 **The non-obvious break:** coordinates are **centre-x, centre-y, width, height in pixels**
-(`inference/server.py:47`), copied verbatim into `bbox_*`
-(`data/local/mapper/VerificationMapper.kt:36-39`), despite comments in `DetectionEntity.kt:13`
-and `supabase/migrations/0001_init.sql:64` claiming they are normalised. And renaming a model
+(`box.xywh` in `inference/server.py::infer`), copied verbatim into `bbox_*`
+(`data/local/mapper/VerificationMapper.kt::toDetectionEntities`), despite the KDoc on
+`DetectionEntity` and the comment at `supabase/migrations/0001_init.sql:232` claiming they are
+normalised. And renaming a model
 class silently changes every verdict and every LPF grouping, because
 `EggSpecies.fromClassLabel` matches on the literal string
 (`domain/model/EggSpecies.kt`).
 
 ## Changing validation logic
 
-**Open:** `../processes/validate.md` · `data/local/mapper/VerificationMapper.kt:10-17` ·
-`Detection.md` · `../../constraints.md` C7 and C8.
+**Open:** `../processes/validate.md` · `data/local/mapper/VerificationMapper.kt::computeVerdict` ·
+`../objects/Detection.md` · `../objects/Finding.md` · `../../constraints.md` C7 and C8.
 
-The whole clinical decision rule is seventeen lines in one function. Treat it as the most
+The whole clinical decision rule is one short `when` in one function. Treat it as the most
 sensitive code in the repo.
 
 **The non-obvious break:** verdicts are lowercase in Room and uppercase in Postgres
-(`domain/model/DetectionVerdict.kt:13-16`). Adding a value means the enum, the Postgres CHECK,
-**and** every raw SQL string that names a verdict — `data/local/dao/DetectionDao.kt:43`, `:66`,
-`:87`, and `data/local/dao/CoverageDao.kt`'s `observeTownCoverage` (the My coverage card's
-examined/positive smear query). Those do not agree with each other today.
+(`domain/model/DetectionVerdict.kt::DetectionVerdict`). Adding a value means the enum, the
+Postgres CHECK, **and** every raw SQL string that names a verdict, in `DetectionDao`,
+`CoverageDao`, `PatientDao` and `SessionDao` — `grep -n "false_positive'\|'confirmed'"
+app/src/main/java/com/agarthavision/data/local/dao/*.kt` lists them. Those do not agree with each
+other today: most count everything that is not `false_positive`, while
+`SessionDao::observeSessionsPage` (the Sessions list egg total) counts only `confirmed` — see
+[`validate`](../processes/validate.md#the-inconsistency-worth-knowing).
+
+**The second one:** species-first counting. An added species row carries the field's **total**
+(`VerificationAnswers.fieldTotal`), and `List<Finding>.toDetectionEntities` writes one detection
+row per unboxed egg, keyed by species and slot. A submit at a lower total prunes the added slots
+it no longer writes (`SubmitVerificationUseCase::invoke`); prediction-backed `#box#` rows are
+never pruned.
 
 ## Changing sync
 
 **Open:** `../processes/sync.md` · `data/supabase/SyncSampleUseCase.kt` ·
 `domain/usecase/sync/SyncPendingDataUseCase.kt` · `Session.md`.
 
-Push order is FK-safe and not incidental: sessions → samples → reports.
+Push order is FK-safe and not incidental: patients → sessions → samples → reports.
 
 **The non-obvious break:** sync is scheduled, not called. Everything except login goes through
 `SyncScheduler.requestSync()` and lands in `data/sync/SyncWorker`, so a change here runs on
@@ -152,19 +210,20 @@ closest thing, and it gates a pass that was already requested rather than starti
 **Open:** `../processes/report.md` · `Report.md` ·
 `domain/usecase/records/GenerateSessionReportUseCase.kt` · `domain/usecase/reports/LpfAggregation.kt`.
 
-**The non-obvious break:** egg count's real definition is the WHERE clause at
-`data/local/dao/DetectionDao.kt:43`, which counts every detection that is **not** a false
+**The non-obvious break:** egg count's real definition is the WHERE clause of
+`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`, which counts every detection that is **not** a false
 positive (`d.verdict != 'false_positive'`) — so `WRONG_CLASS` and `BOX_INCORRECT` boxes count as
 eggs. Findings are aggregated per species across all session fields into an LPF `min..max` range
 via `aggregateLpfPerSpecies`. Reports are snapshots and are never recomputed, so changing the
 aggregation or qualitative descriptor rule changes future numbers only.
 
-Report generation also **requires a live auth session**
-(`GenerateSessionReportUseCase.kt:47-49`), unlike the rest of the offline-capable flows.
+Report generation also **requires a signed-in identity** (`requireNotNull(currentLocalUserId())`
+in `GenerateSessionReportUseCase::invoke`). The id is the cached one, so it works offline, but a
+device that has never signed in cannot generate a report.
 
 ## Changing UI, theme, or design tokens
 
-**Open:** `../../constraints.md` C11 · `app/src/main/java/com/agarthavision/ui/theme/` ·
+**Open:** `../../constraints.md` C11 · `ui/theme/` ·
 `../../file-tree.md`.
 
 Raw hex belongs only in the palette definition. Screens read `AgarthaTheme.colors.*` so both

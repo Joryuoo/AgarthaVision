@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: supabase/migrations/0004_predictions.sql
+---
+
 # Prediction
 
 **One sentence.** One box the model returned for a verified frame, exactly as the model said
@@ -18,11 +26,12 @@ insert-if-absent and the table grants no UPDATE or DELETE policy.
 
 It exists **only for verified samples**, structurally: it references `samples`, a sample row is
 pushed only once verified, and the predictions are pushed in the same sync call as their sample
-(`data/supabase/SampleRemoteDataSource.kt:43`).
+(`SampleRemoteDataSource.kt::syncSample`).
 
-**No Room table, deliberately.** A Room table means a version bump, and a bump is destructive on
-this project (`core/di/DatabaseModule.kt:83`) — it would wipe every unsynced sample on the
-device. `predictions_json` already holds the same list, so rows are built from it on push and
+**No Room table, deliberately.** It was decided when a Room version bump was destructive
+(`fallbackToDestructiveMigration` in `core/di/DatabaseModule.kt::provideDatabase`) and would have
+wiped every unsynced sample. Since v23 a bump ships a hand-written migration instead, but the
+reason to add one is still absent: `predictions_json` already holds the same list, so rows are built from it on push and
 folded back into it on pull (`data/local/mapper/SamplePrediction.kt`).
 
 ## Shape
@@ -31,7 +40,7 @@ folded back into it on pull (`data/local/mapper/SamplePrediction.kt`).
 
 | Field | Constraint |
 |---|---|
-| `id` | PK, **client-derived** — `predictionIdFor(sample_id, ordinal)` (`data/local/mapper/VerificationMapper.kt:96`) |
+| `id` | PK, **client-derived** — `predictionIdFor(sample_id, ordinal)` (`VerificationMapper.kt::predictionIdFor`) |
 | `sample_id` | NOT NULL, FK → `samples(id)`, CASCADE |
 | `ordinal` | NOT NULL, ≥ 0. Index into the frame's prediction list; UNIQUE with `sample_id` |
 | `class_label` | NOT NULL — the server's raw label |
@@ -71,7 +80,8 @@ in ordinal order (`data/inference/PredictionMapper.kt`).
 
 **Does not hit**
 - Verdicts, counts, reports. Nothing aggregates predictions; every count reads `detections`.
-- The overlay during first verification, which renders the live inference response.
+- The overlay during verification, which draws from the sample's own `predictions_json` (written
+  by the inference queue), not from this table.
 
 ## Surfaces
 
