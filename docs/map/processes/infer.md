@@ -63,11 +63,13 @@ returns. The model output arrives later.
    (`core/di/InferenceModule.kt`). The server compares it literally
    (`inference/server.py`). Timeouts are 5 s connect, 30 s read (`core/di/InferenceModule.kt`):
    nobody is waiting on the call, and the on-device model answers when the cloud cannot.
-3. **Run the model.** The container loads the weights once at startup
-   (`inference/server.py:18-21`) and returns, per box, `class`, `confidence`, and `x, y,
-   width, height` from `box.xywh` — **centre-x, centre-y, width, height, in pixels**
-   (`inference/server.py:44-57`), plus `model_version` and the image dimensions
-   (`inference/server.py:59-63`).
+3. **Run the model.** The container loads and warms up one copy of the weights per GPU at
+   startup. A request does not run the model itself: it joins a bounded queue, and one worker
+   per GPU runs up to 8 queued frames as one batch. A full queue, or a wait over 25 s, answers
+   `503` with `Retry-After` (`inference/README.md`, "Queue and batching"). The response gives,
+   per box, `class`, `confidence`, and `x, y, width, height` from `box.xywh` — **centre-x,
+   centre-y, width, height, in pixels** — plus `model_version` and the image dimensions
+   (`inference/server.py`).
 4. **Apply no filter.** The server returns every box the model produced. There is no
    confidence threshold on either side; the human is the threshold
    (`../../constraints.md` C7).
@@ -90,7 +92,8 @@ round trip as network (`data/inference/RemoteInferenceEngine.kt:54`, `inference/
 `inference/server.py:59-63`. The shape is intentionally Roboflow-compatible so the hosting
 backend can change without touching the mobile code — Roboflow itself is a dead path.
 
-`GET /health` returns 200 once the model is loaded (`inference/server.py:29-31`).
+`GET /health` returns 200 once the models are loaded, and answers promptly during inference,
+because the forward pass runs off the event loop (`inference/server.py`).
 
 ## Connectivity
 

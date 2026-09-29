@@ -9,6 +9,28 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/server-micro-batching — the inference server queues, batches and uses both GPUs · 2026-09-27
+
+`14zcqntj6p2`.
+
+`/infer` used to run the model on the event loop. Every inference blocked uvicorn, `/health` hung
+behind it, nothing bounded the pile-up, and the second T4 sat idle.
+
+- **A bounded queue** (`QUEUE_SIZE`, 32) sits in front of the model. When it is full, the server
+  answers `503` with `Retry-After` at once. A request that waits longer than `REQUEST_TIMEOUT_S`
+  (25 s, under the app's 30 s read timeout and Cloudflare's ~100 s) gets a `503` too.
+- **Micro-batching:** a worker takes up to `MAX_BATCH_SIZE` (8) frames, waiting at most
+  `MAX_QUEUE_DELAY_MS` (15) for companions, and runs them as one forward pass.
+- **One worker per GPU**, each with its own model loaded and warmed up at start-up, all pulling
+  from the same queue.
+- JPEG decoding and the forward pass run off the event loop, so **`/health` answers during
+  inference**.
+- **The contract is unchanged:** the same endpoints, auth and response body. An unreadable body
+  is now a `400`, not a `500`. `X-Inference-Batch-Size` and `X-Inference-Device` headers make
+  batching visible from outside.
+- `tests/` covers all of the above against a fake model: 10 tests, no GPU needed. The notebook's
+  `%%writefile` cell is regenerated from `server.py`, and its GPU cell lists every device.
+
 ## feat/verify-pending-inference — a pending sample says so, and the medtech can stop waiting · 2026-09-27
 
 `14zcqntj6p1`.
