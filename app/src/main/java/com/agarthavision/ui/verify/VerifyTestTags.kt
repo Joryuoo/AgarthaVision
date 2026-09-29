@@ -200,6 +200,9 @@ internal object VerifyTestTags {
     fun removeDrawnBox(findingIndex: Int, slot: Int): String =
         "remove_drawn_box_" + findingIndex + "_" + slot
 
+    /** A queue row's inference-state pill, suffixed with which of the four it is showing. */
+    fun inferenceBadge(badge: InferenceBadge): String = "inference_badge_" + badge.name.lowercase()
+
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.
 }
