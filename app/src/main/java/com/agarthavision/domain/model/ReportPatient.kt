@@ -15,9 +15,11 @@ data class ReportPatient(
     /** [Patient.ageYears] resolved at the same instant the report's `generatedAt` uses. */
     val ageYears: Int,
     /**
-     * `"${barangay.name} · ${barangay.parentPath}"`, or the raw [Patient.psgcBarangayCode] when
-     * the code no longer resolves — a PSGC vintage change can retire a code a patient row still
-     * carries, and the raw code is a more honest fallback than a blank line.
+     * [PsgcBarangay.fullAddress] — the same display form used everywhere else a patient's
+     * location is shown (the session patient card, the patient report) — or the raw
+     * [Patient.psgcBarangayCode] when the code no longer resolves: a PSGC vintage change can
+     * retire a code a patient row still carries, and the raw code is a more honest fallback
+     * than a blank line.
      */
     val barangayLabel: String,
 )

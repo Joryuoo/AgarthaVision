@@ -32,8 +32,9 @@ over.
    - **Mean:** average eggs per field across examined fields.
 6. **Normalise species** to canonical names.
 7. **Resolve the patient header.** Name, sex, age (computed at the same instant as the report's
-   `generatedAt`), and a barangay label (`"{name} · {parentPath}"`, or the raw PSGC code when it
-   no longer resolves) are assembled into a `ReportPatient`
+   `generatedAt`), and the full address via `PsgcBarangay.fullAddress` (or the raw PSGC code when
+   it no longer resolves — the same display form the patient report and the session patient card
+   use) are assembled into a `ReportPatient`
    (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 8. **Build Document.** `ReportPdfBuilder` builds the clinical PDF with a patient block, session
    metadata, and per-species LPF density ranges.
@@ -85,7 +86,13 @@ an explicit session-id subset; both default to "every session").
    entirely — not reported as a zero row — so an unexamined smear cannot pad the "sessions
    covered" count on a clinical document. If nothing survives, generation fails with
    `NO_VERIFIED_SAMPLES_MESSAGE`. The "generate report" sheet shows these sessions disabled
-   rather than hiding them (`GetPatientReportCandidatesUseCase`).
+   rather than hiding them (`GetPatientReportCandidatesUseCase`), and they never start checked.
+   Picking a date range re-derives the checklist's selection to sessions that are both eligible
+   and inside it (`SessionsViewModel.onReportDateRangeSelected`), so a checked session can never
+   silently fall out of scope. If the medtech still taps Generate with nothing selected — e.g. a
+   range with no eligible sessions in it — the sheet shows "No verified samples in the selected
+   range." without calling the use case at all, distinct from `NO_VERIFIED_SAMPLES_MESSAGE`,
+   which means the patient has no verified samples anywhere.
 3. **Pool, don't sum per-session ranges.** Every surviving session's findings are collected into
    one list and passed to a single `aggregateLpfPerSpecies(all, totalFieldsAcrossSessions)` call
    — the headline species table is the pooled range across every included session, not each

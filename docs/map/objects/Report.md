@@ -29,6 +29,10 @@ absolute path — so on any device but the one that generated the report, the ro
 that was never there. That was the "No app available" bug: the row arrived, the document did
 not. `SyncReportUseCase` uploads the bytes; `RestoreReportFilesUseCase` pulls them back on first
 open and repoints the row at the local copy it writes, so the second open is a plain local read.
+Both screens that can open a report's PDF call it on a missing file: Session Detail
+(`SessionDetailViewModel.restoreReportFiles`) and, for a patient report, the Reports tab
+(`RecordsViewModel.restoreReportFiles`) — a patient report card is openable straight from there,
+so it needs the same recovery, not just the session it happens to route into.
 A legacy CSV-only report (`pdf_file_path` null, `csv_file_path` set) has nothing to restore —
 the CSV format is retired, so `RestoreReportFilesUseCase` fails rather than inventing a PDF, and
 leaves `csv_file_path` exactly as it was.
@@ -107,8 +111,9 @@ PK column is `report_id`. Differences:
 
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
 (`ui/records/SessionDetailViewModel.kt`). Read by the Reports card on
-`ui/records/SessionDetailScreen.kt` and by the Settings sync counters. Pushed by
-`data/supabase/SyncReportUseCase.kt` — row and PDF bytes both.
+`ui/records/SessionDetailScreen.kt`, by the cross-patient Reports tab
+(`ui/records/RecordsScreen.kt`/`RecordsViewModel.kt`), and by the Settings sync counters. Pushed
+by `data/supabase/SyncReportUseCase.kt` — row and PDF bytes both.
 
 **Note:** report generation requires a **cached local identity** and the session's
 [`Patient`](Patient.md) already on this device.

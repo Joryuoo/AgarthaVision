@@ -1452,7 +1452,7 @@ class SessionsViewModelTest {
     }
 
     @Test
-    fun `opening the report sheet loads candidates all selected by default`() =
+    fun `opening the report sheet selects only sessions with verified samples`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidates = listOf(
                 PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
@@ -1471,10 +1471,77 @@ class SessionsViewModelTest {
                 val sheet = expectMostRecentItem().reportSheet
                 assertNotNull(sheet)
                 assertEquals(2, sheet!!.candidates.size)
-                assertEquals(setOf("s1", "s2"), sheet.selectedSessionIds)
+                // s2 has no verified samples — it must never start checked (D6): it can never
+                // contribute a finding, and a checked box on it would misrepresent the report.
+                assertEquals(setOf("s1"), sheet.selectedSessionIds)
                 assertFalse(sheet.isLoadingCandidates)
                 cancelAndIgnoreRemainingEvents()
             }
+        }
+
+    @Test
+    fun `picking a date range re-derives the selection to sessions inside it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val inRange = makeSession("s1", "u1", startedAt = LocalDate.of(2026, 6, 15))
+            val outOfRange = makeSession("s2", "u1", startedAt = LocalDate.of(2026, 1, 1))
+            val candidates = listOf(
+                PatientReportCandidate(inRange.session, verifiedSampleCount = 2),
+                PatientReportCandidate(outOfRange.session, verifiedSampleCount = 4),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+                // Both start selected: both have verified samples and no range is set yet.
+                assertEquals(setOf("s1", "s2"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                vm.onReportDateRangeSelected(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30))
+                advanceUntilIdle()
+
+                // s2 falls outside the picked range — it must not stay checked even though it
+                // has verified samples, so a narrowed report never silently drops a session the
+                // medtech still believes is included.
+                assertEquals(setOf("s1"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `generating with nothing selected shows a range-specific message, not the use case's`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val outOfRange = makeSession("s1", "u1", startedAt = LocalDate.of(2026, 1, 1))
+            val candidates = listOf(PatientReportCandidate(outOfRange.session, verifiedSampleCount = 2))
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase>()
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onReportDateRangeSelected(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30))
+                advanceUntilIdle()
+                assertEquals(emptySet<String>(), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals("No verified samples in the selected range.", sheet!!.error)
+                assertFalse(sheet.isGenerating)
+                cancelAndIgnoreRemainingEvents()
+            }
+            // The use case is never reached — there is nothing left to hand it.
+            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any())
         }
 
     @Test
@@ -1865,14 +1932,16 @@ private fun fakePatientReport(): com.agarthavision.domain.model.Report =
         supabaseStatus = com.agarthavision.domain.model.ReportSyncStatus.PENDING,
     )
 
-private fun makeSession(id: String, userId: String): SessionWithStats =
+private fun makeSession(id: String, userId: String, startedAt: LocalDate? = null): SessionWithStats =
     SessionWithStats(
         session = Session(
             id = id,
             userId = userId,
             patientId = "patient-1",
             deviceId = "device-1",
-            startedAt = Instant.EPOCH.toEpochMilli(),
+            startedAt = startedAt
+                ?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+                ?: Instant.EPOCH.toEpochMilli(),
             label = "Smear $id",
         ),
         totalSamples = 0,

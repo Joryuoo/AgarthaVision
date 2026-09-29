@@ -22,8 +22,12 @@ Verify any entry with `git log --oneline --reverse`.
   range across the whole scope; a per-session breakdown table keeps each smear's own range
   visible alongside it.
 - **Zero-sample sessions are excluded**, not reported as a zero row (`GetPatientReportCandidatesUseCase`
-  shows them disabled in the "Generate report" sheet, `ui/sessions/PatientReportSheet.kt`). A
-  scope with nothing left fails with `NO_VERIFIED_SAMPLES_MESSAGE`.
+  shows them disabled in the "Generate report" sheet, `ui/sessions/PatientReportSheet.kt`), and
+  never start checked. Picking a date range re-derives the selection to sessions that are both
+  eligible and inside it, so a checked box never survives being pushed out of scope
+  (`SessionsViewModel.onReportDateRangeSelected`). A scope with nothing left fails with
+  `NO_VERIFIED_SAMPLES_MESSAGE`; an empty selection at generation time (e.g. a range with nothing
+  in it) shows a distinct "No verified samples in the selected range." instead.
 - **Room 23 → 24 (`MIGRATION_23_24`)**: `reports.session_id` becomes nullable; `patient_id` and
   `session_ids_json` are added. `supabase/migrations/0007_patient_reports.sql` mirrors this on
   Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
@@ -33,9 +37,11 @@ Verify any entry with `git log --oneline --reverse`.
 - **Sync mirrors session reports**: the row goes to `public.reports`, the PDF to the `reports`
   Storage bucket, restored via `RestoreReportFilesUseCase`'s patient branch
   (`writePatientPdf`). An unrecognised `report_type` on pull is skipped, not stored.
-- **Reports tab** shows a patient title for these cards and routes to the patient's Sessions
-  screen instead of a session (`ReportCard`, `RecordsScreen`), with no NPE on the now-nullable
-  `sessionId`.
+- **Reports tab** shows a patient title for these cards, with no NPE on the now-nullable
+  `sessionId` (`ReportCard`, `RecordsScreen`). Its Open/Share PDF actions restore the file from
+  the `reports` Storage bucket the same way Session Detail does when it isn't on this device yet
+  (`RecordsViewModel.restoreReportFiles`, `RestoreReportFilesUseCase`'s patient branch) — a
+  patient report synced from another device now opens here, not just from Session Detail.
 - **PDF** prints the patient's full display name, age at generation, sex, and full address
   (`PsgcBarangay.fullAddress`, falling back to the raw PSGC code); filenames are UUID-only.
 
@@ -60,10 +66,10 @@ A generated report is now always a PDF, and the PDF always carries who it is abo
   legacy-only column (C8) — old CSV-only rows keep listing, but nothing restores, shares, or
   opens them any more.
 - **The PDF gains a patient block.** Name, sex, age (computed at the same instant as
-  `generatedAt`), and barangay (`"{name} · {parentPath}"`, or the raw PSGC code if it no longer
-  resolves) print above the session and summary sections. A session whose patient has not yet
-  synced to this device fails generation with a clear message rather than a crash or a blank
-  header.
+  `generatedAt`), and address (`PsgcBarangay.fullAddress`, or the raw PSGC code if it no longer
+  resolves — the same display form the patient report and the session patient card use) print
+  above the session and summary sections. A session whose patient has not yet synced to this
+  device fails generation with a clear message rather than a crash or a blank header.
 - **The findings table's empty state is a plural sentence** ("No parasites found across N
   field(s) examined.") instead of a fixed string, and the LPF column header and unit note read
   more explicitly ("Eggs per LPF (range)", "Direct Fecal Smear").

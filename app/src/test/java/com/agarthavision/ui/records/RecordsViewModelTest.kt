@@ -1,6 +1,7 @@
 package com.agarthavision.ui.records
 
 import app.cash.turbine.test
+import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -24,6 +25,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.mockito.kotlin.mock
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecordsViewModelTest {
@@ -418,7 +420,7 @@ class RecordsViewModelTest {
         val reportRepo = LambdaReportRepository(rowsByLimit, totalCount)
         val authRepo = FakeAuthRepository(userId)
         val useCase = ObserveReportsUseCase(authRepo, reportRepo)
-        return RecordsViewModel(useCase, fixedClock())
+        return RecordsViewModel(useCase, mock<RestoreReportFilesUseCase>(), fixedClock())
     }
 
     private fun viewModelWithRecording(
@@ -427,7 +429,7 @@ class RecordsViewModelTest {
     ): RecordsViewModel {
         val authRepo = FakeAuthRepository(userId)
         val useCase = ObserveReportsUseCase(authRepo, reportRepo)
-        return RecordsViewModel(useCase, fixedClock())
+        return RecordsViewModel(useCase, mock<RestoreReportFilesUseCase>(), fixedClock())
     }
 
     private fun fixedClock(): Clock = Clock.fixed(Instant.parse("2026-09-28T12:00:00Z"), ZoneOffset.UTC)

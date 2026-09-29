@@ -1148,6 +1148,33 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
+    fun `a patient report whose patient is not on device is skipped, the rest of the page still lands`() = runTest {
+        // The patient FK fails for one row (its patient hasn't been pulled down yet, or this
+        // account can't see it). That is one bad row, not a reason to drop the whole page.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val orphanPatientReport = fakeReport("rep-orphan", sessionId = "sess-1").copy(
+            patientId = "patient-missing",
+            sessionId = null,
+        )
+        val ok = fakeReport("rep-ok", "sess-1")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(orphanPatientReport, ok))
+        whenever(reportDao.getReportById("rep-orphan")).thenReturn(null)
+        whenever(reportDao.getReportById("rep-ok")).thenReturn(null)
+        whenever(reportDao.insertReport(orphanPatientReport)).thenAnswer {
+            throw android.database.sqlite.SQLiteConstraintException("FOREIGN KEY constraint failed")
+        }
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(reportDao).insertReport(ok)
+        assertEquals(1, summary.reportsFetched)
+        // One row failing its FK is not the whole reports pull failing (E2) — the account's
+        // patient likely just hasn't landed on this device yet, and the next pull retries it.
+        assertFalse(FetchType.REPORTS in summary.failed)
+    }
+
+    @Test
     fun `a report this device has never held takes the remote paths`() = runTest {
         setupOnlineSignedIn()
         stubEmptyPulls()

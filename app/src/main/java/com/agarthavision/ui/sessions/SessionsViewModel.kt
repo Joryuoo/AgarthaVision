@@ -482,8 +482,11 @@ class SessionsViewModel @Inject constructor(
     }
 
     /**
-     * Opens the "generate patient report" sheet and loads this patient's session candidates,
-     * all selected by default (the "all sessions" scope).
+     * Opens the "generate patient report" sheet and loads this patient's session candidates.
+     *
+     * Only sessions with at least one verified sample start selected: a session with none can
+     * never contribute a finding (D6), so pre-checking it would let a medtech generate a report
+     * they believe covers a smear it silently drops.
      */
     fun onOpenGenerateReport() {
         val patient = patientId ?: return
@@ -497,7 +500,7 @@ class SessionsViewModel @Inject constructor(
                         it.copy(
                             reportSheet = PatientReportSheetState(
                                 candidates = candidates,
-                                selectedSessionIds = candidates.map { c -> c.session.id }.toSet(),
+                                selectedSessionIds = eligibleSessionIds(candidates, start = null, end = null),
                                 isLoadingCandidates = false,
                             ),
                         )
@@ -520,11 +523,49 @@ class SessionsViewModel @Inject constructor(
         internalState.update { it.copy(reportSheet = null) }
     }
 
+    /**
+     * Applies a date range to the report sheet and re-derives the selection from scratch to the
+     * sessions that are both in range and eligible (verified samples > 0).
+     *
+     * The selection is recomputed rather than merely intersected with the prior one: a session
+     * the medtech had unchecked before narrowing the range would otherwise stay unchecked once
+     * back in range for no visible reason, and a checked-but-now-out-of-range session must never
+     * survive to generation (14zcqntj2uz follow-up).
+     */
     fun onReportDateRangeSelected(start: LocalDate?, end: LocalDate?) {
         val (safeStart, safeEnd) = sanitizeDateRange(start, end)
-        internalState.update {
-            it.copy(reportSheet = it.reportSheet?.copy(startDate = safeStart, endDate = safeEnd))
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            state.copy(
+                reportSheet = sheet.copy(
+                    startDate = safeStart,
+                    endDate = safeEnd,
+                    selectedSessionIds = eligibleSessionIds(sheet.candidates, safeStart, safeEnd),
+                ),
+            )
         }
+    }
+
+    /**
+     * Sessions from [candidates] with at least one verified sample whose start date falls within
+     * [start]/[end] (inclusive, either bound optional) — the default selection for the report
+     * sheet's checklist.
+     */
+    private fun eligibleSessionIds(
+        candidates: List<PatientReportCandidate>,
+        start: LocalDate?,
+        end: LocalDate?,
+    ): Set<String> {
+        val zone = ZoneId.systemDefault()
+        val startMillis = start?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
+        val endMillis = end?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.minusMillis(1)?.toEpochMilli()
+        return candidates
+            .filter { candidate ->
+                candidate.verifiedSampleCount > 0 &&
+                    (startMillis == null || candidate.session.startedAt >= startMillis) &&
+                    (endMillis == null || candidate.session.startedAt <= endMillis)
+            }
+            .mapTo(mutableSetOf()) { it.session.id }
     }
 
     fun onToggleReportSession(sessionId: String) {
@@ -540,6 +581,16 @@ class SessionsViewModel @Inject constructor(
         val patient = patientId
         val sheet = internalState.value.reportSheet
         if (patient == null || sheet == null || sheet.isGenerating) return
+        // The selection can only ever hold eligible-in-range sessions (see
+        // onReportDateRangeSelected/onToggleReportSession), so an empty selection here means
+        // there is nothing left to report on — not that nothing was ever verified. A distinct
+        // message keeps that honest rather than reusing the use case's blanket failure string.
+        if (sheet.selectedSessionIds.isEmpty()) {
+            internalState.update {
+                it.copy(reportSheet = sheet.copy(error = NO_VERIFIED_SAMPLES_IN_RANGE))
+            }
+            return
+        }
         internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null)) }
         viewModelScope.launch {
             val scope = PatientReportScope(
@@ -583,5 +634,13 @@ class SessionsViewModel @Inject constructor(
 
         /** Unreachable through the UI: every route that opens this screen carries a patient. */
         private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."
+
+        /**
+         * Shown when the report sheet's date range (or manual unticking) leaves nothing
+         * selected. Distinct from [GeneratePatientReportUseCase.NO_VERIFIED_SAMPLES_MESSAGE]:
+         * that one means the patient has no verified samples at all, this one means the current
+         * range/selection has none, which the medtech can fix by widening it.
+         */
+        private const val NO_VERIFIED_SAMPLES_IN_RANGE = "No verified samples in the selected range."
     }
 }

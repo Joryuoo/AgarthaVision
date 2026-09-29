@@ -111,7 +111,7 @@ class GenerateSessionReportUseCaseTest {
         assertEquals(patient.displayName, header.patientName)
         assertEquals(Sex.MALE, header.patientSex)
         assertEquals(patient.ageYears(header.generatedAt), header.patientAgeYears)
-        assertEquals("Lahug · City of Cebu · Region VII (Central Visayas)", header.barangayLabel)
+        assertEquals("Lahug, City of Cebu", header.barangayLabel)
         assertEquals("Dr. Reyes", header.generatedByName)
         // The same instant used for the report row's timestamp is the one age was computed
         // from — not a beat apart, which would let the printed age and "Generated at" disagree.

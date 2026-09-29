@@ -733,12 +733,11 @@
     <string name="patient_report_sheet_title">Generate patient report</string>
     <string name="patient_report_sheet_sessions_title">Sessions to include</string>
     <string name="patient_report_sheet_session_no_verified">No verified samples</string>
+    <string name="patient_report_sheet_session_out_of_range">Outside selected range</string>
     <string name="patient_report_sheet_generate_button">Generate report</string>
-    <string name="patient_report_sheet_generating">Generating…</string>
     <string name="patient_report_sheet_close">Close</string>
     <string name="patient_report_sheet_no_candidates">This patient has no sessions to report on yet.</string>
     <string name="patient_report_generated_snackbar">Patient report saved to Documents/AgarthaVision</string>
-    <string name="patient_report_generation_failed">Report failed: %1$s</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_title">Verify Queue</string>
     <plurals name="verify_queue_subtitle">

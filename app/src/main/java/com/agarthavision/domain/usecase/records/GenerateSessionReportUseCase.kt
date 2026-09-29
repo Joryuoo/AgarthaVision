@@ -144,8 +144,7 @@ class GenerateSessionReportUseCase @Inject constructor(
         generatedAt: Instant,
     ): ReportPatient {
         val barangay = psgcRepository.getBarangay(patient.psgcBarangayCode)
-        val barangayLabel = barangay?.let { "${it.name} · ${it.parentPath}" }
-            ?: patient.psgcBarangayCode
+        val barangayLabel = barangay?.fullAddress ?: patient.psgcBarangayCode
         return ReportPatient(
             name = patient.displayName,
             sex = patient.sex,

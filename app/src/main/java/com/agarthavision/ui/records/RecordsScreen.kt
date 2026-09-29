@@ -114,6 +114,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private const val REPORTS_SKELETON_COUNT = 6
 private const val STATS_REPORTS_WEIGHT = 0.25f
@@ -137,6 +138,11 @@ fun RecordsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var shareError by remember { mutableStateOf<Int?>(null) }
     var showSpeciesDialog by remember { mutableStateOf(false) }
+    val restoringMessage = stringResource(R.string.report_restoring)
+    // Remembers whether a restore-in-flight was started to open or to share the PDF, so the
+    // right action runs once ReportRestored lands — the download is async and the tap that
+    // started it is long gone by then.
+    var pendingRestoreAction by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
     if (showSpeciesDialog) {
         SpeciesFilterDialog(
@@ -144,6 +150,31 @@ fun RecordsScreen(
             onSelectSpecies = viewModel::onSpeciesSelected,
             onDismiss = { showSpeciesDialog = false },
         )
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                // Launched rather than awaited: showSnackbar suspends until it goes away, and
+                // collecting the next event behind it would hold the opened file back by the
+                // length of a snackbar.
+                RecordsEvent.ReportRestoreStarted ->
+                    launch { snackbarHostState.showSnackbar(restoringMessage) }
+                is RecordsEvent.ReportRestored -> {
+                    val pdfPath = event.pdfPath
+                    if (pdfPath != null) {
+                        pendingRestoreAction?.invoke(pdfPath)
+                    } else {
+                        shareError = R.string.report_share_file_gone
+                    }
+                    pendingRestoreAction = null
+                }
+                RecordsEvent.ReportRestoreFailed -> {
+                    shareError = R.string.report_restore_failed
+                    pendingRestoreAction = null
+                }
+            }
+        }
     }
 
     LaunchedEffect(shareError) {
@@ -374,10 +405,31 @@ fun RecordsScreen(
                                             }
                                         },
                                         onOpenPdf = {
-                                            shareError = viewReportPdf(context, report.pdfFilePath)
+                                            val result = viewReportPdf(context, report.pdfFilePath)
+                                            if (result == R.string.report_share_file_gone ||
+                                                result == R.string.report_share_missing_path
+                                            ) {
+                                                // Synced from another device: the row is here,
+                                                // the bytes are not. Fetch them instead of
+                                                // reporting a "missing" file that Storage holds.
+                                                pendingRestoreAction =
+                                                    { path -> shareError = viewReportPdf(context, path) }
+                                                viewModel.restoreReportFiles(report.id)
+                                            } else {
+                                                shareError = result
+                                            }
                                         },
                                         onSharePdf = {
-                                            shareError = shareReportPdf(context, report.pdfFilePath)
+                                            val result = shareReportPdf(context, report.pdfFilePath)
+                                            if (result == R.string.report_share_file_gone ||
+                                                result == R.string.report_share_missing_path
+                                            ) {
+                                                pendingRestoreAction =
+                                                    { path -> shareError = shareReportPdf(context, path) }
+                                                viewModel.restoreReportFiles(report.id)
+                                            } else {
+                                                shareError = result
+                                            }
                                         },
                                         modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
                                     )

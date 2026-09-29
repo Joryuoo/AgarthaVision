@@ -35,13 +35,15 @@ import com.agarthavision.R
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.theme.AgarthaTheme
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * The "generate patient report" sheet: a date-range filter plus a checklist of the patient's
- * sessions, all selected by default. A session with zero verified samples is shown but
- * disabled (D6) — it can never contribute a finding, so including it would let an empty smear
- * pad the "sessions covered" count on a clinical document. Generate is disabled while the
- * selection is empty or a generation is already in flight.
+ * sessions. Only sessions with at least one verified sample, inside the current date range, start
+ * selected — a session with none can never contribute a finding (D6), and one outside the range
+ * would silently be left out of generation regardless of its checkbox, so neither is ever shown
+ * checked. Both cases are shown, disabled, with the reason next to the date. Generate is disabled
+ * while the selection is empty or a generation is already in flight.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -140,6 +142,7 @@ private fun PatientReportSessionList(sheet: PatientReportSheetState, onToggleSes
             sheet.candidates.forEach { candidate ->
                 PatientReportSessionRow(
                     candidate = candidate,
+                    sheet = sheet,
                     isSelected = candidate.session.id in sheet.selectedSessionIds,
                     onToggle = { onToggleSession(candidate.session.id) },
                 )
@@ -148,14 +151,30 @@ private fun PatientReportSessionList(sheet: PatientReportSheetState, onToggleSes
     }
 }
 
+/**
+ * Whether [startedAtMillis] falls within the sheet's inclusive [startDate]/[endDate], in the
+ * device's zone — either bound may be unset. Mirrors the range check
+ * `SessionsViewModel.eligibleSessionIds` applies when it derives the selection.
+ */
+private fun isWithinReportRange(startedAtMillis: Long, startDate: LocalDate?, endDate: LocalDate?): Boolean {
+    val zone = ZoneId.systemDefault()
+    val startMillis = startDate?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
+    val endMillis = endDate?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.minusMillis(1)?.toEpochMilli()
+    return (startMillis == null || startedAtMillis >= startMillis) &&
+        (endMillis == null || startedAtMillis <= endMillis)
+}
+
 @Composable
 private fun PatientReportSessionRow(
     candidate: com.agarthavision.domain.usecase.records.PatientReportCandidate,
+    sheet: PatientReportSheetState,
     isSelected: Boolean,
     onToggle: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    val enabled = candidate.verifiedSampleCount > 0
+    val hasVerifiedSamples = candidate.verifiedSampleCount > 0
+    val inRange = isWithinReportRange(candidate.session.startedAt, sheet.startDate, sheet.endDate)
+    val enabled = hasVerifiedSamples && inRange
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -170,10 +189,10 @@ private fun PatientReportSessionRow(
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (enabled) colors.textPrimary else colors.textSecondary,
             )
-            val suffix = if (!enabled) {
-                " · " + stringResource(R.string.patient_report_sheet_session_no_verified)
-            } else {
-                ""
+            val suffix = when {
+                !hasVerifiedSamples -> " · " + stringResource(R.string.patient_report_sheet_session_no_verified)
+                !inRange -> " · " + stringResource(R.string.patient_report_sheet_session_out_of_range)
+                else -> ""
             }
             Text(
                 text = formatDate(candidate.session.startedAt) + suffix,
