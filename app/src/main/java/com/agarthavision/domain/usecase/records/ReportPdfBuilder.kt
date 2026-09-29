@@ -1,11 +1,9 @@
 package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.domain.model.Detection
-import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.ReportMetadata
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
-import com.agarthavision.domain.model.ReportPdfSpeciesRow
 import com.agarthavision.domain.model.Sample
 import javax.inject.Inject
 
@@ -40,30 +38,7 @@ class ReportPdfBuilder @Inject constructor() {
         )
         return ReportPdfDocument(
             header = header,
-            speciesRows = buildSpeciesRows(metadata),
+            speciesRows = buildReportSpeciesRows(metadata.lpfPerSpecies),
         )
-    }
-
-    /**
-     * One row per recognized [EggSpecies] present in `metadata.lpfPerSpecies`.
-     *
-     * Mucus, blood, and WBC findings aren't egg species — they have no [EggSpecies] entry — so
-     * they can never surface here, matching this table's egg-only scope.
-     *
-     * The reported figure is the LPF (Low Power Field) range across the session's fields.
-     */
-    private fun buildSpeciesRows(metadata: ReportMetadata): List<ReportPdfSpeciesRow> {
-        val knownCanonicalSpecies = EggSpecies.entries.mapNotNull { it.canonicalClass }.toSet()
-        return metadata.lpfPerSpecies
-            .filterKeys { it in knownCanonicalSpecies }
-            .map { (canonical, density) ->
-                ReportPdfSpeciesRow(
-                    speciesDisplayName = canonical,
-                    min = density.min,
-                    max = density.max,
-                    descriptor = density.descriptor,
-                )
-            }
-            .sortedBy { it.speciesDisplayName }
     }
 }

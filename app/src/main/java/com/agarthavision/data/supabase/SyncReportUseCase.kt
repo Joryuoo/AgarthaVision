@@ -49,9 +49,10 @@ class SyncReportUseCase @Inject constructor(
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNCED.value)
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
+            val scopeTag = report.patientId?.let { "Patient:$it" } ?: "Session:${report.sessionId}"
             Log.e(
                 TAG,
-                "[SyncFailed][Report:$reportId][Session:${report.sessionId}]" +
+                "[SyncFailed][Report:$reportId][$scopeTag]" +
                     "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )

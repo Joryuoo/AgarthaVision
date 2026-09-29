@@ -525,8 +525,15 @@ private class FakeReportFileStore : ReportFileStore {
         return "/Documents/AgarthaVision/report.pdf"
     }
 
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String {
+        lastPdfReportId = reportId
+        lastPdfBytes = pdf
+        return "/Documents/AgarthaVision/patient-report.pdf"
+    }
+
     override suspend fun readBytes(path: String): ByteArray? = when (path) {
         "/Documents/AgarthaVision/report.pdf" -> lastPdfBytes
+        "/Documents/AgarthaVision/patient-report.pdf" -> lastPdfBytes
         else -> null
     }
 }
@@ -668,6 +675,7 @@ private fun noOpSyncReportUseCase(): SyncReportUseCase =
 
 private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun insertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit
+    override suspend fun countReportsForPatient(patientId: String): Int = 0
     override suspend fun updateFilePaths(
         reportId: String,
         pdfFilePath: String?,

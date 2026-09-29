@@ -9,9 +9,37 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
-## feature/patient-report-and-address-pdf-only — session card shows the full address; barangay search takes commas · 2026-09-29
+## feature/patient-report-and-address-pdf-only — patient-scoped PDF reports; session card shows the full address; barangay search takes commas · 2026-09-29
 
-`14zcqntj2tm`.
+### Patient reports (pooled, PDF-only) · `14zcqntj2uz`
+
+- **`GeneratePatientReportUseCase`** pools every session a `PatientReportScope` resolves to
+  (default: all of a patient's sessions; a date range and/or an explicit session-id subset
+  narrow it) into one PDF-only document. A foreign session id in the subset fails generation
+  rather than silently dropping it.
+- **Pooled, not per-session-summed.** Findings from every included session are collected and
+  passed to a single `aggregateLpfPerSpecies` call, so the headline species table is one pooled
+  range across the whole scope; a per-session breakdown table keeps each smear's own range
+  visible alongside it.
+- **Zero-sample sessions are excluded**, not reported as a zero row (`GetPatientReportCandidatesUseCase`
+  shows them disabled in the "Generate report" sheet, `ui/sessions/PatientReportSheet.kt`). A
+  scope with nothing left fails with `NO_VERIFIED_SAMPLES_MESSAGE`.
+- **Room 23 → 24 (`MIGRATION_23_24`)**: `reports.session_id` becomes nullable; `patient_id` and
+  `session_ids_json` are added. `supabase/migrations/0007_patient_reports.sql` mirrors this on
+  Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
+  a `patient_users` link on a patient-report insert. Must apply before the build reaches any
+  device that can generate one — an older build decoding `session_id` as non-null crashes on
+  the first patient report row it pulls.
+- **Sync mirrors session reports**: the row goes to `public.reports`, the PDF to the `reports`
+  Storage bucket, restored via `RestoreReportFilesUseCase`'s patient branch
+  (`writePatientPdf`). An unrecognised `report_type` on pull is skipped, not stored.
+- **Reports tab** shows a patient title for these cards and routes to the patient's Sessions
+  screen instead of a session (`ReportCard`, `RecordsScreen`), with no NPE on the now-nullable
+  `sessionId`.
+- **PDF** prints the patient's full display name, age at generation, sex, and full address
+  (`PsgcBarangay.fullAddress`, falling back to the raw PSGC code); filenames are UUID-only.
+
+### Session card shows the full address; barangay search takes commas · `14zcqntj2tm`
 
 - **`PsgcBarangay.fullAddress`** ("Lahug, City of Cebu" / "Adams, Adams, Ilocos Norte") is now
   the single display form for a patient's location. The session patient card reads it instead of

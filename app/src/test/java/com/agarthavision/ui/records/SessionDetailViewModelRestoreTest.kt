@@ -95,6 +95,9 @@ class SessionDetailViewModelRestoreTest {
             override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
                 WRITTEN_PDF
 
+            override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String =
+                WRITTEN_PDF
+
             override suspend fun readBytes(path: String): ByteArray? = null
         }
         val sessionManager: SessionManager = mock()

@@ -15,6 +15,9 @@ import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
+import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
@@ -1362,6 +1365,8 @@ class SessionsViewModelTest {
             patientRepository = patientRepo,
             psgcRepository = psgcRepo,
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            getPatientReportCandidatesUseCase = mock(),
+            generatePatientReportUseCase = mock(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
@@ -1409,11 +1414,199 @@ class SessionsViewModelTest {
             patientRepository = deps.patientRepo ?: stubPatientRepository(),
             psgcRepository = deps.psgcRepo ?: stubPsgcRepository(),
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
+            getPatientReportCandidatesUseCase = mock(),
+            generatePatientReportUseCase = mock(),
             savedStateHandle = SavedStateHandle(
                 if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
             ),
         )
     }
+
+    // ---------------------------------------------------------------------------
+    // Patient report sheet (14zcqntj2uz)
+    // ---------------------------------------------------------------------------
+
+    private fun viewModelForReportSheet(
+        candidatesUseCase: GetPatientReportCandidatesUseCase = mock(),
+        generateUseCase: GeneratePatientReportUseCase = mock(),
+    ): SessionsViewModel {
+        val identityFlow = MutableStateFlow<LocalIdentity?>(LocalIdentity(userId = "u1", email = "user@example.com"))
+        val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(identityFlow)
+        }
+        val sessionManager = mock<SessionManager> {
+            on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+        }
+        return SessionsViewModel(
+            sessionRepository = RecordingSessionRepository(emptyList()),
+            sessionManager = sessionManager,
+            observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
+            patientRepository = stubPatientRepository(),
+            psgcRepository = stubPsgcRepository(),
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            getPatientReportCandidatesUseCase = candidatesUseCase,
+            generatePatientReportUseCase = generateUseCase,
+            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
+        )
+    }
+
+    @Test
+    fun `opening the report sheet loads candidates all selected by default`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 0),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals(2, sheet!!.candidates.size)
+                assertEquals(setOf("s1", "s2"), sheet.selectedSessionIds)
+                assertFalse(sheet.isLoadingCandidates)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `dismissing the report sheet clears it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `toggling a session flips only that session's selection`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 2),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onToggleReportSession("s1")
+                advanceUntilIdle()
+
+                assertEquals(setOf("s2"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `generating successfully closes the sheet and emits a PatientReportGenerated event`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            val events = mutableListOf<SessionsEvent>()
+            val job = launch { vm.events.collect { events += it } }
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+            assertTrue(events.any { it is SessionsEvent.PatientReportGenerated })
+            job.cancel()
+        }
+
+    @Test
+    fun `a failed generation keeps the sheet open with an error, not generating`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.failure(IllegalStateException("boom"))
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals("boom", sheet!!.error)
+                assertFalse(sheet.isGenerating)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a second generate call while one is in flight is ignored (double-tap guard)`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+            vm.onOpenGenerateReport()
+            advanceUntilIdle()
+
+            // isGenerating flips synchronously before the coroutine is launched, so a second
+            // call made before the first suspends past that point is already a no-op — no need
+            // to hold the mock open to prove it.
+            vm.onGeneratePatientReport()
+            vm.onGeneratePatientReport()
+            advanceUntilIdle()
+
+            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any())
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -1653,6 +1846,24 @@ private class DuplicateLabelSessionRepository(
 // ---------------------------------------------------------------------------
 // Model helpers
 // ---------------------------------------------------------------------------
+
+private fun fakePatientReport(): com.agarthavision.domain.model.Report =
+    com.agarthavision.domain.model.Report(
+        id = "report-1",
+        sessionId = null,
+        patientId = "patient-1",
+        sessionIds = listOf("s1"),
+        userId = "u1",
+        reportType = com.agarthavision.domain.model.ReportType.PATIENT,
+        generatedAt = Instant.EPOCH,
+        totalSamples = 1,
+        totalEggsConfirmed = 0,
+        positiveSpecies = emptyList(),
+        lpfPerSpecies = emptyMap(),
+        csvFilePath = null,
+        pdfFilePath = "/Documents/AgarthaVision/patient-report.pdf",
+        supabaseStatus = com.agarthavision.domain.model.ReportSyncStatus.PENDING,
+    )
 
 private fun makeSession(id: String, userId: String): SessionWithStats =
     SessionWithStats(

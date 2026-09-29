@@ -24,6 +24,7 @@ import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
 import com.agarthavision.domain.model.PatientSyncStatus
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
@@ -473,6 +474,12 @@ class FetchRemoteDataUseCase @Inject constructor(
         while (true) {
             val page = reportRemoteDataSource.fetchReports(userId, offset, PAGE_SIZE.toLong())
             for (remote in page) {
+                // An unrecognised report_type is a server-side type this build doesn't know how
+                // to render yet — skip it rather than store and later crash decoding it, or
+                // silently mislabel it as a session report.
+                if (ReportType.fromValueOrNull(remote.reportType) == null) {
+                    continue
+                }
                 // E4 guard: skip if local row is pending or sync_failed
                 val local = reportDao.getReportById(remote.reportId)
                 if (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value) {

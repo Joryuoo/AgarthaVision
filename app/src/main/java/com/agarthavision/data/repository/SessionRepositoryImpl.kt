@@ -58,6 +58,9 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> =
         sessionDao.getLabelsForPatient(patientId)
 
+    override suspend fun getSessionsForPatient(patientId: String, userId: String): List<Session> =
+        sessionDao.getSessionsForPatient(patientId, userId).map { it.toDomain() }
+
     /**
      * A signed-out caller sees nothing, not everything.
      *

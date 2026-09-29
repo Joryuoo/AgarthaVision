@@ -96,9 +96,14 @@ open class ReportRemoteDataSource @Inject constructor(
         val lpf: Map<String, LpfDensity> = runCatching {
             gson.fromJson<Map<String, LpfDensity>>(lpfPerSpeciesJson, stringLpfDensityMapType)
         }.getOrNull().orEmpty()
+        val sessionIds: List<String>? = runCatching {
+            sessionIdsJson?.let { gson.fromJson<List<String>>(it, stringListType) }
+        }.getOrNull()
         return ReportInsertRow(
             id = reportId,
             sessionId = sessionId,
+            patientId = patientId,
+            sessionIds = sessionIds,
             userId = userId,
             reportType = reportType,
             generatedAt = Instant.ofEpochMilli(generatedAt).toString(),
@@ -139,7 +144,11 @@ open class ReportRemoteDataSource @Inject constructor(
         @SerialName("id")
         val id: String,
         @SerialName("session_id")
-        val sessionId: String,
+        val sessionId: String?,
+        @SerialName("patient_id")
+        val patientId: String? = null,
+        @SerialName("session_ids")
+        val sessionIds: List<String>? = null,
         @SerialName("user_id")
         val userId: String,
         @SerialName("report_type")
@@ -165,7 +174,9 @@ open class ReportRemoteDataSource @Inject constructor(
     @Serializable
     private data class ReportRow(
         @SerialName("id") val id: String,
-        @SerialName("session_id") val sessionId: String,
+        @SerialName("session_id") val sessionId: String? = null,
+        @SerialName("patient_id") val patientId: String? = null,
+        @SerialName("session_ids") val sessionIds: List<String>? = null,
         @SerialName("user_id") val userId: String,
         @SerialName("report_type") val reportType: String,
         @SerialName("generated_at") val generatedAt: String,
@@ -194,6 +205,8 @@ open class ReportRemoteDataSource @Inject constructor(
         return ReportEntity(
             reportId = id,
             sessionId = sessionId,
+            patientId = patientId,
+            sessionIdsJson = sessionIds?.let { gson.toJson(it) },
             userId = userId,
             reportType = reportType,
             generatedAt = generatedAtMs,

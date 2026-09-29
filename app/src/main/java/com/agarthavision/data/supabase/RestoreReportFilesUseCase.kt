@@ -52,6 +52,7 @@ class RestoreReportFilesUseCase @Inject constructor(
             userId = report.userId,
             reportId = reportId,
             sessionId = report.sessionId,
+            patientId = report.patientId,
             localPath = report.pdfFilePath,
         )
 
@@ -80,7 +81,8 @@ class RestoreReportFilesUseCase @Inject constructor(
     private suspend fun ensureLocal(
         userId: String,
         reportId: String,
-        sessionId: String,
+        sessionId: String?,
+        patientId: String?,
         localPath: String?,
     ): String? {
         if (localPath == null || reportFileStore.readBytes(localPath) != null) return localPath
@@ -91,7 +93,13 @@ class RestoreReportFilesUseCase @Inject constructor(
             .getOrNull()
 
         return bytes?.let {
-            runCatching { reportFileStore.writePdf(reportId, sessionId, it) }
+            runCatching {
+                if (patientId != null) {
+                    reportFileStore.writePatientPdf(reportId, patientId, it)
+                } else {
+                    reportFileStore.writePdf(reportId, requireNotNull(sessionId), it)
+                }
+            }
                 .onFailure { e -> Log.e(TAG, "Could not write restored pdf for $reportId", e) }
                 .getOrNull()
         }

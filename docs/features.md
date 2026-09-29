@@ -119,6 +119,15 @@ as working.
 - **PDF-only session reports.** Generated as a PDF artifact on-device via `ReportPdfBuilder.kt` and
   `ReportPdfRenderer.kt`, stored in `Documents/AgarthaVision/`, and tracked in Room/Supabase
   (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
+- **Patient reports (14zcqntj2uz).** Pool every session a `PatientReportScope` resolves to
+  (defaulting to all of a patient's sessions; a date range and/or an explicit session subset
+  narrow it) into one PDF-only document, reached from the Sessions screen's "Generate report"
+  sheet (`ui/sessions/PatientReportSheet.kt`). Findings are pooled into a single
+  `aggregateLpfPerSpecies` call across every included session (not summed per-session ranges),
+  with a per-session breakdown table alongside it. Sessions with zero verified samples are
+  excluded and shown disabled in the picker
+  (`domain/usecase/records/GeneratePatientReportUseCase.kt`,
+  `domain/usecase/records/GetPatientReportCandidatesUseCase.kt`).
 
 ### Home dashboard
 - **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,

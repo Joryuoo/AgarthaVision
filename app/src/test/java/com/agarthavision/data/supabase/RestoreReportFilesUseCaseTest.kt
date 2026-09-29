@@ -101,12 +101,28 @@ class RestoreReportFilesUseCaseTest {
         assertNull(dao.rowOf(REPORT_ID)?.pdfFilePath)
     }
 
+    @Test
+    fun `a patient report downloads via writePatientPdf, not writePdf, on a null session_id`() = runTest {
+        val dao = FakeDao(listOf(patientEntity(pdfPath = "content://media/external_primary/file/77")))
+        val store = FakeStore(present = emptySet())
+        val useCase = RestoreReportFilesUseCase(dao, StubRemote(stored = setOf(PATIENT_PDF_OBJECT)), store)
+
+        val result = useCase(REPORT_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(WRITTEN_PATIENT_PDF, result.getOrThrow().pdfFilePath)
+        assertEquals(WRITTEN_PATIENT_PDF, dao.rowOf(REPORT_ID)?.pdfFilePath)
+    }
+
     private companion object {
         const val REPORT_ID = "report-1"
         const val USER_ID = "user-1"
+        const val PATIENT_ID = "patient-1"
         const val LOCAL_PDF = "/documents/report.pdf"
         const val WRITTEN_PDF = "/documents/AgarthaVision/written.pdf"
+        const val WRITTEN_PATIENT_PDF = "/documents/AgarthaVision/written-patient.pdf"
         const val PDF_OBJECT = "$USER_ID/$REPORT_ID.pdf"
+        const val PATIENT_PDF_OBJECT = "$USER_ID/$REPORT_ID.pdf"
 
         fun entity(pdfPath: String?, csvPath: String? = null): ReportEntity = ReportEntity(
             reportId = REPORT_ID,
@@ -119,6 +135,24 @@ class RestoreReportFilesUseCaseTest {
             positiveSpeciesJson = "[]",
             lpfPerSpeciesJson = "{}",
             csvFilePath = csvPath,
+            pdfFilePath = pdfPath,
+            supabaseStatus = ReportSyncStatus.SYNCED.value,
+            createdAt = 1_000L,
+        )
+
+        fun patientEntity(pdfPath: String?): ReportEntity = ReportEntity(
+            reportId = REPORT_ID,
+            sessionId = null,
+            patientId = PATIENT_ID,
+            sessionIdsJson = "[\"session-1\",\"session-2\"]",
+            userId = USER_ID,
+            reportType = "patient",
+            generatedAt = 1_000L,
+            totalSamples = 2,
+            totalEggsConfirmed = 1,
+            positiveSpeciesJson = "[]",
+            lpfPerSpeciesJson = "{}",
+            csvFilePath = null,
             pdfFilePath = pdfPath,
             supabaseStatus = ReportSyncStatus.SYNCED.value,
             createdAt = 1_000L,
@@ -143,6 +177,9 @@ private class FakeStore(private val present: Set<String>) : ReportFileStore {
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
         "/documents/AgarthaVision/written.pdf"
 
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String =
+        "/documents/AgarthaVision/written-patient.pdf"
+
     override suspend fun readBytes(path: String): ByteArray? =
         if (path in present) "local-bytes".toByteArray() else null
 }
@@ -153,6 +190,9 @@ private class FakeDao(seeded: List<ReportEntity>) : ReportDao {
     fun rowOf(reportId: String): ReportEntity? = rows[reportId]
 
     override suspend fun getReportById(reportId: String): ReportEntity? = rows[reportId]
+
+    override suspend fun countReportsForPatient(patientId: String): Int =
+        rows.values.count { it.patientId == patientId }
 
     override suspend fun updateFilePaths(
         reportId: String,

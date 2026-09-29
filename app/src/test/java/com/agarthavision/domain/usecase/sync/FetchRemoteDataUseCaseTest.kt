@@ -1113,6 +1113,41 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
+    fun `an unrecognised report_type is skipped rather than stored or crashing`() = runTest {
+        // A server-side type this build doesn't know how to render yet (e.g. a future
+        // "administrative" type, or a bad row) must be dropped, not stored under a guessed
+        // type nor left to crash a later decode.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val unknownTyped = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(unknownTyped))
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(reportDao, never()).insertReport(any())
+        assertEquals(0, summary.reportsFetched)
+        // Skipping an unrecognised row is not itself a failure of the reports pull.
+        assertFalse(FetchType.REPORTS in summary.failed)
+    }
+
+    @Test
+    fun `a page mixing a known and an unrecognised report_type only stores the known one`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val known = fakeReport("rep-known", "sess-1")
+        val unknown = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(known, unknown))
+        whenever(reportDao.getReportById("rep-known")).thenReturn(null)
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        assertEquals(1, summary.reportsFetched)
+        val written = argumentCaptor<ReportEntity>()
+        verify(reportDao, times(1)).insertReport(written.capture())
+        assertEquals("rep-known", written.firstValue.reportId)
+    }
+
+    @Test
     fun `a report this device has never held takes the remote paths`() = runTest {
         setupOnlineSignedIn()
         stubEmptyPulls()

@@ -2,6 +2,7 @@ package com.agarthavision.ui.records
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.agarthavision.R
@@ -42,6 +43,24 @@ class ReportCardTest {
         csvFilePath = null,
         pdfFilePath = pdfFilePath,
         supabaseStatus = ReportSyncStatus.SYNCED,
+    )
+
+    private fun patientReport(patientId: String?, patientName: String?) = Report(
+        id = "report-2",
+        sessionId = null,
+        patientId = patientId,
+        sessionIds = listOf("session-1", "session-2"),
+        userId = "user-1",
+        reportType = ReportType.PATIENT,
+        generatedAt = Instant.parse("2026-01-01T00:00:00Z"),
+        totalSamples = 2,
+        totalEggsConfirmed = 3,
+        positiveSpecies = emptyList(),
+        lpfPerSpecies = emptyMap(),
+        csvFilePath = null,
+        pdfFilePath = "/tmp/patient-report.pdf",
+        supabaseStatus = ReportSyncStatus.SYNCED,
+        patientName = patientName,
     )
 
     private data class CardActions(
@@ -107,5 +126,29 @@ class ReportCardTest {
 
         assertEquals("expected one onSharePdf click, got $sharePdfClicks", 1, sharePdfClicks)
         assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
+    }
+
+    @Test
+    fun `a patient report renders the patient title, not a session label`() {
+        setCard(patientReport(patientId = "patient-1", patientName = "Jane Doe"))
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.report_card_patient_title, "Jane Doe"))
+            .assertExists()
+    }
+
+    @Test
+    fun `clicking a patient report card fires onSessionClick, with no NPE on a null sessionId`() {
+        var clicks = 0
+        setCard(
+            patientReport(patientId = "patient-1", patientName = "Jane Doe"),
+            CardActions(onSessionClick = { clicks++ }),
+        )
+
+        composeRule
+            .onNodeWithText(context.getString(R.string.report_card_patient_title, "Jane Doe"))
+            .performClick()
+
+        assertEquals(1, clicks)
     }
 }

@@ -162,6 +162,9 @@ private class FakeReportDao(seeded: List<ReportEntity>) : ReportDao {
         rows[report.reportId] = report
     }
 
+    override suspend fun countReportsForPatient(patientId: String): Int =
+        rows.values.count { it.patientId == patientId }
+
     override fun observeReportsForSession(
         sessionId: String,
         userId: String,
@@ -306,6 +309,9 @@ private class FakeReportFileStore(
 ) : ReportFileStore {
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
         "/downloads/report.pdf"
+
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String =
+        "/downloads/patient-report.pdf"
 
     override suspend fun readBytes(path: String): ByteArray? =
         if (path in present) "bytes-for-$path".toByteArray() else null

@@ -7,11 +7,15 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
+import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import android.database.sqlite.SQLiteConstraintException
@@ -72,12 +76,26 @@ data class SessionsState(
      * from [Patient.psgcBarangayCode], or null when the code is unknown.
      */
     val barangayAddress: String? = null,
+    /** Non-null while the "generate patient report" sheet is open. */
+    val reportSheet: PatientReportSheetState? = null,
+)
+
+/** State backing the patient-report bottom sheet reached from this screen (14zcqntj2uz). */
+data class PatientReportSheetState(
+    val candidates: List<PatientReportCandidate> = emptyList(),
+    val selectedSessionIds: Set<String> = emptySet(),
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val isGenerating: Boolean = false,
+    val isLoadingCandidates: Boolean = true,
+    val error: String? = null,
 )
 
 sealed interface SessionsEvent {
     data class NavigateToCapture(val sessionId: String) : SessionsEvent
     data class NavigateToVerificationQueue(val sessionId: String) : SessionsEvent
     data class ShareExport(val content: String) : SessionsEvent
+    data class PatientReportGenerated(val pdfPath: String?) : SessionsEvent
 }
 
 /**
@@ -105,6 +123,8 @@ class SessionsViewModel @Inject constructor(
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
     private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
+    private val getPatientReportCandidatesUseCase: GetPatientReportCandidatesUseCase,
+    private val generatePatientReportUseCase: GeneratePatientReportUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -459,6 +479,90 @@ class SessionsViewModel @Inject constructor(
 
     fun onDismissError() {
         internalState.update { it.copy(errorMessage = null) }
+    }
+
+    /**
+     * Opens the "generate patient report" sheet and loads this patient's session candidates,
+     * all selected by default (the "all sessions" scope).
+     */
+    fun onOpenGenerateReport() {
+        val patient = patientId ?: return
+        internalState.update {
+            it.copy(reportSheet = PatientReportSheetState(isLoadingCandidates = true))
+        }
+        viewModelScope.launch {
+            getPatientReportCandidatesUseCase(patient)
+                .onSuccess { candidates ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = PatientReportSheetState(
+                                candidates = candidates,
+                                selectedSessionIds = candidates.map { c -> c.session.id }.toSet(),
+                                isLoadingCandidates = false,
+                            ),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = it.reportSheet?.copy(
+                                isLoadingCandidates = false,
+                                error = error.message ?: "Could not load sessions.",
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
+    fun onDismissReportSheet() {
+        internalState.update { it.copy(reportSheet = null) }
+    }
+
+    fun onReportDateRangeSelected(start: LocalDate?, end: LocalDate?) {
+        val (safeStart, safeEnd) = sanitizeDateRange(start, end)
+        internalState.update {
+            it.copy(reportSheet = it.reportSheet?.copy(startDate = safeStart, endDate = safeEnd))
+        }
+    }
+
+    fun onToggleReportSession(sessionId: String) {
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            val selected = sheet.selectedSessionIds
+            val updated = if (sessionId in selected) selected - sessionId else selected + sessionId
+            state.copy(reportSheet = sheet.copy(selectedSessionIds = updated))
+        }
+    }
+
+    fun onGeneratePatientReport() {
+        val patient = patientId
+        val sheet = internalState.value.reportSheet
+        if (patient == null || sheet == null || sheet.isGenerating) return
+        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null)) }
+        viewModelScope.launch {
+            val scope = PatientReportScope(
+                startDate = sheet.startDate,
+                endDate = sheet.endDate,
+                sessionIds = sheet.selectedSessionIds,
+            )
+            generatePatientReportUseCase(patient, scope)
+                .onSuccess { report ->
+                    internalState.update { it.copy(reportSheet = null) }
+                    eventChannel.send(SessionsEvent.PatientReportGenerated(report.pdfFilePath))
+                }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = it.reportSheet?.copy(
+                                isGenerating = false,
+                                error = error.message ?: "Could not generate report.",
+                            ),
+                        )
+                    }
+                }
+        }
     }
 
     private companion object {

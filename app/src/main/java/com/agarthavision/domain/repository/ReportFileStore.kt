@@ -14,6 +14,13 @@ interface ReportFileStore {
     suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String
 
     /**
+     * Persists a patient-scoped report's PDF body and returns the absolute path (or
+     * `content://` URI) to the written file. Keyed by `reportId`/`patientId` so multiple
+     * patient reports for the same patient don't collide.
+     */
+    suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String
+
+    /**
      * Reads back a file previously written by [writePdf].
      *
      * [path] is the opaque string it returns, so both shapes are handled: a MediaStore

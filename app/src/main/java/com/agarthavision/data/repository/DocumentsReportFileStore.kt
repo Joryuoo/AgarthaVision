@@ -34,6 +34,11 @@ class DocumentsReportFileStore @Inject constructor(
         return writeBytes(fileName, PDF_MIME_TYPE, pdf)
     }
 
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String {
+        val fileName = "agarthavision-patient-${patientId.sanitize()}-${reportId.sanitize()}.pdf"
+        return writeBytes(fileName, PDF_MIME_TYPE, pdf)
+    }
+
     /**
      * The shape [writePdf] can return is read here, and every failure collapses to null: a
      * cleared MediaStore entry throws rather than returning empty, and a caller that has to

@@ -98,6 +98,7 @@ import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.EmptyState
@@ -125,6 +126,7 @@ fun RecordsScreen(
     @Suppress("UNUSED_PARAMETER")
     onNavigate: (String) -> Unit = {},
     onSessionClick: (String) -> Unit,
+    onPatientClick: (String) -> Unit = {},
     @Suppress("UNUSED_PARAMETER")
     onBackClick: () -> Unit = {},
     viewModel: RecordsViewModel = hiltViewModel(),
@@ -362,7 +364,15 @@ fun RecordsScreen(
                                 items(items, key = { it.id }) { report ->
                                     ReportCard(
                                         report = report,
-                                        onSessionClick = { onSessionClick(report.sessionId) },
+                                        onSessionClick = {
+                                            val patientId = report.patientId
+                                            val sessionId = report.sessionId
+                                            if (report.reportType == ReportType.PATIENT && patientId != null) {
+                                                onPatientClick(patientId)
+                                            } else if (sessionId != null) {
+                                                onSessionClick(sessionId)
+                                            }
+                                        },
                                         onOpenPdf = {
                                             shareError = viewReportPdf(context, report.pdfFilePath)
                                         },
@@ -848,6 +858,14 @@ private fun ReportActionButton(
 }
 
 @Composable
+private fun reportCardTitle(report: Report): String =
+    if (report.reportType == ReportType.PATIENT) {
+        stringResource(R.string.report_card_patient_title, report.patientName ?: "")
+    } else {
+        report.sessionLabel ?: report.sessionId?.take(8).orEmpty()
+    }
+
+@Composable
 internal fun ReportCard(
     report: Report,
     onSessionClick: () -> Unit,
@@ -871,7 +889,7 @@ internal fun ReportCard(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = report.sessionLabel ?: report.sessionId.take(8),
+                text = reportCardTitle(report),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,

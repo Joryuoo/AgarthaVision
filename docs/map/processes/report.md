@@ -64,6 +64,50 @@ Session Detail displays before anyone generates a report.
 - **Sample or detection state.** Reporting is read-only over both. Generating a report does not
   mark anything as reported.
 
+## Patient report
+
+14zcqntj2uz. Pools every session `PatientReportScope` resolves to into one PDF-only document,
+rather than a session's own smear. Written by `GeneratePatientReportUseCase`
+(`domain/usecase/records/GeneratePatientReportUseCase.kt`), reached from the Sessions screen's
+"Generate report" sheet (`ui/sessions/PatientReportSheet.kt`).
+
+**Input** — a patient id, a signed-in medtech, and a `PatientReportScope` (a date range and/or
+an explicit session-id subset; both default to "every session").
+**Output** — a persisted `Report` row with `report_type = 'patient'`, `patient_id` set,
+`session_id` null, and `session_ids` naming every session actually included; a PDF in
+`Documents/AgarthaVision/`.
+
+1. **Resolve scope.** `resolvePatientReportSessions` (pure, C2) filters the patient's sessions
+   by the scope's inclusive date range and/or session-id subset. A session id in the subset that
+   does not belong to the patient is a caller error (`IllegalArgumentException`), not a silent
+   drop.
+2. **Drop empty sessions.** Any resolved session with zero verified samples is excluded
+   entirely — not reported as a zero row — so an unexamined smear cannot pad the "sessions
+   covered" count on a clinical document. If nothing survives, generation fails with
+   `NO_VERIFIED_SAMPLES_MESSAGE`. The "generate report" sheet shows these sessions disabled
+   rather than hiding them (`GetPatientReportCandidatesUseCase`).
+3. **Pool, don't sum per-session ranges.** Every surviving session's findings are collected into
+   one list and passed to a single `aggregateLpfPerSpecies(all, totalFieldsAcrossSessions)` call
+   — the headline species table is the pooled range across every included session, not each
+   session's range combined after the fact. The per-session breakdown table keeps each smear's
+   own range visible alongside the pooled figure.
+4. **Resolve the patient header.** Full `displayName`, age computed at the same instant as
+   `generatedAt`, sex, and the full address via `PsgcBarangay.fullAddress` (falling back to the
+   raw PSGC code when the barangay no longer resolves).
+5. **Build and write.** `PatientReportPdfBuilder` assembles the pure-data document;
+   `AndroidPatientReportPdfRenderer` paginates it — an unbounded session count means the
+   per-session table can span multiple pages, repeating its column headers on each new one.
+6. **Insert and sync.** Same shape as a session report: insert with `supabase_status = pending`,
+   then push row and PDF bytes to `public.reports` / the `reports` Storage bucket
+   (`data/supabase/SyncReportUseCase.kt`). RLS additionally requires the inserting user to hold
+   a `patient_users` link to the patient (`supabase/migrations/0007_patient_reports.sql`).
+
+Every generation mints a new row, exactly like a session report — regenerating for the same
+patient does not update or replace an earlier one.
+
+An unrecognised `report_type` pulled from Supabase (a report type this build predates) is
+skipped during sync rather than stored and later mis-decoded (`FetchRemoteDataUseCase`).
+
 ## Storage note
 
 The PDF *does* reach Supabase now — `SyncReportUseCase` uploads it to the `reports` bucket
