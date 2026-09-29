@@ -1,5 +1,6 @@
 package com.agarthavision.ui.sessions
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.Button
@@ -61,6 +63,17 @@ internal fun PatientReportSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         containerColor = colors.surfaceHigh,
+        // Same drag handle and corner radius as every other sheet in the app. Without an explicit
+        // shape Material3 uses `shapes.extraLarge`, which is the 999.dp pill token in this theme.
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .padding(top = 8.dp, bottom = 8.dp)
+                    .size(width = 36.dp, height = 4.dp)
+                    .background(colors.borderStrong, RoundedCornerShape(2.dp)),
+            )
+        },
+        shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
     ) {
         Column(
             modifier = Modifier
