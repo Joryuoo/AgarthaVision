@@ -108,6 +108,15 @@ class AgarthaDatabaseSchemaTest {
     }
 
     @Test
+    fun `samples carry the inference queue's state and attempt count`() {
+        // Added at version 23 by the first hand-written migration (14zcqntj6ny). Not null with a
+        // default, so a row written by any path that predates the queue reads as ready.
+        assertTrue(columnsOf("samples").containsAll(listOf("inference_state", "inference_attempts")))
+        assertTrue(isNotNull("samples", "inference_state"))
+        assertTrue(isNotNull("samples", "inference_attempts"))
+    }
+
+    @Test
     fun `samples no longer carry is_repeat`() {
         // The flag existed only because there was no way to delete a duplicate. deleted_at
         // provides that, so the workaround went with it (86d4ab4vm).
@@ -322,6 +331,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 22
+        private const val EXPECTED_VERSION = 23
     }
 }

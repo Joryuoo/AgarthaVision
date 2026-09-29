@@ -14,19 +14,22 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 
 **Then check, in order:**
 1. Does the column need to exist remotely at all? Several deliberately do not — `predictions_json`
-   (its content syncs as `predictions` rows instead), `samples.status`, `reports.supabase_status`,
+   (its content syncs as `predictions` rows instead), `samples.status`,
+   `samples.inference_state` and `samples.inference_attempts`, `reports.supabase_status`,
    `psgc_barangays`.
 2. If it does, add it to the insert row in `data/supabase/*RemoteDataSource.kt`. **A column
    missing from the insert row is silently dropped, with no error.**
-3. If it is a Room change, bump `core/database/AgarthaDatabase.kt:105`.
+3. If it is a Room change, bump `AgarthaDatabase.version` **and write the `Migration`** into
+   `core/database/Migrations.kt`'s `ALL_MIGRATIONS`. Every bump from 22 onward needs one.
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
 
-**The non-obvious break:** `core/di/DatabaseModule.kt:54` uses
-`fallbackToDestructiveMigration(dropAllTables = true)`. A Room version bump **wipes every
-device**, it does not migrate. Fine in Phase 1; a data-loss incident the day there is real
-data.
+**The non-obvious break:** `core/di/DatabaseModule.kt` still has
+`fallbackToDestructiveMigration(dropAllTables = false)` behind the hand-written migrations. A
+bump with no `Migration` for it **wipes every device** instead of failing, including the
+inference queue, whose frames exist nowhere else. From version 23 that is a data-loss
+incident, so every bump ships a migration.
 
 **The second non-obvious break:** that same wipe takes `psgc_barangays` with it. Reference
 data has to be re-seedable, not just seeded — which is why `PsgcSeeder` gates on the row

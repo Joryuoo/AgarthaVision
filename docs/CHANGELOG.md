@@ -31,6 +31,121 @@ behind it, nothing bounded the pile-up, and the second T4 sat idle.
 - `tests/` covers all of the above against a fake model: 10 tests, no GPU needed. The notebook's
   `%%writefile` cell is regenerated from `server.py`, and its GPU cell lists every device.
 
+## feat/verify-pending-inference — a pending sample says so, and the medtech can stop waiting · 2026-09-27
+
+`14zcqntj6p1`.
+
+- **Pending is visible.** While a sample waits on inference, its Model Output section shows a
+  spinner and "Queued for inference", or "Frame is in inference" once it is the frame being
+  run: the same split as the queue's badge. Read off the frame's own `InferenceState`. There is no
+  second flag. `isResolving` keeps its own meaning (a frame still being fetched), because
+  merging the two would conflate a frame with no model output yet and a frame with no image
+  yet.
+- **Annotation is locked meanwhile.** Add species, remarks and Submit are disabled, and the view
+  model ignores those inputs too. The model pre-fills the species, so anything entered before
+  it lands would collide with it.
+- **Cancel inference, confirmed.** The dialog says the sample will never get a model output.
+  Confirming calls `CancelInferenceUseCase`, the frame switches to manual in place, and it can
+  be annotated at once. Dismissing leaves it pending. When the result beats the tap, there is
+  nothing to cancel and the result shows.
+- **The result updates in place.** When the store re-emits the open frame with its output,
+  the section, the boxes and the pre-filled answers appear without leaving the screen. This
+  only happens while the frame is pending, so a medtech's answers are never overwritten.
+- **#78 still holds.** Nothing can be edited while pending, so leaving never asks then.
+  Cancelling is not an edit. Edits after a cancel are guarded as usual.
+- The "no model output" copy now covers a cancelled frame and one the queue gave up on, not
+  only an unreachable server.
+
+---
+
+## feat/queue-inference-badges — every queue row says where its model output is · 2026-09-27
+
+`14zcqntj6p0`.
+
+Each Verification Queue row's badge now shows the sample's inference state: **Queued**, **In
+inference**, **Ready** or **Manual**. It replaces the "AI-suggested" / "Manual" pill, which could
+only say whether a model was ever involved.
+
+- Four states, not two. Frames run one at a time and the on-device path takes seconds each, so
+  labelling every waiting frame "In inference" would misstate what the system is doing.
+- The label is always drawn, and the tone only reinforces it: neutral for queued, gold for in
+  inference, the accent tint for ready (as AI rows had) and the warning tint for manual (as
+  manual rows had). All come from theme tokens.
+- It updates live. The queue is a Room query and `QueueSample` compares by value, so a row
+  moves Queued → In inference → Ready without leaving the screen.
+- Every row stays tappable, pending ones included.
+
+---
+
+## feat/instant-capture — the shutter confirms at once and never spins · 2026-09-27
+
+`14zcqntj6nz`.
+
+A tap saves the frame and shows "Frame captured" immediately. The model output comes later from
+the background inference queue, so there is nothing left for the shutter to wait on.
+
+- **No busy state.** `CaptureState.isBusy` is gone, and with it the shutter's dimmed
+  travelling arc, the "Capturing sample" description, the back button's disabled state and the
+  system-back lock. The medtech can capture field after field without pausing.
+- **A double tap saves one sample.** The busy state was also what stopped a second tap from
+  saving the same cached frame again. `CaptureViewModel` now saves each cached frame once, by
+  identity; the next tap takes the analyzer's next frame. A failed save can be retried.
+- **Taps less than 750 ms apart save once (2026-09-29).** Identity alone was not enough: the
+  analyzer replaces the frame every ~33 ms, so a fast double tap lands on a new, near-identical
+  frame, and rapid tapping saved 9 samples of one field in 1.25 s on a Redmi Note 11. The
+  cooldown drops those taps. Moving to the next field takes far longer than 750 ms.
+- **The save still survives leaving the screen.** It runs under `NonCancellable`, so a medtech
+  who leaves in the milliseconds it takes loses only the confirmation, not the frame.
+- **One confirmation for every tap.** `CaptureOutcome` no longer carries a source. Whether a
+  model answers is decided later by the queue, so "Frame captured · model unavailable" is gone.
+  The toast's action still opens the exact sample that tap wrote.
+- `ConnectionLossBanner` is unchanged. Whether it still earns its place now that the phone can
+  answer offline is an open question for Tabada.
+
+---
+
+## feat/background-inference-queue — capture saves at once, and the model answers later · 2026-09-27
+
+`14zcqntj6ny`.
+
+**Capture waits on nothing.** `CaptureFieldUseCase` saves the frame as `queued` and returns. It
+used to run inference first, so every tap waited on the network (up to 40 s against a dead
+server), and an unreachable server turned the frame into a Manual Capture that could never get a
+model output.
+
+**A queue in Room, with one consumer.** `samples.inference_state` holds `queued` →
+`in_inference` → `ready`, or `manual`. `InferenceQueueProcessor` takes one frame at a time,
+oldest first: the cloud first, the on-device model when the cloud fails for any reason, a `503`
+included. `CloudCircuitBreaker` skips the cloud for 60 s after three failures in a row, doubling
+per failed probe up to 10 minutes. It runs through WorkManager (`WorkManagerInferenceQueue`), like
+sync: each capture and each app launch appends an `InferenceQueueWorker` pass to one unique chain,
+so passes never overlap, and `InferenceRetryWorker` wakes the queue when a failed frame is due. A
+frame interrupted by a killed process is put back in the queue on the next pass. The queue keeps
+going after the app is swiped away, whenever Android allows it background work; on MIUI that needs
+Autostart, as sync does. The queue itself is the rows in Room, on the phone.
+
+**When both engines fail**, the frame waits 30 s, then twice as long each time up to 5 minutes,
+and becomes manual after 5 attempts (`samples.inference_attempts`). Other frames keep moving.
+
+**Cancel is atomic and final.** Every transition is one conditional UPDATE. A result is written
+only if the row is still `in_inference`, so a cancel or delete that lands first discards it.
+`CancelInferenceUseCase` records the sample manual (`inference_model_version = 'manual'`). The
+Verification Screen's UI for it is a separate ticket.
+
+**A pending sample is never a clean field.** It shows as `ModelOutput.InProgress`,
+`isCleanField` is false, and `SubmitVerificationUseCase` refuses it. Counts, reports, the dashboard
+and sync already skip it because it is still `flagged`.
+
+**Room 23, the first hand-written migration.** `MIGRATION_22_23` adds the two columns and marks
+existing manual rows `manual`. From here the phone holds frames that exist nowhere else, so every
+bump ships a `Migration` (C6). Destructive fallback stays only for installs older than 22.
+
+**Connect timeout 10 s → 5 s.** Nobody waits on the call now, and the phone answers when the
+cloud cannot.
+
+**The connection-loss banner no longer says captures become Manual.** It reads "Cloud model
+unreachable · Captures are still recorded. This phone reads them instead, more slowly."
+
 ---
 
 ## feat/offline-inference-engine — the on-device model is back, and it agrees with the cloud · 2026-09-27

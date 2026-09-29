@@ -200,6 +200,17 @@ internal object VerifyTestTags {
     fun removeDrawnBox(findingIndex: Int, slot: Int): String =
         "remove_drawn_box_" + findingIndex + "_" + slot
 
+    /** "Frame is in inference", shown while the model output is pending (14zcqntj6p1). */
+    const val MODEL_OUTPUT_PENDING = "model_output_pending"
+
+    /** Opens the "cancel inference?" confirmation. */
+    const val CANCEL_INFERENCE = "cancel_inference"
+    const val CANCEL_INFERENCE_CONFIRM = "cancel_inference_confirm"
+    const val CANCEL_INFERENCE_DISMISS = "cancel_inference_dismiss"
+
+    /** A queue row's inference-state pill, suffixed with which of the four it is showing. */
+    fun inferenceBadge(badge: InferenceBadge): String = "inference_badge_" + badge.name.lowercase()
+
     // There is no questionOption. The three questions are checkboxes rather than Yes/No pairs,
     // so a question has one control and its own tag is enough to reach it.
 }

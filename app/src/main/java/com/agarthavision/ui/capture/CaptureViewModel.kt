@@ -2,6 +2,7 @@ package com.agarthavision.ui.capture
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.camera.CachedFrame
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.core.connectivity.NetworkMonitor
 import com.agarthavision.core.session.SessionManager
@@ -19,7 +20,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
@@ -29,7 +32,8 @@ import javax.inject.Inject
  * Start/Stop control any more; the picker creates sessions, and only [endSession]
  * closes one. Capture is medtech-triggered (Track 2.13): there is no auto-timer or
  * inference pause/resume sub-state any more — [onCapture] snapshots the cached frame
- * and runs inference exactly once per tap.
+ * and saves it, queued for the background inference queue. Nothing on this screen waits on
+ * a model, so there is no busy state (14zcqntj6nz).
  *
  * **Upstream collectors** (wired in `init`):
  * - [sessionManager].state → updates the active-session mirror in [CaptureState].
@@ -59,6 +63,12 @@ class CaptureViewModel @Inject constructor(
     val state: StateFlow<CaptureState> = _state.asStateFlow()
 
     private val _events = MutableSharedFlow<CaptureEvent>(extraBufferCapacity = 1)
+
+    /** The cached frame the last tap saved, compared by identity. See [saveOnce]. */
+    private var lastSavedFrame: CachedFrame? = null
+
+    /** When the last saved tap landed, on [clock]. See [saveOnce]. */
+    private var lastSavedAtMs: Long? = null
 
     /**
      * One-shot outcomes of a shutter tap, for the screen to confirm.
@@ -129,12 +139,9 @@ class CaptureViewModel @Inject constructor(
     }
 
     /**
-     * Snapshots the cached frame and runs inference once. A server response records a
-     * [com.agarthavision.domain.model.FrameSource.MODEL] frame (predictions may be
-     * empty — a clean field is a normal negative result and is still recorded); an
-     * [com.agarthavision.domain.usecase.inference.InferenceConnectionException]
-     * records a [com.agarthavision.domain.model.FrameSource.MANUAL] frame instead.
-     * See [CaptureFieldUseCase].
+     * Snapshots the cached frame and saves it, queued for a model output that the background
+     * inference queue produces later: cloud first, the on-device model as the fallback. Nothing
+     * here waits on a model. See [CaptureFieldUseCase].
      *
      * The cached frame must be **fresh**, not merely present. `FrameSampler` is process-
      * scoped and its cache survives a session change, a screen exit and a camera rebind, so
@@ -155,14 +162,41 @@ class CaptureViewModel @Inject constructor(
             _state.update { it.copy(errorMessage = "Waiting for a live frame.") }
             return
         }
+        saveOnce(sessionId, cached)
+    }
+
+    /**
+     * Saves [cached] unless the last tap already saved it, or landed less than
+     * [CAPTURE_COOLDOWN_MS] ago.
+     *
+     * Nothing locks the shutter between taps any more. Refusing the same cached frame twice is
+     * not enough on its own: the analyzer replaces the frame about every 33 ms, so the second
+     * tap of a double tap usually finds a new, near-identical frame, and rapid tapping saved
+     * nine samples of one field in 1.25 s on a Redmi Note 11. The cooldown drops those extra
+     * taps. It is far shorter than moving the slide to a new field, so it never costs a
+     * deliberate capture.
+     */
+    private fun saveOnce(sessionId: String, cached: CachedFrame) {
+        val tappedAtMs = clock.elapsedRealtimeMs()
+        val inCooldown = lastSavedAtMs?.let { tappedAtMs - it < CAPTURE_COOLDOWN_MS } == true
+        if (cached === lastSavedFrame || inCooldown) return
+        lastSavedFrame = cached
+        lastSavedAtMs = tappedAtMs
         viewModelScope.launch {
-            _state.update { it.copy(isBusy = true, errorMessage = null) }
-            captureFieldUseCase(sessionId, cached.jpegBytes)
+            _state.update { it.copy(errorMessage = null) }
+            // The save takes milliseconds, so the screen no longer locks around it. It must
+            // still finish if the medtech leaves in those milliseconds: a cancelled save would
+            // drop a frame they saw the shutter take. Only the confirmation is skipped then.
+            withContext(NonCancellable) { captureFieldUseCase(sessionId, cached.jpegBytes) }
                 .onSuccess { outcome -> _events.emit(CaptureEvent.FrameCaptured(outcome)) }
                 .onFailure { throwable ->
+                    // Nothing was saved, so the same frame may be tried again, at once.
+                    if (lastSavedFrame === cached) {
+                        lastSavedFrame = null
+                        lastSavedAtMs = null
+                    }
                     _state.update { it.copy(errorMessage = throwable.message ?: "Capture failed.") }
                 }
-            _state.update { it.copy(isBusy = false) }
         }
     }
 
@@ -202,6 +236,13 @@ class CaptureViewModel @Inject constructor(
          * threshold costs nothing in normal use and fails closed in all of them.
          */
         private const val MAX_FRAME_AGE_MS = 1_000L
+
+        /**
+         * The shortest gap between two saved taps. Long enough to drop a double tap or a burst
+         * (about 150 ms apart when tapping fast), short enough that moving to the next field,
+         * which takes well over a second, is never refused.
+         */
+        private const val CAPTURE_COOLDOWN_MS = 750L
     }
 }
 
@@ -212,8 +253,6 @@ class CaptureViewModel @Inject constructor(
  * @property activeSessionId Room sessionId of the active smear (null when idle).
  * @property activeSessionLabel the smear label entered in the picker, shown in
  *   the top app bar / REC badge area for orientation.
- * @property isBusy true while End Session or a capture is in flight; hides the
- *   action button behind a progress spinner and blocks duplicate taps.
  * @property errorMessage transient error surfaced as a toast, then cleared via
  *   [CaptureViewModel.clearErrorMessage].
  * @property flaggedFrames mirror of [FlaggedFrameStore.state].
@@ -227,7 +266,6 @@ class CaptureViewModel @Inject constructor(
 data class CaptureState(
     val activeSessionId: String? = null,
     val activeSessionLabel: String? = null,
-    val isBusy: Boolean = false,
     val errorMessage: String? = null,
     val flaggedFrames: List<FlaggedFrame> = emptyList(),
     val isConnectionLost: Boolean = false,

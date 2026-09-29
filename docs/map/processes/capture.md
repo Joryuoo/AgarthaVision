@@ -41,17 +41,14 @@ Getting a frame off the microscope and into a state a human can review.
    a frame for the current binding would record the *previous* session's image under this
    session's id (86d4au2n1). Stale and absent share one message — from the medtech's side both
    mean "the camera isn't ready, tap again".
-4. **Infer once, then record whatever the server said.** `CaptureFieldUseCase` calls the
-   injected `InferenceEngine` (bound to the cloud `RemoteInferenceEngine`) a single time — what
-   happens inside is [`infer`](infer.md).
-   Capture source is decided by whether the server was *consulted*, not by what it found: any
-   response — **including zero detections** — builds a `FrameSource.MODEL` frame (JPEG,
-   predictions, model version, image dimensions). A clean field is a normal negative result and
-   must be recorded, not discarded. An `InferenceConnectionException` (container unreachable)
-   builds a `FrameSource.MANUAL` frame with no predictions, so a lost connection is a Manual
-   Capture rather than a silent failure.
+4. **Queue it for a model, and return.** `CaptureFieldUseCase` builds a `FrameSource.MODEL`
+   frame with no predictions and `inference_state = 'queued'`, saves it (step 5), wakes the
+   inference queue, and returns. It waits on no model (14zcqntj6ny). The model output arrives
+   later from the background queue, cloud first with the on-device model as the fallback; what
+   happens there is [`infer`](infer.md). Until it does, the frame's empty prediction list is not
+   a clean field.
    (`domain/usecase/capture/CaptureFieldUseCase.kt`).
-5. **Persist.** A recorded frame (AI Capture or Manual Capture) goes to `FlaggedFrameStore.add`, which runs
+5. **Persist.** The frame goes to `FlaggedFrameStore.add`, which runs
    `PersistFlaggedFrameUseCase`: it writes the JPEG under
    `filesDir/users/{owner}/samples/{sampleId}.jpg` and inserts a `SampleEntity` with
    `status = flagged` (`data/repository/FlaggedFrameStore.kt:77-79`,
@@ -63,14 +60,13 @@ Getting a frame off the microscope and into a state a human can review.
 
 ## One entrance, two outcomes
 
-There is no longer a separate no-model entrance. Every tap runs inference, and whether the
-server was reached decides what is recorded: any server response — zero detections included —
-is an **AI Capture** (`FrameSource.MODEL`); an `InferenceConnectionException` is a **Manual
-Capture** (`FrameSource.MANUAL`). A clean field is recorded like any other AI Capture, since a
-negative result is still a result. The `InferenceConnectionException` the call already throws on
-transport failure *is* the AI-vs-Manual classifier — there is no separate timeout or signal.
-`SubmitVerificationUseCase` handles both sources for turning a recorded frame into a verified
-sample downstream. Aggregating clean fields as an LPF-density denominator is a separate concern
+There is no separate no-model entrance, and the tap no longer decides the outcome. Every tap
+queues the frame for a model. Whatever the queue gets decides what the sample is: any model
+answer, zero detections included, makes it `ready`, an **AI Capture** (`FrameSource.MODEL`). A
+clean field is recorded like any other AI Capture, since a negative result is still a result.
+A cancel, or both engines failing until the retry limit, makes it `manual`, a **Manual Capture**
+(`FrameSource.MANUAL`). Rows captured before version 23 while the container was unreachable
+are manual too. `SubmitVerificationUseCase` handles both, and refuses a sample still pending. Aggregating clean fields as an LPF-density denominator is a separate concern
 (86d4a6jxw).
 
 ## Discarding

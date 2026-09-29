@@ -7,8 +7,13 @@ import com.agarthavision.data.inference.ondevice.ModelStore
 import com.agarthavision.data.inference.ondevice.OnDeviceInferenceEngine
 import com.agarthavision.data.inference.ondevice.OnDeviceModels
 import com.agarthavision.data.inference.ondevice.YoloOutputDecoder
+import com.agarthavision.data.inference.queue.WorkManagerInferenceQueue
 import com.agarthavision.data.remote.InferenceApi
-import com.agarthavision.domain.inference.InferenceEngine
+import com.agarthavision.data.repository.InferenceQueueRepositoryImpl
+import com.agarthavision.domain.inference.CloudCircuitBreaker
+import com.agarthavision.domain.inference.InferenceQueue
+import com.agarthavision.domain.inference.InferenceQueueProcessor
+import com.agarthavision.domain.repository.InferenceQueueRepository
 import com.google.gson.Gson
 import dagger.Binds
 import dagger.Module
@@ -26,15 +31,24 @@ import javax.inject.Singleton
  * Provides the [InferenceApi] backed by Retrofit + OkHttp.
  *
  * The base URL and bearer key come from [BuildConfig], which is populated from
- * `local.properties` at build time. Until DMKuZu's container is live, requests
- * will fail at runtime — which is fine, because `CaptureFieldUseCase` is built
- * around the response *shape*, not against a live server. See ADR-003.
+ * `local.properties` at build time. When the container is not live, requests fail at runtime
+ * and the inference queue falls back to the on-device model. See ADR-003.
  */
 @Module
 @InstallIn(SingletonComponent::class)
 object InferenceModule {
 
-    private const val CONNECT_TIMEOUT_SECONDS = 10L
+    /**
+     * Short, because nobody waits on it any more. Every inference call comes from the background
+     * queue, and an unreachable container is answered by the on-device model; until the circuit
+     * breaker opens, each dead-server frame pays this timeout once before its fallback runs.
+     */
+    private const val CONNECT_TIMEOUT_SECONDS = 5L
+
+    /**
+     * Above the server's own per-request timeout (25 s in `inference/server.py`), so a busy
+     * server answers `503` or `504` itself rather than the phone giving up first.
+     */
     private const val READ_TIMEOUT_SECONDS = 30L
 
     @Provides
@@ -88,10 +102,8 @@ object InferenceModule {
         retrofit.create(InferenceApi::class.java)
 
     /**
-     * The on-device engine, running the precision chosen in [OnDeviceModels.SHIPPED].
-     *
-     * Provided but not yet bound as the app's [InferenceEngine]: routing between the cloud and
-     * this engine belongs to the background inference queue.
+     * The on-device engine, running the precision chosen in [OnDeviceModels.SHIPPED]. The
+     * inference queue's fallback when the cloud cannot be reached.
      */
     @Provides
     @Singleton
@@ -101,15 +113,43 @@ object InferenceModule {
         decoder: YoloOutputDecoder,
     ): OnDeviceInferenceEngine =
         OnDeviceInferenceEngine(modelStore, preprocessor, decoder, OnDeviceModels.SHIPPED)
+
+    /**
+     * The inference queue's consumer: cloud first, this phone as the fallback.
+     *
+     * Built here rather than injected so the two engines are passed by concrete type. Both are
+     * [com.agarthavision.domain.inference.InferenceEngine]s, and naming them here is clearer than
+     * a pair of qualifiers. A singleton, because WorkManager builds a new worker for every pass:
+     * the circuit breaker, the retry schedule and the lock that keeps passes from overlapping
+     * must be the same ones each time.
+     */
+    @Provides
+    @Singleton
+    fun provideInferenceQueueProcessor(
+        repository: InferenceQueueRepository,
+        cloudEngine: RemoteInferenceEngine,
+        deviceEngine: OnDeviceInferenceEngine,
+    ): InferenceQueueProcessor = InferenceQueueProcessor(
+        repository = repository,
+        cloudEngine = cloudEngine,
+        deviceEngine = deviceEngine,
+        circuitBreaker = CloudCircuitBreaker(),
+    )
 }
 
 /**
- * Binds [InferenceEngine] to the cloud backend.
+ * Binds the inference queue and its storage.
+ *
+ * There is no unqualified `InferenceEngine` binding any more. Nothing outside the queue runs
+ * inference, and the queue is handed both engines by type in
+ * [InferenceModule.provideInferenceQueueProcessor].
  */
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class InferenceBindingModule {
     @Binds
-    @Singleton
-    abstract fun bindInferenceEngine(impl: RemoteInferenceEngine): InferenceEngine
+    abstract fun bindInferenceQueue(impl: WorkManagerInferenceQueue): InferenceQueue
+
+    @Binds
+    abstract fun bindInferenceQueueRepository(impl: InferenceQueueRepositoryImpl): InferenceQueueRepository
 }

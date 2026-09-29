@@ -11,6 +11,7 @@ import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.domain.usecase.records.SampleImageSource
+import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
 import com.agarthavision.domain.usecase.verify.Finding
 import com.agarthavision.domain.usecase.verify.SearchSpeciesSuggestionsUseCase
 import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
@@ -64,6 +65,7 @@ class VerificationViewModelTest {
         flaggedFrameStore,
         submitVerificationUseCase,
         searchSpeciesSuggestions,
+        mock<CancelInferenceUseCase>(),
     )
 
     private fun makeFrame(predictions: Int = 2): FlaggedFrame {

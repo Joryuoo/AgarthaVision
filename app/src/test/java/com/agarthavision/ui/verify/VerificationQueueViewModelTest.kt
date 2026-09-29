@@ -1,5 +1,6 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.QueueSample
 import com.agarthavision.domain.usecase.verify.DeleteQueueItemsUseCase
@@ -17,6 +18,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import java.time.Instant
 
@@ -46,12 +48,46 @@ class VerificationQueueViewModelTest {
         deleteQueueItems,
     )
 
-    private fun sample(id: String, source: FrameSource = FrameSource.MODEL) = QueueSample(
+    private fun sample(
+        id: String,
+        source: FrameSource = FrameSource.MODEL,
+        state: InferenceState? = null,
+    ) = QueueSample(
         sampleId = id,
         capturedAt = Instant.EPOCH,
         imagePath = "/tmp/$id.jpg",
         source = source,
-    )
+    ).let { if (state == null) it else it.copy(inferenceState = state) }
+
+    // ── inference state (14zcqntj6p0) ───────────────────────────────────────────────────────
+
+    @Test
+    fun `a row's inference state moves live while the queue is open`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            listOf(InferenceState.QUEUED, InferenceState.IN_INFERENCE, InferenceState.READY).forEach { state ->
+                queue.value = VerificationQueue(samples = listOf(sample("a", state = state)), sessionId = "s1")
+                advanceUntilIdle()
+
+                assertEquals(state, vm.state.value.samples.single().inferenceState)
+            }
+        }
+
+    @Test
+    fun `a row still awaiting inference opens its verification screen like any other`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val vm = viewModel()
+            val pending = sample("a", state = InferenceState.QUEUED)
+            queue.value = VerificationQueue(samples = listOf(pending), sessionId = "s1")
+            whenever(openVerificationTarget.invoke("a"))
+                .thenReturn(Result.failure(IllegalStateException("not the point of this test")))
+            advanceUntilIdle()
+
+            vm.onQueueItemSelected(pending)
+            advanceUntilIdle()
+
+            verify(openVerificationTarget).invoke("a")
+        }
 
     @Test
     fun `the queue is one list, whatever a row's source`() =

@@ -4,12 +4,14 @@ import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.mapper.detectionIdFor
+import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.sync.SyncScheduler
+import com.agarthavision.domain.usecase.inference.InferencePendingException
 import java.time.Instant
 import javax.inject.Inject
 
@@ -49,6 +51,15 @@ class SubmitVerificationUseCase @Inject constructor(
         // sample re-enters getSamplesPendingSync, so SyncPendingDataUseCase pushes the edit
         // when connectivity returns. Without it an offline edit would never reach Supabase.
         val existingSample = sampleDao.getSampleById(sampleId)
+
+        // A frame still waiting on its model output cannot be verified: its empty prediction
+        // list is not a clean field, it is no answer yet (14zcqntj6ny). Checked against both the
+        // frame the medtech saw and the row as it is now. Neither can move from ready or manual
+        // back to pending, so once both say settled, they stay settled for the writes below.
+        if (frame.inferenceState.isPending || existingSample?.effectiveInferenceState()?.isPending == true) {
+            throw InferencePendingException(sampleId)
+        }
+
         val isEdited = existingSample?.isEdited == true ||
             (existingSample != null && existingSample.status != SampleStatus.FLAGGED.value)
 

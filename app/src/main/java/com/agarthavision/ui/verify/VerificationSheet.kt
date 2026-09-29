@@ -68,6 +68,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.request.ImageRequest
 import com.agarthavision.R
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
@@ -165,6 +166,9 @@ fun VerificationSheet(
                 onRemoveReplacementBox = viewModel::onRemoveReplacementBox,
                 onConfirmLeave = viewModel::onConfirmLeave,
                 onDismissLeave = viewModel::onDismissLeave,
+                onCancelInferenceRequested = viewModel::onCancelInferenceRequested,
+                onCancelInferenceConfirmed = viewModel::onCancelInferenceConfirmed,
+                onCancelInferenceDismissed = viewModel::onCancelInferenceDismissed,
             ),
             isEditing = prior != null,
         )
@@ -291,8 +295,14 @@ internal fun VerificationSheetContent(
                     )
 
                     // 3. Model output: what the container said, or that it said nothing, or that it has
-                    //    not answered yet. Always present, never collapsed to two states.
-                    ModelOutputSection(output = frame.modelOutput())
+                    //    not answered yet. Always present, never collapsed to two states. A frame still
+                    //    in the inference queue offers the way out of waiting for it (14zcqntj6p1).
+                    ModelOutputSection(
+                        output = frame.modelOutput(),
+                        onCancelInference = actions.onCancelInferenceRequested
+                            .takeIf { state.isAwaitingInference },
+                        isInferenceRunning = frame.inferenceState == InferenceState.IN_INFERENCE,
+                    )
 
                     // 4. Current detection. Only when there is model output with at least one box -
                     //    every question in here is a question about a box.
@@ -353,6 +363,9 @@ internal fun VerificationSheetContent(
                         findings = state.findings,
                         boxCount = boxCount,
                         actions = actions,
+                        // Locked while the model output is pending: the model pre-fills the
+                        // species, so anything added now would collide with it when it lands.
+                        enabled = !state.isAwaitingInference,
                         expandedIndex = state.expandedFindingIndex,
                         onExpandedCardPositioned = { anchor.card = it },
                         suggestionsFor = { index ->
@@ -377,6 +390,7 @@ internal fun VerificationSheetContent(
                         value = state.userNote,
                         onValueChange = actions.onUserNoteChanged,
                         placeholder = stringResource(R.string.verify_remarks_placeholder),
+                        enabled = !state.isAwaitingInference,
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
 
@@ -436,6 +450,10 @@ internal fun VerificationSheetContent(
                     }
                 },
             )
+        }
+
+        if (state.showCancelInferenceConfirm) {
+            CancelInferenceDialog(actions)
         }
 
         if (state.pendingLeave != null) {
@@ -897,16 +915,51 @@ internal fun CheckQuestion(
     }
 }
 
+/**
+ * "Cancel inference?" (14zcqntj6p1). Cancelling cannot be undone, so it is confirmed, and the
+ * dialog says what is lost: this sample's model output, for good.
+ */
+@Composable
+private fun CancelInferenceDialog(actions: VerificationSheetActions) {
+    AlertDialog(
+        onDismissRequest = actions.onCancelInferenceDismissed,
+        shape = DialogShape,
+        title = { Text(stringResource(R.string.verify_cancel_inference_title)) },
+        text = { Text(stringResource(R.string.verify_cancel_inference_body)) },
+        confirmButton = {
+            TextButton(
+                onClick = actions.onCancelInferenceConfirmed,
+                modifier = Modifier.testTag(VerifyTestTags.CANCEL_INFERENCE_CONFIRM),
+            ) {
+                Text(
+                    stringResource(R.string.verify_cancel_inference_confirm),
+                    color = AgarthaTheme.colors.danger,
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = actions.onCancelInferenceDismissed,
+                modifier = Modifier.testTag(VerifyTestTags.CANCEL_INFERENCE_DISMISS),
+            ) {
+                Text(stringResource(R.string.verify_cancel_inference_dismiss))
+            }
+        },
+    )
+}
+
 @Composable
 private fun NoteField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
             .testTag(VerifyTestTags.NOTE_FIELD),

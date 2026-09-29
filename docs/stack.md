@@ -43,7 +43,9 @@ Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicati
 | EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
 | On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `libs.versions.toml:34` |
 
-**Room is at schema version 16** (`core/database/AgarthaDatabase.kt:105`).
+**Room is at schema version 23** (`core/database/AgarthaDatabase.kt`), reached from 22 by the
+project's first hand-written migration (`core/database/Migrations.kt`). Older installs still fall
+back to a destructive rebuild.
 
 The app-wide Coil `ImageLoader` is configured in `AgarthaVisionApp.newImageLoader()`: disk
 cache fixed at 250MB (matching Coil's own maximum clamp of ~2% of disk space, capped between
@@ -74,6 +76,8 @@ the pure-Kotlin `domain/sync/SyncScheduler` port, enqueued as unique work with a
 constraint and exponential backoff. `androidx.hilt:hilt-work` supplies `@HiltWorker`, and
 WorkManager's default initializer is removed in the manifest so `AgarthaVisionApp`'s
 `Configuration.Provider` can hand it the `HiltWorkerFactory`. See `map/processes/sync.md`.
+The inference queue runs through WorkManager the same way (14zcqntj6ny). See
+`map/processes/infer.md`.
 
 Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrofit converter
 (`core/di/InferenceModule.kt:35`, `:69`), **kotlinx.serialization** for Supabase row shapes

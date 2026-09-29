@@ -5,6 +5,7 @@ import androidx.room.ExperimentalRoomApi
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.agarthavision.core.database.ALL_MIGRATIONS
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
@@ -53,6 +54,9 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
+    // The spread copies ALL_MIGRATIONS once, when the database is first built. Keeping one list
+    // that this and Migration22To23Test both read is worth more than that copy.
+    @Suppress("SpreadOperator")
     @OptIn(ExperimentalRoomApi::class)
     @Provides
     @Singleton
@@ -76,7 +80,13 @@ object DatabaseModule {
                 },
             )
             .setInMemoryTrackingMode(false)
-            // Phase 1 has no production data — destructive migrations are acceptable.
+            // Hand-written migrations first. Room uses one whenever it covers the upgrade, and
+            // falls back to the destructive rebuild below only when none does. From version 23
+            // the local database holds the inference queue, frames that exist nowhere else, so
+            // every bump from 22 onward must ship a migration. See Migrations.kt.
+            .addMigrations(*ALL_MIGRATIONS)
+            // Phase 1 has no production data — destructive migrations are acceptable for any
+            // upgrade that starts below version 22, which no hand-written migration covers.
             //
             // dropAllTables = false, deliberately. On Room 2.7.0 `true` drops every table in
             // the file including Room's own `room_table_modification_log`, and does not
