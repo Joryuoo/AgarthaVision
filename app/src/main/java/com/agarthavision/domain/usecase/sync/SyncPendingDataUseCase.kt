@@ -78,20 +78,44 @@ class SyncPendingDataUseCase @Inject constructor(
             return@runCatching SyncSummary.Skipped
         }
 
+        val failedLogList = mutableListOf<String>()
+
         // Patients first: a session insert fails on sessions.patient_id otherwise. Scoped to
         // this medtech like every other type below — on a shared device an unscoped pass
         // pushed another medtech's offline patients under whoever was signed in.
         val patientsSynced = patientDao.getPatientsPendingSync(userId).count { patient ->
-            syncPatientUseCase(patient.patientId).isSuccess
+            val result = syncPatientUseCase(patient.patientId)
+            result.onFailure { error ->
+                failedLogList.add("[Patient:${patient.patientId}] ${error.message}")
+            }
+            result.isSuccess
         }
         val sessionsSynced = sessionDao.getSessionsPendingSync(userId).count { session ->
-            syncSessionUseCase(session.sessionId).isSuccess
+            val result = syncSessionUseCase(session.sessionId)
+            result.onFailure { error ->
+                failedLogList.add("[Session:${session.sessionId}] ${error.message}")
+            }
+            result.isSuccess
         }
         val samplesSynced = sampleDao.getSamplesPendingSyncIncludingDeleted(userId).count { sample ->
-            syncSampleUseCase(sample.sampleId).isSuccess
+            val result = syncSampleUseCase(sample.sampleId)
+            result.onFailure { error ->
+                failedLogList.add("[Sample:${sample.sampleId}] ${error.message}")
+            }
+            result.isSuccess
         }
         val reportsSynced = reportDao.getReportsPendingSync(userId).count { report ->
-            syncReportUseCase(report.reportId).isSuccess
+            val result = syncReportUseCase(report.reportId)
+            result.onFailure { error ->
+                failedLogList.add("[Report:${report.reportId}] ${error.message}")
+            }
+            result.isSuccess
+        }
+
+        if (failedLogList.isNotEmpty()) {
+            lastSyncStore.recordLastError(userId, failedLogList.first())
+        } else {
+            lastSyncStore.recordLastError(userId, "")
         }
 
         val totalSynced = patientsSynced + sessionsSynced + samplesSynced + reportsSynced

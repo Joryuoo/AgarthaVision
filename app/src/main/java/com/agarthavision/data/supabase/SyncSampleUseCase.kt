@@ -25,6 +25,7 @@ class SyncSampleUseCase @Inject constructor(
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
     private val remoteDataSource: SampleRemoteDataSource,
+    private val syncSessionUseCase: SyncSessionUseCase,
     private val gson: Gson,
 ) {
     /**
@@ -33,15 +34,36 @@ class SyncSampleUseCase @Inject constructor(
      * @return [Result.success] when the sample reaches [SampleStatus.SYNCED], otherwise
      * [Result.failure] after marking the local sample [SampleStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(sampleId: String): Result<Unit> {
         // Including deleted: a tombstoned sample still has to push its tombstone, and reading
         // it through the filtered accessor would make the delete local-only.
         val sample = sampleDao.getSampleByIdIncludingDeleted(sampleId)
-            ?: return Result.failure(IllegalArgumentException("Sample $sampleId does not exist."))
+        if (sample == null) {
+            val errorMsg = "Sample $sampleId does not exist."
+            Log.e(TAG, "[SyncFailed][Sample:$sampleId][Class:MISSING_ENTITY] $errorMsg")
+            return Result.failure(IllegalArgumentException(errorMsg))
+        }
+
+        if (sample.status == SampleStatus.SYNCED.value) {
+            return Result.success(Unit)
+        }
+
         val detections = detectionDao.getDetectionsForSample(sampleId)
         val findings = findingDao.getFindingsForSample(sampleId)
 
         return runCatching {
+            // Ensure parent session (and patient) is synced before pushing sample to avoid FK race
+            if (sample.sessionId.isNotBlank()) {
+                val sessionSyncResult = syncSessionUseCase(sample.sessionId)
+                if (sessionSyncResult.isFailure) {
+                    val cause = sessionSyncResult.exceptionOrNull()
+                    val msg = "Parent session ${sample.sessionId} failed to sync " +
+                        "prior to sample $sampleId"
+                    throw IllegalStateException(msg, cause)
+                }
+            }
+
             val imageBytes = loadAndResizeJpeg(sample)
             // Decoded inside the runCatching: an unreadable column fails this sample's push and
             // marks it sync_failed, loudly, rather than pushing the sample with its model output
@@ -61,8 +83,14 @@ class SyncSampleUseCase @Inject constructor(
                 status = SampleStatus.SYNCED.value,
                 storagePath = storagePath,
             )
-        }.onFailure {
-            Log.e(TAG, "Sync sample failed for $sampleId", it)
+        }.onFailure { throwable ->
+            val failureClass = classifyFailure(throwable)
+            Log.e(
+                TAG,
+                "[SyncFailed][Sample:$sampleId][Session:${sample.sessionId}]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                throwable,
+            )
             sampleDao.updateStatus(sampleId, SampleStatus.SYNC_FAILED.value)
         }
     }
@@ -94,6 +122,28 @@ class SyncSampleUseCase @Inject constructor(
             }
             bitmap.recycle()
             output.toByteArray()
+        }
+    }
+
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.io.FileNotFoundException ||
+                msg.contains("image does not exist", ignoreCase = true) ->
+                "FILE_NOT_FOUND"
+            throwable is IllegalStateException &&
+                msg.contains("Parent session", ignoreCase = true) ->
+                "PARENT_SESSION_SYNC_FAILED"
+            throwable is IllegalStateException &&
+                msg.contains("user session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            throwable is java.net.UnknownHostException ||
+                throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
         }
     }
 

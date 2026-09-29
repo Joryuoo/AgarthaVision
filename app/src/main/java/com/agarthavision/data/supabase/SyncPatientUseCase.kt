@@ -26,16 +26,45 @@ class SyncPatientUseCase @Inject constructor(
      * @return [Result.success] when the row reaches [PatientSyncStatus.SYNCED], otherwise
      * [Result.failure] after marking the local row [PatientSyncStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(patientId: String): Result<Unit> {
         val patient = patientDao.getPatientById(patientId)
-            ?: return Result.failure(IllegalArgumentException("Patient $patientId does not exist."))
+        if (patient == null) {
+            val errorMsg = "Patient $patientId does not exist."
+            Log.e(TAG, "[SyncFailed][Patient:$patientId][Class:MISSING_ENTITY] $errorMsg")
+            return Result.failure(IllegalArgumentException(errorMsg))
+        }
+
+        if (patient.supabaseStatus == PatientSyncStatus.SYNCED.value) {
+            return Result.success(Unit)
+        }
 
         return runCatching {
             remoteDataSource.upsertPatient(patient)
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNCED.value)
-        }.onFailure {
-            Log.e(TAG, "Sync patient failed for $patientId", it)
+        }.onFailure { throwable ->
+            val failureClass = classifyFailure(throwable)
+            Log.e(
+                TAG,
+                "[SyncFailed][Patient:$patientId][Class:$failureClass] " +
+                    "Marking status SYNC_FAILED. Error: ${throwable.message}",
+                throwable,
+            )
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNC_FAILED.value)
+        }
+    }
+
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException || throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException && msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
         }
     }
 

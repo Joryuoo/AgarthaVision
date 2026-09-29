@@ -33,6 +33,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.agarthavision.domain.sync.RecordingSyncScheduler
 
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+
+@RunWith(RobolectricTestRunner::class)
 class GenerateSessionReportUseCaseTest {
     @Test
     fun `generates a csv report, writes only the csv, and persists metadata`() = runTest {

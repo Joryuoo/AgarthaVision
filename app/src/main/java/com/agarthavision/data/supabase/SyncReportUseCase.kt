@@ -30,16 +30,31 @@ class SyncReportUseCase @Inject constructor(
      * otherwise [Result.failure] after marking the local row
      * [ReportSyncStatus.SYNC_FAILED].
      */
+    @Suppress("ReturnCount")
     suspend operator fun invoke(reportId: String): Result<Unit> {
         val report = reportDao.getReportById(reportId)
-            ?: return Result.failure(IllegalArgumentException("Report $reportId does not exist."))
+        if (report == null) {
+            val errorMsg = "Report $reportId does not exist."
+            Log.e(TAG, "[SyncFailed][Report:$reportId][Class:MISSING_ENTITY] $errorMsg")
+            return Result.failure(IllegalArgumentException(errorMsg))
+        }
+
+        if (report.supabaseStatus == ReportSyncStatus.SYNCED.value) {
+            return Result.success(Unit)
+        }
 
         return runCatching {
             uploadFiles(report)
             remoteDataSource.upsertReport(report)
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNCED.value)
-        }.onFailure {
-            Log.e(TAG, "Sync report failed for $reportId", it)
+        }.onFailure { throwable ->
+            val failureClass = classifyFailure(throwable)
+            Log.e(
+                TAG,
+                "[SyncFailed][Report:$reportId][Session:${report.sessionId}]" +
+                    "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
+                throwable,
+            )
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNC_FAILED.value)
         }
     }
@@ -84,6 +99,22 @@ class SyncReportUseCase @Inject constructor(
             ReportRemoteDataSource.objectPathFor(userId, reportId, extension),
             bytes,
         )
+    }
+
+    private fun classifyFailure(throwable: Throwable): String {
+        val msg = throwable.message.orEmpty()
+        return when {
+            throwable is java.net.UnknownHostException ||
+                throwable is java.io.IOException ->
+                "NETWORK_ERROR"
+            throwable is IllegalStateException &&
+                msg.contains("session", ignoreCase = true) ->
+                "UNAUTHENTICATED"
+            msg.contains("foreign key constraint", ignoreCase = true) ->
+                "FOREIGN_KEY_VIOLATION"
+            else ->
+                throwable.javaClass.simpleName.ifBlank { "UNKNOWN_ERROR" }
+        }
     }
 
     private companion object {

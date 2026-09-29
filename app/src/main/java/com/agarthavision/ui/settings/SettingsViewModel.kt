@@ -50,6 +50,7 @@ data class SettingsUiState(
     val initialFetchDone: Boolean = true,
     val lastFetchIncomplete: Boolean = false,
     val lastSyncCompletion: SyncCompletion? = null,
+    val lastSyncError: String? = null,
 ) {
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
@@ -61,6 +62,7 @@ private data class SyncTuple(
     val initialFetchDone: Boolean,
     val fetchIncomplete: Boolean,
     val lastSync: SyncCompletion?,
+    val lastSyncError: String?,
 )
 
 /**
@@ -118,12 +120,23 @@ class SettingsViewModel @Inject constructor(
         identity?.let { lastSyncStore.observe(it.userId) } ?: flowOf(null)
     }
 
+    private val lastSyncErrorFlow = identityFlow.flatMapLatest { identity ->
+        identity?.let { lastSyncStore.observeLastError(it.userId) } ?: flowOf(null)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         identityFlow,
         connectivityObserver.isOnline,
         observeThemeModeUseCase(),
         pendingSyncFlow,
-        combine(isSyncingFlow, initialFetchDoneFlow, lastFetchIncompleteFlow, lastSyncFlow, ::SyncTuple),
+        combine(
+            isSyncingFlow,
+            initialFetchDoneFlow,
+            lastFetchIncompleteFlow,
+            lastSyncFlow,
+            lastSyncErrorFlow,
+            ::SyncTuple,
+        ),
     ) { identity, online, themeMode, pendingSync, tuple ->
         SettingsUiState(
             isLoading = false,
@@ -137,6 +150,7 @@ class SettingsViewModel @Inject constructor(
             initialFetchDone = tuple.initialFetchDone,
             lastFetchIncomplete = tuple.fetchIncomplete,
             lastSyncCompletion = tuple.lastSync,
+            lastSyncError = tuple.lastSyncError,
         )
     }.stateIn(
         scope = viewModelScope,

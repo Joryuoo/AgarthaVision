@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.agarthavision.domain.sync.LastSyncStore
 import com.agarthavision.domain.sync.SyncCompletion
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +36,18 @@ class DataStoreLastSyncStore @Inject constructor(
         dataStore.edit { prefs ->
             prefs[timeKey] = completion.completedAtMillis
             prefs[countKey] = completion.itemsSynced
+        }
+    }
+
+    override fun observeLastError(userId: String): Flow<String?> {
+        val errorKey = stringPreferencesKey("last_sync_error_$userId")
+        return dataStore.data.map { prefs -> prefs[errorKey] }
+    }
+
+    override suspend fun recordLastError(userId: String, error: String) {
+        val errorKey = stringPreferencesKey("last_sync_error_$userId")
+        dataStore.edit { prefs ->
+            prefs[errorKey] = error
         }
     }
 }

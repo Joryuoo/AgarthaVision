@@ -203,6 +203,7 @@ internal data class SyncCardState(
     val initialFetchDone: Boolean = true,
     val isFetching: Boolean = false,
     val lastFetchIncomplete: Boolean = false,
+    val lastSyncError: String? = null,
 )
 
 internal enum class SyncBadge {
@@ -360,6 +361,16 @@ internal fun SyncCard(
                 pendingCount = state.counts.pendingReports,
                 failedCount = state.counts.failedReports,
             )
+
+            if (state.counts.failed > 0 && !state.lastSyncError.isNullOrBlank()) {
+                HorizontalDivider(color = colors.border.copy(alpha = 0.6f))
+                Text(
+                    text = state.lastSyncError,
+                    color = colors.dangerText,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
 
         }
     }
