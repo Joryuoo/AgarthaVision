@@ -9,6 +9,7 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.usecase.inference.CancelInferenceUseCase
 import com.agarthavision.domain.usecase.verify.AddedCardMerge
 import com.agarthavision.domain.usecase.verify.consolidateAddedTwins
 import com.agarthavision.domain.usecase.verify.Finding
@@ -111,7 +112,19 @@ data class VerificationUiState(
     val openedNote: String = userNote,
     /** Where the medtech asked to go while holding unsubmitted edits, awaiting their say-so. */
     val pendingLeave: LeaveIntent? = null,
+    /** True while the "cancel inference?" confirmation is open. */
+    val showCancelInferenceConfirm: Boolean = false,
 ) {
+    /**
+     * True while the frame's model output may still arrive (14zcqntj6p1).
+     *
+     * Read off the frame itself, like [ModelOutput], so there is still one source of truth for
+     * "has a model output". **Annotation is locked while this holds.** The model pre-fills the
+     * species fields, so anything entered before the result lands would collide with it.
+     */
+    val isAwaitingInference: Boolean
+        get() = frame?.inferenceState?.isPending == true
+
     /**
      * True when leaving now would throw away something the medtech entered.
      *
@@ -200,6 +213,8 @@ data class VerificationUiState(
         get() = when {
             isSubmitting -> false
             frame == null -> false
+            // Nothing to verify yet: the empty prediction list is no answer, not a clean field.
+            isAwaitingInference -> false
             else -> {
                 val consolidated = findings.consolidateAddedTwins()
                 findings.all { it.isComplete } && consolidated.totalsAreConsistent()
@@ -302,6 +317,7 @@ class VerificationViewModel @Inject constructor(
     private val flaggedFrameStore: FlaggedFrameStore,
     private val submitVerificationUseCase: SubmitVerificationUseCase,
     private val searchSpeciesSuggestions: SearchSpeciesSuggestionsUseCase,
+    private val cancelInference: CancelInferenceUseCase,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(VerificationUiState())
@@ -319,6 +335,7 @@ class VerificationViewModel @Inject constructor(
         viewModelScope.launch {
             flaggedFrameStore.state.collect { frames ->
                 val cycle = frames
+                refreshIfInferenceMoved(frames)
                 val frame = currentFrame
                 _state.update { current ->
                     current.copy(
@@ -391,6 +408,7 @@ class VerificationViewModel @Inject constructor(
                 openedNote = note,
                 pendingLeave = null,
                 expandedFindingIndex = null,
+                showCancelInferenceConfirm = false,
             )
         }
     }
@@ -400,6 +418,7 @@ class VerificationViewModel @Inject constructor(
      * on submit and surfaced in SampleDetail (Track 2.14). Per ADR-005.
      */
     fun onUserNoteChanged(text: String) {
+        if (_state.value.isAwaitingInference) return
         _state.update { it.copy(userNote = text) }
     }
 
@@ -619,6 +638,9 @@ class VerificationViewModel @Inject constructor(
      * (`0007_detection_bbox_nullable.sql`), and drawing one is optional (PB-14).
      */
     fun onAddSpecies() {
+        // The screen disables the button while the model output is pending; this holds the line
+        // for any other caller.
+        if (_state.value.isAwaitingInference) return
         val unfinished = _state.value.firstUnfinishedAddedIndex()
         if (unfinished != null) {
             _state.update { it.copy(expandedFindingIndex = unfinished) }
@@ -888,6 +910,83 @@ class VerificationViewModel @Inject constructor(
         return if (idx < 0 || step == 0) null else frames.getOrNull(idx + step)
     }
 
+    /**
+     * Swaps in the stored version of the open frame when its model output has moved on: the
+     * result landed, or the queue gave up on it (14zcqntj6p1). The section updates in place, and
+     * the medtech does not have to leave and come back.
+     *
+     * **Only while the open frame is pending.** Annotation is locked until then, so re-seeding
+     * the findings from the new frame loses nothing the medtech entered. Once the frame is ready
+     * or manual, the medtech's answers are the state, and a re-emission must never overwrite them.
+     */
+    private fun refreshIfInferenceMoved(frames: List<FlaggedFrame>) {
+        val open = currentFrame?.takeIf { it.inferenceState.isPending } ?: return
+        val stored = frames.firstOrNull { it.sampleId == open.sampleId } ?: return
+        if (stored != open) reseed(stored)
+    }
+
+    /** Re-opens [frame] in place: fresh findings from its own shape, image source and note kept. */
+    private fun reseed(frame: FlaggedFrame) {
+        currentFrame = frame
+        val findings = frame.initialFindings()
+        _state.update {
+            it.copy(
+                frame = frame,
+                currentDetectionIndex = 0,
+                findings = findings,
+                openedFindings = findings,
+                openedNote = it.userNote,
+                drawTarget = null,
+                expandedFindingIndex = null,
+                showCancelInferenceConfirm = false,
+            )
+        }
+    }
+
+    /** Asks before cancelling: it cannot be undone. */
+    fun onCancelInferenceRequested() {
+        if (!_state.value.isAwaitingInference) return
+        _state.update { it.copy(showCancelInferenceConfirm = true) }
+    }
+
+    /** Keep waiting. The sample stays pending. */
+    fun onCancelInferenceDismissed() {
+        _state.update { it.copy(showCancelInferenceConfirm = false) }
+    }
+
+    /**
+     * Gives up on the model output for good and switches the sample to manual verification.
+     *
+     * The write is atomic and final (`CancelInferenceUseCase`): a result that lands afterwards
+     * is refused, so this sample never gets a model output. When the result beat the tap, there
+     * is nothing to cancel, and the store re-emission shows the result instead.
+     */
+    fun onCancelInferenceConfirmed() {
+        val frame = currentFrame?.takeIf { it.inferenceState.isPending } ?: return
+        _state.update { it.copy(showCancelInferenceConfirm = false) }
+        viewModelScope.launch {
+            cancelInference(frame.sampleId).fold(
+                onSuccess = { cancelled ->
+                    // Guarded again: the result may have landed and been shown while this ran.
+                    if (cancelled && currentFrame?.sampleId == frame.sampleId &&
+                        currentFrame?.inferenceState?.isPending == true
+                    ) {
+                        reseed(
+                            frame.copy(
+                                source = FrameSource.MANUAL,
+                                inferenceState = InferenceState.MANUAL,
+                                inferenceModelVersion = MANUAL_MODEL_VERSION,
+                            ),
+                        )
+                    }
+                },
+                onFailure = { throwable ->
+                    _state.update { it.copy(errorMessage = throwable.message) }
+                },
+            )
+        }
+    }
+
     fun onDeleteFrame() {
         val frames = cycleFrames()
         val current = currentFrame ?: return
@@ -1089,6 +1188,9 @@ class VerificationViewModel @Inject constructor(
     private companion object {
         /** [VerificationUiState.frameIndexInQueue] when the open frame left the cycle. */
         const val OUT_OF_CYCLE = 0
+
+        /** What `samples.inference_model_version` holds for a cancelled sample. */
+        const val MANUAL_MODEL_VERSION = "manual"
 
         /**
          * How long typing has to pause before the suggestion index is queried.

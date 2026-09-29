@@ -32,7 +32,9 @@ internal sealed interface ModelOutput {
     data object InProgress : ModelOutput
 
     /**
-     * The container was unreachable, so nothing was ever asked of the model.
+     * There is no model output and there never will be: the medtech cancelled inference, both
+     * engines kept failing until the queue gave up, or the frame predates the queue and the
+     * container was unreachable.
      *
      * Not a failure and not an empty result — the field was still captured, and the medtech can
      * still verify it in full by adding the eggs they see. See [FrameSource.MANUAL].

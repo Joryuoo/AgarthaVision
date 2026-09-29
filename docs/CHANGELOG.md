@@ -9,6 +9,33 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/verify-pending-inference — a pending sample says so, and the medtech can stop waiting · 2026-09-27
+
+`14zcqntj6p1`.
+
+- **Pending is visible.** While a sample waits on inference, its Model Output section shows a
+  spinner and "Queued for inference", or "Frame is in inference" once it is the frame being
+  run: the same split as the queue's badge. Read off the frame's own `InferenceState`. There is no
+  second flag. `isResolving` keeps its own meaning (a frame still being fetched), because
+  merging the two would conflate a frame with no model output yet and a frame with no image
+  yet.
+- **Annotation is locked meanwhile.** Add species, remarks and Submit are disabled, and the view
+  model ignores those inputs too. The model pre-fills the species, so anything entered before
+  it lands would collide with it.
+- **Cancel inference, confirmed.** The dialog says the sample will never get a model output.
+  Confirming calls `CancelInferenceUseCase`, the frame switches to manual in place, and it can
+  be annotated at once. Dismissing leaves it pending. When the result beats the tap, there is
+  nothing to cancel and the result shows.
+- **The result updates in place.** When the store re-emits the open frame with its output,
+  the section, the boxes and the pre-filled answers appear without leaving the screen. This
+  only happens while the frame is pending, so a medtech's answers are never overwritten.
+- **#78 still holds.** Nothing can be edited while pending, so leaving never asks then.
+  Cancelling is not an edit. Edits after a cancel are guarded as usual.
+- The "no model output" copy now covers a cancelled frame and one the queue gave up on, not
+  only an unreachable server.
+
+---
+
 ## feat/queue-inference-badges — every queue row says where its model output is · 2026-09-27
 
 `14zcqntj6p0`.
