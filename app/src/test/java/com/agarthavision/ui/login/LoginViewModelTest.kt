@@ -60,10 +60,14 @@ class LoginViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val viewModel = viewModel()
 
-            viewModel.onEmailChanged("not-an-email")
-            viewModel.onPasswordChanged("password123")
-            viewModel.onSubmit()
-            advanceUntilIdle()
+            viewModel.events.test {
+                viewModel.onEmailChanged("not-an-email")
+                viewModel.onPasswordChanged("password123")
+                viewModel.onSubmit()
+                advanceUntilIdle()
+
+                assertEquals(LoginEvent.ShowLoginError("Enter a valid email address."), awaitItem())
+            }
 
             assertTrue(viewModel.state.value.emailError)
             assertFalse(viewModel.state.value.passwordError)
@@ -75,10 +79,14 @@ class LoginViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val viewModel = viewModel()
 
-            viewModel.onEmailChanged("user@example.com")
-            viewModel.onPasswordChanged("")
-            viewModel.onSubmit()
-            advanceUntilIdle()
+            viewModel.events.test {
+                viewModel.onEmailChanged("user@example.com")
+                viewModel.onPasswordChanged("")
+                viewModel.onSubmit()
+                advanceUntilIdle()
+
+                assertEquals(LoginEvent.ShowLoginError("Password is required."), awaitItem())
+            }
 
             assertTrue(viewModel.state.value.passwordError)
             verify(signInUseCase, never()).invoke(any(), any())

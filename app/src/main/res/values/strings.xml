@@ -8,7 +8,7 @@
     <string name="login_email_placeholder">m.santos@laguna-rhu.ph</string>
     <string name="login_email_error">Enter a valid email address.</string>
     <string name="login_password_label">Password</string>
-    <string name="login_password_placeholder">..........</string>
+    <string name="login_password_placeholder">Password</string>
     <string name="login_password_error">Password is required.</string>
     <string name="login_forgot_password">Forgot?</string>
     <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
