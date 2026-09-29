@@ -106,16 +106,27 @@ class LoginViewModel @Inject constructor(
 
         val email = snapshot.email.trim()
         val password = snapshot.password
-        val emailIsValid = EMAIL_PATTERN.matches(email)
-        val passwordIsValid = password.isNotBlank()
+        val emailIsBlank = email.isBlank()
+        val passwordIsBlank = password.isBlank()
+        val emailIsValid = !emailIsBlank && EMAIL_PATTERN.matches(email)
+        val passwordIsValid = !passwordIsBlank
 
         if (!emailIsValid || !passwordIsValid) {
+            val errorMessage = when {
+                emailIsBlank && passwordIsBlank -> "Email and password are required."
+                emailIsBlank -> "Email is required."
+                !emailIsValid -> "Enter a valid email address."
+                else -> "Password is required."
+            }
             _state.update {
                 it.copy(
                     email = email,
                     emailError = !emailIsValid,
                     passwordError = !passwordIsValid,
                 )
+            }
+            viewModelScope.launch {
+                _events.emit(LoginEvent.ShowLoginError(errorMessage))
             }
             return
         }

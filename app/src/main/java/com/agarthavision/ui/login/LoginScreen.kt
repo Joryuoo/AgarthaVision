@@ -257,10 +257,10 @@ private fun LoginForm(
         modifier = modifier.fillMaxWidth(),
     ) {
         LoginInputGroup(
-            label = "Email",
+            label = stringResource(R.string.login_email_label),
             value = state.email,
             onValueChange = actions.onEmailChanged,
-            placeholder = "you@hospital.org",
+            placeholder = stringResource(R.string.login_email_placeholder),
             config = LoginFieldConfig(
                 isError = state.emailError,
                 errorText = emailErrorText,
@@ -274,10 +274,10 @@ private fun LoginForm(
         Spacer(modifier = Modifier.height(14.dp))
 
         LoginInputGroup(
-            label = "Password",
+            label = stringResource(R.string.login_password_label),
             value = state.password,
             onValueChange = actions.onPasswordChanged,
-            placeholder = "••••••••••",
+            placeholder = stringResource(R.string.login_password_placeholder),
             config = LoginFieldConfig(
                 isError = state.passwordError,
                 errorText = passwordErrorText,
