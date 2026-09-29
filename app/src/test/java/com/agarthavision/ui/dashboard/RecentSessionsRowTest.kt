@@ -260,4 +260,28 @@ class RecentSessionsRowTest {
         composeRule.onNodeWithText("Smear 1").assertIsDisplayed()
         composeRule.onNodeWithText("Smear 2").assertIsDisplayed()
     }
+
+    @Test
+    fun `long session identifier does not wrap to second line`() {
+        val longLabel = "N.J.-0731300014-001"
+        whenever(sessionManager.state).thenReturn(MutableStateFlow(SessionState.Idle))
+        whenever(observeSessionListUseCase(any(), anyOrNull(), any())).thenReturn(
+            flowOf(
+                SessionListResult(
+                    listOf(sampleSummary("s-long", longLabel)),
+                    1,
+                ),
+            ),
+        )
+
+        val vm = createViewModel()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                DashboardScreen(viewModel = vm)
+            }
+        }
+
+        composeRule.onNodeWithTag("recentSessionCard_s-long").assertIsDisplayed()
+        composeRule.onNodeWithText(longLabel).assertIsDisplayed()
+    }
 }

@@ -93,6 +93,7 @@ internal fun RecentSessionCard(
                 color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 20.sp,
             )
@@ -104,6 +105,7 @@ internal fun RecentSessionCard(
                 color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
                 lineHeight = 17.sp,
             )
             Spacer(Modifier.height(3.dp))
@@ -114,6 +116,7 @@ internal fun RecentSessionCard(
                 color = colors.textSecondary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
                 style = TextStyle(fontFeatureSettings = "tnum"),
                 lineHeight = 16.sp,
             )
