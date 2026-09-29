@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt
+---
+
 # Sample
 
 **One sentence.** One microscope frame that a human has looked at — a captured JPEG plus its
@@ -11,9 +19,9 @@ capture so any finding can be traced back to a slide, a patient encounter, and a
 species and no count — those are children, because one frame can hold several eggs and the
 medtech may disagree with the model about each one independently.
 
-**This is where Room and Postgres diverge most.** Room stores the pre-verification state and
-several workflow-only flags that were deliberately never given remote columns; Postgres stores
-only what a verified, uploaded sample looks like.
+**This is where Room and Postgres diverge most.** Room stores the pre-verification state, the
+inference queue, and several workflow-only flags that were deliberately never given remote
+columns; Postgres stores only what a verified, uploaded sample looks like.
 
 ## Shape
 
@@ -33,45 +41,56 @@ only what a verified, uploaded sample looks like.
 | `is_manual` | NOT NULL default false |
 | `deleted_at` | nullable timestamptz. Null means live. See *the tombstone* below |
 
-*Deliberately absent:* `gps_latitude`, `gps_longitude`, `gps_accuracy` were removed (`0001_init.sql:205-208`).
+*Deliberately absent:* `gps_latitude`, `gps_longitude`, `gps_accuracy` (`0001_init.sql:205-208`).
 The fix recorded where the smear was read (the lab), not where the patient lives. Geospatial mapping
 keys on `patients.psgc_barangay_code`.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt:45-135`), schema v16
+**Room** (`SampleEntity`, schema v23). PK column is `sample_id`. Foreign key to `SessionEntity`
+with `onDelete = ForeignKey.NO_ACTION` per C8. Room-only or Room-different fields, each a
+property of `SampleEntity`:
 
-PK column is `sample_id`. Foreign key to `SessionEntity` with `onDelete = ForeignKey.NO_ACTION` per C8.
-Room-only or Room-different:
-
-| Field | Note | Line |
-|---|---|---|
-| `user_id` | **nullable** — unowned until claimed at login | `SampleEntity.kt:60` |
-| `device_id` | Room-only. Postgres keeps device ownership on `sessions.device_id` | `SampleEntity.kt:63` |
-| `timestamp` | Room's name for the capture instant; epoch millis. Maps to `captured_at` | `SampleEntity.kt:66` |
-| `image_path` | Room-only. The on-device file. Postgres has no such column | `SampleEntity.kt:72` |
-| `storage_path` | **nullable** in Room until upload succeeds; NOT NULL remotely | `SampleEntity.kt:75` |
-| `status` | **Room/domain only.** `flagged`/`verified`/`synced`/`sync_failed`. No Postgres column exists | `SampleEntity.kt:89`, `domain/model/SampleStatus.kt:13-18` |
-| `predictions_json` | Room-only form of the model's output — the local store of [`Prediction`](Prediction.md). Kept through verification; pushed as `predictions` rows and restored from them on pull. A pull never overwrites it with null | `SampleEntity.kt:110`, `data/local/dao/SampleDao.kt:83` |
-| `image_width` / `image_height` | Room-only, from the inference response | `SampleEntity.kt:113-116` |
-| `deleted_at` | Epoch millis, **synced**. Null means live | `SampleEntity.kt:134`, `supabase/migrations/0001_init.sql:202` |
+| Field | Note |
+|---|---|
+| `user_id` | **nullable** in Room, a leftover of the removed claim-at-login flow. Every new row gets an owner at capture (`PersistFlaggedFrameUseCase::invoke`) |
+| `device_id` | Room-only. Postgres keeps device ownership on `sessions.device_id` |
+| `timestamp` | Room's name for the capture instant; epoch millis. Maps to `captured_at` |
+| `image_path` | Room-only. The on-device file. Postgres has no such column |
+| `storage_path` | **nullable** in Room until upload succeeds; NOT NULL remotely |
+| `status` | **Room/domain only.** `flagged`/`verified`/`synced`/`sync_failed` (`domain/model/SampleStatus.kt`). No Postgres column |
+| `predictions_json` | Room-only form of the model's output — the local store of [`Prediction`](Prediction.md). Kept through verification; pushed as `predictions` rows and restored from them on pull. A pull never overwrites it with null (`SampleDao::updatePredictionsJson`) |
+| `image_width` / `image_height` | Room-only, from the inference response |
+| `is_edited` | Room-only. Set when findings change after verification; drives the "edited" mark on Session Detail and Sample Detail |
+| `inference_state` | Room-only. `queued` / `in_inference` / `ready` / `manual`. **Read it through `SampleMapper.kt::effectiveInferenceState`**, never raw: `is_manual` wins, because rows from before v23 and rows pulled from Supabase carry the `ready` default. See [`infer`](../processes/infer.md) |
+| `inference_attempts` | Room-only. Failed passes of both engines; at the queue's limit the frame becomes manual. On the row so a crash loop cannot reset it |
+| `deleted_at` | Epoch millis. Null means live. Pulled from Supabase; **not pushed** — see below |
 
 **The tombstone.** A verified sample is never hard-deleted — C8, and `detections` doubles as the
 retraining corpus. But a medtech who captured the same egg twice needs the duplicate gone from
 the queue, the counts and the report. `deleted_at` does exactly that and nothing more: the
-detections stay, the findings rows stay, the local JPEG stays, the Storage object stays, and
-`0003_storage_rls.sql:45-46` still creates no DELETE policy. Unverified frames are different —
-they are hard-deleted on-device, which is C8's existing local exception.
+detections stay, the findings rows stay, the local JPEG stays, the Storage object stays, and the
+bucket still has no DELETE policy (`0001_init.sql:538-540`). Unverified frames are different —
+they are hard-deleted on-device, which is C8's existing local exception
+(`DeleteQueueItemsUseCase` decides which of the two a delete is).
+
+**Drift, code wins: the tombstone is local-only today.** `SyncSampleUseCase::invoke` reads the
+sample *including deleted* so that "a tombstoned sample still has to push its tombstone", but
+`SampleRemoteDataSource.kt::SampleInsertRow` has no `deleted_at` field, so the upsert never
+carries it. A tombstoned sample disappears on the device that tombstoned it and stays live in
+Postgres and on every other device. A pull does honour a remote `deleted_at`
+(`SampleRemoteDataSource.kt::SampleRow`).
 
 **The rule this creates.** *Every* query that lists or counts samples must filter
 `deleted_at is null`. Miss one and a deleted duplicate reappears in a report. This is enforced
 by a naming rule plus `SoftDeleteGuardTest`: a DAO method that SELECTs over `samples` must carry
-the predicate unless its name ends in `IncludingDeleted`. Exactly two methods are exempt, and
-each announces it at every call site. The stronger form — a `@DatabaseView` over live rows, with
-every list query reading the view — is the intended end state; it was deferred because it
-changes DAO return types and ripples into `SampleMapper` and every `@Embedded` projection.
+the predicate unless its name ends in `IncludingDeleted`. The stronger form — a `@DatabaseView`
+over live rows, with every list query reading the view — is the intended end state; it was
+deferred because it changes DAO return types and ripples into `SampleMapper` and every
+`@Embedded` projection.
 
 The insert row is the definitive list of what actually crosses the wire —
-`data/supabase/SampleRemoteDataSource.kt:114-131`. `image_path`, `status`, `device_id`, and the
-prediction cache are all absent from it.
+`data/supabase/SampleRemoteDataSource.kt::SampleInsertRow`. `image_path`, `status`, `device_id`,
+`is_edited`, the inference queue columns, the prediction cache and `deleted_at` are all absent
+from it.
 
 `schema.ts` documents both the Postgres schema and the Room-only extensions.
 
@@ -79,7 +98,7 @@ prediction cache are all absent from it.
 
 - **Owned by** [`Session`](Session.md) and, remotely, [`Profile`](Profile.md).
 - **Owns** [`Prediction`](Prediction.md), 1 → many, CASCADE
-  (`supabase/migrations/0004_predictions.sql`). Only a model frame has any.
+  (`supabase/migrations/0004_predictions.sql:43`). Only a model frame has any.
 - **Owns** [`Detection`](Detection.md), 1 → many, CASCADE
   (`supabase/migrations/0001_init.sql:226`). Zero detections is legal.
 - **Owns** [`Finding`](Finding.md), 1 → many, CASCADE
@@ -88,46 +107,47 @@ prediction cache are all absent from it.
 - **Points at** [`StorageObject`](StorageObject.md), 1 → 0..1, via `storage_path`. Local-only
   samples have none.
 - **Looks like but is not** `FlaggedFrame` (`domain/model/FlaggedFrame.kt`). That is the
-  in-flight capture object carrying raw JPEG bytes and prediction DTOs. It is reconstructed
-  *from* a flagged `SampleEntity` (`data/repository/FlaggedFrameStore.kt:101-119`), not stored
-  as one.
+  in-flight capture object carrying raw JPEG bytes and predictions. It is reconstructed
+  *from* a flagged `SampleEntity` (`FlaggedFrameStore.kt::toFlaggedFrame`), not stored as one.
 
 ## If you change this
 
 **Hits**
 - `SyncSampleUseCase` and the insert row — anything that must reach Postgres has to be added
-  to `SampleInsertRow` or it is silently dropped
-  (`data/supabase/SyncSampleUseCase.kt:29-49`, `data/supabase/SampleRemoteDataSource.kt:114-131`).
+  to `SampleInsertRow` or it is silently dropped (`SampleRemoteDataSource.kt::toInsertRow`).
 - Every `SampleDao` query filtering `status != 'flagged'`. The flagged/verified split is
-  enforced in query text, not by a type — `data/local/dao/SampleDao.kt:83`, `:112`, `:120`,
-  `:144`, `:163`.
+  enforced in query text, not by a type — `grep -n "status != 'flagged'"` over `SampleDao.kt`
+  lists them.
+- The inference queue's `SampleDao` methods (`requeueInterruptedInference` through
+  `cancelInference`). Each transition is a conditional UPDATE, so a new state or column has to
+  keep every WHERE clause honest.
 - The confirmed detections count, which joins samples
-  (`data/local/dao/DetectionDao.kt:33-52`).
-- The Patients list Recent sort (`PatientDao.observePatients`), which reads `samples.timestamp`
+  (`DetectionDao.kt::getConfirmedEggCountsForSession`).
+- The Patients list Recent sort (`PatientDao::observePatients`), which reads `samples.timestamp`
   and `samples.verified_at` (filtering `deleted_at IS NULL`) to sort active patients to the top.
-- The report generation pipeline (`domain/usecase/reports/GenerateSessionReportUseCase.kt`
-  and `domain/usecase/reports/PdfReportGenerator.kt`).
-- The Room database version (`core/database/AgarthaDatabase.kt:46`) — and remember the
-  destructive-migration fallback wipes the device.
+- The report pipeline (`domain/usecase/records/GenerateSessionReportUseCase.kt`,
+  `domain/usecase/records/ReportPdfBuilder.kt`).
+- The Room database version (`core/database/AgarthaDatabase.kt`) and a hand-written
+  `Migration` in `core/database/Migrations.kt` — see [effects](../effects/CONTEXT.md).
 
 **Does not hit**
 - The Storage object path. Changing `storage_path` in Room does **not** move or rename the
-  file. The path is recomputed server-side at upload from the live auth user id and the sample
-  id (`data/supabase/SampleRemoteDataSource.kt:33-35`), and the RLS policy validates the first
-  folder segment against `auth.uid()` (`supabase/migrations/0001_init.sql:357-362`).
-  Editing the column just desynchronises the pointer from the object.
+  file. The path is recomputed at upload from the live auth user id and the sample id
+  (`SampleRemoteDataSource.kt::syncSample`), and the RLS policy validates the first folder
+  segment against `auth.uid()` (`supabase/migrations/0001_init.sql:506-511`). Editing the
+  column just desynchronises the pointer from the object.
 - Detection bounding boxes. They are stored per-detection in source-image pixels and are not
   rescaled if you change the sample's `image_width` / `image_height`.
 
 ## Surfaces
 
-Written by `PersistFlaggedFrameUseCase` (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:38-60`),
-updated by `SubmitVerificationUseCase`, and by
-`SyncSampleUseCase` on upload. Read by the verification queue, Patients, Session Detail, Sample
-Detail, confirmed detections count, and the PDF report generator.
+Written by `PersistFlaggedFrameUseCase` at capture, moved through the inference queue by
+`InferenceQueueRepositoryImpl`, updated by `SubmitVerificationUseCase`, tombstoned by
+`DeleteQueueItemsUseCase`, and marked synced by `SyncSampleUseCase`. Read by the verification
+queue, Patients, Session Detail, Sample Detail, Home, the confirmed detections count, and the
+PDF report.
 
 ## See
 
-`supabase/migrations/0001_init.sql:181-203`,
-`app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt`,
-`data/supabase/SampleRemoteDataSource.kt:114-131`, `schema.ts` (`Sample`).
+`supabase/migrations/0001_init.sql:181-203`, `data/local/entity/SampleEntity.kt`,
+`data/supabase/SampleRemoteDataSource.kt::SampleInsertRow`, `schema.ts` (`Sample`).

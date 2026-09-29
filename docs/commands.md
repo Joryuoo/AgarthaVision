@@ -8,12 +8,12 @@ two tables fails.
 
 ## Bun scripts
 
-All defined in `package.json:5-19`.
+All defined in `package.json` `scripts`.
 
 | Command | Runs | Purpose |
 |---|---|---|
 | `bun run build` | `./gradlew assembleDebug` | Build the debug APK |
-| `bun run build:release` | `./gradlew assembleRelease` | Build the release APK (unminified — `app/build.gradle.kts:71`) |
+| `bun run build:release` | `./gradlew assembleRelease` | Build the release APK (unminified — `isMinifyEnabled = false` in `app/build.gradle.kts` `buildTypes`) |
 | `bun run compile` | `./gradlew :app:compileDebugKotlin` | Kotlin compile only; fastest sanity check |
 | `bun run test` | `./gradlew testDebugUnitTest` | JVM unit tests |
 | `bun run test:all` | `./gradlew :app:test` | Unit tests across all variants |
@@ -36,28 +36,36 @@ All defined in `package.json:5-19`.
 | `./gradlew :app:verifyRoborazziDebug` | Run unit tests and compare Roborazzi screenshot goldens |
 | `./gradlew :app:recordRoborazziDebug` | Re-record Roborazzi screenshot goldens when UI changes are intentional |
 | `./gradlew :app:ktlintCheck :app:detekt` | Lint the app module — the exact pair the pre-commit hook runs |
-| `./gradlew :app:connectedAndroidTest` | Instrumented tests. Needs a device or emulator. `androidTest/` currently holds only the generated stub |
+| `./gradlew :app:connectedDebugAndroidTest` | Instrumented tests (`app/src/androidTest/`: the generated stub and `OnDeviceInferenceParityTest`). **Emulator or spare device only** — see below |
 | `./gradlew tasks` | Enumerate what is actually available in this build |
 
 On Windows PowerShell use `.\gradlew.bat …` when the shell does not resolve `./gradlew`.
 
 ### Compose UI tests run on the JVM, not a device
 
-`:app:testDebugUnitTest` covers both plain unit tests and the Compose UI tests for the
-verification sheets (`app/src/test/java/com/agarthavision/ui/verify/`). Those render under
-Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts:100-104`),
+`:app:testDebugUnitTest` covers both plain unit tests and the Compose UI tests under
+`app/src/test/java/com/agarthavision/ui/` (verify, capture, records, dashboard and others). Those render under
+Robolectric with `testOptions.unitTests.isIncludeAndroidResources` (`app/build.gradle.kts` `testOptions`),
 so screen-level behaviour is gated by the pre-commit hook without an emulator. Run one suite
 with `./gradlew :app:testDebugUnitTest --tests "com.agarthavision.ui.verify.*"`.
 
-One interaction cannot be tested this way and needs `connectedAndroidTest` instead: the inside
+One interaction cannot be tested this way and needs an instrumented test instead: the inside
 of the species dropdown in `VerificationSheet`. It puts a text field inside a popup window,
 which never reaches idle under Robolectric — a lookup after it opens spins until the Espresso
 timeout. The suite documents this in its header. (There were two until 86d4ab4tq deleted
 `ManualSheet` and its bespoke custom-species dialog; the merged screen uses the dropdown for
 both sources.)
 
-`ktlint` and `detekt` are applied at both the root project (`build.gradle.kts:7-8`) and `:app`
-(`app/build.gradle.kts:9-10`), so the unqualified `ktlintCheck` / `detekt` used by
+### Never run instrumented tests on a phone that holds real samples
+
+`connectedAndroidTest` / `connectedDebugAndroidTest` install the app, run the suite, then
+**uninstall the app**. Uninstalling deletes its Room database and its JPEGs, so every sample not
+yet synced is gone — including frames still waiting in the inference queue, which exist nowhere
+else. Run them on an emulator or a device kept for testing. Listed in
+[`non-negotiables.md`](non-negotiables.md).
+
+`ktlint` and `detekt` are applied at both the root project and `:app` (the `plugins {}` block of `build.gradle.kts` and of
+`app/build.gradle.kts`), so the unqualified `ktlintCheck` / `detekt` used by
 `bun run lint` and the `:app:`-qualified form used by the hook are not identical invocations.
 When in doubt, run the `:app:`-qualified pair — that is the one gating commits.
 
@@ -70,9 +78,8 @@ Installed by Husky into `.git/hooks` via `bun run prepare`.
 | `pre-commit` | `:app:compileDebugKotlin` → `:app:verifyRoborazziDebug` → `assembleDebug` → `:app:ktlintCheck :app:detekt`, aborting on the first failure | `.husky/pre-commit` |
 | `commit-msg` | Validates subject format `[type][ClickUp-ID][Lastname]: Task title` against C9 | `.husky/commit-msg` |
 | `pre-push` | `assembleDebug` | `.husky/pre-push` |
-| `commit-msg` | Validates commit message subject against `[type][ClickUp-ID][Lastname]: Task title` | `.husky/commit-msg` |
 
-Both auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
+`pre-commit` and `pre-push` auto-detect `JAVA_HOME`, falling back to the Android Studio JBR path on Windows.
 
 `verifyRoborazziDebug` stands in for `:app:testDebugUnitTest` in the hook rather than being an
 extra step: it runs the same suite with pixel comparison switched on, so a separate unit-test
@@ -104,10 +111,10 @@ docker build -t agartha-inference inference/
 docker run -p 8000:8000 -e INFERENCE_API_KEY=<secret> agartha-inference
 ```
 
-Environment it reads: `INFERENCE_API_KEY` (required), `WEIGHTS_PATH`
-(default `weights/yolo26n-efficientnetv2b0.pt`), `MODEL_VERSION` (default `yolo26n-effv2b0-v1-cloud-fp32`) —
-`inference/server.py:9-11`. Check it with `GET /health`; it returns 200 once the model has
-loaded (`inference/server.py:29-31`).
+`INFERENCE_API_KEY` is required; everything else it reads (weights path, model version, queue
+and batching limits, GPUs) is in the environment table of `inference/README.md`. Check it with
+`GET /health`, which answers once the model has loaded and stays prompt during inference
+(`inference/server.py::health`). Server tests: `inference/README.md`, "Tests".
 
 GPU droplets bill by the second. **Destroy the droplet after every test or demo.**
 

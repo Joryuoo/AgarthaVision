@@ -1,6 +1,14 @@
+---
+type: process
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+---
+
 # sync
 
-Pushing local rows to Supabase. Foreground, trigger-based, best-effort.
+Pushing local rows to Supabase, and pulling them back. Trigger-based, run by WorkManager,
+best-effort.
 
 **Input** — local rows and a live Supabase session.
 **Output** — remote rows, a Storage object per sample, and updated local sync state.
@@ -14,26 +22,35 @@ Pushing local rows to Supabase. Foreground, trigger-based, best-effort.
 
 Runs inline at the end of [`validate`](validate.md).
 
-1. **Load** the sample and its detections from Room
-   (`data/supabase/SyncSampleUseCase.kt:30-32`). A missing sample fails immediately.
-2. **Resize** the JPEG to 640×640 at quality 80, skipping the work if it is already that size
-   (`data/supabase/SyncSampleUseCase.kt:58-83`).
-3. **Require auth.** `SampleRemoteDataSource` throws if there is no live Supabase session — the
-   cached identity is not sufficient here (`data/supabase/SampleRemoteDataSource.kt:33-34`).
-4. **Upload** to `samples/{auth-user-id}/{sample_id}.jpg` with `upsert = true`. The user id
+1. **Load** the sample — *including* a tombstoned one — with its detections and findings
+   (`SyncSampleUseCase::invoke`). A missing sample fails immediately; an already-`synced` one
+   returns at once.
+2. **Push the parent first.** `SyncSessionUseCase` runs for the sample's session (and through it
+   the patient) before anything else, so the sample insert cannot race its own FK; a parent
+   failure fails the sample loudly (86d4c2q2m).
+3. **Resize** the JPEG to 640×640 at quality 80, skipping the work if it is already that size
+   (`SyncSampleUseCase.kt::resizeToSyncJpeg`).
+4. **Require auth.** `SampleRemoteDataSource` throws if there is no live Supabase session — the
+   cached identity is not sufficient here (`SampleRemoteDataSource.kt::syncSample`).
+5. **Upload** to `samples/{auth-user-id}/{sample_id}.jpg` with `upsert = true`. The user id
    comes from the live session, not from the Room row, which is what keeps the object key
-   inside the RLS-permitted folder (`data/supabase/SampleRemoteDataSource.kt:35-39`).
-5. **Upsert the sample row, then its predictions, then its detections** — the FK chain, in one
-   call (`data/supabase/SampleRemoteDataSource.kt:43`). Predictions are built from
+   inside the RLS-permitted folder.
+6. **Upsert the sample row, then its predictions, then its detections, then replace its
+   findings** — the FK chain, in one call (`SampleRemoteDataSource.kt::syncSample`). Findings are
+   delete-then-insert for the sample, so a species removed on re-edit disappears remotely too. Predictions are built from
    `predictions_json` and written insert-if-absent, because a model's output never changes and
    `predictions` grants no UPDATE policy. Each detection carries `prediction_id` for the
    prediction at its own ordinal, null for an egg the medtech added. When the device holds no
    model output for the sample, `prediction_id` is **left out of the payload** rather than sent
    as null, so a link the server already has survives. Verdicts are uppercased on the way out.
    Every write is idempotent, so a pass that fails part-way converges on retry.
-6. **Record the outcome.** Success writes `status = synced` and the returned storage path;
-   failure writes `sync_failed` (`data/supabase/SyncSampleUseCase.kt:41-48`). Nothing is
-   rolled back and nothing is retried here.
+7. **Record the outcome.** Success writes `status = synced` and the returned storage path;
+   failure writes `sync_failed` and logs a `[SyncFailed]` line with a failure class
+   (`SyncSampleUseCase::invoke`). Nothing is rolled back and nothing is retried here.
+
+**Gap, code wins: a tombstone does not reach Postgres.** Step 1 reads the tombstoned row so it
+can "push its tombstone", but `SampleInsertRow` has no `deleted_at`, so the upsert never carries
+it. See [`Sample`](../objects/Sample.md).
 
 ## Movement — the catch-up pass
 
@@ -42,13 +59,15 @@ and after every local write.
 
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —
    returning `SyncSummary.Skipped`, not a failure
-   (`domain/usecase/sync/SyncPendingDataUseCase.kt:70-74`).
+   (`SyncPendingDataUseCase::invoke`).
 2. **Push in FK-safe order**: **patients → sessions → samples → reports**
-   (`domain/usecase/sync/SyncPendingDataUseCase.kt:76-90`). Patients go first because
+   (`SyncPendingDataUseCase::invoke`). Samples are read *including deleted*. Patients go first because
    `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
    does not abort the pass.
 
-Report pushes are row-only — the PDF/CSV never leaves the device (`data/supabase/SyncReportUseCase.kt`).
+A report push is the row, then its PDF or CSV into the `reports` bucket; a file the device no
+longer holds is skipped rather than failing the row (`data/supabase/SyncReportUseCase.kt`).
+`RestoreReportFilesUseCase` pulls a file back on first open on another device.
 Because login is mandatory on first launch, every entity has an owner from creation and no
 deferred claiming step is needed.
 
@@ -94,7 +113,7 @@ and is repaired from the disk rather than trusted.
   pulled row keeps the device's own copy, and `pullChildRowsFor` then folds a whole set of
   `predictions` rows back into it — fetched before detections, so a failure writes no detection
   without its model output. A set with a missing ordinal is ignored
-  (`domain/usecase/sync/FetchRemoteDataUseCase.kt:379`, `:430`).
+  (`FetchRemoteDataUseCase.kt::withLocalPredictions`, `::pullChildRowsFor`).
 - **Deploy order.** `0004_predictions.sql` must be applied before a build carrying this change
   syncs: until it is, every sample push and pull fails on the missing table. Older builds are
   unaffected by the migration — they never name the new column, and supabase-kt ignores
@@ -106,9 +125,9 @@ and is repaired from the disk rather than trusted.
   `data/supabase/SampleRemoteDataSource.kt`,
   `data/supabase/ReportRemoteDataSource.kt`).
 - **RLS.** Every insert must satisfy ownership: `auth.uid() = created_by` on patients
-  (`0001_init.sql:369-371`), `auth.uid() = user_id` on sessions/samples/reports
-  (`0001_init.sql:405-420`), and detections/findings are checked through the parent
-  sample (`0001_init.sql:441-470`). Sync only ever runs authenticated.
+  (`0001_init.sql:369`), `auth.uid() = user_id` on sessions, samples and reports
+  (`0001_init.sql:405`, `:418`, `:497`), and detections and findings are checked through the
+  parent sample (`0001_init.sql:431-491`). Sync only ever runs authenticated.
 - **Four separate sync-state enums** — `PatientSyncStatus`, `SessionSyncStatus`,
   `SampleStatus`, `ReportSyncStatus` — all managing pending/synced/sync_failed states. Changing the
   vocabulary means changing all four plus every raw query that names a value.
@@ -141,10 +160,12 @@ and is repaired from the disk rather than trusted.
   `IllegalStateException("Not implemented")`. `minSdk` is 26 and the fleet runs Android 11, so
   `setExpedited` killed every pass before `doWork` ran. A foreground service is also the one
   thing this deliberately avoids.
-- **Recording.** Losing Supabase mid-session does not stop capture. Only losing the inference
-  container does — see [`infer`](infer.md).
-- **Deletion.** Sync only inserts and upserts. Nothing here can remove a remote row or a
-  Storage object (`../../constraints.md` C8).
+- **Recording.** Losing Supabase mid-session does not stop capture, and neither does losing the
+  inference container — see [`infer`](infer.md).
+- **Deletion.** Sync inserts and upserts, with one exception: a sample's findings rows are
+  deleted and re-inserted, because a count is a current statement (C8 reading in
+  [`Finding`](../objects/Finding.md)). Nothing here can remove a sample, a detection, a
+  prediction or a Storage object (`../../constraints.md` C8).
 - **Repeat samples.** Gone as of 86d4ab4vm — duplicates are deleted, not flagged. While it
   existed, `is_repeat` had no Postgres column and was not in the insert row — the
-  flag stays local by design (`supabase/migrations/0006_sample_is_manual.sql:9-11`).
+  flag stays local by design (`supabase/migrations/legacy-dev/0006_sample_is_manual.sql:9-11`).

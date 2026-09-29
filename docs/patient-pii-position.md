@@ -24,7 +24,7 @@ The application now captures and stores:
 * `birthdate` (`patients.birthdate`: epoch millis at midnight `Asia/Manila`)
 * `psgc_barangay_code` (`patients.psgc_barangay_code`: 10-digit zero-padded canonical code)
 
-All of these fields are joined directly to parasitological examination findings, low-power field (LPF) egg density ranges, and diagnostic reports (`supabase/migrations/0001_init.sql:91-112`, `app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt:38-82`).
+All of these fields are joined directly to parasitological examination findings, low-power field (LPF) egg density ranges, and diagnostic reports (`supabase/migrations/0001_init.sql:78-116`, `data/local/entity/PatientEntity.kt`).
 
 Under the **Philippine Data Privacy Act of 2012 (Republic Act No. 10173)**, §3(l), this constitutes **Sensitive Personal Information** regarding an individual's health, age, and sex. Crucially, the primary target population for Soil-Transmitted Helminth (STH) surveillance in the Philippines consists of **school-age children (minors aged 1–14)** participating in DepEd/DOH mass deworming programs.
 
@@ -39,17 +39,17 @@ This document establishes the project's formal written position on patient priva
 A factual audit of the codebase confirms five operational realities:
 
 1. **Unencrypted Storage at Rest:**
-   - The local SQLite/Room database (`AgarthaDatabase.db`) is unencrypted plain text. There is no SQLCipher wrapper and no Android Keystore-backed encryption key (`core/database/AgarthaDatabase.kt:52-105`).
-   - Microscopic field JPEGs are written as plain image files to internal app-private storage (`data/local/SampleImageStore.kt:15-21` writes to `/data/user/0/com.agarthavision/files/users/{userId}/samples/{sampleId}.jpg`).
+   - The local SQLite/Room database (`AgarthaDatabase.db`) is unencrypted plain text. There is no SQLCipher wrapper and no Android Keystore-backed encryption key (`core/database/AgarthaDatabase.kt::AgarthaDatabase`).
+   - Microscopic field JPEGs are written as plain image files to internal app-private storage (`data/local/SampleImageStore.kt::persistJpeg` writes to `/data/user/0/com.agarthavision/files/users/{userId}/samples/{sampleId}.jpg`).
 2. **Database-Only Row Level Security (RLS):**
-   - Post-refactor patient visibility is controlled at the Supabase database layer via the `patient_users` join table (`supabase/migrations/0001_init.sql:117-122`, `:360-388`).
+   - Post-refactor patient visibility is controlled at the Supabase database layer via the `patient_users` join table (`supabase/migrations/0001_init.sql:117-122`, `:359-394`).
    - While RLS provides database tenancy enforcement, it provides zero protection for data resident on an unlocked, lost, or compromised physical Android handset.
 3. **Shared Clinical Hardware:**
-   - Rural health unit (RHU) and barangay microscopy stations operate shared devices. While mandatory authentication (`core/session/SessionManager.kt:29`) attributes work to a logged-in user, cached Supabase credentials satisfy the authentication gate indefinitely. Whoever holds the unlocked phone possesses the permissions of the signed-in medtech.
+   - Rural health unit (RHU) and barangay microscopy stations operate shared devices. While mandatory authentication (`MainViewModel.authGate`, `domain/usecase/auth/ResolveAuthGateUseCase.kt`) attributes work to a logged-in user, cached Supabase credentials satisfy the authentication gate indefinitely. Whoever holds the unlocked phone possesses the permissions of the signed-in medtech.
 4. **Constraint C8 ("Nothing is deleted"):**
-   - Under `docs/constraints.md` C8, verified samples are soft-deleted (`samples.deleted_at`), never purged. Supabase Storage enforces an insert/select-only policy with deliberately no DELETE policy (`supabase/migrations/0003_storage_rls.sql:45-46`). This retention model serves model retraining but presents a compliance conflict if identifiable personal data is retained indefinitely.
+   - Under `docs/constraints.md` C8, verified samples are soft-deleted (`samples.deleted_at`), never purged. Supabase Storage enforces an insert/select-only policy with deliberately no DELETE policy (`supabase/migrations/0001_init.sql:538-540`). This retention model serves model retraining but presents a compliance conflict if identifiable personal data is retained indefinitely.
 5. **PDF Diagnostic Reports in Public Shared Storage:**
-   - Generated session reports are saved to shared public external storage in `Documents/AgarthaVision/` via `DocumentsReportFileStore.kt:15-45` using `MediaStore` or direct filesystem access.
+   - Generated session reports are saved to shared public external storage in `Documents/AgarthaVision/` via `data/repository/DocumentsReportFileStore.kt::DocumentsReportFileStore` using `MediaStore` or direct filesystem access.
    - Any third-party application on the handset with storage read permissions, or any workstation connected via USB Media Transfer Protocol (MTP), can read these patient-identifying PDF reports without authenticating to AgarthaVision.
 
 ---

@@ -8,40 +8,40 @@ line references point at it.
 
 | Thing | Version | Read from |
 |---|---|---|
-| Kotlin | 2.2.10 | `gradle/libs.versions.toml:2` |
-| Android Gradle Plugin | 9.2.1 | `gradle/libs.versions.toml:3` |
+| Kotlin | 2.2.10 | `libs.versions.toml` `kotlin` |
+| Android Gradle Plugin | 9.2.1 | `libs.versions.toml` `agp` |
 | Gradle wrapper | 9.4.1 | `gradle/wrapper/gradle-wrapper.properties` (`distributionUrl`) |
-| JDK / toolchain | 21 | `gradle/gradle-daemon-jvm.properties` (`toolchainVersion`), `app/build.gradle.kts:95-98` |
-| KSP | 2.2.10-2.0.2 | `gradle/libs.versions.toml:24` |
-| compileSdk | 36 (minor API 1) | `app/build.gradle.kts:25-30` |
-| minSdk / targetSdk | 26 / 36 | `app/build.gradle.kts:34-35` |
-| App version | `versionCode 1`, `versionName 0.1.0-mvp` | `app/build.gradle.kts:36-37` |
+| JDK / toolchain | 21 | `gradle/gradle-daemon-jvm.properties` (`toolchainVersion`), `app/build.gradle.kts` `compileOptions` |
+| KSP | 2.2.10-2.0.2 | `libs.versions.toml` `ksp` |
+| compileSdk | 36 (minor API 1) | `app/build.gradle.kts` `compileSdk` |
+| minSdk / targetSdk | 26 / 36 | `app/build.gradle.kts` `defaultConfig` |
+| App version | `versionCode 1`, `versionName 0.1.0-mvp` | `app/build.gradle.kts` `defaultConfig` |
 
-Single Gradle module: `:app` (`settings.gradle.kts:26`). Namespace and applicationId are both
-`com.agarthavision` (`app/build.gradle.kts:24`, `:33`).
+Single Gradle module: `:app` (`settings.gradle.kts` `include`). Namespace and applicationId are both
+`com.agarthavision` (`app/build.gradle.kts` `namespace`, `applicationId`).
 
 ## Android libraries
 
-| Area | Library | Version | Line |
+| Area | Library | Version | Catalog key |
 |---|---|---|---|
-| UI | Compose BOM | 2026.02.01 | `libs.versions.toml:4` |
-| UI | `foundation-layout` (pinned outside the BOM) | 1.11.2 | `libs.versions.toml:31` |
-| DI | Hilt | 2.59.2 | `libs.versions.toml:5` |
-| Local DB | Room | 2.7.0 | `libs.versions.toml:7` |
-| Camera | CameraX | 1.6.1 | `libs.versions.toml:10` |
-| HTTP | Retrofit | 2.11.0 | `libs.versions.toml:8` |
-| HTTP | OkHttp | 4.12.0 | `libs.versions.toml:9` |
-| Cloud | supabase-kt BOM (auth, postgrest, storage) | 3.0.3 | `libs.versions.toml:32` |
-| Cloud | Ktor client (OkHttp engine) | 3.0.3 | `libs.versions.toml:33` |
-| Async | Coroutines | 1.9.0 | `libs.versions.toml:13` |
-| Async | kotlinx-datetime (`strictly`) | 0.6.1 | `libs.versions.toml:14` |
-| Nav | Navigation Compose | 2.8.5 | `libs.versions.toml:15` |
-| Lifecycle | lifecycle-viewmodel / runtime compose | 2.8.7 | `libs.versions.toml:16` |
-| Images | Coil | 2.7.0 | `libs.versions.toml:17` |
-| Prefs | DataStore Preferences | 1.1.2 | `libs.versions.toml:12` |
-| Background | WorkManager | 2.10.0 | `libs.versions.toml:11` |
-| EXIF | androidx exifinterface | 1.4.2 | `libs.versions.toml:23` |
-| On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `libs.versions.toml:34` |
+| UI | Compose BOM | 2026.02.01 | `compose-bom` |
+| UI | `foundation-layout` (pinned outside the BOM) | 1.11.2 | `foundation-layout` |
+| DI | Hilt | 2.59.2 | `hilt` |
+| Local DB | Room | 2.7.0 | `room` |
+| Camera | CameraX | 1.6.1 | `camerax` |
+| HTTP | Retrofit | 2.11.0 | `retrofit` |
+| HTTP | OkHttp | 4.12.0 | `okhttp` |
+| Cloud | supabase-kt BOM (auth, postgrest, storage) | 3.0.3 | `supabase` |
+| Cloud | Ktor client (OkHttp engine) | 3.0.3 | `ktor` |
+| Async | Coroutines | 1.9.0 | `coroutines` |
+| Async | kotlinx-datetime (`strictly`) | 0.6.1 | `kotlinx-datetime` |
+| Nav | Navigation Compose | 2.8.5 | `navigation` |
+| Lifecycle | lifecycle-viewmodel / runtime compose | 2.8.7 | `lifecycle` |
+| Images | Coil | 2.7.0 | `coil` |
+| Prefs | DataStore Preferences | 1.1.2 | `datastore` |
+| Background | WorkManager | 2.10.0 | `workmanager` |
+| EXIF | androidx exifinterface | 1.4.2 | `exifinterface` |
+| On-device ML | LiteRT (`CompiledModel` API, GPU accelerator built in) | 2.2.0 | `litert` |
 
 **Room is at schema version 23** (`core/database/AgarthaDatabase.kt`), reached from 22 by the
 project's first hand-written migration (`core/database/Migrations.kt`). Older installs still fall
@@ -66,7 +66,7 @@ for Phase 1).
 - Version 13 added the patient-based schema (`patients`, `patient_users`, `sessions.patient_id`, and dropped `sessions.notes`, `sessions.ended_at`, `sessions.psgc_barangay_code`, `sessions.claim_exempt`, and GPS columns).
 - Version 14 added `species_suggestions`, the offline autocomplete index.
 - Version 15 added `reports.lpf_per_species_json` (LPF density metrics).
-- Version 16 declared the samples-to-sessions foreign key with `NO_ACTION` (`SampleEntity.kt:35-42`).
+- Version 16 declared the samples-to-sessions foreign key with `NO_ACTION` (`SampleEntity.kt` `foreignKeys`).
 - Version 22 dropped `detections.species_touched` and `detections.verified_by_user`. **Version 21 is left free**: `development` briefly carried a `21.json` of a different shape.
 
 `play-services-location` was removed along with the GPS columns (`gradle/libs.versions.toml`).
@@ -80,24 +80,24 @@ The inference queue runs through WorkManager the same way (14zcqntj6ny). See
 `map/processes/infer.md`.
 
 Two JSON stacks coexist by design: **Gson** for Room JSON columns and the Retrofit converter
-(`core/di/InferenceModule.kt:35`, `:69`), **kotlinx.serialization** for Supabase row shapes
-(`data/supabase/SampleRemoteDataSource.kt:99-152`).
+(`core/di/InferenceModule.kt::provideGson`, `::provideInferenceRetrofit`), **kotlinx.serialization** for Supabase row shapes
+(`data/supabase/SampleRemoteDataSource.kt::SampleInsertRow`).
 
 ## Quality tooling
 
-| Tool | Version | Line |
+| Tool | Version | Catalog key |
 |---|---|---|
-| ktlint Gradle plugin | 12.1.2 | `libs.versions.toml:25` |
-| detekt | 1.23.7 | `libs.versions.toml:28` |
-| Robolectric | 4.16 | `libs.versions.toml:29` |
-| Roborazzi | 1.74.0 | `libs.versions.toml:30` |
-| JUnit 4 | 4.13.2 | `libs.versions.toml:112` |
-| mockito-kotlin | 5.4.0 | `libs.versions.toml:26` |
-| Turbine | 1.1.0 | `libs.versions.toml:27` |
-| Espresso | 3.7.0 | `libs.versions.toml:22` |
+| ktlint Gradle plugin | 12.1.2 | `ktlint-plugin` |
+| detekt | 1.23.7 | `detekt` |
+| Robolectric | 4.16 | `robolectric` |
+| Roborazzi | 1.74.0 | `roborazzi` |
+| JUnit 4 | 4.13.2 | `junit` |
+| mockito-kotlin | 5.4.0 | `mockito-kotlin` |
+| Turbine | 1.1.0 | `turbine` |
+| Espresso | 3.7.0 | `espresso` |
 
 Detekt config: `detekt.yml`, applied at both the root and `:app`
-(`build.gradle.kts:11-14`, `app/build.gradle.kts:14-17`) with `buildUponDefaultConfig = true`.
+(the `detekt {}` block in `build.gradle.kts` and in `app/build.gradle.kts`) with `buildUponDefaultConfig = true`.
 It configures complexity, exceptions, naming, and style only — no architecture rules.
 
 Robolectric backs the Compose UI tests under `app/src/test/`, so screen-level tests run on
@@ -106,14 +106,14 @@ screenshot goldens in `:app:verifyRoborazziDebug`. It is not used by, and not pe
 `domain/` — see `constraints.md` C2.
 
 Gradle behaviour flags worth knowing: configuration cache and build cache are both on, KSP2 is
-on (`gradle.properties:10-11`, `:20`).
+on (`gradle.properties`: `org.gradle.configuration-cache`, `org.gradle.caching`, `ksp.useKSP2`).
 
 ## Node-side tooling
 
 `package.json` is a script wrapper around Gradle plus the Husky hook installer
-(`package.json:5-19`). Runtime is **Bun**.
+(`package.json` `scripts`). Runtime is **Bun**.
 
-**Lockfile drift:** `bun.lock:7-13` records devDependencies — `@commitlint/cli`,
+**Lockfile drift:** `bun.lock`'s `devDependencies` records devDependencies — `@commitlint/cli`,
 `@commitlint/config-conventional`, `@types/bun`, `husky`, `lint-staged` — that `package.json`
 no longer declares. `bun install` from the current `package.json` installs nothing. See
 `commands.md`.
@@ -121,22 +121,21 @@ no longer declares. `bun install` from the current `package.json` installs nothi
 ## Backend and inference
 
 - **Supabase** (managed): Auth, Postgres, Storage. Client plugins installed at
-  `core/di/SupabaseModule.kt:30-32`. Schema is consolidated into `supabase/migrations/0001_init.sql`
-  for the patient-records project `agarthavision`, applied by hand in the dashboard. Pre-patient
-  migrations `0001`–`0013` are archived under `supabase/migrations/legacy-dev/` as the historical
-  record of `agarthavision-dev` and `agarthavision-prod`. No Supabase CLI in Phase 1.
+  `core/di/SupabaseModule.kt::provideSupabaseClient`. Schema: `supabase/migrations/`, applied by
+  hand in the dashboard (C6); which file describes which project is in
+  [`file-tree.md`](file-tree.md#supabasemigrations). No Supabase CLI in Phase 1.
 - **Inference container** (self-hosted): FastAPI + Uvicorn + Ultralytics YOLO on PyTorch,
-  image based on `rocm/pytorch:latest` (`inference/Dockerfile:1`), serving on port 8000
-  (`inference/Dockerfile:10-11`). Endpoints `GET /health` and `POST /infer`
-  (`inference/server.py:29`, `:34`). Bearer-token auth (`inference/server.py:24-27`).
+  image based on `rocm/pytorch:latest` (`inference/Dockerfile` `FROM`), serving on port 8000
+  (`inference/Dockerfile` `EXPOSE`, `CMD`). Endpoints `GET /health` and `POST /infer`
+  (`inference/server.py::health`, `::infer`). Bearer-token auth (`inference/server.py::verify_key`).
   Weights baked in at `inference/weights/yolo26n-efficientnetv2b0.pt` (YOLO26-nano on an
   EfficientNetV2-B0 backbone, from the fork's `feat/optimized-inference`); default model version string
-  `yolo26n-effv2b0-v1-cloud-fp32` (`inference/server.py:12`).
+  `yolo26n-effv2b0-v1-cloud-fp32` (`inference/server.py` `MODEL_VERSION`).
 
 ## Build-time configuration
 
 Four `BuildConfig` fields per build type — `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 `INFERENCE_URL`, `INFERENCE_API_KEY` — populated from `local.properties`
-(`app/build.gradle.kts:47-93`). Debug reads the `*_DEV` keys, release the `*_PROD` keys.
+(`app/build.gradle.kts` `buildTypes`). Debug reads the `*_DEV` keys, release the `*_PROD` keys.
 Both suffixed keys are documented in `local.properties.example` (PB-01).
 A missing key becomes an empty string.

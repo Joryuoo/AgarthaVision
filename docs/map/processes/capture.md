@@ -1,3 +1,10 @@
+---
+type: process
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+---
+
 # capture
 
 Getting a frame off the microscope and into a state a human can review.
@@ -26,7 +33,7 @@ Getting a frame off the microscope and into a state a human can review.
    runs on a single background thread owned by `CameraManager`, not the main one — encoding
    every frame on the UI thread was visible as preview jank.
    `toJpegBytes` rotates by `imageInfo.rotationDegrees`, centre-crops to a square, then
-   downscales to 640 (`core/util/ImageExtensions.kt:38-83`), so every device posts the same
+   downscales to 640 (`core/util/ImageExtensions.kt::toJpegBytes`), so every device posts the same
    geometry. Cropping before scaling is what keeps the image from stretching. A device that
    cannot supply 640 is encoded at its native square size rather than upscaled.
 3. **Wait for the tap, and check the frame is live.** Capture is medtech-triggered, one frame
@@ -40,7 +47,10 @@ Getting a frame off the microscope and into a state a human can review.
    nothing resets it, so without the age check a tap arriving before the analyzer had delivered
    a frame for the current binding would record the *previous* session's image under this
    session's id (86d4au2n1). Stale and absent share one message — from the medtech's side both
-   mean "the camera isn't ready, tap again".
+   mean "the camera isn't ready, tap again". A tap within **750 ms** of the last saved one is
+   dropped (`CAPTURE_COOLDOWN_MS` in `CaptureViewModel::saveOnce`): a jittery double-tap once
+   saved nine samples of one field in 1.25 s. The save itself runs under `NonCancellable`, so
+   leaving the screen mid-save still keeps the frame.
 4. **Queue it for a model, and return.** `CaptureFieldUseCase` builds a `FrameSource.MODEL`
    frame with no predictions and `inference_state = 'queued'`, saves it (step 5), wakes the
    inference queue, and returns. It waits on no model (14zcqntj6ny). The model output arrives
@@ -51,12 +61,11 @@ Getting a frame off the microscope and into a state a human can review.
 5. **Persist.** The frame goes to `FlaggedFrameStore.add`, which runs
    `PersistFlaggedFrameUseCase`: it writes the JPEG under
    `filesDir/users/{owner}/samples/{sampleId}.jpg` and inserts a `SampleEntity` with
-   `status = flagged` (`data/repository/FlaggedFrameStore.kt:77-79`,
-   `domain/usecase/capture/PersistFlaggedFrameUseCase.kt:23-62`,
-   `data/local/SampleImageStore.kt:15-20`). Owner is the cached identity or `null`; unowned
-   frames go under a literal `local` folder
-   (`domain/usecase/capture/PersistFlaggedFrameUseCase.kt:66-67`). The raw predictions are
-   cached in `predictions_json`.
+   `status = flagged` and `inference_state = 'queued'` (`FlaggedFrameStore.kt::add`,
+   `PersistFlaggedFrameUseCase.kt::invoke`, `SampleImageStore.kt::persistJpeg`). Owner is the
+   cached identity; the code keeps an unowned `local` folder (`UNOWNED_FOLDER`) that mandatory
+   login leaves unused. The predictions land in `predictions_json` later, when
+   [`infer`](infer.md) completes.
 
 ## One entrance, two outcomes
 
@@ -72,15 +81,15 @@ are manual too. `SubmitVerificationUseCase` handles both, and refuses a sample s
 ## Discarding
 
 A flagged frame can be dropped before verification: the JPEG is deleted and the row removed
-(`domain/usecase/capture/DeleteFlaggedSampleUseCase.kt:11-15`,
-`data/repository/FlaggedFrameStore.kt:80-84`). This is the only deletion the system permits —
-nothing verified is deletable (`../../constraints.md` C8).
+(`DeleteFlaggedSampleUseCase::invoke`, reached from `FlaggedFrameStore.remove` and from the
+queue's batch delete). This is the only hard deletion the system permits — a verified sample is
+tombstoned instead. See [`delete-sample`](delete-sample.md) and `../../constraints.md` C8.
 
 ## Hits
 
 - **The flagged queue is Room-backed, not in-memory.** `FlaggedFrameStore` observes
   `samples WHERE status = 'flagged'` and rebuilds `FlaggedFrame` objects, re-reading the JPEG
-  off disk each time (`data/repository/FlaggedFrameStore.kt:59-75`, `:99-117`). Any older
+  off disk each time (`FlaggedFrameStore.kt::state`, `::toFlaggedFrame`). Any older
   claim that flagged frames are transient and lost on process death is stale.
 - **Login is mandatory on first launch.** Because authentication is required before entering
   the app, a valid cached local identity is guaranteed when opening an active patient session
@@ -99,14 +108,16 @@ nothing verified is deletable (`../../constraints.md` C8).
   `CaptureFrameBoundary`. The brackets it draws are only truthful because preview and analysis
   share a field of view and the preview is `FIT_CENTER` — under `FILL_CENTER` the analysed
   region is wider than the display and no on-screen box can mark it
-  (`ui/components/CaptureFrameBoundary.kt`, `ui/components/MicroscopyViewport.kt:46-49`).
+  (`ui/components/CaptureFrameBoundary.kt`, `MicroscopyViewport.kt::MicroscopyViewport`,
+  `scaleType = FIT_CENTER`).
 
 ## Does not hit
 
 - **Sync.** Nothing in capture talks to Supabase. A flagged sample is purely local until
   [`validate`](validate.md) submits it.
 - **LPF density ranges or reports.** Every aggregate query excludes `status = 'flagged'`
-  (`data/local/dao/DetectionDao.kt:41`, `data/local/dao/SampleDao.kt:83`). An unverified frame
+  (`grep -n "status != 'flagged'"` over `DetectionDao.kt`, `SampleDao.kt`, `SessionDao.kt`). An
+  unverified frame
   counts for nothing — that is `../../constraints.md` C7 enforced structurally.
 - **Detection rows.** None exist yet. Predictions live only as cached JSON on the sample until
   a human rules on them.
