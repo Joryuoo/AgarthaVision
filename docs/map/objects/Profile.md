@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: supabase/migrations/0001_init.sql
+---
+
 # Profile
 
 **One sentence.** The user record attached to a Supabase Auth account — one row per medtech or
@@ -17,24 +25,25 @@ The role column is where all admin capability lives, and nothing in the Android 
 
 | Field | Constraint | Cited |
 |---|---|---|
-| `id` | PK, FK → `auth.users(id)`, ON DELETE CASCADE | `supabase/migrations/0001_init.sql:11` |
-| `full_name` | nullable text | `supabase/migrations/0001_init.sql:12` |
-| `role` | NOT NULL, default `medtech`, CHECK in (`medtech`, `admin`) | `supabase/migrations/0001_init.sql:13` |
-| `created_at` | NOT NULL, default `now()` | `supabase/migrations/0001_init.sql:14` |
+| `id` | PK, FK → `auth.users(id)`, ON DELETE CASCADE | `supabase/migrations/0001_init.sql:35` |
+| `full_name` | nullable text | `supabase/migrations/0001_init.sql:36` |
+| `role` | NOT NULL, default `medtech`, CHECK in (`medtech`, `admin`) | `supabase/migrations/0001_init.sql:37` |
+| `created_at` | NOT NULL, default `now()` | `supabase/migrations/0001_init.sql:38` |
 
 Auto-creation: `handle_new_user()` inserts `(id, 'medtech')` on every `auth.users` insert —
-`supabase/migrations/0001_init.sql:18-28`. Note it never populates `full_name`, so that column
+`supabase/migrations/0001_init.sql:42-52`. Note it never populates `full_name`, so that column
 is null in practice.
 
 Admin reads go through the SECURITY DEFINER helper `public.is_admin(uuid)`, added to break the
 policy recursion the original inline subquery caused —
-`supabase/migrations/0004_fix_profiles_rls_recursion.sql:4-18`.
+`supabase/migrations/0001_init.sql:58-72`, carried over from
+`legacy-dev/0004_fix_profiles_rls_recursion.sql`.
 
-Documented shape: `schema.ts:146-158`.
+Documented shape: `schema.ts` (`Profile`).
 
 **No Room mirror.** Identity on-device is a DataStore-cached `LocalIdentity`
 (`app/src/main/java/com/agarthavision/domain/model/LocalIdentity.kt`,
-`data/repository/SupabaseAuthRepository.kt:31-42`), not a `profiles` row.
+`SupabaseAuthRepository.kt::observeLocalIdentity`), not a `profiles` row.
 
 ## Connected to
 
@@ -51,17 +60,17 @@ Documented shape: `schema.ts:146-158`.
 ## If you change this
 
 **Hits**
-- Every RLS policy on `sessions`, `samples`, `detections`, `reports` — they all resolve admin
-  through `is_admin(auth.uid())` (`0004_fix_profiles_rls_recursion.sql:25-57`).
-- `0008_reports.sql:36-38`, which reintroduced the inline `(select role from profiles …)`
-  subquery instead of `is_admin()`. Any change to the role column's name or values must patch
-  both styles.
+- Every RLS policy that has an admin branch — in the consolidated schema they all resolve
+  admin through `is_admin(auth.uid())` (policies from `0001_init.sql:352`).
+- On the dev and prod projects, which still run the legacy history, `legacy-dev/0008_reports.sql:36-38`
+  and `legacy-dev/0012` reintroduced the inline `(select role from profiles …)` subquery. A change
+  to the role column's name or values there must patch both styles.
 - Sign-in, if you add a required column with no default — `handle_new_user()` inserts only
   `id` and `role`.
 
 **Does not hit**
 - The Android app's login flow. It reads `auth.users` metadata for a display name
-  (`data/repository/SupabaseAuthRepository.kt:76`), never the `profiles` row. Adding a
+  (`SupabaseAuthRepository.kt::cacheIdentity`), never the `profiles` row. Adding a
   `profiles` column changes nothing client-side until something queries it.
 - Room. There is no local mirror to migrate.
 
@@ -72,5 +81,4 @@ writes it, no report includes it.** The `admin` role has no UI anywhere in the a
 
 ## See
 
-`supabase/migrations/0001_init.sql:10-28`,
-`supabase/migrations/0004_fix_profiles_rls_recursion.sql`, `schema.ts:146-158`.
+`supabase/migrations/0001_init.sql:30-72`, `schema.ts` (`Profile`).

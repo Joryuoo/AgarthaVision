@@ -215,6 +215,7 @@ internal fun ActivityRow(
                 lineHeight = 16.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
             )
             Spacer(Modifier.height(1.dp))
             Text(
@@ -224,6 +225,7 @@ internal fun ActivityRow(
                 lineHeight = 14.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                softWrap = false,
             )
         }
     }

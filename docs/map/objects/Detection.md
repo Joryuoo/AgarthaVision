@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt
+---
+
 # Detection
 
 **One sentence.** One egg — a single model prediction or manual tag inside a sample, carrying
@@ -26,15 +34,16 @@ so a redraw no longer costs the corpus the box the model actually drew.
 | `id` | PK, default `uuid_generate_v4()` |
 | `sample_id` | NOT NULL, FK → `samples(id)`, CASCADE |
 | `class_label` | NOT NULL — what the model said |
-| `confidence` | NOT NULL real, CHECK between 0 and 1 (`0001_init.sql:229`) |
-| `bbox_x/y/w/h` | real, **nullable** (`0001_init.sql:231-234`). The box a human stands behind — see *Box provenance* below |
+| `confidence` | NOT NULL real, CHECK between 0 and 1 (`0001_init.sql:228`) |
+| `bbox_x/y/w/h` | real, **nullable** (`0001_init.sql:232-235`). The box a human stands behind — see *Box provenance* below |
 | `verdict` | NOT NULL, default `'CONFIRMED'`, CHECK in (`CONFIRMED`, `FALSE_POSITIVE`, `WRONG_CLASS`, `BOX_INCORRECT`) (`0001_init.sql:237-238`) |
 | `expert_class` | nullable — the corrected species. Set when the verdict is `WRONG_CLASS`, or when the verdict is `BOX_INCORRECT` and the medtech corrected the species |
+| `stage` | nullable text, added by `0005_verification_stage.sql`. The STH developmental stage the medtech picked; part of an added row's identity, so one species at two stages is two rows |
 | `prediction_id` | nullable, FK `(prediction_id, sample_id)` → `predictions(id, sample_id)`, unique where set (`0004_predictions.sql`). Null on an egg the medtech added, and on a pre-0004 row whose provenance could not be established. **Room has no such column**; the push derives it from the ordinal |
 
 **Box provenance** (14zcqnthrx6, 14zcqnthrx8). `VerificationMapper` writes the model's box only
 where a human stood behind it: a `BOX_INCORRECT` row the medtech did not redraw is written with
-**no box** (`data/local/mapper/VerificationMapper.kt:193`), where it used to fall back to the
+**no box** (`data/local/mapper/VerificationMapper.kt::toDetectionEntity`), where it used to fall back to the
 model's rejected geometry and so passed the exhaustiveness rule. Every linked row therefore
 answers "who drew this box?" by itself, with no float comparison:
 
@@ -47,7 +56,7 @@ answers "who drew this box?" by itself, with no float comparison:
 | `prediction_id` null | null | nobody — counted, not located |
 
 The reopen path reads the same rule: on `BOX_INCORRECT`, a stored box *is* the redraw
-(`domain/usecase/verify/OpenVerificationTargetUseCase.kt:209`). The half-pixel comparison it
+(`OpenVerificationTargetUseCase.kt::toAnswers`). The half-pixel comparison it
 replaces is gone.
 
 **Pre-0004 rows.** `0004`'s backfill links legacy prediction-backed rows by recomputing the
@@ -68,27 +77,26 @@ marked for a real reason is carried elsewhere — `WRONG_CLASS` for a picked spe
 `prediction_id` for an added egg — and box provenance is the table above. Submitting a
 pre-filled row is the medtech's confirmation of it.
 
-Index on `verdict` for retraining queries (`0001_init.sql:250`).
+Index on `verdict` for retraining queries (`0001_init.sql:256`).
 `verified_by_user` was **dropped** from Postgres in legacy-dev migration 0002, and from Room at
 version 22.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt:28-68`)
+**Room** (`DetectionEntity`)
 
-PK column is `detection_id`. One thing to know:
+PK column is `detection_id`. Room carries `stage` too. One thing to know:
 
 - **Case mismatch.** Room stores lowercase (`confirmed`, `false_positive`, …) and Postgres
   stores uppercase. `DetectionVerdict` carries both and maps at the boundary —
-  `domain/model/DetectionVerdict.kt:9-27`,
-  `data/supabase/SampleRemoteDataSource.kt:79-97`. Queries that hardcode a verdict string must
+  `domain/model/DetectionVerdict.kt`,
+  `SampleRemoteDataSource.kt::toInsertRow` (the `DetectionEntity` overload). Queries that hardcode a verdict string must
   pick the right case for the store they are querying.
 
-**Contradiction in the source, unresolved:** the entity's class KDoc says bounding boxes are
-"normalized 0–1" (`DetectionEntity.kt:13`) while the field KDoc directly beneath says
-"source-image pixels" (`DetectionEntity.kt:43-46`); legacy SQL comment also said normalized.
-**The pixel reading is correct** — the server returns `box.xywh`, which is centre-x, centre-y,
-width, height in pixels (`inference/server.py:47-55`), and the mapper stores those values
-unchanged (`data/local/mapper/VerificationMapper.kt:36-39`). Treat the "normalized" comments as
-stale.
+**Contradiction in the source, unresolved:** the class KDoc on `DetectionEntity` says bounding
+boxes are "normalized 0–1" while the KDoc on `bboxX` says "source-image pixels", and the SQL
+comment at `0001_init.sql:232` also says normalized. **The pixel reading is correct** — the
+server returns `box.xywh`, which is centre-x, centre-y, width, height in pixels
+(`inference/server.py::infer`), and the mapper stores those values unchanged
+(`VerificationMapper.kt::toDetectionEntity`). Treat the "normalized" comments as stale.
 
 Documented shape: `schema.ts` (`Detection`).
 
@@ -97,9 +105,9 @@ Documented shape: `schema.ts` (`Detection`).
 - **Owned by** [`Sample`](Sample.md). Deleting a sample cascades.
 - **Aggregated into** [`Report`](Report.md) — counted, never copied.
 - **Scoped by** [`Profile`](Profile.md) indirectly: `detections` RLS runs through the parent
-  sample's `user_id`, not its own (`supabase/migrations/0001_init.sql:405-414`).
+  sample's `user_id`, not its own (`supabase/migrations/0001_init.sql:431-455`).
   There is no `user_id` on this table.
-- **Looks like but is not** `PredictionDto` (`data/remote/dto/InferenceResponseDto.kt:17-24`).
+- **Looks like but is not** `PredictionDto` (`data/remote/dto/InferenceResponseDto.kt::PredictionDto`).
   That is the wire shape from the inference server: `class`, `confidence`, `x`, `y`, `width`,
   `height`, with no verdict and no id. It becomes a `DetectionEntity` only at verification
   time.
@@ -108,32 +116,36 @@ Documented shape: `schema.ts` (`Detection`).
 
 **Hits**
 - The verdict computation — the questionnaire-to-verdict function is the single decision point
-  (`data/local/mapper/VerificationMapper.kt:10-17`).
+  (`data/local/mapper/VerificationMapper.kt::computeVerdict`).
 - Confirmed egg counts. `getConfirmedEggCountsForSession` resolves species as
   `COALESCE(expert_class, class_label)`, so `expert_class` silently overrides the model's label
-  in every count and every report (`data/local/dao/DetectionDao.kt:33-52`). Counts all detections
+  in every count and every report (`DetectionDao.kt::getConfirmedEggCountsForSession`). Counts all detections
   where `d.verdict != 'false_positive'`.
 - Both sides of the case mapping, if you add or rename a verdict: the Postgres CHECK
-  (`0001_init.sql:238`), the enum (`domain/model/DetectionVerdict.kt:13-16`), and
-  every raw query string that names a verdict (`data/local/dao/DetectionDao.kt:43`, `:66`,
-  `:87`).
+  (`0001_init.sql:238`), the enum (`domain/model/DetectionVerdict.kt`), and every raw query
+  string that names a verdict, in four DAOs — the list is in
+  [effects](../effects/CONTEXT.md#changing-validation-logic).
 - The report generator, which emits `model_class`, `expert_class`, and `verdict`.
 
 **Does not hit**
-- The overlay geometry. `FrameWithBoxes` renders from the live
-  `PredictionDto` during verification, not from persisted `DetectionEntity` rows — changing the
-  entity's box columns does not change what the medtech sees while verifying.
+- The overlay geometry. `FrameWithBoxes` renders the frame's predictions and the answers being
+  edited (`ui/verify/FrameBoxes.kt`), not persisted `DetectionEntity` rows — changing the entity's
+  box columns does not change what the medtech sees while verifying.
 - Sample-level state. `needs_reannotation` is a *frame*-level answer set on the sample
-  (`domain/usecase/verify/SubmitVerificationUseCase.kt:38`), not derived from any detection.
+  (`SubmitVerificationUseCase::invoke`, from the view model's `missedEgg`), not stored on any
+  detection.
 
 ## Surfaces
 
 Written only at verification, by `SubmitVerificationUseCase` — one path for both sources since
-86d4ab4tq. A finding with no prediction (a manual capture, or a species the medtech added to an
-AI frame) becomes one row with `confidence = 1.0f` and all four box columns null. A
+86d4ab4tq. An added species writes **one row per egg the model did not box**: the field total
+minus the model's boxes of that species, each keyed by species and slot
+(`VerificationMapper.kt::addedDetectionIdFor`), with `confidence = 1.0f` and the box the medtech
+drew for that slot, or none. A lower total on re-submit prunes the slots no longer written;
+prediction-backed rows are never pruned (`SubmitVerificationUseCase::invoke`). A
 prediction-backed row judged `BOX_INCORRECT` and not redrawn keeps the model's confidence and
-also has all four box columns null. Read by Sample Detail,
-the confirmed egg counts query (`DetectionDao.kt:43`), and the report generator. Pushed by `data/supabase/SampleRemoteDataSource.kt:41-43`.
+has all four box columns null. Read by Sample Detail, the confirmed egg counts query, and the
+report generator. Pushed by `SampleRemoteDataSource.kt::syncSample`.
 
 ## See
 

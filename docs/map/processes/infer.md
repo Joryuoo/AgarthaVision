@@ -1,3 +1,10 @@
+---
+type: process
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+---
+
 # infer
 
 Asking the model what is in a frame.
@@ -51,8 +58,8 @@ returns. The model output arrives later.
 
 1. **POST the raw bytes.** The queue hands the JPEG to `RemoteInferenceEngine`, which wraps it
    as an `image/jpeg` request body and calls `InferenceApi.infer`
-   (`data/inference/RemoteInferenceEngine.kt:38-40`). No multipart, no base64 — the body *is*
-   the image (`data/remote/InferenceApi.kt:23-24`). Transport failures route through
+   (`RemoteInferenceEngine.kt::infer`). No multipart, no base64 — the body *is* the image
+   (`data/remote/InferenceApi.kt::infer`). Transport failures route through
    `NetworkErrorMapper` rather than being wrapped by hand.
 
    Both engines sit behind the `InferenceEngine` interface (`domain/inference/InferenceEngine.kt`).
@@ -87,9 +94,9 @@ returns. The model output arrives later.
 `POST /infer` → `{ predictions: [{ class, confidence, x, y, width, height }],
 image: { width, height }, model_version, inference_ms }`. `inference_ms` is the server's own
 compute time, optional so older containers still work; when absent the client books the whole
-round trip as network (`data/inference/RemoteInferenceEngine.kt:54`, `inference/server.py`). Client side that is
-`data/remote/dto/InferenceResponseDto.kt:11-29`; server side
-`inference/server.py:59-63`. The shape is intentionally Roboflow-compatible so the hosting
+round trip as network (`serverInferMs` in `RemoteInferenceEngine.kt::infer`). Client side that is
+`data/remote/dto/InferenceResponseDto.kt::InferenceResponseDto`; server side the dict
+`inference/server.py::infer` returns. The shape is intentionally Roboflow-compatible so the hosting
 backend can change without touching the mobile code — Roboflow itself is a dead path.
 
 `GET /health` returns 200 once the models are loaded, and answers promptly during inference,
@@ -97,19 +104,20 @@ because the forward pass runs off the event loop (`inference/server.py`).
 
 ## Connectivity
 
-`NetworkMonitor` probes `/health` every 10 s for the duration of an active session; **two
-consecutive failures** flip the status to disconnected
-(`core/connectivity/NetworkMonitor.kt:59-79`), which surfaces as
-`ui/capture/ConnectionLossBanner.kt`. The loop is cancelled and the status resets when the
-session goes idle (`core/connectivity/NetworkMonitor.kt:44-49`).
+`NetworkMonitor` probes `/health` every 10 s while a session is active **and** a capture screen
+is mounted (`acquire` / `release` from `CaptureViewModel`, refcounted); **two consecutive
+failures** flip the status to disconnected (`NetworkMonitor.kt::runProbeLoop`), which surfaces as
+`ui/capture/ConnectionLossBanner.kt`. Leaving the screen cancels the loop and resets the status.
+The banner is informational only: a capture still saves, and the queue falls back on-device.
 
 ## On-device engine
 
 `OnDeviceInferenceEngine` (`data/inference/ondevice/OnDeviceInferenceEngine.kt`) is the offline
 counterpart, and the queue's fallback whenever the cloud fails or the circuit breaker is open.
 
-- **Which model.** `assets/models/` bundles both precisions, each a `<model_version>.tflite` and
-  a `<model_version>.json` manifest written by `inference/export/export_mobile.py`.
+- **Which model.** `assets/models/` bundles one build today, `yolo26n-effv2b0-v1-tflite-fp32`: a
+  `<model_version>.tflite` and a `<model_version>.json` manifest written by
+  `inference/export/export_mobile.py`.
   `OnDeviceModels.SHIPPED` (`data/inference/ondevice/ModelStore.kt`) picks the one production
   runs; the manifest's `model_version` is what the sample records.
 - **Loading.** Compiled once on first use, GPU first with LiteRT placing unsupported ops on the
@@ -124,26 +132,27 @@ counterpart, and the queue's fallback whenever the cloud fails or the circuit br
   box geometry **normalised to 0..1**; the manifest's `box_coordinates` says so and the
   decoder scales it. Reading it as pixels was the zero-match fault the first attempt hit.
 - **Latency.** Every frame logs `pre/infer/post/total` ms under tag `OnDeviceInference`.
-  `OnDeviceInferenceParityTest` (androidTest) runs both precisions on the phone against the
-  cloud's answers for the same frames; `inference/export/make_parity_fixture.py` builds those.
+  `OnDeviceInferenceParityTest` (androidTest) runs the shipped model on the phone against the
+  cloud's answers for the same frames — on a test device only, see `../../commands.md`; `inference/export/make_parity_fixture.py` builds those.
 
 ## Hits
 
 - **Any response-shape change breaks two files at once**: the DTO
   (`data/remote/dto/InferenceResponseDto.kt`) and the entity mapper
-  (`data/local/mapper/VerificationMapper.kt:36-39`), which copies `x, y, width, height`
+  (`VerificationMapper.kt::toDetectionEntity`), which copies `x, y, width, height`
   straight into `bbox_x/y/w/h` with no transformation.
 - **Class-label strings are load-bearing.** `EggSpecies.fromClassLabel` matches canonical names
-  and a small alias set (`domain/model/EggSpecies.kt:7-22`). An unrecognised label is preserved
+  and a small alias set (`domain/model/EggSpecies.kt`). An unrecognised label is preserved
   raw in `class_label` and behaves as a `WRONG_CLASS` candidate — renaming a model class
   silently changes every verdict computation and every species grouping.
-- The bearer key name. `app/build.gradle.kts:67` reads `INFERENCE_API_KEY_DEV` and `:90` reads
-  `INFERENCE_API_KEY_PROD`, aligned with `local.properties.example:35-36` (`../../constraints.md` C10).
+- The bearer key name. The debug `buildTypes` block of `app/build.gradle.kts` reads
+  `INFERENCE_API_KEY_DEV` and release reads `INFERENCE_API_KEY_PROD`, the two keys
+  `local.properties.example` declares (`../../constraints.md` C10).
 
 ## Does not hit
 
 - **Persistence.** The inference service is stateless — it never stores an image and never sees
-  a sample id (`inference/server.py:34-63`). Nothing about a schema change reaches it.
+  a sample id (`inference/server.py::infer`). Nothing about a schema change reaches it.
 - **The tap.** Capture saves and returns before any model runs. A failed `/infer` call only
   sends the frame to the on-device model. Only two consecutive `/health` failures raise the
   connection-loss banner.

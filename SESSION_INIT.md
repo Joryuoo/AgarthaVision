@@ -26,11 +26,15 @@ to this repository.
 | If you are... | Open |
 |---|---|
 | Changing the data model or writing a migration | `docs/map/effects/CONTEXT.md`, then the named object card |
-| Changing capture (camera, frame sampling, manual snapshot) | `docs/map/processes/capture.md` |
-| Changing inference (request/response contract, connectivity) | `docs/map/processes/infer.md` |
+| Changing sign-in, sign-out, or the login gate | `docs/map/processes/sign-in.md` |
+| Changing patients or the patient form | `docs/map/processes/register-patient.md` |
+| Changing sessions or the active session | `docs/map/processes/session-lifecycle.md` |
+| Changing capture (camera, frame cache, the shutter) | `docs/map/processes/capture.md` |
+| Changing inference (the queue, cloud and on-device engines, contract, connectivity) | `docs/map/processes/infer.md` |
 | Changing validation, verdicts, or the questionnaire | `docs/map/processes/validate.md` |
+| Changing sample deletion or the tombstone | `docs/map/processes/delete-sample.md` |
 | Changing sync to Supabase (Storage or Postgres) | `docs/map/processes/sync.md` |
-| Changing reports, CSV output, or EPG | `docs/map/processes/report.md` |
+| Changing reports (PDF or CSV) or LPF ranges | `docs/map/processes/report.md` |
 | Changing UI, theme, or design tokens | `docs/constraints.md` C11, then `docs/file-tree.md` |
 | Setting up the environment or picking a version | `docs/stack.md` |
 | Running a build, test, or lint | `docs/commands.md` |
@@ -52,7 +56,8 @@ C12 Build and test before pushing · C13 Code wins over docs.
 
 ## Rules of the road
 
-- **Code is the source of truth.** Every shelf file cites `path:line`. Where a document and
+- **Code is the source of truth.** Every shelf file cites the code by symbol (`File.kt::name`),
+  and SQL migrations by `path:line` — `docs/CONTEXT.md` house rule 1. Where a document and
   the code disagree, the code wins and you correct the document in the same change.
 - Load the router, then **one** shelf file, then **one** card. Do not walk all of `docs/`.
 - `docs/_archive/` is superseded. Never implement against anything inside it.

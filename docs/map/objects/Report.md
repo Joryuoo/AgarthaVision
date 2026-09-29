@@ -1,3 +1,11 @@
+---
+type: object
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+entity: app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt
+---
+
 # Report
 
 **One sentence.** A snapshot of one session's — or, since 14zcqntj2uz, one patient's pooled
@@ -66,8 +74,7 @@ bytes must not cost the metadata too.
 Indexes on `(session_id, generated_at desc)`, `(user_id, generated_at desc)`, and
 `(patient_id, generated_at desc) where patient_id is not null`.
 
-**Room** (`app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt`, version 24 —
-`MIGRATION_23_24`)
+**Room** (`ReportEntity`, version 24 — `MIGRATION_23_24`)
 
 PK column is `report_id`. Differences:
 
@@ -112,8 +119,9 @@ PK column is `report_id`. Differences:
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
 (`ui/records/SessionDetailViewModel.kt`). Read by the Reports card on
 `ui/records/SessionDetailScreen.kt`, by the cross-patient Reports tab
-(`ui/records/RecordsScreen.kt`/`RecordsViewModel.kt`), and by the Settings sync counters. Pushed
-by `data/supabase/SyncReportUseCase.kt` — row and PDF bytes both.
+(`ui/records/RecordsScreen.kt`/`RecordsViewModel.kt`), and by the Settings sync counters. Pushed by
+`data/supabase/SyncReportUseCase.kt` — the row, then the PDF into the `reports` bucket
+(see [`StorageObject`](StorageObject.md)). PDF is the only format (86d4be47c).
 
 **Note:** report generation requires a **cached local identity** and the session's
 [`Patient`](Patient.md) already on this device.

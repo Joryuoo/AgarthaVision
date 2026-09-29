@@ -261,10 +261,11 @@ export interface Session {
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
   label: string | null;
-  // Nullable human-friendly smear label. Auto-generated as
-  // `C.G.-0730600000-001` (initials, the patient's barangay code, then the Nth
-  // smear for that patient) and editable thereafter. Cosmetic and deliberately
-  // not unique — the session UUID is the real key.
+  // Nullable human-friendly smear label. Auto-generated as `LDNJ-M21-S01`
+  // (3-letter surname abbreviation + first initial, sex and age, then the Nth
+  // smear for that patient; domain/session/SessionLabelGenerator.kt) and editable
+  // thereafter. Unique per patient in Room only (index on patient_id, label);
+  // Postgres does not constrain it — the session UUID is the real key.
 
   // ── Deliberately absent, all three ────────────────────────────────────────
   // `notes`     — removed. It was being used as an ad-hoc patient identifier

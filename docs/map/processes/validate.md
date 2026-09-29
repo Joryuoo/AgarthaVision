@@ -1,71 +1,89 @@
+---
+type: process
+status: verified
+verified: 2026-09-29
+commit: feaa4803
+---
+
 # validate
 
 The human-in-the-loop gate. Nothing counts until this runs.
 
-**Input** — a flagged frame and the medtech's answers.
-**Output** — a `verified` [`Sample`](../objects/Sample.md) with N
-[`Detection`](../objects/Detection.md) rows, and a sync attempt.
+**Input** — a flagged frame whose inference has settled (`ready` or `manual`), and the medtech's
+answers.
+**Output** — a `verified` [`Sample`](../objects/Sample.md), its
+[`Detection`](../objects/Detection.md) rows and [`Finding`](../objects/Finding.md) rows, and a
+sync attempt.
 
-**consumes** [`Sample`](../objects/Sample.md) (status `flagged`)
-**produces** [`Detection`](../objects/Detection.md), [`Sample`](../objects/Sample.md) (status `verified`)
+**consumes** [`Sample`](../objects/Sample.md) (status `flagged`, or `verified` on re-edit)
+**produces** [`Detection`](../objects/Detection.md), [`Finding`](../objects/Finding.md),
+[`Sample`](../objects/Sample.md) (status `verified`)
 
 ## Movement
 
-1. **Load the queue.** `FlaggedFrameStore.state` observes flagged samples for the active
-   session and rebuilds `FlaggedFrame` objects, re-reading each JPEG from disk
-   (`data/repository/FlaggedFrameStore.kt:59-75`, `:99-117`). The unverified queue is flat —
-   there are no tabs dividing sources. When the queue has no rows, the screen indicates the status
-   (nothing captured yet, all verified, or session complete). Duplicate frames are handled via soft-delete
-   tombstoning (`deleted_at`), which excludes them from counts and queues.
-2. **Review per box (pre-filled Q1–Q3, Add Egg).** For each detected egg, the verification sheet
-   presents the model's prediction: is it an egg (Q1), is the bounding box placed correctly (Q2),
-   and which species is it (Q3). These are pre-filled from model inference so the medtech confirms
-   or overrides with minimal taps. Medtechs can also use "Add Egg" to draw/tag missed eggs on the frame.
-   A "no" to the egg question records `FALSE_POSITIVE`. A "no" to the box question records `BOX_INCORRECT`
-   while still asking for species.
-3. **Derived / frame-level reannotation.** Missed eggs or misclassified detections feed
-   `needs_reannotation` on the sample row (`SubmitVerificationUseCase.kt:54`).
-4. **Compute the verdict.** One function, first-match-wins:
-   not an egg → `FALSE_POSITIVE`; box wrong → `BOX_INCORRECT`; species is `OTHER` or differs
-   from the model's → `WRONG_CLASS`; otherwise `CONFIRMED`
-   (`data/local/mapper/VerificationMapper.kt:10-17`). Note a null species also yields `FALSE_POSITIVE`.
-5. **Submit.** `VerificationViewModel.onSubmit` calls the use case and navigates on success.
-6. **Update the sample and findings.** One UPDATE sets `status = verified`, `verified_at`,
-   `needs_reannotation` and `user_note`, and leaves `predictions_json` in place — it is what the
-   sync pushes as `predictions` rows (`domain/usecase/verify/SubmitVerificationUseCase.kt:51`). GPS and the legacy repeat flag
-   are completely absent. `SampleSpeciesFindingDao.replaceFindingsForSample` updates the per-species
-   counts for the low-power field (`:69-72`).
-7. **Insert detections.** Predictions are mapped to `DetectionEntity` rows with their verdicts
-   (`SubmitVerificationUseCase.kt:61-63`). **Both halves persist** — a rejection is a
-   `FALSE_POSITIVE` row, never a deletion (`../../constraints.md` C8).
-8. **Sync immediately.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()`
-   enqueues background sync (`SubmitVerificationUseCase.kt:74-78`).
+1. **Load the queue.** `ObserveVerificationQueueUseCase` feeds the queue screen; the sheet itself
+   reads `FlaggedFrameStore.state`, which rebuilds `FlaggedFrame` objects from Room and re-reads
+   each JPEG from disk (`FlaggedFrameStore.kt::toFlaggedFrame`). The unverified queue is flat —
+   no tabs by source. Each row shows a Queued / In inference / Ready / Manual badge
+   (`ui/verify/InferenceStateBadge.kt`). Tombstoned samples are excluded everywhere.
+2. **Wait for the model, or cancel it.** While a frame's inference is queued or running, Model
+   Output shows "Frame is in inference" and Add species, remarks and Submit are locked
+   (`ui/verify/InferencePending.kt`). "Cancel inference" asks first, then makes it a manual
+   capture (`CancelInferenceUseCase`). The result replaces the spinner in place when it lands.
+3. **Review each model box — three pre-checked statements.** Q1 "There is a parasitic egg in
+   this box", Q2 "The bounding box is correctly placed", Q3 "This egg is <species>"
+   (`VerificationSheet.kt::CheckQuestion`). All three are pre-filled from the model, so an
+   untouched box is the medtech's confirmation of it. Unchecking Q1 hides the rest. Unchecking Q2
+   keeps Q3 visible — a misplaced box still holds a countable egg — and offers **Redraw the box**
+   (`ui/verify/DrawMode.kt`). Once a box is redrawn, Q2 is latched unchecked and disabled.
+   Unchecking Q3 opens the species dropdown, and a stage dropdown where the species has stages.
+4. **Add species, counted per field.** "+ Add species" opens one card per species (and stage):
+   the medtech enters the field's **total** eggs of that species, floored at what the model
+   already boxed (`VerificationViewModel::onFieldTotalChanged`, `VerificationAnswers.fieldTotal`).
+   **Locate eggs** optionally draws a box for each unboxed egg (`drawnBoxes`); it never gates
+   submit, so declaring missed eggs never costs more than ignoring them.
+5. **Derived Q4.** `needs_reannotation` is not asked. It is true when an added species' total
+   exceeds its boxed count (`VerificationUiState.missedEgg`), and null for a manual capture or a
+   frame still pending.
+6. **Compute the verdict.** One function, first-match-wins: not an egg → `FALSE_POSITIVE`; box
+   wrong → `BOX_INCORRECT`; no species → `FALSE_POSITIVE`; species `OTHER` or differs from the
+   model's → `WRONG_CLASS`; otherwise `CONFIRMED` (`VerificationMapper.kt::computeVerdict`).
+7. **Submit.** `VerificationViewModel.onSubmit` calls `SubmitVerificationUseCase`, which refuses a
+   frame whose inference is still pending (`InferencePendingException`, checked against both the
+   frame and the row), then in `::invoke`:
+   - one UPDATE sets `status = verified`, `verified_at`, `needs_reannotation`, `user_note` and
+     `is_edited`, leaving `predictions_json` in place for sync (`SampleDao::updateSampleOnVerify`);
+   - writes every detection — **both halves persist**; a rejection is a `FALSE_POSITIVE` row
+     (`List<Finding>.toDetectionEntities`, one row per egg: kept model boxes plus one per unboxed
+     added egg, keyed by species and slot);
+   - prunes added slots a lower total no longer writes, never touching a model box's row;
+   - replaces the sample's findings wholesale (`SampleSpeciesFindingDao::replaceFindingsForSample`).
+8. **Sync.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()` enqueues
+   the background pass; offline, the inline call fails safely and the worker catches up. See
+   [`sync`](sync.md).
 
 ## Manual captures take the same path
 
-There is no second use case and no second screen. A manual capture is a frame with no model
-output, so it opens with exactly one finding whose `prediction` is null: the isEgg and
-isBoxCorrect questions do not render, and the medtech names a species and a count directly.
-`Finding.toDetectionEntity` writes that as **one** detection with `confidence = 1.0f`, all four
-box columns null and `verdict = CONFIRMED`.
+There is no second use case and no second screen. A manual capture — no model reachable, a
+cancel, or five failed passes — is a frame with no model output: no box questions render, and
+the medtech adds species with totals directly. Each egg becomes a detection with
+`confidence = 1.0f`, `verdict = CONFIRMED`, and the drawn box for its slot or none.
 
 ## Hits
 
-- **Every downstream count.** A verdict is not just a label — the confirmed egg count query
-  filters `verdict != 'false_positive'` (`data/local/dao/DetectionDao.kt:43`), and `expert_class`
-  overrides `class_label` in the species grouping. Findings feed `aggregateLpfPerSpecies` for LPF ranges.
+- **Every downstream count.** The confirmed egg count filters `verdict != 'false_positive'`
+  (`DetectionDao.kt::getConfirmedEggCountsForSession`), and `expert_class` overrides
+  `class_label` in the species grouping. Findings feed `aggregateLpfPerSpecies` for LPF ranges.
 - **Verdict case.** Room lowercase, Postgres uppercase, mapped at the sync boundary
-  (`domain/model/DetectionVerdict.kt:13-16`,
-  `data/supabase/SampleRemoteDataSource.kt:79-97`).
-- **Offline behaviour.** Verification needs no auth and no network
-  (`domain/usecase/verify/SubmitVerificationUseCase.kt:41-42`). The inline sync call simply
-  fails safely and enqueues background sync via `SyncScheduler`.
+  (`domain/model/DetectionVerdict.kt`).
+- **Offline behaviour.** Verification needs no auth and no network; only the sync step does.
+- **The count helpers.** `Finding.kt`'s `boxedCountOf`, `fieldTotalOf` and `unboxedCountOf` are
+  what the card, the detection rows, the findings rows and `missedEgg` all agree through.
 
 ## Does not hit
 
-- **The bounding box.** `BOX_INCORRECT` records that the box was wrong; nothing corrects it.
-  The original coordinates are stored unchanged and in-app box editing does not exist — the fix
-  happens in offline annotation tooling.
+- **The model's own claim.** A redraw writes the medtech's box on the detection; the model's box
+  stays in `predictions` untouched (see [`Prediction`](../objects/Prediction.md)).
 - **The model.** Nothing here retrains or reweights anything. The verdicts accumulate as a
   corpus; consuming it is a separate, out-of-repo activity.
 - **The image bytes.** Verification never rewrites the JPEG. Resizing happens later, in
@@ -73,43 +91,28 @@ box columns null and `verdict = CONFIRMED`.
 
 ## Free-text audit (C13)
 
-Every text-entry field reachable from verification/manual capture and the records screens,
-audited for whether it is sanctioned free text, a dropdown-gated fallback, or not free text at
-all.
+Every text-entry field reachable from verification and the records screens.
 
-- **Sanctioned free text (keep).** The per-detection sample note: `NoteField` in
-  `ui/verify/VerificationSheet.kt:348-353` (call site) and `:482-497` (definition), and the
-  equivalent `OutlinedTextField` in `ui/verify/ManualSheet.kt:313-329`. Both write to
-  `state.userNote` / `samples.user_note` and land unchanged in the CSV `user_note` column
-  (`domain/usecase/records/ReportCsvBuilder.kt:82`, `:108`). Also sanctioned: the session label
-  entered at session creation (`ui/sessions/SessionsScreen.kt:436-441`), an administrative
-  specimen identifier rather than a clinical observation, which flows into the CSV
-  `session_label` header (`ReportCsvBuilder.kt:47`) and the PDF header
-  (`domain/usecase/records/ReportPdfBuilder.kt:31`).
-- **Dropdown-gated fallback (legitimate, but a *species* field, not remarks).** The "Other
-  species" text field in `ui/verify/SpeciesDropdown.kt:143-154`, rendered only when
-  `EggSpecies.OTHER` is selected. Its value becomes `expert_class`
-  (`data/local/mapper/VerificationMapper.kt:24-39`), not a note — it names the organism, it
-  doesn't annotate it.
-- **Not actually free text.** The species dropdown
-  (`ui/verify/SpeciesDropdown.kt:111-142`) is a read-only `ExposedDropdownMenu` with no search
-  query; the committed value only ever comes from a `DropdownMenuItem` tap
-  (`SpeciesDropdown.kt:133-139`), never from typed text.
-- **No editable/free-text fields** exist on `ui/records/SampleDetailScreen.kt` or
-  `ui/records/SessionDetailScreen.kt` — both are read-only presentations of already-committed
-  data.
-
-**Governing rule status.** The only clinical free-text field in the app is the dropdown-gated
-"Other species" fallback above and medtech notes. The per-species LPF count uses the structured
-findings inputs.
+- **Sanctioned free text.** The sample remark (`VerificationSheet.kt::NoteField`), written to
+  `samples.user_note` and exported unchanged in the CSV `user_note` column
+  (`ReportCsvBuilder.kt::CSV_HEADER`). The session label typed in the New Session sheet
+  (`SessionsScreen.kt::NewSessionSheet`) — an administrative specimen identifier, printed in the
+  CSV and PDF headers.
+- **Dropdown-gated fallbacks** — they name the organism or stage, they do not annotate it. The
+  "Other species" field in `SpeciesDropdown`, shown only for `EggSpecies.OTHER`, with offline
+  suggestions from earlier entries (`SearchSpeciesSuggestionsUseCase`); its value becomes
+  `expert_class`. The "Other stage" field in `StageDropdown`, shown only for `EggStage.OTHER`.
+- **Not free text.** The species and stage dropdowns themselves are read-only
+  `ExposedDropdownMenu`s; a value comes only from a menu tap. The field total is a number.
+- **No editable fields** on `SampleDetailScreen` or `SessionDetailScreen`.
 
 ## The inconsistency worth knowing
 
-Two aggregate queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession`
-— the one behind the report egg count — counts everything with
-`verdict != 'false_positive'`, so `WRONG_CLASS` and `BOX_INCORRECT` boxes are counted as eggs
-(`data/local/dao/DetectionDao.kt:43`). The dashboard trend queries use
-`verdict = 'confirmed'` (`data/local/dao/DetectionDao.kt:66`, `:87`). Prose that says the report counts
-"CONFIRMED detections" describes the second query, not the one that produces the number.
-Clinically the first is defensible — a misclassified egg is still an egg — but the two should
-not silently differ.
+Queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession` — the one
+behind the report egg count — counts everything with `verdict != 'false_positive'`, so
+`WRONG_CLASS` and `BOX_INCORRECT` eggs count. `SessionDao::observeSessionsPage`, which gives the
+patient's Sessions list its `totalEggs`, joins only `verdict = 'confirmed'`, so the same smear
+can show fewer eggs on its session card than in its report. Clinically the first is
+defensible — a misclassified egg is still an egg — but the two should not silently differ.
+`DetectionDao::observeConfirmedEggCountsSince` and `SessionDao::observeSessionsWithStats` use the
+confirmed-only rule too, but nothing calls them (ghosts).

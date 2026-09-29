@@ -34,8 +34,9 @@ The terse list. No explanation here — each line points at the constraint that 
 ## Design
 
 - **Never introduce a second theme or a charting library.** → C11
-- **Never give the bottom bar or a brand mark a Material icon.** Those are hand-drawn
-  outline drawables; Material glyphs stay inside screens. → C11
+- **Never hand-draw an icon.** Bottom-bar and brand glyphs are Material Symbols exports in
+  `ui/icons/`; in-screen glyphs may come from `Icons.*`. No SVG path data or `ImageVector`
+  coordinates written by hand. → C11
 - **Never write a raw hex colour outside the palette definition file.** → C11
 - **Never hardcode user-facing text.** It goes in `strings.xml`. → C11
 
@@ -44,7 +45,12 @@ The terse list. No explanation here — each line points at the constraint that 
 - **Never create or re-introduce a `TODO.md`.** Tasks live in ClickUp.
 - **Never over-specify implementation in an AI-assisted ticket.** State the problem, expected behavior, and acceptance criteria; treat code paths and fixes as hints. → C9
 - **Never push without a local build and test pass.** → C12
+- **Never run `connectedAndroidTest` / `connectedDebugAndroidTest` on a phone that holds real
+  samples.** It uninstalls the app afterwards, which wipes every unsynced sample and every frame
+  still waiting for inference. Emulator or test device only. → `commands.md`
 - **Never open a PR against `main` or `staging` directly.** Target `development`. → C9
 - **Never invent a convention without writing it into `docs/`.** → C13
+- **Never change code without updating the shelf card that describes it** — in the same PR,
+  or mark the card `status: stale`. → `CONTEXT.md` house rule 5
 - **Never trust a document over the code.** → C13
 - **Never implement against anything in `docs/_archive/`.**
