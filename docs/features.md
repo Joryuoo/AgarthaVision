@@ -118,6 +118,21 @@ as working.
   `ReportPdfRenderer.kt`, stored in `Documents/AgarthaVision/`, and tracked in Room/Supabase
   (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 
+### Home dashboard
+- **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,
+  Positive rate, To review, AI agreement); page 2 shows **My coverage**
+  (`ui/dashboard/KpiPager.kt`, `ui/dashboard/coverage/MyCoverageCard.kt`).
+- **My coverage card.** Rolls examined smears up to province level via each patient's PSGC
+  barangay, shaded by positive rate on a small offline choropleth map
+  (`ui/dashboard/coverage/MiniChoroplethMap.kt`), with a rate/smear-count summary beside it.
+  Framed as a single province, an island group, or the whole country depending on how many
+  provinces have data in the selected period (`domain/usecase/coverage/CoverageAggregation.kt`,
+  `domain/usecase/coverage/ObserveMyCoverageUseCase.kt`). Tapping the card opens the full-screen
+  **My coverage** map (`Screen.MyCoverage`, `ui/coverage/MyCoverageScreen.kt`) — a pannable/
+  zoomable province choropleth with island-group filter chips, a period toggle local to the
+  screen, and a per-province bottom sheet (`ui/coverage/ProvinceSheet.kt`) showing the positive
+  rate, species mix, and towns ranked by positive rate.
+
 ### Shell and appearance
 - **Screens**: Login, Dashboard, Patients, PatientSessions, PatientForm, Capture, Reports,
   SessionDetail, SampleDetail, VerificationQueue, Settings (`ui/navigation/AgarthaNavGraph.kt:44-89`).

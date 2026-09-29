@@ -219,4 +219,6 @@ private class FakeDao(seeded: List<ReportEntity>) : ReportDao {
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
 
     override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
+
+    override fun observeUnsyncedCount(userId: String): Flow<Int> = flowOf(0)
 }

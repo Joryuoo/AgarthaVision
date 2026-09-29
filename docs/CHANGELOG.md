@@ -72,6 +72,19 @@ The tables above measure the old model.
 
 ---
 
+## feat/home-and-ui-redesign — offline province/town boundary geometry · 2026-09-27
+
+`14zcqntj3bv` (Phase 8 of 10). No boundary data existed anywhere in the repo — the on-device
+map planned for later phases needs province/town geometry keyed on the same PSGC codes the
+barangay picker already ships. `tools/geo/` reverses the Negros Island Region and Sulu
+renumbering to join a 2023-vintage shapefile onto the current q2_2026 PSGC dataset
+(1,642/1,642 towns, 85 province-level units including the NCR pseudo-province), and packs the
+result into two custom quantized binary assets well inside their 200 KB/900 KB budgets. New
+pure-Kotlin `domain/geo` primitives (projection, hit-testing, view-fit, choropleth binning) and
+a `BoundaryRepository` read them — no Room table, no schema change, no map UI yet.
+
+---
+
 ## fix/detection-box-provenance — the model's output is stored, and a box says who drew it · 2026-09-24
 
 `14zcqnthrx6` with `14zcqnthrx8`.

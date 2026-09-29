@@ -167,8 +167,8 @@ internal fun DrawModeScreen(
                 label = stringResource(R.string.verify_draw_accept),
                 tag = VerifyTestTags.DRAW_ACCEPT,
                 enabled = draft != null,
-                background = colors.accent,
-                foreground = colors.onAccent,
+                background = colors.brandFill,
+                foreground = colors.onBrandFill,
                 onClick = { draft?.let(onSaved) },
                 modifier = Modifier.weight(1f),
             )

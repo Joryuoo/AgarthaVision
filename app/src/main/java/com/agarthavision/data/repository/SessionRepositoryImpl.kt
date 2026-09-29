@@ -2,6 +2,7 @@ package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.mapper.toDomain
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
@@ -166,4 +167,78 @@ class SessionRepositoryImpl @Inject constructor(
                 SessionsCounts(totalCount = row.totalCount, unverifiedCount = row.unverifiedCount)
             }
     }
+
+    override fun observeSessionSummaries(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+        limit: Int,
+    ): Flow<List<com.agarthavision.domain.model.SessionSummary>> =
+        sessionDao.observeSessionSummaries(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+            limit = limit,
+        ).map { rows ->
+            rows.map { row ->
+                com.agarthavision.domain.model.SessionSummary(
+                    session = row.session.toDomain(),
+                    patient = row.patient.toDomain(),
+                    totalFrames = row.totalSamples,
+                    framesToReview = row.unverifiedSamples,
+                    isPositive = row.isPositive,
+                    lastActivityAt = row.lastActivityAt,
+                )
+            }
+        }
+
+    override fun observeSessionSummaryCount(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+    ): Flow<Int> =
+        sessionDao.observeSessionSummaryCount(
+            userId = userId,
+            filter = filter.sql,
+            fromMillis = window?.startMillis,
+            toMillis = window?.endMillis,
+        )
+
+    override fun observeEmptySessionCount(
+        userId: String,
+        excludeSessionId: String?,
+    ): Flow<Int> =
+        sessionDao.observeEmptySessionCount(userId, excludeSessionId)
+
+    override fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> =
+        sessionDao.observeSessionOutcomesBetween(userId, fromMillis, toMillis).map { rows ->
+            rows.map {
+                com.agarthavision.domain.model.SessionOutcome(
+                    sessionId = it.sessionId,
+                    patientId = it.patientId,
+                    startedAt = it.startedAt,
+                    examined = it.examined,
+                    positive = it.positive,
+                )
+            }
+        }
+
+    override fun observeStartedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.SessionStarted>> =
+        sessionDao.observeStartedActivity(userId, limit).map { rows ->
+            rows.map {
+                ActivityItem.SessionStarted(
+                    sessionId = it.sessionId,
+                    sessionLabel = it.sessionLabel,
+                    occurredAt = it.occurredAt,
+                )
+            }
+        }
 }
