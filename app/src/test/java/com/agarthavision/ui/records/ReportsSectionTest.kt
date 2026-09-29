@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.agarthavision.ui.theme.AgarthaVisionTheme
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,16 +35,17 @@ class ReportsSectionTest {
 
         composeRule.onNodeWithText("Verify at least one sample to generate a report.").assertExists()
         composeRule.onNodeWithText("No reports yet.").assertDoesNotExist()
-        composeRule.onNodeWithContentDescription("Export report").assertIsNotEnabled()
+        composeRule.onNodeWithContentDescription("Generate PDF report").assertIsNotEnabled()
     }
 
     @Test
-    fun `tapping the disabled button offers no format`() {
-        render(verifiedSamples = emptyList())
+    fun `disabled tap does not call onGenerate`() {
+        var generateCalls = 0
+        render(verifiedSamples = emptyList(), onGenerate = { generateCalls++ })
 
-        composeRule.onNodeWithContentDescription("Export report").performClick()
+        composeRule.onNodeWithContentDescription("Generate PDF report").performClick()
 
-        composeRule.onNodeWithText("PDF", substring = true).assertDoesNotExist()
+        assertEquals(0, generateCalls)
     }
 
     @Test
@@ -51,20 +53,19 @@ class ReportsSectionTest {
         render(verifiedSamples = listOf(sample()))
 
         composeRule.onNodeWithText("No reports yet.").assertExists()
-        composeRule.onNodeWithContentDescription("Export report")
+        composeRule.onNodeWithContentDescription("Generate PDF report")
             .assertIsEnabled()
             .assertHasClickAction()
     }
 
     @Test
-    fun `tapping the enabled button offers both formats`() {
-        // The positive twin of the disabled case, so its assertDoesNotExist cannot pass vacuously.
-        render(verifiedSamples = listOf(sample()))
+    fun `tap on enabled button calls onGenerate once`() {
+        var generateCalls = 0
+        render(verifiedSamples = listOf(sample()), onGenerate = { generateCalls++ })
 
-        composeRule.onNodeWithContentDescription("Export report").performClick()
+        composeRule.onNodeWithContentDescription("Generate PDF report").performClick()
 
-        composeRule.onNodeWithText("PDF", substring = true).assertExists()
-        composeRule.onNodeWithText("CSV", substring = true).assertExists()
+        assertEquals(1, generateCalls)
     }
 
     @Test
@@ -74,7 +75,11 @@ class ReportsSectionTest {
         composeRule.onNodeWithContentDescription("Generating…").assertIsNotEnabled()
     }
 
-    private fun render(verifiedSamples: List<SampleUi>, isGenerating: Boolean = false) {
+    private fun render(
+        verifiedSamples: List<SampleUi>,
+        isGenerating: Boolean = false,
+        onGenerate: () -> Unit = {},
+    ) {
         val state = SessionDetailContentState(
             session = SessionDetailUi(
                 id = "abcd",
@@ -92,7 +97,7 @@ class ReportsSectionTest {
             totalReports = 0,
             currentPage = 0,
             isGenerating = isGenerating,
-            onGenerate = {},
+            onGenerate = onGenerate,
             onOpenReport = {},
             onPrevPage = {},
             onNextPage = {},

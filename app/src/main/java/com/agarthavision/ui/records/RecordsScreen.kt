@@ -48,11 +48,8 @@ import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -369,14 +366,8 @@ fun RecordsScreen(
                                         onOpenPdf = {
                                             shareError = viewReportPdf(context, report.pdfFilePath)
                                         },
-                                        onOpenCsv = {
-                                            shareError = viewReportCsv(context, report.csvFilePath)
-                                        },
                                         onSharePdf = {
                                             shareError = shareReportPdf(context, report.pdfFilePath)
-                                        },
-                                        onShareCsv = {
-                                            shareError = shareReportCsv(context, report.csvFilePath)
                                         },
                                         modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
                                     )
@@ -861,9 +852,7 @@ internal fun ReportCard(
     report: Report,
     onSessionClick: () -> Unit,
     onOpenPdf: () -> Unit,
-    onOpenCsv: () -> Unit,
     onSharePdf: () -> Unit,
-    onShareCsv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -940,8 +929,7 @@ internal fun ReportCard(
         }
 
         val hasPdf = report.pdfFilePath != null
-        val hasCsv = report.csvFilePath != null
-        if (hasPdf || hasCsv) {
+        if (hasPdf) {
             Spacer(Modifier.height(6.dp))
             HorizontalDivider(color = colors.border, thickness = 1.dp)
             Spacer(Modifier.height(6.dp))
@@ -951,99 +939,24 @@ internal fun ReportCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                ReportActionButton(
+                    icon = Icons.Outlined.PictureAsPdf,
+                    label = stringResource(R.string.reports_format_pdf),
+                    contentDescription = stringResource(R.string.reports_open_pdf),
+                    isPrimary = true,
+                    onClick = onOpenPdf,
+                )
+
+                IconButton(
+                    onClick = onSharePdf,
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    if (hasPdf) {
-                        ReportActionButton(
-                            icon = Icons.Outlined.PictureAsPdf,
-                            label = stringResource(R.string.reports_format_pdf),
-                            contentDescription = stringResource(R.string.reports_open_pdf),
-                            isPrimary = true,
-                            onClick = onOpenPdf,
-                        )
-                    }
-
-                    if (hasCsv) {
-                        ReportActionButton(
-                            icon = Icons.Outlined.TableChart,
-                            label = stringResource(R.string.reports_format_csv),
-                            contentDescription = stringResource(R.string.reports_open_csv),
-                            isPrimary = false,
-                            onClick = onOpenCsv,
-                        )
-                    }
-                }
-
-                var shareMenuExpanded by remember { mutableStateOf(false) }
-
-                Box {
-                    IconButton(
-                        onClick = {
-                            when {
-                                hasPdf && hasCsv -> shareMenuExpanded = true
-                                hasPdf -> onSharePdf()
-                                hasCsv -> onShareCsv()
-                                else -> {}
-                            }
-                        },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = stringResource(R.string.report_share_action),
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-
-                    if (hasPdf && hasCsv) {
-                        DropdownMenu(
-                            expanded = shareMenuExpanded,
-                            onDismissRequest = { shareMenuExpanded = false },
-                            modifier = Modifier.background(colors.surfaceHigh),
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = stringResource(R.string.reports_share_pdf),
-                                        color = colors.textPrimary,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.PictureAsPdf,
-                                        contentDescription = null,
-                                        tint = colors.accent,
-                                    )
-                                },
-                                onClick = {
-                                    shareMenuExpanded = false
-                                    onSharePdf()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = stringResource(R.string.reports_share_csv),
-                                        color = colors.textPrimary,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.TableChart,
-                                        contentDescription = null,
-                                        tint = colors.textPrimary,
-                                    )
-                                },
-                                onClick = {
-                                    shareMenuExpanded = false
-                                    onShareCsv()
-                                },
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = stringResource(R.string.report_share_action),
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         }

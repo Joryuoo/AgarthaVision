@@ -6,26 +6,27 @@ import com.agarthavision.domain.repository.ReportFileStore
 import javax.inject.Inject
 
 /**
- * Where a report's files live on this device after [RestoreReportFilesUseCase] has run.
+ * Where a report's PDF lives on this device after [RestoreReportFilesUseCase] has run.
  *
- * Either may be null: a report is generated as one format or the other, and a report written
- * before the `reports` bucket existed has nothing stored to recover.
+ * Null when the report predates the `reports` bucket, or nothing could be recovered for it.
  */
 data class RestoredReportFiles(
     val pdfFilePath: String?,
-    val csvFilePath: String?,
 )
 
 /**
- * Puts a report's files back on this device by pulling them from the `reports` bucket.
+ * Puts a report's PDF back on this device by pulling it from the `reports` bucket.
  *
  * The counterpart to [SyncReportUseCase]'s upload. A report row syncs between devices but
- * `pdf_file_path` and `csv_file_path` are device-local — a MediaStore id or an absolute path
- * — so on any device but the one that generated it, the row names a file that was never
- * there. This downloads the stored bytes, writes them through [ReportFileStore] so they land
- * in `Documents/AgarthaVision/` like any other report, and repoints the row at the result.
+ * `pdf_file_path` is device-local — a MediaStore id or an absolute path — so on any device but
+ * the one that generated it, the row names a file that was never there. This downloads the
+ * stored bytes, writes them through [ReportFileStore] so they land in `Documents/AgarthaVision/`
+ * like any other report, and repoints the row at the result.
  *
  * Writing the path back is what keeps this a one-time cost: the next open is a local read.
+ *
+ * `csv_file_path` is untouched here — the CSV format is retired (PDF-only reports), so a legacy
+ * CSV-only report has nothing to restore and its stored path just passes through unchanged.
  */
 class RestoreReportFilesUseCase @Inject constructor(
     private val reportDao: ReportDao,
@@ -33,14 +34,15 @@ class RestoreReportFilesUseCase @Inject constructor(
     private val reportFileStore: ReportFileStore,
 ) {
     /**
-     * Ensures the report's files are readable locally, downloading whatever is missing.
+     * Ensures the report's PDF is readable locally, downloading it when missing.
      *
-     * Files already present are left alone rather than re-fetched — this runs on a tap, and
+     * Already present is left alone rather than re-fetched — this runs on a tap, and
      * re-downloading a document the device already has would spend the medtech's data to
      * arrive at the same place.
      *
-     * @return the local paths, or [Result.failure] when the report is unknown or nothing
-     *   could be recovered for it.
+     * @return the local PDF path, or [Result.failure] when the report is unknown or nothing
+     *   could be recovered for it (including a legacy CSV-only report, which has no PDF to
+     *   restore).
      */
     suspend operator fun invoke(reportId: String): Result<RestoredReportFiles> {
         val report = reportDao.getReportById(reportId)
@@ -51,60 +53,46 @@ class RestoreReportFilesUseCase @Inject constructor(
             reportId = reportId,
             sessionId = report.sessionId,
             localPath = report.pdfFilePath,
-            extension = ReportRemoteDataSource.PDF_EXTENSION,
-        )
-        val csvPath = ensureLocal(
-            userId = report.userId,
-            reportId = reportId,
-            sessionId = report.sessionId,
-            localPath = report.csvFilePath,
-            extension = ReportRemoteDataSource.CSV_EXTENSION,
         )
 
-        return if (pdfPath == null && csvPath == null) {
+        return if (pdfPath == null) {
             Result.failure(
-                IllegalStateException("No stored file could be recovered for report $reportId."),
+                IllegalStateException("No stored PDF could be recovered for report $reportId."),
             )
         } else {
-            // Only touch the row when a path actually changed; a no-op write would bump the row
-            // for nothing and, on a shared session, race the sync that is reading it.
-            if (pdfPath != report.pdfFilePath || csvPath != report.csvFilePath) {
-                reportDao.updateFilePaths(reportId, pdfPath, csvPath)
+            // Only touch the row when the path actually changed; a no-op write would bump the
+            // row for nothing and, on a shared session, race the sync that is reading it.
+            if (pdfPath != report.pdfFilePath) {
+                reportDao.updateFilePaths(reportId, pdfPath, report.csvFilePath)
             }
-            Result.success(RestoredReportFiles(pdfFilePath = pdfPath, csvFilePath = csvPath))
+            Result.success(RestoredReportFiles(pdfFilePath = pdfPath))
         }
     }
 
     /**
-     * A null [localPath] means the report was never generated in this format, so nothing was
-     * uploaded for it either — asking Storage would only spend a round trip on a certain miss.
+     * A null [localPath] means the report was never generated as a PDF (a legacy CSV-only
+     * report), so nothing was uploaded for it either — asking Storage would only spend a round
+     * trip on a certain miss.
      *
      * @return a path whose bytes this device can read, or null when the file is neither here
      *   nor in Storage.
      */
-    @Suppress("LongParameterList")
     private suspend fun ensureLocal(
         userId: String,
         reportId: String,
         sessionId: String,
         localPath: String?,
-        extension: String,
     ): String? {
         if (localPath == null || reportFileStore.readBytes(localPath) != null) return localPath
 
-        val objectPath = ReportRemoteDataSource.objectPathFor(userId, reportId, extension)
+        val objectPath = ReportRemoteDataSource.objectPathFor(userId, reportId, ReportRemoteDataSource.PDF_EXTENSION)
         val bytes = runCatching { remoteDataSource.downloadReportFile(objectPath) }
-            .onFailure { Log.w(TAG, "No stored $extension for report $reportId", it) }
+            .onFailure { Log.w(TAG, "No stored pdf for report $reportId", it) }
             .getOrNull()
 
         return bytes?.let {
-            runCatching {
-                if (extension == ReportRemoteDataSource.PDF_EXTENSION) {
-                    reportFileStore.writePdf(reportId, sessionId, it)
-                } else {
-                    reportFileStore.writeCsv(reportId, sessionId, it.decodeToString())
-                }
-            }.onFailure { e -> Log.e(TAG, "Could not write restored $extension for $reportId", e) }
+            runCatching { reportFileStore.writePdf(reportId, sessionId, it) }
+                .onFailure { e -> Log.e(TAG, "Could not write restored pdf for $reportId", e) }
                 .getOrNull()
         }
     }

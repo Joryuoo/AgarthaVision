@@ -14,6 +14,7 @@ import com.agarthavision.domain.model.LpfDescriptor
 import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportPdfHeader
 import com.agarthavision.domain.model.ReportPdfSpeciesRow
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.ui.records.labelRes
 import com.agarthavision.ui.theme.AppColors
@@ -31,6 +32,10 @@ import javax.inject.Inject
  * come from [AppColors], the app's one palette (C11: no raw hex outside palette files), via
  * [PdfTextStyle].
  */
+// The patient block split the old header block in two and added a sex/age helper; each function
+// draws one self-contained piece of the page, and splitting further would just move the same
+// lines around without reducing the real complexity.
+@Suppress("TooManyFunctions")
 class AndroidReportPdfRenderer @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ReportPdfRenderer {
@@ -63,65 +68,64 @@ class AndroidReportPdfRenderer @Inject constructor(
             titlePaint,
         )
         var cursorY = MARGIN + LOGO_SIZE + SECTION_GAP
-        cursorY = drawHeaderBlock(canvas, document.header, cursorY)
+        cursorY = drawPatientBlock(canvas, document.header, cursorY)
+        cursorY += SECTION_GAP
+        cursorY = drawSessionBlock(canvas, document.header, cursorY)
         cursorY += SECTION_GAP
         cursorY = drawSummaryBlock(canvas, document.header, cursorY)
         cursorY += SECTION_GAP
-        drawSpeciesTable(canvas, document.speciesRows, cursorY)
+        drawSpeciesTable(canvas, document.speciesRows, document.header.fieldsExamined, cursorY)
         drawFooter(canvas)
     }
 
-    private fun drawHeaderBlock(canvas: Canvas, header: ReportPdfHeader, startY: Float): Float {
-        var y = startY
-        val dateFormatter = DateTimeFormatter.ofPattern(DATE_PATTERN).withZone(ZoneId.systemDefault())
+    private fun drawPatientBlock(canvas: Canvas, header: ReportPdfHeader, startY: Float): Float {
+        val y = drawSectionHeader(canvas, context.getString(R.string.report_pdf_patient_section_title), startY)
+        val ageValue = context.getString(R.string.report_pdf_age_value, header.patientAgeYears)
+        return drawLabeledLines(
+            canvas,
+            listOf(
+                context.getString(R.string.report_pdf_patient_name_label) to header.patientName,
+                context.getString(R.string.report_pdf_sex_label) to context.getString(sexLabelRes(header.patientSex)),
+                context.getString(R.string.report_pdf_age_label) to ageValue,
+                context.getString(R.string.report_pdf_barangay_label) to header.barangayLabel,
+            ),
+            y,
+        )
+    }
 
-        y = drawLabeledLine(
+    private fun drawSessionBlock(canvas: Canvas, header: ReportPdfHeader, startY: Float): Float {
+        val dateFormatter = DateTimeFormatter.ofPattern(DATE_PATTERN).withZone(ZoneId.systemDefault())
+        return drawLabeledLines(
             canvas,
-            context.getString(R.string.report_pdf_session_label),
-            header.sessionLabel ?: header.sessionId,
-            y,
+            listOf(
+                context.getString(R.string.report_pdf_session_label) to (header.sessionLabel ?: header.sessionId),
+                context.getString(R.string.report_pdf_fields_examined_label) to header.fieldsExamined.toString(),
+                context.getString(R.string.report_pdf_generated_by_label) to header.generatedByName,
+                context.getString(R.string.report_pdf_generated_at_label) to dateFormatter.format(header.generatedAt),
+            ),
+            startY,
         )
-        y = drawLabeledLine(canvas, context.getString(R.string.report_pdf_device_label), header.deviceId, y)
-        y = drawLabeledLine(
-            canvas,
-            context.getString(R.string.report_pdf_generated_by_label),
-            header.generatedBy,
-            y,
-        )
-        y = drawLabeledLine(
-            canvas,
-            context.getString(R.string.report_pdf_generated_at_label),
-            dateFormatter.format(header.generatedAt),
-            y,
-        )
-        return y
     }
 
     private fun drawSummaryBlock(canvas: Canvas, header: ReportPdfHeader, startY: Float): Float {
-        var y = drawSectionHeader(canvas, context.getString(R.string.report_pdf_summary_title), startY)
-
-        y = drawLabeledLine(
-            canvas,
-            context.getString(R.string.report_pdf_total_samples_label),
-            header.totalSamples.toString(),
-            y,
-        )
-        y = drawLabeledLine(
-            canvas,
-            context.getString(R.string.report_pdf_total_eggs_label),
-            header.totalEggsConfirmed.toString(),
-            y,
-        )
+        val y = drawSectionHeader(canvas, context.getString(R.string.report_pdf_summary_title), startY)
         val positiveSpeciesValue = header.positiveSpecies.takeIf { it.isNotEmpty() }
             ?.joinToString(", ")
             ?: context.getString(R.string.report_no_positive_species)
-        y = drawLabeledLine(
+        return drawLabeledLines(
             canvas,
-            context.getString(R.string.report_pdf_positive_species_label),
-            positiveSpeciesValue,
+            listOf(
+                context.getString(R.string.report_pdf_total_eggs_label) to header.totalEggsConfirmed.toString(),
+                context.getString(R.string.report_pdf_positive_species_label) to positiveSpeciesValue,
+            ),
             y,
         )
-        return y
+    }
+
+    private fun sexLabelRes(sex: Sex?): Int = when (sex) {
+        Sex.MALE -> R.string.patients_sex_male
+        Sex.FEMALE -> R.string.patients_sex_female
+        null -> R.string.patients_sex_unknown
     }
 
     /**
@@ -133,16 +137,21 @@ class AndroidReportPdfRenderer @Inject constructor(
      * holding the page to work out whether the app found nothing or failed to look. Session
      * Detail says the same thing in the same words, which is the consistency PB-18 asks for.
      */
-    private fun drawSpeciesTable(canvas: Canvas, rows: List<ReportPdfSpeciesRow>, startY: Float) {
+    private fun drawSpeciesTable(
+        canvas: Canvas,
+        rows: List<ReportPdfSpeciesRow>,
+        fieldsExamined: Int,
+        startY: Float,
+    ) {
         var y = drawSectionHeader(canvas, context.getString(R.string.report_pdf_species_table_title), startY)
 
         if (rows.isEmpty()) {
-            canvas.drawText(
-                context.getString(R.string.report_pdf_no_parasites),
-                MARGIN,
-                y,
-                paintFor(PdfTextStyle.VALUE),
+            val message = context.resources.getQuantityString(
+                R.plurals.report_pdf_no_parasites_fields,
+                fieldsExamined,
+                fieldsExamined,
             )
+            canvas.drawText(message, MARGIN, y, paintFor(PdfTextStyle.VALUE))
             return
         }
 
@@ -155,7 +164,7 @@ class AndroidReportPdfRenderer @Inject constructor(
         val rowPaint = paintFor(PdfTextStyle.VALUE)
         rows.forEach { row ->
             canvas.drawText(row.speciesDisplayName, MARGIN, y, rowPaint)
-            canvas.drawText("%d\u2013%d".format(row.min, row.max), LPF_COLUMN_X, y, rowPaint)
+            canvas.drawText("%d–%d".format(row.min, row.max), LPF_COLUMN_X, y, rowPaint)
             // Blank rather than a dash when a species was never seen: the row would not be on
             // the page at all in that case, and inventing a reading for one is worse than none.
             row.descriptor?.let { canvas.drawText(context.getString(it.labelRes), READING_COLUMN_X, y, rowPaint) }
@@ -198,10 +207,27 @@ class AndroidReportPdfRenderer @Inject constructor(
         return y + LINE_HEIGHT
     }
 
+    /** Draws each `label: value` pair below [startY], one per line, and returns the next y. */
+    private fun drawLabeledLines(canvas: Canvas, lines: List<Pair<String, String>>, startY: Float): Float {
+        var y = startY
+        lines.forEach { (label, value) -> y = drawLabeledLine(canvas, label, value, y) }
+        return y
+    }
+
     private fun drawLabeledLine(canvas: Canvas, label: String, value: String, y: Float): Float {
         canvas.drawText("$label:", MARGIN, y, paintFor(PdfTextStyle.LABEL))
-        canvas.drawText(value, LABEL_COLUMN_WIDTH, y, paintFor(PdfTextStyle.VALUE))
+        val valuePaint = paintFor(PdfTextStyle.VALUE)
+        val maxValueWidth = PAGE_WIDTH - MARGIN - LABEL_COLUMN_WIDTH
+        canvas.drawText(truncate(valuePaint, value, maxValueWidth), LABEL_COLUMN_WIDTH, y, valuePaint)
         return y + LINE_HEIGHT
+    }
+
+    /** Truncates [text] with a trailing ellipsis when it would overflow [maxWidth] under [paint]. */
+    private fun truncate(paint: Paint, text: String, maxWidth: Float): String {
+        if (paint.measureText(text) <= maxWidth) return text
+        val availableWidth = maxWidth - paint.measureText(ELLIPSIS)
+        val fittingChars = paint.breakText(text, true, availableWidth, null)
+        return text.substring(0, fittingChars) + ELLIPSIS
     }
 
     private fun paintFor(style: PdfTextStyle): Paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -249,5 +275,6 @@ class AndroidReportPdfRenderer @Inject constructor(
         private const val LOGO_SUPERSAMPLE = 8
 
         private const val DATE_PATTERN = "yyyy-MM-dd HH:mm"
+        private const val ELLIPSIS = "…"
     }
 }

@@ -21,6 +21,27 @@ Verify any entry with `git log --oneline --reverse`.
   `PsgcSearchQuery.parse` returns both the full term list and the name-ranking terms;
   `PsgcBarangayDao.search` and the repository's cache key follow.
 
+### PDF-only reports, with a patient header · `86d4be47c`
+
+A generated report is now always a PDF, and the PDF always carries who it is about.
+
+- **CSV export is retired.** `ReportCsvBuilder`, `ReportFormat`, and the export-format picker
+  (`ExportFormat`/`ExportFormatMenu`) are gone; `GenerateSessionReportUseCase` writes one PDF,
+  no format argument. `ReportFileStore.writeCsv` and the CSV share/view helpers in
+  `ReportSharing.kt` are gone with it. `csv_file_path` stays on `Report`/`ReportEntity` as a
+  legacy-only column (C8) — old CSV-only rows keep listing, but nothing restores, shares, or
+  opens them any more.
+- **The PDF gains a patient block.** Name, sex, age (computed at the same instant as
+  `generatedAt`), and barangay (`"{name} · {parentPath}"`, or the raw PSGC code if it no longer
+  resolves) print above the session and summary sections. A session whose patient has not yet
+  synced to this device fails generation with a clear message rather than a crash or a blank
+  header.
+- **The findings table's empty state is a plural sentence** ("No parasites found across N
+  field(s) examined.") instead of a fixed string, and the LPF column header and unit note read
+  more explicitly ("Eggs per LPF (range)", "Direct Fecal Smear").
+- Session Detail's generate control is a direct tap (no PDF/CSV menu); the Reports list card
+  drops its CSV button and share-format menu.
+
 ## feat/server-micro-batching — the inference server queues, batches and uses both GPUs · 2026-09-27
 
 `14zcqntj6p2`.

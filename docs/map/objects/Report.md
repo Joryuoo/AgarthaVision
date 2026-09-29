@@ -1,8 +1,10 @@
 # Report
 
 **One sentence.** A snapshot of one session's findings at one moment — counts, LPF density 
-per species, and a pointer to a CSV or PDF file. Table and Room entity are both `reports`; the product calls the
-artefact a "session report".
+per species, and a pointer to a PDF file. Table and Room entity are both `reports`; the product
+calls the artefact a "session report". PDF-only since 86d4be47c — `csv_file_path` is a legacy
+column kept for reports generated before that change (C8: nothing is deleted); no new report
+ever writes one.
 
 ## Why this shape
 
@@ -12,15 +14,17 @@ be reproducible. That is why the aggregates are denormalised into columns rather
 on read.
 
 The split matters: **the numbers and the file sync separately.** The row goes to Postgres; the
-CSV or PDF goes to the `reports` Storage bucket at `{user_id}/{report_id}.{ext}`, a path derived
-from the row rather than stored on it.
+PDF goes to the `reports` Storage bucket at `{user_id}/{report_id}.pdf`, a path derived from the
+row rather than stored on it.
 
-They have to travel separately because `csv_file_path` and `pdf_file_path` are device-local — a
-MediaStore id or an absolute path — so on any device but the one that generated the report, the
-row names a file that was never there. That was the "No app available" bug: the row arrived, the
-document did not. `SyncReportUseCase` uploads the bytes; `RestoreReportFilesUseCase` pulls them
-back on first open and repoints the row at the local copy it writes, so the second open is a
-plain local read.
+They have to travel separately because `pdf_file_path` is device-local — a MediaStore id or an
+absolute path — so on any device but the one that generated the report, the row names a file
+that was never there. That was the "No app available" bug: the row arrived, the document did
+not. `SyncReportUseCase` uploads the bytes; `RestoreReportFilesUseCase` pulls them back on first
+open and repoints the row at the local copy it writes, so the second open is a plain local read.
+A legacy CSV-only report (`pdf_file_path` null, `csv_file_path` set) has nothing to restore —
+the CSV format is retired, so `RestoreReportFilesUseCase` fails rather than inventing a PDF, and
+leaves `csv_file_path` exactly as it was.
 
 A file the device no longer holds is skipped on upload rather than failing the row: losing the
 bytes must not cost the metadata too.
@@ -40,8 +44,8 @@ bytes must not cost the metadata too.
 | `total_eggs_confirmed` | integer NOT NULL, no default |
 | `positive_species` | `text[]` NOT NULL default `'{}'` |
 | `lpf_per_species` | `jsonb` NOT NULL default `'{}'` (Replaces Kato-Katz `epg_per_species`) |
-| `csv_file_path` | nullable text — a **device-local** path; other devices restore from Storage |
-| `pdf_file_path` | nullable text — mirrors `csv_file_path`; device-local path or URI |
+| `csv_file_path` | nullable text — **legacy only**; no report generated since 86d4be47c writes one |
+| `pdf_file_path` | nullable text — a **device-local** path or URI; other devices restore from Storage |
 | `created_at` | NOT NULL, default `now()` |
 
 Indexes on `(session_id, generated_at desc)` and `(user_id, generated_at desc)`.
@@ -63,15 +67,15 @@ PK column is `report_id`. Differences:
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.
 - **Aggregates** findings from `sample_species_findings` table into LPF density.
-- **Looks like but is not** the CSV or PDF file. Both live in `Documents/AgarthaVision/`
-  and are shared from `ui/records/ReportSharing.kt`. Since 86d4bzm9g they are also mirrored to the
-  `reports` Storage bucket, which is what makes a report readable on a second device.
+- **Looks like but is not** the PDF file. It lives in `Documents/AgarthaVision/` and is shared
+  from `ui/records/ReportSharing.kt`. Since 86d4bzm9g it is also mirrored to the `reports`
+  Storage bucket, which is what makes a report readable on a second device.
 
 ## If you change this
 
 **Hits**
-- `GenerateSessionReportUseCase` — it computes every aggregate and writes the chosen format's
-  single file before the row (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
+- `GenerateSessionReportUseCase` — it computes every aggregate, resolves the patient header,
+  and writes the PDF before the row (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 - `ReportInsertRow`, or your column never reaches Postgres
   (`data/supabase/ReportRemoteDataSource.kt`).
 - The two Gson serialisation points, if you touch either collection column.
@@ -83,6 +87,7 @@ PK column is `report_id`. Differences:
 Written by `GenerateSessionReportUseCase`, triggered from Session Detail
 (`ui/records/SessionDetailViewModel.kt`). Read by the Reports card on
 `ui/records/SessionDetailScreen.kt` and by the Settings sync counters. Pushed by
-`data/supabase/SyncReportUseCase.kt` — row only, no file.
+`data/supabase/SyncReportUseCase.kt` — row and PDF bytes both.
 
-**Note:** report generation requires a **cached local identity**.
+**Note:** report generation requires a **cached local identity** and the session's
+[`Patient`](Patient.md) already on this device.

@@ -20,9 +20,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * Writes persisted session reports to Supabase Postgres. Row-only sync — the
- * CSV file stays local on the device; only the metadata + aggregate stats are
- * mirrored to `public.reports`.
+ * Writes persisted session reports to Supabase Postgres. Metadata + aggregate stats are mirrored
+ * to `public.reports`; the PDF itself is uploaded separately to the `reports` bucket (see
+ * [uploadReportFile]). `csv_file_path`/`CSV_EXTENSION` are gone from generation (PDF-only
+ * reports); `csvFilePath` stays only as a legacy column for reports generated before this change.
  *
  * **`epg_per_species` is gone from both sides,** and `lpf_per_species` took its place on
  * both at once. `0001_init.sql` declares `lpf_per_species jsonb not null default '{}'` and
@@ -213,9 +214,6 @@ open class ReportRemoteDataSource @Inject constructor(
 
         /** File extension for a report PDF, as used by [objectPathFor]. */
         const val PDF_EXTENSION = "pdf"
-
-        /** File extension for a report CSV, as used by [objectPathFor]. */
-        const val CSV_EXTENSION = "csv"
 
         /**
          * The object path a report's file occupies: `{userId}/{reportId}.{extension}`.

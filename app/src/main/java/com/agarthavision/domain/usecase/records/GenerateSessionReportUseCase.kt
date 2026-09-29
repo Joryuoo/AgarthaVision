@@ -2,15 +2,16 @@ package com.agarthavision.domain.usecase.records
 
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.supabase.SyncReportUseCase
-import com.agarthavision.domain.model.Detection
+import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.Report
-import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.model.ReportMetadata
+import com.agarthavision.domain.model.ReportPatient
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
-import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
 import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
@@ -21,12 +22,13 @@ import com.agarthavision.domain.sync.SyncScheduler
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
+import kotlinx.coroutines.flow.first
 
 /**
- * Generates a persisted session report and writes the CSV + PDF to device storage.
+ * Generates a persisted session report and writes the patient-facing PDF to device storage.
  */
-// Composition-root use case wiring 11 distinct, non-overlapping DI dependencies (repositories,
-// file store, CSV/PDF builders + renderer, sync use case); each is independently meaningful and
+// Composition-root use case wiring 12 distinct, non-overlapping DI dependencies (repositories,
+// file store, PDF builder + renderer, sync use case); each is independently meaningful and
 // bundling would not simplify the real dependency graph.
 @Suppress("LongParameterList")
 class GenerateSessionReportUseCase @Inject constructor(
@@ -35,15 +37,16 @@ class GenerateSessionReportUseCase @Inject constructor(
     private val sampleRepository: SampleRepository,
     private val detectionRepository: DetectionRepository,
     private val findingDao: SampleSpeciesFindingDao,
+    private val patientRepository: PatientRepository,
+    private val psgcRepository: PsgcRepository,
     private val reportRepository: ReportRepository,
     private val reportFileStore: ReportFileStore,
-    private val reportCsvBuilder: ReportCsvBuilder,
     private val reportPdfBuilder: ReportPdfBuilder,
     private val reportPdfRenderer: ReportPdfRenderer,
     private val syncReportUseCase: SyncReportUseCase,
     private val syncScheduler: SyncScheduler,
 ) {
-    suspend operator fun invoke(sessionId: String, format: ReportFormat): Result<Report> = runCatching {
+    suspend operator fun invoke(sessionId: String): Result<Report> = runCatching {
         val userId = requireNotNull(authRepository.currentLocalUserId()) {
             "Sign in to generate reports."
         }
@@ -60,6 +63,11 @@ class GenerateSessionReportUseCase @Inject constructor(
         // disabled in that state too; this keeps any other caller from producing one.
         val samples = sampleRepository.getSamplesForSession(sessionId, userId)
         require(samples.isNotEmpty()) { NO_VERIFIED_SAMPLES_MESSAGE }
+
+        val patient = requireNotNull(patientRepository.getPatientById(session.patientId)) {
+            PATIENT_NOT_ON_DEVICE_MESSAGE
+        }
+
         // No floor. It existed to keep a mean from dividing by zero, and the mean is gone.
         val fieldCount = samples.size
         val detectionsBySample = samples.associate { sample ->
@@ -74,11 +82,18 @@ class GenerateSessionReportUseCase @Inject constructor(
         val lpfPerSpecies = aggregateLpfPerSpecies(findings, fieldCount)
 
         val reportId = UUID.randomUUID().toString()
+        // One instant for both the report's timestamp and the patient's age, so a report never
+        // prints an age computed a beat apart from the "Generated at" line beside it.
         val generatedAt = Instant.now()
+        val generatedByName = resolveGeneratedByName(userId)
+        val reportPatient = buildReportPatient(patient, generatedAt)
+
         val metadata = ReportMetadata(
             reportId = reportId,
             session = session,
+            patient = reportPatient,
             generatedBy = userId,
+            generatedByName = generatedByName,
             generatedAt = generatedAt,
             totalSamples = samples.size,
             totalEggsConfirmed = eggCounts.sumOf { it.count },
@@ -86,7 +101,9 @@ class GenerateSessionReportUseCase @Inject constructor(
             lpfPerSpecies = lpfPerSpecies,
         )
 
-        val (csvPath, pdfPath) = generateFiles(format, metadata, samples, detectionsBySample)
+        val pdfDoc = reportPdfBuilder.build(metadata, samples, detectionsBySample)
+        val pdfBytes = reportPdfRenderer.render(pdfDoc)
+        val pdfPath = reportFileStore.writePdf(reportId, sessionId, pdfBytes)
 
         val report = Report(
             id = reportId,
@@ -98,7 +115,7 @@ class GenerateSessionReportUseCase @Inject constructor(
             totalEggsConfirmed = metadata.totalEggsConfirmed,
             positiveSpecies = metadata.positiveSpecies,
             lpfPerSpecies = lpfPerSpecies,
-            csvFilePath = csvPath,
+            csvFilePath = null,
             pdfFilePath = pdfPath,
             supabaseStatus = ReportSyncStatus.PENDING,
         )
@@ -110,29 +127,36 @@ class GenerateSessionReportUseCase @Inject constructor(
         report
     }
 
-    private suspend fun generateFiles(
-        format: ReportFormat,
-        metadata: ReportMetadata,
-        samples: List<Sample>,
-        detectionsBySample: Map<String, List<Detection>>,
-    ): Pair<String?, String?> {
-        var csvFilePath: String? = null
-        var pdfFilePath: String? = null
-        when (format) {
-            ReportFormat.CSV -> {
-                val csv = reportCsvBuilder.build(metadata, samples, detectionsBySample)
-                csvFilePath = reportFileStore.writeCsv(metadata.reportId, metadata.session.id, csv)
-            }
-            ReportFormat.PDF -> {
-                val pdfDoc = reportPdfBuilder.build(metadata, samples, detectionsBySample)
-                val pdfBytes = reportPdfRenderer.render(pdfDoc)
-                pdfFilePath = reportFileStore.writePdf(metadata.reportId, metadata.session.id, pdfBytes)
-            }
-        }
-        return csvFilePath to pdfFilePath
+    /**
+     * The medtech's name as printed on the report: display name first, falling back to email,
+     * then the raw user id — mirroring the convention used wherever a medtech's identity is
+     * shown without a guaranteed display name.
+     */
+    private suspend fun resolveGeneratedByName(userId: String): String {
+        val identity = authRepository.observeLocalIdentity().first()
+        return identity?.displayName?.takeIf { it.isNotBlank() }
+            ?: identity?.email?.takeIf { it.isNotBlank() }
+            ?: userId
+    }
+
+    private suspend fun buildReportPatient(
+        patient: Patient,
+        generatedAt: Instant,
+    ): ReportPatient {
+        val barangay = psgcRepository.getBarangay(patient.psgcBarangayCode)
+        val barangayLabel = barangay?.let { "${it.name} · ${it.parentPath}" }
+            ?: patient.psgcBarangayCode
+        return ReportPatient(
+            name = patient.displayName,
+            sex = patient.sex,
+            ageYears = patient.ageYears(generatedAt),
+            barangayLabel = barangayLabel,
+        )
     }
 
     companion object {
         const val NO_VERIFIED_SAMPLES_MESSAGE = "Verify at least one sample to generate a report."
+        const val PATIENT_NOT_ON_DEVICE_MESSAGE =
+            "This session's patient is not on this device yet. Sync, then try again."
     }
 }

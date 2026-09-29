@@ -53,7 +53,7 @@ class SyncReportUseCaseTest {
     }
 
     @Test
-    fun `uploads both report files to the owner-scoped object paths`() = runTest {
+    fun `uploads the report pdf to the owner-scoped object path`() = runTest {
         val dao = FakeReportDao(seeded = listOf(entity("report-3")))
         val remote = StubRemoteDataSource(shouldThrow = false)
         val useCase = SyncReportUseCase(dao, remote, FakeReportFileStore())
@@ -61,11 +61,8 @@ class SyncReportUseCaseTest {
         useCase("report-3")
 
         // The leading uid is not decoration: the bucket's RLS matches on it, so a path
-        // built any other way is refused.
-        assertEquals(
-            listOf("user-1/report-3.pdf", "user-1/report-3.csv"),
-            remote.uploadedPaths,
-        )
+        // built any other way is refused. PDF-only: no csv object is ever uploaded.
+        assertEquals(listOf("user-1/report-3.pdf"), remote.uploadedPaths)
     }
 
     @Test
@@ -305,11 +302,8 @@ private class InsertIfAbsentRemoteDataSource(
 
 /** Holds bytes for the two paths [entity] uses, and nothing else. */
 private class FakeReportFileStore(
-    private val present: Set<String> = setOf("/downloads/report.pdf", "/downloads/report.csv"),
+    private val present: Set<String> = setOf("/downloads/report.pdf"),
 ) : ReportFileStore {
-    override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String =
-        "/downloads/report.csv"
-
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
         "/downloads/report.pdf"
 

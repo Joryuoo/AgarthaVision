@@ -84,18 +84,21 @@ class RestoreReportFilesUseCaseTest {
     }
 
     @Test
-    fun `reports a csv-only report without inventing a pdf`() = runTest {
+    fun `a csv-only legacy report fails restore and leaves the csv path untouched`() = runTest {
         val dao = FakeDao(listOf(entity(pdfPath = null, csvPath = "content://media/file/7")))
         val useCase = RestoreReportFilesUseCase(
             dao,
-            StubRemote(stored = setOf(CSV_OBJECT)),
+            StubRemote(stored = emptySet()),
             FakeStore(present = emptySet()),
         )
 
-        val restored = useCase(REPORT_ID).getOrThrow()
+        val result = useCase(REPORT_ID)
 
-        assertEquals(WRITTEN_CSV, restored.csvFilePath)
-        assertNull(restored.pdfFilePath)
+        // The CSV format is retired: a legacy CSV-only report has no PDF to recover, and its
+        // stored csv path is left exactly as it was rather than rewritten or cleared.
+        assertTrue(result.isFailure)
+        assertEquals("content://media/file/7", dao.rowOf(REPORT_ID)?.csvFilePath)
+        assertNull(dao.rowOf(REPORT_ID)?.pdfFilePath)
     }
 
     private companion object {
@@ -103,9 +106,7 @@ class RestoreReportFilesUseCaseTest {
         const val USER_ID = "user-1"
         const val LOCAL_PDF = "/documents/report.pdf"
         const val WRITTEN_PDF = "/documents/AgarthaVision/written.pdf"
-        const val WRITTEN_CSV = "/documents/AgarthaVision/written.csv"
         const val PDF_OBJECT = "$USER_ID/$REPORT_ID.pdf"
-        const val CSV_OBJECT = "$USER_ID/$REPORT_ID.csv"
 
         fun entity(pdfPath: String?, csvPath: String? = null): ReportEntity = ReportEntity(
             reportId = REPORT_ID,
@@ -139,9 +140,6 @@ private class StubRemote(private val stored: Set<String>) : ReportRemoteDataSour
 }
 
 private class FakeStore(private val present: Set<String>) : ReportFileStore {
-    override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String =
-        "/documents/AgarthaVision/written.csv"
-
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
         "/documents/AgarthaVision/written.pdf"
 

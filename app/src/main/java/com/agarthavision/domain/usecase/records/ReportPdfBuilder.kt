@@ -13,10 +13,9 @@ import javax.inject.Inject
  * Builds the pure-data [ReportPdfDocument] handed to
  * [com.agarthavision.domain.repository.ReportPdfRenderer].
  *
- * Mirrors [ReportCsvBuilder]'s constructor shape so both report artifacts are assembled from the
- * same inputs in [GenerateSessionReportUseCase]. `samples` and `detectionsBySample` are accepted
- * for that parity and to leave room for a future per-sample appendix; the Phase 1 PDF renders
- * only the aggregate header and per-species table below.
+ * `samples` and `detectionsBySample` are accepted to leave room for a future per-sample
+ * appendix; the current PDF renders only the patient block, the aggregate header, and the
+ * per-species table below.
  */
 class ReportPdfBuilder @Inject constructor() {
     @Suppress("UnusedParameter")
@@ -29,10 +28,13 @@ class ReportPdfBuilder @Inject constructor() {
             reportId = metadata.reportId,
             sessionId = metadata.session.id,
             sessionLabel = metadata.session.label,
-            generatedBy = metadata.generatedBy,
+            patientName = metadata.patient.name,
+            patientSex = metadata.patient.sex,
+            patientAgeYears = metadata.patient.ageYears,
+            barangayLabel = metadata.patient.barangayLabel,
+            fieldsExamined = metadata.totalSamples,
+            generatedByName = metadata.generatedByName,
             generatedAt = metadata.generatedAt,
-            deviceId = metadata.session.deviceId,
-            totalSamples = metadata.totalSamples,
             totalEggsConfirmed = metadata.totalEggsConfirmed,
             positiveSpecies = metadata.positiveSpecies,
         )

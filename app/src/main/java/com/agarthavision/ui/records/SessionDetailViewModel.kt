@@ -8,7 +8,6 @@ import com.agarthavision.core.session.SessionState
 import com.agarthavision.data.supabase.RestoreReportFilesUseCase
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.Report
-import com.agarthavision.domain.model.ReportFormat
 import com.agarthavision.domain.usecase.records.GenerateSessionReportUseCase
 import com.agarthavision.domain.usecase.records.GetSessionSamplesUseCase
 import com.agarthavision.domain.usecase.records.ObserveSessionPendingCountUseCase
@@ -96,15 +95,11 @@ data class EggCountSummary(
  */
 sealed interface SessionDetailEvent {
     /**
-     * A report was successfully generated. Both [pdfPath] and [csvPath] are the files the use
-     * case wrote for it (either may be null if that file failed to write); [format] is the
-     * export the medtech chose from the generate menu, so the snackbar's Share action shares
-     * the file that matches what they asked for rather than always the PDF.
+     * A report was successfully generated. [pdfPath] is the file the use case wrote for it,
+     * so the snackbar's Share action shares it directly.
      */
     data class ReportGenerated(
         val pdfPath: String?,
-        val csvPath: String?,
-        val format: ExportFormat,
     ) : SessionDetailEvent
 
     /**
@@ -115,12 +110,11 @@ sealed interface SessionDetailEvent {
     data object ReportRestoreStarted : SessionDetailEvent
 
     /**
-     * A report's file is now on this device, at these paths. Either may be null — a report is
-     * generated in one format, not both.
+     * A report's PDF is now on this device, at this path. Null only for a legacy CSV-only
+     * report, which has nothing to restore.
      */
     data class ReportRestored(
         val pdfPath: String?,
-        val csvPath: String?,
     ) : SessionDetailEvent
 
     /**
@@ -237,25 +231,18 @@ class SessionDetailViewModel @Inject constructor(
     }
 
     /**
-     * Generates a fresh report for this session in the chosen [format] (the use case writes only
-     * that format's file). Emits [SessionDetailEvent.ReportGenerated] on success so the screen can
-     * offer the medtech a share action for the format they asked for.
+     * Generates a fresh PDF report for this session. Emits [SessionDetailEvent.ReportGenerated]
+     * on success so the screen can offer the medtech a share action for it.
      */
-    fun generateReport(format: ExportFormat) {
+    fun generateReport() {
         viewModelScope.launch {
             generationState.update { it.copy(isGenerating = true, error = null) }
-            generateSessionReportUseCase(sessionId, format.toDomain()).fold(
+            generateSessionReportUseCase(sessionId).fold(
                 onSuccess = { report ->
                     generationState.update { GenerationState() }
                     // The new report is newest, so it lands on the first page — jump there.
                     currentReportPage.value = 0
-                    _events.emit(
-                        SessionDetailEvent.ReportGenerated(
-                            pdfPath = report.pdfFilePath,
-                            csvPath = report.csvFilePath,
-                            format = format,
-                        ),
-                    )
+                    _events.emit(SessionDetailEvent.ReportGenerated(pdfPath = report.pdfFilePath))
                 },
                 onFailure = { error ->
                     generationState.update {
@@ -284,12 +271,7 @@ class SessionDetailViewModel @Inject constructor(
                 _events.emit(SessionDetailEvent.ReportRestoreStarted)
                 restoreReportFilesUseCase(reportId).fold(
                     onSuccess = { files ->
-                        _events.emit(
-                            SessionDetailEvent.ReportRestored(
-                                pdfPath = files.pdfFilePath,
-                                csvPath = files.csvFilePath,
-                            ),
-                        )
+                        _events.emit(SessionDetailEvent.ReportRestored(pdfPath = files.pdfFilePath))
                     },
                     onFailure = { _events.emit(SessionDetailEvent.ReportRestoreFailed) },
                 )
@@ -308,11 +290,6 @@ class SessionDetailViewModel @Inject constructor(
     fun goToPreviousReportPage() {
         currentReportPage.update { (it - 1).coerceAtLeast(0) }
     }
-}
-
-private fun ExportFormat.toDomain(): ReportFormat = when (this) {
-    ExportFormat.PDF -> ReportFormat.PDF
-    ExportFormat.CSV -> ReportFormat.CSV
 }
 
 private data class GenerationState(

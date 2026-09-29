@@ -48,7 +48,9 @@ and after every local write.
    `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
    does not abort the pass.
 
-Report pushes are row-only — the PDF/CSV never leaves the device (`data/supabase/SyncReportUseCase.kt`).
+Report pushes upload both the row and the PDF bytes, to `public.reports` and the `reports`
+Storage bucket respectively (`data/supabase/SyncReportUseCase.kt`). PDF-only since 86d4be47c —
+a report never carries a CSV to push.
 Because login is mandatory on first launch, every entity has an owner from creation and no
 deferred claiming step is needed.
 

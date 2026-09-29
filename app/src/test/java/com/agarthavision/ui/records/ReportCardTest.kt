@@ -2,7 +2,6 @@ package com.agarthavision.ui.records
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.agarthavision.R
@@ -30,7 +29,7 @@ class ReportCardTest {
 
     private val context get() = ApplicationProvider.getApplicationContext<android.content.Context>()
 
-    private fun baseReport(pdfFilePath: String?, csvFilePath: String?) = Report(
+    private fun baseReport(pdfFilePath: String?) = Report(
         id = "report-1",
         sessionId = "session-1",
         userId = "user-1",
@@ -40,7 +39,7 @@ class ReportCardTest {
         totalEggsConfirmed = 2,
         positiveSpecies = emptyList(),
         lpfPerSpecies = emptyMap(),
-        csvFilePath = csvFilePath,
+        csvFilePath = null,
         pdfFilePath = pdfFilePath,
         supabaseStatus = ReportSyncStatus.SYNCED,
     )
@@ -48,9 +47,7 @@ class ReportCardTest {
     private data class CardActions(
         val onSessionClick: () -> Unit = {},
         val onOpenPdf: () -> Unit = {},
-        val onOpenCsv: () -> Unit = {},
         val onSharePdf: () -> Unit = {},
-        val onShareCsv: () -> Unit = {},
     )
 
     private fun setCard(report: Report, actions: CardActions = CardActions()) {
@@ -60,43 +57,26 @@ class ReportCardTest {
                     report = report,
                     onSessionClick = actions.onSessionClick,
                     onOpenPdf = actions.onOpenPdf,
-                    onOpenCsv = actions.onOpenCsv,
                     onSharePdf = actions.onSharePdf,
-                    onShareCsv = actions.onShareCsv,
                 )
             }
         }
     }
 
     @Test
-    fun `report with both pdf and csv renders pdf, csv and share actions`() {
-        setCard(baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"))
-
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
-
-        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.reports_share_pdf)).assertExists()
-        composeRule.onNodeWithText(context.getString(R.string.reports_share_csv)).assertExists()
-    }
-
-    @Test
-    fun `report with only pdf renders pdf action and no csv action`() {
-        setCard(baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = null))
+    fun `report with a pdf renders open and share actions`() {
+        setCard(baseReport(pdfFilePath = "/tmp/report.pdf"))
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertExists()
         composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertDoesNotExist()
     }
 
     @Test
-    fun `report with only csv renders csv action and no pdf action`() {
-        setCard(baseReport(pdfFilePath = null, csvFilePath = "/tmp/report.csv"))
+    fun `a legacy csv-only report renders no pdf actions`() {
+        setCard(baseReport(pdfFilePath = null))
 
-        composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_csv)).assertExists()
-        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertExists()
         composeRule.onNodeWithContentDescription(context.getString(R.string.reports_open_pdf)).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).assertDoesNotExist()
     }
 
     @Test
@@ -104,7 +84,7 @@ class ReportCardTest {
         var openPdfClicks = 0
         var sessionClicks = 0
         setCard(
-            baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"),
+            baseReport(pdfFilePath = "/tmp/report.pdf"),
             CardActions(onSessionClick = { sessionClicks++ }, onOpenPdf = { openPdfClicks++ }),
         )
 
@@ -115,31 +95,15 @@ class ReportCardTest {
     }
 
     @Test
-    fun `clicking Share with only CSV invokes onShareCsv directly, not onSessionClick`() {
-        var shareCsvClicks = 0
-        var sessionClicks = 0
-        setCard(
-            baseReport(pdfFilePath = null, csvFilePath = "/tmp/report.csv"),
-            CardActions(onSessionClick = { sessionClicks++ }, onShareCsv = { shareCsvClicks++ }),
-        )
-
-        composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
-
-        assertEquals("expected one onShareCsv click, got $shareCsvClicks", 1, shareCsvClicks)
-        assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
-    }
-
-    @Test
-    fun `clicking Share with both options opens menu and clicking share pdf invokes onSharePdf`() {
+    fun `clicking Share invokes onSharePdf only, not onSessionClick`() {
         var sharePdfClicks = 0
         var sessionClicks = 0
         setCard(
-            baseReport(pdfFilePath = "/tmp/report.pdf", csvFilePath = "/tmp/report.csv"),
+            baseReport(pdfFilePath = "/tmp/report.pdf"),
             CardActions(onSessionClick = { sessionClicks++ }, onSharePdf = { sharePdfClicks++ }),
         )
 
         composeRule.onNodeWithContentDescription(context.getString(R.string.report_share_action)).performClick()
-        composeRule.onNodeWithText(context.getString(R.string.reports_share_pdf)).performClick()
 
         assertEquals("expected one onSharePdf click, got $sharePdfClicks", 1, sharePdfClicks)
         assertEquals("onSessionClick should not fire from action click, got $sessionClicks", 0, sessionClicks)
