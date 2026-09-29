@@ -3,18 +3,29 @@ package com.agarthavision.ui.dashboard
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,6 +33,14 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.ActivityItem
+import com.agarthavision.domain.model.HomePeriod
+import com.agarthavision.domain.model.SessionListFilter
+import com.agarthavision.ui.components.AgarthaButton
+import com.agarthavision.ui.components.AgarthaButtonVariant
+import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.icons.AgarthaIcons
+import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
@@ -70,10 +89,12 @@ private fun handleSyncTap(
 @Composable
 fun DashboardScreen(
     onNavigate: (String) -> Unit = {},
-    viewModel: DashboardViewModel = hiltViewModel()
+    onNavigateToTab: (String) -> Unit = {},
+    viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showAiAgreementSheet by rememberSaveable { mutableStateOf(false) }
     // Rate-limit the sync button so rapid taps can't fire a burst of sync passes (or toasts).
     val lastSyncTapMs = remember { longArrayOf(0L) }
     val syncToastHolder = remember { arrayOfNulls<Toast>(1) }
@@ -103,36 +124,63 @@ fun DashboardScreen(
                 )
             }
 
-            // 2. Recent Session Hero (only when a session is active/recent)
-            state.activeSession?.let { session ->
-                item {
-                    ActiveSessionHero(
-                        sessionId    = session.label,
-                        elapsed      = session.updatedAtAgo,
-                        frameCount   = session.totalFrames.toIntOrNull() ?: 0,
-                        onResume     = { onNavigate(Screen.Capture.route) },
-                        modifier     = Modifier.padding(horizontal = Spacing.xl)
+            // 1b. Needs Attention strip
+            if (!state.needsAttention.isEmpty) {
+                item(key = "needsAttention") {
+                    Spacer(Modifier.height(Spacing.xs))
+                    NeedsAttentionStrip(
+                        needsAttention = state.needsAttention,
+                        onNavigateToTab = onNavigateToTab,
+                        onOpenSessionList = { filter ->
+                            onNavigate(Screen.SessionList.createRoute(filter))
+                        },
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
                     )
-                    Spacer(Modifier.height(Spacing.lg))
+                    Spacer(Modifier.height(Spacing.sm))
                 }
             }
 
-            // 3. Today's Activity KPI Grid
-            if (state.activeSession == null) {
-                item { Spacer(Modifier.height(Spacing.lg)) }
-            }
+            // 2. Recent Sessions section
+            recentSessionsSection(state, onNavigate, onNavigateToTab)
             item {
-                SectionLabel(
-                    "Today's activity",
-                    modifier = Modifier.padding(horizontal = Spacing.xl)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.xl),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SectionLabel("Activity")
+                    PeriodToggle(
+                        selected = state.period,
+                        onSelect = viewModel::onPeriodSelected,
+                    )
+                }
             }
-            item {
+            item(key = "kpiPager") {
                 Spacer(Modifier.height(Spacing.sm))
-                KpiGrid(
-                    kpis = state.kpis,
+                KpiPager(
+                    tiles = state.kpiTiles,
                     isLoading = state.isLoading,
-                    modifier = Modifier.padding(horizontal = Spacing.xl)
+                    period = state.period,
+                    onTileClick = { kind ->
+                        when (kind) {
+                            KpiKind.SESSIONS -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.ALL, state.period)
+                            )
+                            KpiKind.POSITIVE_RATE -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.EXAMINED, state.period)
+                            )
+                            KpiKind.TO_REVIEW -> onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.TO_REVIEW, state.period)
+                            )
+                            KpiKind.AI_AGREEMENT -> {
+                                showAiAgreementSheet = true
+                            }
+                        }
+                    },
+                    onOpenCoverage = { period -> onNavigate(Screen.MyCoverage.createRoute(period)) },
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
                 )
             }
 
@@ -146,26 +194,48 @@ fun DashboardScreen(
                 item {
                     Spacer(Modifier.height(Spacing.lg))
                     SpeciesMixCard(
+                        title = state.findingsTitle,
+                        positiveSmearsCount = state.positiveSmearsCount,
                         speciesData = state.topSpecies,
-                        modifier    = Modifier.padding(horizontal = Spacing.xl)
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
                     )
                 }
             }
 
-            // 6. Verify alert row
-            if (state.pendingReviewCount > 0) {
-                item {
-                    Spacer(Modifier.height(Spacing.lg))
-                    VerifyAlertRow(
-                        pendingCount = state.pendingReviewCount,
-                        oldestAgo    = state.oldestPendingAgo,
-                        onClick      = { onNavigate(Screen.VerificationQueue.route) },
-                        modifier     = Modifier.padding(horizontal = Spacing.xl)
-                    )
-                }
+            // 5. Recent activity feed
+            item {
+                Spacer(Modifier.height(Spacing.lg))
+                RecentActivityCard(
+                    items = state.recentActivity,
+                    nowMillis = remember { System.currentTimeMillis() },
+                    onItemClick = { activityItem -> onActivityItemClick(activityItem, onNavigate, onNavigateToTab) },
+                    onSeeAllClick = { onNavigate(Screen.Activity.route) },
+                    modifier = Modifier.padding(horizontal = Spacing.xl),
+                )
             }
-
         }
+
+        if (showAiAgreementSheet) {
+            AiAgreementSheet(
+                breakdown = state.aiBreakdown,
+                onDismiss = { showAiAgreementSheet = false },
+            )
+        }
+    }
+}
+
+/** Routes a recent-activity row tap to whatever screen best explains that item. */
+internal fun onActivityItemClick(
+    activityItem: ActivityItem,
+    onNavigate: (String) -> Unit,
+    onNavigateToTab: (String) -> Unit,
+) {
+    when (activityItem) {
+        is ActivityItem.FramesVerified -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.FramesCaptured -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.SessionStarted -> onNavigate(Screen.SessionDetail.createRoute(activityItem.sessionId))
+        is ActivityItem.PatientAdded -> onNavigate(Screen.PatientSessions.createRoute(activityItem.patientId))
+        is ActivityItem.SyncFinished -> onNavigateToTab(Screen.Settings.route)
     }
 }
 
@@ -181,4 +251,107 @@ private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
         letterSpacing = 1.1.sp,
         modifier = modifier
     )
+}
+
+private fun LazyListScope.recentSessionsSection(
+    state: DashboardUiState,
+    onNavigate: (String) -> Unit,
+    onNavigateToTab: (String) -> Unit,
+) {
+    item {
+        Spacer(Modifier.height(Spacing.xs))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.xl),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            SectionLabel("Recent sessions")
+            if (state.hasAnySession || state.activeSession != null) {
+                Text(
+                    text = "See all",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = AgarthaTheme.colors.accent,
+                    modifier = Modifier
+                        .clickable {
+                            onNavigate(
+                                Screen.SessionList.createRoute(SessionListFilter.ALL, HomePeriod.LAST_7_DAYS)
+                            )
+                        }
+                        .padding(vertical = Spacing.xs),
+                )
+            }
+        }
+        Spacer(Modifier.height(Spacing.sm))
+    }
+
+    if (!state.hasAnySession && state.activeSession == null) {
+        item {
+            EmptyState(
+                icon = AgarthaIcons.Science,
+                title = "No sessions yet",
+                body = "Start a session from a patient's page",
+                modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+                action = {
+                    AgarthaButton(
+                        onClick = { onNavigateToTab("patients") },
+                        variant = AgarthaButtonVariant.Primary,
+                    ) {
+                        Text("Go to Patients")
+                    }
+                },
+            )
+            Spacer(Modifier.height(Spacing.lg))
+        }
+    } else {
+        renderActiveAndRecentSessions(state, onNavigate)
+    }
+}
+
+private fun LazyListScope.renderActiveAndRecentSessions(
+    state: DashboardUiState,
+    onNavigate: (String) -> Unit,
+) {
+    state.activeSession?.let { session ->
+        item(key = "activeSession") {
+            val nowMillis = remember { System.currentTimeMillis() }
+            ActiveSessionHero(
+                sessionId = session.label,
+                elapsed = relativeTimeText(session.lastActivityAt, nowMillis),
+                frameCount = session.totalFrames,
+                onResume = { onNavigate(Screen.Capture.route) },
+                modifier = Modifier.padding(horizontal = Spacing.xl),
+            )
+            Spacer(Modifier.height(Spacing.sm))
+        }
+    }
+
+    if (state.recentSessions.isNotEmpty()) {
+        item(key = "recentSessions") {
+            LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(horizontal = Spacing.xl),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                items(
+                    items = state.recentSessions,
+                    key = { it.session.id },
+                ) { sessionSummary ->
+                    RecentSessionCard(
+                        sessionSummary = sessionSummary,
+                        onClick = {
+                            onNavigate(Screen.SessionDetail.createRoute(sessionSummary.session.id))
+                        },
+                    )
+                }
+            }
+            Spacer(Modifier.height(Spacing.lg))
+        }
+    } else if (state.activeSession != null) {
+        item(key = "recentSessions") {
+            Spacer(Modifier.height(Spacing.md))
+        }
+    }
 }

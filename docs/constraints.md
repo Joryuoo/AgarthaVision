@@ -79,7 +79,11 @@ app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `Came
 `FramePreprocessor` and `YoloOutputDecoder`), which hold a compiled model or a client and are
 expensive to build, `WorkManagerInferenceQueue`, and `InferenceQueueProcessor`, which holds the
 circuit breaker, the retry schedule and the lock that keeps passes from overlapping: WorkManager
-builds a new worker per pass, so those must outlive it. Repositories and use cases are unscoped.
+builds a new worker per pass, so those must outlive it. Repositories and use cases are unscoped, with
+one exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
+~25-40k quantized points out of the bundled offline boundary assets once per process. An
+unscoped or lifecycle-scoped alternative would repeat that parse on every screen that touches
+province/town geometry.
 
 **Enforcement:** review only. The scoped set is visible at
 `core/di/DatabaseModule.kt:44-54`, `core/di/InferenceModule.kt:33-76`,

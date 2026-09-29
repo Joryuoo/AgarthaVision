@@ -1,5 +1,6 @@
 package com.agarthavision.data.local.dao
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -40,35 +41,56 @@ interface PatientDao {
      * [query] matches lastname or firstname. A blank query matches everything — the
      * `:query = ''` short-circuit keeps the plan simple rather than relying on `LIKE '%%'`.
      * Barangay filtering is handled via [barangayCode], not free-text search.
+     *
+     * For `sort` of `TODAY`/`THIS_WEEK`/`EARLIER`, [todayStartMillis] and [sevenDaysAgoMillis]
+     * (see `DateBucketing.startOfTodayMillis`/`sevenDaysAgoMillis`) bound the same "last
+     * activity" expression used for ordering, in SQL, not just in the caller's ordering of an
+     * already-fetched page. Filtering only the loaded page is not enough here: this query
+     * paginates via a growing `LIMIT`, so an unfiltered page can be entirely "this week" and
+     * make "Earlier" look empty even when older patients exist further down the unfiltered
+     * order.
      */
     @Suppress("LongParameterList")
     @Transaction
     @Query(
         """
-        SELECT p.* FROM patients p
-        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
-        WHERE pu.user_id = :userId
-          AND (
+        WITH scored AS (
+            SELECT p.*,
+                MAX(
+                    p.updated_at,
+                    COALESCE((SELECT MAX(se.started_at) FROM sessions se
+                              WHERE se.patient_id = p.patient_id), 0),
+                    COALESCE((SELECT MAX(MAX(sa.timestamp, sa.verified_at)) FROM samples sa
+                              INNER JOIN sessions se2 ON se2.session_id = sa.session_id
+                              WHERE se2.patient_id = p.patient_id AND sa.deleted_at IS NULL), 0)
+                ) AS last_activity_at
+            FROM patients p
+            INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+            WHERE pu.user_id = :userId
+        )
+        SELECT * FROM scored
+        WHERE (
             :query = ''
-            OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
-            OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
+            OR lastname  LIKE '%' || :query || '%' ESCAPE '\'
+            OR firstname LIKE '%' || :query || '%' ESCAPE '\'
           )
-          AND (:sex IS NULL OR p.sex = :sex)
-          AND (:barangayCode IS NULL OR p.psgc_barangay_code = :barangayCode)
-          AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
-          AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
+          AND (:sex IS NULL OR sex = :sex)
+          AND (:barangayCode IS NULL OR psgc_barangay_code = :barangayCode)
+          AND (:minBirthdate IS NULL OR birthdate >= :minBirthdate)
+          AND (:maxBirthdate IS NULL OR birthdate <= :maxBirthdate)
+          AND (
+            :sort NOT IN ('TODAY', 'THIS_WEEK', 'EARLIER')
+            OR (:sort = 'TODAY' AND last_activity_at >= :todayStartMillis)
+            OR (:sort = 'THIS_WEEK' AND last_activity_at >= :sevenDaysAgoMillis
+                AND last_activity_at < :todayStartMillis)
+            OR (:sort = 'EARLIER' AND last_activity_at < :sevenDaysAgoMillis)
+          )
         ORDER BY
-          CASE WHEN :sort = 'RECENT' THEN MAX(
-              p.updated_at,
-              COALESCE((SELECT MAX(se.started_at) FROM sessions se
-                        WHERE se.patient_id = p.patient_id), 0),
-              COALESCE((SELECT MAX(MAX(sa.timestamp, sa.verified_at)) FROM samples sa
-                        INNER JOIN sessions se2 ON se2.session_id = sa.session_id
-                        WHERE se2.patient_id = p.patient_id AND sa.deleted_at IS NULL), 0)
-          ) END DESC,
-          CASE WHEN :sort = 'LAST_NAME' THEN p.lastname END ASC,
-          CASE WHEN :sort = 'FIRST_NAME' THEN p.firstname END ASC,
-          p.lastname ASC, p.firstname ASC
+          CASE WHEN :sort = 'RECENT' OR :sort = 'TODAY' OR :sort = 'THIS_WEEK' OR :sort = 'EARLIER'
+               THEN last_activity_at END DESC,
+          CASE WHEN :sort = 'LAST_NAME' THEN lastname END ASC,
+          CASE WHEN :sort = 'FIRST_NAME' THEN firstname END ASC,
+          lastname ASC, firstname ASC
         LIMIT :limit OFFSET :offset
         """,
     )
@@ -82,24 +104,52 @@ interface PatientDao {
         barangayCode: String? = null,
         minBirthdate: Long? = null,
         maxBirthdate: Long? = null,
+        todayStartMillis: Long? = null,
+        sevenDaysAgoMillis: Long? = null,
     ): Flow<List<PatientEntity>>
 
-    /** Total matching [observePatients], for the pager's page count. */
+    /**
+     * Total matching [observePatients], for the pager's page count.
+     *
+     * Applies the same `sort`-driven TODAY/THIS_WEEK/EARLIER bucket predicate as
+     * [observePatients] (see its doc), against the same "last activity" expression, so
+     * `canLoadMore` (page size vs. this total) reflects the active bucket filter rather than
+     * every patient regardless of it.
+     */
     @Suppress("LongParameterList")
     @Query(
         """
-        SELECT COUNT(*) FROM patients p
-        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
-        WHERE pu.user_id = :userId
-          AND (
+        WITH scored AS (
+            SELECT p.*,
+                MAX(
+                    p.updated_at,
+                    COALESCE((SELECT MAX(se.started_at) FROM sessions se
+                              WHERE se.patient_id = p.patient_id), 0),
+                    COALESCE((SELECT MAX(MAX(sa.timestamp, sa.verified_at)) FROM samples sa
+                              INNER JOIN sessions se2 ON se2.session_id = sa.session_id
+                              WHERE se2.patient_id = p.patient_id AND sa.deleted_at IS NULL), 0)
+                ) AS last_activity_at
+            FROM patients p
+            INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+            WHERE pu.user_id = :userId
+        )
+        SELECT COUNT(*) FROM scored
+        WHERE (
             :query = ''
-            OR p.lastname  LIKE '%' || :query || '%' ESCAPE '\'
-            OR p.firstname LIKE '%' || :query || '%' ESCAPE '\'
+            OR lastname  LIKE '%' || :query || '%' ESCAPE '\'
+            OR firstname LIKE '%' || :query || '%' ESCAPE '\'
           )
-          AND (:sex IS NULL OR p.sex = :sex)
-          AND (:barangayCode IS NULL OR p.psgc_barangay_code = :barangayCode)
-          AND (:minBirthdate IS NULL OR p.birthdate >= :minBirthdate)
-          AND (:maxBirthdate IS NULL OR p.birthdate <= :maxBirthdate)
+          AND (:sex IS NULL OR sex = :sex)
+          AND (:barangayCode IS NULL OR psgc_barangay_code = :barangayCode)
+          AND (:minBirthdate IS NULL OR birthdate >= :minBirthdate)
+          AND (:maxBirthdate IS NULL OR birthdate <= :maxBirthdate)
+          AND (
+            :sort NOT IN ('TODAY', 'THIS_WEEK', 'EARLIER')
+            OR (:sort = 'TODAY' AND last_activity_at >= :todayStartMillis)
+            OR (:sort = 'THIS_WEEK' AND last_activity_at >= :sevenDaysAgoMillis
+                AND last_activity_at < :todayStartMillis)
+            OR (:sort = 'EARLIER' AND last_activity_at < :sevenDaysAgoMillis)
+          )
         """,
     )
     fun observePatientCount(
@@ -109,6 +159,9 @@ interface PatientDao {
         barangayCode: String? = null,
         minBirthdate: Long? = null,
         maxBirthdate: Long? = null,
+        sort: String = "RECENT",
+        todayStartMillis: Long? = null,
+        sevenDaysAgoMillis: Long? = null,
     ): Flow<Int>
 
     @Query("SELECT * FROM patients WHERE patient_id = :patientId")
@@ -298,4 +351,56 @@ interface PatientDao {
         """,
     )
     suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String>
+
+    @Query(
+        """
+        SELECT DISTINCT p.patient_id AS patientId, p.lastname AS lastname, p.firstname AS firstname, p.middle_name AS middleName, p.created_at AS occurredAt
+        FROM patients p
+        INNER JOIN patient_users pu ON pu.patient_id = p.patient_id
+        WHERE pu.user_id = :userId AND p.created_by = :userId
+        ORDER BY p.created_at DESC LIMIT :limit
+        """,
+    )
+    fun observeAddedActivity(userId: String, limit: Int): Flow<List<PatientAddedActivityRow>>
+
+    @Query(
+        """
+        SELECT 
+            p.patient_id AS patientId,
+            COUNT(CASE WHEN sa.status = 'flagged' THEN 1 END) AS unverifiedCount,
+            (SELECT d.class_label FROM detections d
+             JOIN samples sa2 ON sa2.sample_id = d.sample_id
+             JOIN sessions se2 ON se2.session_id = sa2.session_id
+             WHERE se2.patient_id = p.patient_id AND sa2.deleted_at IS NULL AND d.verdict != 'false_positive'
+             LIMIT 1) AS positiveSpecies,
+            MAX(
+                p.updated_at,
+                COALESCE((SELECT MAX(se3.started_at) FROM sessions se3 WHERE se3.patient_id = p.patient_id), 0),
+                COALESCE((SELECT MAX(MAX(sa3.timestamp, sa3.verified_at)) FROM samples sa3
+                          JOIN sessions se4 ON se4.session_id = sa3.session_id
+                          WHERE se4.patient_id = p.patient_id AND sa3.deleted_at IS NULL), 0)
+            ) AS lastActivityAt
+        FROM patients p
+        LEFT JOIN sessions se ON se.patient_id = p.patient_id
+        LEFT JOIN samples sa ON sa.session_id = se.session_id AND sa.deleted_at IS NULL
+        WHERE p.patient_id IN (:patientIds)
+        GROUP BY p.patient_id
+        """,
+    )
+    suspend fun getPatientActivitySummaries(patientIds: List<String>): List<PatientActivitySummary>
 }
+
+data class PatientActivitySummary(
+    @ColumnInfo(name = "patientId") val patientId: String,
+    @ColumnInfo(name = "unverifiedCount") val unverifiedCount: Int,
+    @ColumnInfo(name = "positiveSpecies") val positiveSpecies: String?,
+    @ColumnInfo(name = "lastActivityAt") val lastActivityAt: Long,
+)
+
+data class PatientAddedActivityRow(
+    val patientId: String,
+    val lastname: String,
+    val firstname: String,
+    val middleName: String?,
+    val occurredAt: Long,
+)

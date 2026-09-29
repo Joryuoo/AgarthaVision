@@ -13,6 +13,7 @@ import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import com.agarthavision.ui.components.BarangayPickerDelegate
 import com.agarthavision.ui.components.BarangayPickerState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import java.time.Clock
 import java.time.Instant
 import javax.inject.Inject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -46,7 +47,9 @@ data class PatientsState(
     /**
      * One instant per emission, so every row in a given render computes its age against
      * the same clock reading. Reading the clock per row would let a list drawn across
-     * midnight show two ages for the same birthday.
+     * midnight show two ages for the same birthday. Sourced from the injected [java.time.Clock]
+     * and set explicitly on every emission built in [PatientsViewModel.state] — the default here
+     * only covers [PatientsState]'s own no-arg default (e.g. this class's initial value).
      */
     val now: Instant = Instant.now(),
 ) {
@@ -96,6 +99,7 @@ class PatientsViewModel @Inject constructor(
     observePatientsUseCase: ObservePatientsUseCase,
     observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     searchBarangaysUseCase: SearchBarangaysUseCase,
+    private val clock: Clock,
 ) : ViewModel() {
 
     private val searchQuery = MutableStateFlow("")
@@ -188,6 +192,7 @@ class PatientsViewModel @Inject constructor(
                 minAge = ui.minAge,
                 maxAge = ui.maxAge,
                 canLoadMore = result.items.size < result.total,
+                now = clock.instant(),
             )
         }.stateIn(
             scope = viewModelScope,

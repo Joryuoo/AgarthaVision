@@ -36,6 +36,7 @@ class SoftDeleteGuardTest {
         "SampleDao.kt",
         "DetectionDao.kt",
         "SessionDao.kt",
+        "CoverageDao.kt",
     ).map { File(daoDir, it) }
 
     @Test

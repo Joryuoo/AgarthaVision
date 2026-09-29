@@ -15,6 +15,7 @@ AgarthaVision/
 ├── inference/                 The self-hosted FastAPI inference container
 ├── branding/                  Logo SVGs
 ├── tools/psgc/                Generator for the bundled PSGC asset. Run by hand, output committed
+├── tools/geo/                 Generator for the bundled offline boundary assets. Run by hand, output committed
 ├── gradle/                    Wrapper + version catalog
 ├── .github/                   CI workflows (build-and-test.yml)
 └── .husky/                    Git hooks — commit-msg, pre-commit, pre-push
@@ -30,6 +31,7 @@ app/
     ├── main/
     │   ├── AndroidManifest.xml    Permissions, single Activity, FileProvider for report sharing
     │   ├── assets/psgc/           Bundled PSGC barangay dataset, gzipped. Room-seeded on first run
+    │   ├── assets/geo/            Bundled offline province/town boundary geometry, custom binary format
     │   ├── res/                   Launcher icons, strings, themes
     │   └── java/com/agarthavision/
     │       ├── MainActivity.kt · MainViewModel.kt · AgarthaVisionApp.kt
@@ -60,6 +62,7 @@ app/
 | Folder | For |
 |---|---|
 | `model/` | Domain models and the enums that define the vocabulary: `Patient`, `Sex`, `QueueSample`, `SampleStatus`, `DetectionVerdict`, `EggSpecies`, `FrameSource`, `ReportType`, `ReportSyncStatus`, `SessionSyncStatus` |
+| `geo/` | Offline boundary geometry primitives: `IslandGroup`, `GeoBounds`, `GeoProjection`, `AreaShape`/`BoundarySet`/`AreaDirectory`, `ViewFit`, `HitTest`, `PositiveRateBin` |
 | `repository/` | Interfaces only. Implementations live in `data/` |
 | `inference/` | `InferenceEngine` and its result types, `InferenceState`, and the background queue: `InferenceQueueProcessor` (the one consumer) and `CloudCircuitBreaker` |
 | `usecase/auth` | Sign in, sign out, observe identity |
@@ -72,6 +75,7 @@ app/
 | `usecase/records` | Records list, session samples, sample detail, image source resolution, report generation, PDF building |
 | `usecase/reports` | Per-species LPF range aggregation (`LpfAggregation.kt`) and session egg counts |
 | `usecase/settings` | Theme mode; pending sync counts |
+| `usecase/coverage` | Load province/town boundary geometry (`LoadProvinceBoundariesUseCase`, `LoadTownBoundariesUseCase`) |
 
 Contains no Android imports. Does import `data/` in a few boundary files — see `constraints.md` C3.
 
@@ -83,6 +87,7 @@ Contains no Android imports. Does import `data/` in a few boundary files — see
 | `local/dao/` | Room queries for each entity. The LPF query lives in `DetectionDao` |
 | `local/mapper/` | Entity ↔ domain conversion, plus `VerificationMapper` which computes verdicts and derived IDs |
 | `local/psgc/` | `PsgcSeeder` for bundled barangay dataset |
+| `geo/` | `GeoDataset` identity, `BoundaryBinaryReader` for the "AVGE" binary boundary format — pure JVM, no Android import |
 | `local/species/` | `SpeciesSuggestionSeeder` and repository for offline autocomplete index |
 | `local/` | `SampleImageStore` — on-device JPEG files under `users/{owner}/samples/` |
 | `inference/` | `RemoteInferenceEngine` (the cloud container) and `PredictionMapper` |

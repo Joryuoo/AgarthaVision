@@ -31,6 +31,7 @@ data class ReportsQuery(
 data class ReportsResult(
     val items: List<Report> = emptyList(),
     val totalCount: Int = 0,
+    val unsyncedCount: Int = 0,
 )
 
 /**
@@ -82,9 +83,11 @@ class ObserveReportsUseCase @Inject constructor(
             query = escapedQuery,
         )
 
+        val unsyncedFlow = reportRepository.observeUnsyncedCount(userId)
+
         emitAll(
-            combine(reportsFlow, countFlow) { items, count ->
-                ReportsResult(items = items, totalCount = count)
+            combine(reportsFlow, countFlow, unsyncedFlow) { items, count, unsynced ->
+                ReportsResult(items = items, totalCount = count, unsyncedCount = unsynced)
             }
         )
     }

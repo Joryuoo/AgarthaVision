@@ -537,6 +537,7 @@ private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun claimReportsForSessions(sessionIds: List<String>, userId: String) = Unit
     override fun observePendingCount(userId: String): Flow<Int> = flowOf(0)
     override fun observeFailedCount(userId: String): Flow<Int> = flowOf(0)
+    override fun observeUnsyncedCount(userId: String): Flow<Int> = flowOf(0)
 }
 
 private class NoOpReportRemoteDataSource : com.agarthavision.data.supabase.ReportRemoteDataSource(
