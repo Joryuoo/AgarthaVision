@@ -520,7 +520,7 @@ private fun ViewDetectionButton(onClick: () -> Unit, modifier: Modifier = Modifi
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(colors.accent)
+            .background(colors.brandFill)
             .clickable(onClick = onClick)
             .testTag(SampleDetailTestTags.VIEW_DETECTION)
             .padding(vertical = 15.dp),
@@ -528,7 +528,7 @@ private fun ViewDetectionButton(onClick: () -> Unit, modifier: Modifier = Modifi
     ) {
         Text(
             text = stringResource(R.string.sample_detail_view_detection),
-            color = colors.onAccent,
+            color = colors.onBrandFill,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
         )

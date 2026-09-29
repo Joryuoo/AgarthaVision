@@ -1,11 +1,14 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Sample
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for captured sample persistence.
  */
+@Suppress("TooManyFunctions")
 interface SampleRepository {
     /**
      * Saves a captured sample locally.
@@ -49,4 +52,33 @@ interface SampleRepository {
      * A concrete owner sees their own rows plus unowned ones; a null owner sees unowned only.
      */
     fun observeFlaggedSamplesForSession(sessionId: String, userId: String?): Flow<List<Sample>>
+
+    /**
+     * Live count of owned samples still awaiting cloud upload (`verified` only).
+     */
+    fun observePendingCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Live count of flagged samples owned by the medtech awaiting review.
+     */
+    fun observeFlaggedCount(userId: String): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes samples with capture and verification timestamps within a time range for KPI calculations.
+     */
+    fun observeSampleTimesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SampleTime>> = kotlinx.coroutines.flow.emptyFlow()
+
+    fun observeCaptureActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesCaptured>> = emptyFlow()
+
+    fun observeVerifyActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.FramesVerified>> = emptyFlow()
 }

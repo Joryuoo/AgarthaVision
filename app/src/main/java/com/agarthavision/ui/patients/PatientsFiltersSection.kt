@@ -135,7 +135,7 @@ internal fun PatientsFilterSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = colors.surface,
+        containerColor = colors.surfaceHigh,
         dragHandle = {
             Box(
                 modifier = Modifier
@@ -226,8 +226,8 @@ internal fun PatientsFilterSheet(
                     .height(49.dp),
                 shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = colors.accent,
-                    contentColor = colors.onAccent,
+                    containerColor = colors.brandFill,
+                    contentColor = colors.onBrandFill,
                 ),
             ) {
                 Text(
@@ -249,6 +249,9 @@ private fun FilterSortSelector(
     var expanded by remember { mutableStateOf(false) }
     val label = when (sort) {
         PatientSort.RECENT -> stringResource(R.string.patients_sort_recent)
+        PatientSort.TODAY -> stringResource(R.string.patients_sort_today)
+        PatientSort.THIS_WEEK -> stringResource(R.string.patients_sort_this_week)
+        PatientSort.EARLIER -> stringResource(R.string.patients_sort_earlier)
         PatientSort.LAST_NAME -> stringResource(R.string.patients_sort_lastname)
         PatientSort.FIRST_NAME -> stringResource(R.string.patients_sort_firstname)
     }
@@ -297,6 +300,27 @@ private fun FilterSortSelector(
                     },
                 )
                 DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_today)) },
+                    onClick = {
+                        onSortSelected(PatientSort.TODAY)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_this_week)) },
+                    onClick = {
+                        onSortSelected(PatientSort.THIS_WEEK)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.patients_sort_earlier)) },
+                    onClick = {
+                        onSortSelected(PatientSort.EARLIER)
+                        expanded = false
+                    },
+                )
+                DropdownMenuItem(
                     text = { Text(stringResource(R.string.patients_sort_lastname)) },
                     onClick = {
                         onSortSelected(PatientSort.LAST_NAME)
@@ -339,9 +363,9 @@ private fun FilterSexSegmentedRow(
             )
             for ((sex, label) in options) {
                 val isSelected = selectedSex == sex
-                val bg = if (isSelected) colors.accent else colors.surface
-                val border = if (isSelected) colors.accent else colors.borderStrong
-                val text = if (isSelected) colors.onAccent else colors.textPrimary
+                val bg = if (isSelected) colors.brandFill else colors.surface
+                val border = if (isSelected) colors.brandFill else colors.borderStrong
+                val text = if (isSelected) colors.onBrandFill else colors.textPrimary
 
                 Row(
                     modifier = Modifier

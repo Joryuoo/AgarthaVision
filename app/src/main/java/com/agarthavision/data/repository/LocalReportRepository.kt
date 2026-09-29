@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions")
+ 
 package com.agarthavision.data.repository
 
 import com.agarthavision.data.local.dao.ReportDao
@@ -54,7 +56,10 @@ class LocalReportRepository @Inject constructor(
         offset: Int,
     ): Flow<List<Report>> =
         reportDao.observeFilteredReports(userId, startMillis, endMillis, species, query, limit, offset).map { rows ->
-            rows.map { it.report.toDomain(gson, it.sessionLabel) }
+            rows.map { row ->
+                val patientName = formatMaskedPatientName(row.patientLastname, row.patientFirstname)
+                row.report.toDomain(gson, row.sessionLabel, patientName)
+            }
         }
 
     override fun observeFilteredCount(
@@ -75,4 +80,21 @@ class LocalReportRepository @Inject constructor(
     override suspend fun updateSupabaseStatus(reportId: String, status: ReportSyncStatus) {
         reportDao.updateSupabaseStatus(reportId, status.value)
     }
+
+    override fun observeUnsyncedCount(userId: String): Flow<Int> =
+        reportDao.observeUnsyncedCount(userId)
 }
+
+private fun formatMaskedPatientName(lastname: String?, firstname: String?): String? {
+    if (lastname.isNullOrBlank()) return null
+    val last = lastname.trim()
+    val maskedLast = if (last.length <= 2) {
+        last
+    } else {
+        val middleBullets = "•".repeat(last.length - 2)
+        "${last.first()}$middleBullets${last.last()}"
+    }
+    val initial = firstname?.trim()?.firstOrNull()?.uppercaseChar()
+    return if (initial != null) "$maskedLast, $initial." else maskedLast
+}
+

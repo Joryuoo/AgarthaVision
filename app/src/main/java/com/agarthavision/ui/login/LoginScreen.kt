@@ -153,7 +153,7 @@ private fun LoginScreenContent(
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = "AgarthaVision",
-                            color = colors.accent,
+                            color = if (colors.isDark) Color.White else Color.Black,
                             fontSize = 30.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = (-0.75).sp, // -0.025em * 30px
@@ -235,8 +235,9 @@ private fun AppMark() {
             .border(1.dp, colors.border, RoundedCornerShape(20.dp)),
         contentAlignment = Alignment.Center
     ) {
+        val logoRes = if (colors.isDark) R.drawable.ic_logo_dark else R.drawable.ic_logo_light
         androidx.compose.foundation.Image(
-            painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_logo),
+            painter = androidx.compose.ui.res.painterResource(id = logoRes),
             contentDescription = "AgarthaVision Logo",
             modifier = Modifier.fillMaxSize()
         )
@@ -297,10 +298,10 @@ private fun LoginForm(
             enabled = state.canSubmit,
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = themeColors.accent,
-                contentColor = themeColors.onAccent,
-                disabledContainerColor = themeColors.accent.copy(alpha = 0.5f),
-                disabledContentColor = themeColors.onAccent.copy(alpha = 0.5f)
+                containerColor = themeColors.brandFill,
+                contentColor = themeColors.onBrandFill,
+                disabledContainerColor = themeColors.brandFill.copy(alpha = 0.5f),
+                disabledContentColor = themeColors.onBrandFill.copy(alpha = 0.5f)
             ),
             contentPadding = PaddingValues(vertical = 14.dp),
             modifier = Modifier.fillMaxWidth()

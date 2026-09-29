@@ -53,6 +53,7 @@ class SyncCardTest {
             pendingSamples = 0,
             pendingReports = 0,
             failed = failed,
+            failedSessions = failed,
         ),
         isSyncing = false,
         canSyncNow = true,

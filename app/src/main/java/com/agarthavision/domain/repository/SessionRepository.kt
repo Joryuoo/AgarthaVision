@@ -1,10 +1,12 @@
 package com.agarthavision.domain.repository
 
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.SessionWithStats
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Repository contract for locally persisted recording sessions.
@@ -137,4 +139,45 @@ interface SessionRepository {
         endMillis: Long?,
         query: String,
     ): Flow<SessionsCounts>
+
+    /**
+     * Observes filtered cross-patient session summaries.
+     */
+    fun observeSessionSummaries(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+        limit: Int,
+    ): Flow<List<com.agarthavision.domain.model.SessionSummary>> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes total count for cross-patient filtered sessions.
+     */
+    fun observeSessionSummaryCount(
+        userId: String,
+        filter: com.agarthavision.domain.model.SessionListFilter,
+        window: com.agarthavision.domain.model.TimeWindow?,
+    ): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes count of empty sessions (zero samples), optionally excluding [excludeSessionId].
+     */
+    fun observeEmptySessionCount(
+        userId: String,
+        excludeSessionId: String?,
+    ): Flow<Int> = kotlinx.coroutines.flow.emptyFlow()
+
+    /**
+     * Observes sessions with basic outcome metrics within a time range for KPI calculations.
+     */
+    fun observeSessionOutcomesBetween(
+        userId: String,
+        fromMillis: Long,
+        toMillis: Long,
+    ): Flow<List<com.agarthavision.domain.model.SessionOutcome>> = kotlinx.coroutines.flow.emptyFlow()
+
+    fun observeStartedActivity(
+        userId: String,
+        limit: Int,
+    ): Flow<List<ActivityItem.SessionStarted>> = emptyFlow()
 }
