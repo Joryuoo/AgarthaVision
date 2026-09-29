@@ -395,6 +395,15 @@ export interface Sample {
   image_height: number | null;
   // Room-only pixel height.
 
+  inference_state: "queued" | "in_inference" | "ready" | "manual";
+  // Room-only, not null, default 'ready' (Room version 23). Where the frame is in getting its
+  // model output from the background inference queue. Never synced: only a `ready` or `manual`
+  // sample can be verified, and only verified samples reach Supabase. `is_manual` wins over it.
+
+  inference_attempts: number;
+  // Room-only, not null, default 0. Times both inference engines failed on this frame; at the
+  // queue's limit the frame becomes manual.
+
   // ── Deliberately absent ───────────────────────────────────────────────────
   // `gps_latitude` / `gps_longitude` / `gps_accuracy` — removed. The fix was
   // taken at the microscope, so it recorded where the smear was read, not where

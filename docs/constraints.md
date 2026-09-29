@@ -68,14 +68,19 @@ returns `Result<T>` so the caller handles both branches. Never swallow an except
 files under `domain/usecase/` never mention `Result<` — for example
 `domain/usecase/reports/SessionEggCountUseCase.kt:19`, which returns a bare data class. Treat
 C4 as the target shape for new code, not a description of the existing code. Newer capture code
-follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<FrameSource>`.
+follows it: `domain/usecase/capture/CaptureFieldUseCase.kt` returns `Result<CaptureOutcome>`.
 
 ## C5 — `@Singleton` is a closed list
 
 `@Singleton` is for the database, OkHttp, Retrofit, Gson, the Supabase client, and the
 app-scoped services `SessionManager`, `FlaggedFrameStore`, `FrameSampler`, `CameraManager`,
-`NetworkMonitor`, `SampleImageStore`. Repositories and use cases are unscoped, with one
-exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
+`NetworkMonitor`, `SampleImageStore`. The inference side adds the two engines
+(`RemoteInferenceEngine`, and `OnDeviceInferenceEngine` with its `ModelStore`,
+`FramePreprocessor` and `YoloOutputDecoder`), which hold a compiled model or a client and are
+expensive to build, `WorkManagerInferenceQueue`, and `InferenceQueueProcessor`, which holds the
+circuit breaker, the retry schedule and the lock that keeps passes from overlapping: WorkManager
+builds a new worker per pass, so those must outlive it. Repositories and use cases are unscoped, with
+one exception: `BoundaryRepository` (`data/repository/BoundaryRepositoryImpl.kt`), which parses
 ~25-40k quantized points out of the bundled offline boundary assets once per process. An
 unscoped or lifecycle-scoped alternative would repeat that parse on every screen that touches
 province/town geometry.
@@ -97,7 +102,14 @@ the dev and prod projects. Do not change schema behaviour without updating both 
 **and** `schema.ts`. Migrations are numbered, committed, and run **manually** in the Supabase
 dashboard SQL editor — never applied programmatically (`supabase/migrations/0001_init.sql:2`).
 Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
-(`core/database/AgarthaDatabase.kt:105`).
+(`core/database/AgarthaDatabase.kt`).
+
+**From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
+to a destructive rebuild, which was acceptable while the local database held nothing Supabase
+did not. Version 23 added the inference queue: frames that are captured, waiting on a model
+and not yet verified exist on the phone only. `MIGRATION_22_23` (`core/database/Migrations.kt`)
+is the first. Add the next one to `ALL_MIGRATIONS` and export its schema JSON beside it.
+Destructive fallback remains only for installs older than 22.
 
 **Enforcement:** review only. There is no migration runner and no schema-diff test.
 `schema.ts` is documentation and is never compiled (`schema.ts:4-5`).

@@ -3,11 +3,14 @@ package com.agarthavision.domain.usecase.verify
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.DetectionEntity
+import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.mapper.addedDetectionIdFor
 import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.domain.model.DetectionVerdict
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.inference.Prediction
+import com.agarthavision.domain.usecase.inference.InferencePendingException
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
@@ -21,6 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
@@ -422,4 +426,40 @@ class SubmitVerificationUseCaseTest {
             )
         }
 
+    // ── a frame still waiting on inference (14zcqntj6ny) ────────────────────────────────────
+
+    @Test
+    fun `a frame still in inference cannot be verified`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val pending = frame.copy(predictions = emptyList(), inferenceState = InferenceState.QUEUED)
+
+            val result = useCase(pending, findings = emptyList(), missedEgg = null)
+
+            // Verifying it would record a clean field no model ever read.
+            assertTrue(result.exceptionOrNull() is InferencePendingException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+            verify(detectionDao, never()).insertDetections(any())
+        }
+
+    @Test
+    fun `a frame the medtech saw as ready is refused if the row is still pending`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(sampleDao.getSampleById("sample-1")).thenReturn(
+                SampleEntity(
+                    sampleId = "sample-1",
+                    sessionId = "session-1",
+                    userId = "user-1",
+                    deviceId = "device-1",
+                    timestamp = 0L,
+                    imagePath = "/tmp/sample-1.jpg",
+                    status = SampleStatus.FLAGGED.value,
+                    inferenceState = InferenceState.IN_INFERENCE.value,
+                ),
+            )
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = null)
+
+            assertTrue(result.exceptionOrNull() is InferencePendingException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+        }
 }

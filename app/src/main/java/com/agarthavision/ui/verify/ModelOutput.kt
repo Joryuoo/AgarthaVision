@@ -1,5 +1,6 @@
 package com.agarthavision.ui.verify
 
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
 
@@ -22,12 +23,11 @@ internal sealed interface ModelOutput {
     /**
      * Inference has not come back yet. A spinner, nothing else.
      *
-     * **No path constructs this today, and that is stated rather than hidden.** Capture awaits
-     * inference before it writes a row, so a sample in the queue has always already resolved to
-     * [Read] or [Unavailable]. It is here because the screen has to be total over the three
-     * states the spec defines, and because PB-15b brings the first caller that can produce it:
-     * opening a sample synced from another device, whose frame and detections are still being
-     * resolved from Storage. Render it correctly now so that caller does not have to invent it.
+     * Produced by a frame whose [InferenceState] is still pending: capture saves the frame at
+     * once and the background queue gives it a model output later (14zcqntj6ny). Such a frame
+     * has no predictions yet, and reading it as [Read] with nothing in it would show a clean
+     * field no model has looked at. PB-15b is the other caller: a sample synced from another
+     * device, whose frame and detections are still being resolved from Storage.
      */
     data object InProgress : ModelOutput
 
@@ -66,11 +66,16 @@ internal data class ModelSpeciesCount(
  * what submitting would write. The two can and should differ: the gap between them is exactly
  * what the medtech is being asked to create.
  *
+ * A frame awaiting inference is [ModelOutput.InProgress], read off the frame's own
+ * [InferenceState] rather than passed in, so there is still one source of truth for "has a model
+ * output". [isResolving] is kept for its own, different case below.
+ *
  * @param isResolving true while the frame is still being fetched and its detections are not yet
  *   known. Nothing sets it today; see [ModelOutput.InProgress].
  */
 internal fun FlaggedFrame.modelOutput(isResolving: Boolean = false): ModelOutput = when {
     isResolving -> ModelOutput.InProgress
+    inferenceState.isPending -> ModelOutput.InProgress
     source == FrameSource.MANUAL -> ModelOutput.Unavailable
     else -> ModelOutput.Read(
         species = predictions

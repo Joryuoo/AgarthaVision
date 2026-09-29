@@ -114,10 +114,15 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * project. Leaving 11 free keeps a slot for the stage work when it returns. Versions are only
  * an ordering token under destructive fallback, so a skipped number costs nothing.
  *
- * No hand-written `Migration` is supplied: per [DatabaseModule] the app
- * uses `fallbackToDestructiveMigration`, so a version bump recreates the tables from
- * these entities. Acceptable in Phase 1 (no production data). Local schema history is
- * exported under `app/schemas/`.
+ * Version 23 adds `samples.inference_state` and `samples.inference_attempts`, the background
+ * inference queue (14zcqntj6ny). **It is the first version reached by a hand-written migration,
+ * [MIGRATION_22_23], rather than a destructive rebuild.** From here the local database holds
+ * frames that exist nowhere else: captured, queued for a model output, and not yet verified, so
+ * not yet synced. Wiping them on an app update would lose a medtech's work.
+ *
+ * **Every bump from 22 onward ships a `Migration`, added to [ALL_MIGRATIONS].** The destructive
+ * fallback in `DatabaseModule` stays only for installs older than 22, which no migration
+ * covers and which predate the queue. Local schema history is exported under `app/schemas/`.
  */
 @Database(
     entities = [
@@ -131,7 +136,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
     ],
-    version = 22,
+    version = 23,
     exportSchema = true,
 )
 abstract class AgarthaDatabase : RoomDatabase() {

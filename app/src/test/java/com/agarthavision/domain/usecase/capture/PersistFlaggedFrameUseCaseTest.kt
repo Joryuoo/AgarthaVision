@@ -6,6 +6,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.inference.InferenceState
 import com.agarthavision.domain.model.FrameSource
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.repository.AuthRepository
@@ -117,6 +118,33 @@ class PersistFlaggedFrameUseCaseTest {
             assertEquals(sampleId, sample.sampleId)
             assertEquals("manual", sample.inferenceModelVersion)
             assertTrue(sample.isManual)
+            assertNull(sample.predictionsJson)
+        }
+
+    @Test
+    fun `a queued capture is written queued, with no model output and no attempts`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+            whenever(deviceIdProvider.id).thenReturn("device-1")
+            whenever(sampleImageStore.persistJpeg(any(), any(), any())).thenReturn("/data/samples/id.jpg")
+
+            useCase(
+                FlaggedFrame(
+                    sessionId = "session-1",
+                    capturedAt = Instant.EPOCH,
+                    jpegBytes = ByteArray(5),
+                    predictions = emptyList(),
+                    source = FrameSource.MODEL,
+                    inferenceState = InferenceState.QUEUED,
+                ),
+            )
+
+            val sampleCaptor = argumentCaptor<SampleEntity>()
+            verify(sampleDao).upsertSample(sampleCaptor.capture())
+            val sample = sampleCaptor.firstValue
+            assertEquals("queued", sample.inferenceState)
+            assertEquals(0, sample.inferenceAttempts)
+            assertTrue(!sample.isManual)
             assertNull(sample.predictionsJson)
         }
 }
