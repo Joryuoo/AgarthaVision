@@ -4,6 +4,7 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.SampleImageStore
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
@@ -11,6 +12,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.data.local.entity.ColleagueEntity
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
@@ -22,6 +24,7 @@ import com.agarthavision.data.local.mapper.SamplePrediction
 import com.agarthavision.data.inference.decodePredictions
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.PatientRemoteDataSource
+import com.agarthavision.data.supabase.ProfileRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -100,6 +103,10 @@ class FetchRemoteDataUseCaseTest {
         onBlocking { invoke(any()) } doReturn ImageCacheSummary()
     }
     private val sampleImageStore: SampleImageStore = mock()
+    private val profileRemoteDataSource: ProfileRemoteDataSource = mock {
+        onBlocking { fetchColleagues(any()) } doReturn emptyList()
+    }
+    private val colleagueDao: ColleagueDao = mock()
 
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
@@ -120,6 +127,8 @@ class FetchRemoteDataUseCaseTest {
         cacheSampleImages = cacheSampleImages,
         sampleImageStore = sampleImageStore,
         gson = Gson(),
+        profileRemoteDataSource = profileRemoteDataSource,
+        colleagueDao = colleagueDao,
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -292,6 +301,33 @@ class FetchRemoteDataUseCaseTest {
         useCase.invoke()
 
         verify(patientDao, never()).unlinkPatientFromUser(any(), any())
+    }
+
+    // ── Colleagues' names (14zcqntjph6) ──────────────────────────────────────
+
+    @Test
+    fun `colleagues' names are cached for read-only records`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val names = listOf(ColleagueEntity(userId = "user-2", fullName = "Maria Santos"))
+        whenever(profileRemoteDataSource.fetchColleagues("user-1")).thenReturn(names)
+
+        useCase.invoke()
+
+        verify(colleagueDao).upsertColleagues(names)
+    }
+
+    @Test
+    fun `a failed name fetch does not fail the pass`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(profileRemoteDataSource.fetchColleagues("user-1")).thenThrow(RuntimeException("boom"))
+
+        val result = useCase.invoke()
+
+        // A missing name costs a label on a read-only card, not a record.
+        assertTrue((result.getOrThrow() as FetchSummary.Ran).isComplete)
+        verify(initialFetchStateStore).markCompleted("user-1")
     }
 
     // ── Rows whose parent is not on the device (14zcqntjph5) ─────────────────

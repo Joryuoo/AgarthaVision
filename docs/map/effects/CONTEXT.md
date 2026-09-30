@@ -69,6 +69,14 @@ whole history. Nothing from 0001–0006 is dropped. The phone repeats the rule i
 send, or the server sends rows no screen shows. Cross-patient views — Home, the dashboard, the
 Records tab, the pending counts — stay the medtech's own work on purpose.
 
+**Reading a colleague's row is not permission to change it.** Writes stay author-only on the
+server, so the phone treats a colleague's session and sample as read-only: one rule,
+`domain/model/RecordAuthorship.kt::isColleagueRecord`, enforced in `SessionManager::resumeSession`,
+`OpenVerificationTargetUseCase`, `SubmitVerificationUseCase`, `DeleteQueueItemsUseCase` and
+`SessionsViewModel::onRenameSession`, with the screens hiding the actions first. **A new write
+path on a session or sample needs the same check**, or its edit is written locally and silently
+refused on push. The push queues filter on `user_id`, so a colleague's row can never be pushed.
+
 In the consolidated schema every table's admin path, `reports` included, resolves through
 `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`). The dev and prod
 projects still run the legacy history, where `reports` reintroduced an inline

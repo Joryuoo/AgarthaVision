@@ -45,6 +45,11 @@ as working.
   stays with whoever recorded it (`0007_patient_shared_history.sql`,
   `domain/repository/PatientAccessRepository.kt`). An assignment the server removes leaves the
   patient list at the next pull (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
+- **Colleagues' records are read-only.** A colleague's session opens in Session Detail rather than
+  Capture, and a colleague's sample offers no edit, re-verify, add-species, redraw or delete; both
+  say "Recorded by …" (`ui/components/ReadOnlyAuthorNote.kt`,
+  `domain/model/RecordAuthorship.kt::isColleagueRecord`). Names come from the `colleagues` cache
+  (`0008_colleague_names.sql`, Room v24).
 - **No client delete.** Patient deletion is restricted to server administrators; no client path
   or DAO method allows deleting a patient.
 - **Non-cascading edits.** Editing a patient's details does not cascade to existing session

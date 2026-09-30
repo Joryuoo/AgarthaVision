@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: supabase/migrations/0001_init.sql
 ---
 
@@ -41,9 +41,20 @@ policy recursion the original inline subquery caused —
 
 Documented shape: `schema.ts` (`Profile`).
 
-**No Room mirror.** Identity on-device is a DataStore-cached `LocalIdentity`
+**Colleagues can read each other's name, and only then.** `profiles_select_colleague`
+(`supabase/migrations/0008_colleague_names.sql:54-56`) adds a SELECT beside
+`profiles_select_own` for a colleague who authored a session or report on a patient the reader
+is assigned to (`shares_patient_history_with`, `:29-49`). It exists so a colleague's read-only
+record can name its author (14zcqntjph6).
+
+**Room holds colleagues' names only.** Identity on-device is a DataStore-cached `LocalIdentity`
 (`app/src/main/java/com/agarthavision/domain/model/LocalIdentity.kt`,
-`SupabaseAuthRepository.kt::observeLocalIdentity`), not a `profiles` row.
+`SupabaseAuthRepository.kt::observeLocalIdentity`), not a `profiles` row. The `colleagues` table
+(`data/local/entity/ColleagueEntity.kt`, Room v24) caches `id` and `full_name` of those
+colleagues, filled by the pull (`data/supabase/ProfileRemoteDataSource.kt::fetchColleagues`) and
+read through `ColleagueRepository`. It is a label, never a permission. Because
+`handle_new_user()` writes no name, a colleague reads as "another medtech" until something sets
+`full_name`.
 
 ## Connected to
 

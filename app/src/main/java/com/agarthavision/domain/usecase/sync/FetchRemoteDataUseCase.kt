@@ -7,6 +7,7 @@ import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.inference.encodePredictions
 import com.agarthavision.data.local.SampleImageStore
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
@@ -19,6 +20,7 @@ import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.local.mapper.toFramePredictionsOrNull
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
+import com.agarthavision.data.supabase.ProfileRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -130,6 +132,8 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val cacheSampleImages: CacheSampleImagesUseCase,
     private val sampleImageStore: SampleImageStore,
     private val gson: Gson,
+    private val profileRemoteDataSource: ProfileRemoteDataSource,
+    private val colleagueDao: ColleagueDao,
 ) {
     /**
      * Runs one fetch pass.
@@ -167,6 +171,12 @@ class FetchRemoteDataUseCase @Inject constructor(
 
         runCatching { reportsFetched = pullReports(); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
+
+        // Colleagues' names, so a read-only record can say whose it is offline (14zcqntjph6).
+        // Best-effort and outside the completeness sets below: a missing name costs a label,
+        // not a record, and must not hold the badge at NOT_YET_SYNCED.
+        runCatching { colleagueDao.upsertColleagues(profileRemoteDataSource.fetchColleagues(userId)) }
+            .onFailure { error -> Log.w(TAG, "Fetch colleague names failed", error) }
 
         // Frames last: every one of them hangs off a sample row, so there is nothing to cache
         // until the rows are down. It never throws — an unreachable object is counted, not

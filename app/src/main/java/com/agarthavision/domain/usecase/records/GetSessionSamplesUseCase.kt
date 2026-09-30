@@ -1,7 +1,10 @@
 package com.agarthavision.domain.usecase.records
 
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Session
+import com.agarthavision.domain.model.isColleagueRecord
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.repository.ColleagueRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.SampleRepository
@@ -18,6 +21,8 @@ import javax.inject.Inject
 data class SessionSamples(
     val session: Session,
     val samples: List<SampleRecordItem>,
+    /** Who wrote the session. A colleague's is read-only here (14zcqntjph6). */
+    val author: RecordAuthor = RecordAuthor.Viewer,
 )
 
 /**
@@ -44,6 +49,7 @@ class GetSessionSamplesUseCase @Inject constructor(
     private val sampleRepository: SampleRepository,
     private val detectionRepository: DetectionRepository,
     private val patientAccessRepository: PatientAccessRepository,
+    private val colleagueRepository: ColleagueRepository,
 ) {
     operator fun invoke(sessionId: String): Flow<SessionSamplesResult> = flow {
         val userId = authRepository.currentLocalUserId()
@@ -57,11 +63,13 @@ class GetSessionSamplesUseCase @Inject constructor(
             return@flow
         }
 
+        val author = authorOf(session.userId, userId)
         emitAll(
             sampleRepository.observeSamplesForSession(sessionId, userId).map { samples ->
                 SessionSamplesResult.Visible(
                     SessionSamples(
                         session = session,
+                        author = author,
                         samples = samples.map { sample ->
                             SampleRecordItem(
                                 sample = sample,
@@ -79,4 +87,12 @@ class GetSessionSamplesUseCase @Inject constructor(
         if (authorId == null || authorId == userId) return true
         return userId != null && patientAccessRepository.isAssignedToSessionPatient(sessionId, userId)
     }
+
+    /** The viewer, or the colleague who wrote it — the second is read-only (14zcqntjph6). */
+    private suspend fun authorOf(authorId: String?, userId: String?): RecordAuthor =
+        if (authorId != null && isColleagueRecord(authorId, userId)) {
+            RecordAuthor.Colleague(name = colleagueRepository.nameOf(authorId))
+        } else {
+            RecordAuthor.Viewer
+        }
 }

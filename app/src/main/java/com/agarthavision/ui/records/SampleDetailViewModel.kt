@@ -3,6 +3,8 @@ package com.agarthavision.ui.records
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.domain.model.RecordAuthor
+import com.agarthavision.domain.model.isReadOnly
 import com.agarthavision.domain.usecase.records.GetSampleDetailUseCase
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleDetailResult
@@ -37,6 +39,8 @@ data class SampleDetailState(
     val imageSource: SampleImageSource = SampleImageSource.Unavailable(
         SampleImageUnavailableReason.SAMPLE_NOT_FOUND,
     ),
+    /** Who wrote the sample. A colleague's is shown read-only (14zcqntjph6). */
+    val author: RecordAuthor = RecordAuthor.Viewer,
 )
 
 /**
@@ -67,7 +71,8 @@ class SampleDetailViewModel @Inject constructor(
 
     val state: StateFlow<SampleDetailState> = getSampleDetailUseCase(sampleId)
         .map { result ->
-            val item = (result as? SampleDetailResult.Visible)?.data
+            val visible = result as? SampleDetailResult.Visible
+            val item = visible?.data
             val unavail = when (result) {
                 is SampleDetailResult.NotFound -> SampleUnavailable.NOT_FOUND
                 is SampleDetailResult.NotVisible -> SampleUnavailable.NOT_VISIBLE
@@ -79,6 +84,7 @@ class SampleDetailViewModel @Inject constructor(
                 unavailable = unavail,
                 imageSource = item?.let { resolveSampleImageSourceUseCase(it.sample) }
                     ?: SampleImageSource.Unavailable(SampleImageUnavailableReason.SAMPLE_NOT_FOUND),
+                author = visible?.author ?: RecordAuthor.Viewer,
             )
         }
         .stateIn(
@@ -96,6 +102,9 @@ class SampleDetailViewModel @Inject constructor(
      * resubmit defaults over whatever they said the first time.
      */
     fun onViewDetection() {
+        // A colleague's sample has no edit mode (14zcqntjph6). The screen offers no way in;
+        // this keeps a stray call from opening one. OpenVerificationTargetUseCase refuses too.
+        if (state.value.author.isReadOnly) return
         viewModelScope.launch {
             openVerificationTarget(sampleId).fold(
                 onSuccess = { target -> _editState.update { it.copy(target = target, errorMessage = null) } },

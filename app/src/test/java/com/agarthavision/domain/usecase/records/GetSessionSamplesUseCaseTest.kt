@@ -12,6 +12,7 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.ColleagueRepository
 import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
@@ -37,6 +38,8 @@ class GetSessionSamplesUseCaseTest {
             val session = sessionsSession(id = "session-x", userId = null)
 
             val useCase = GetSessionSamplesUseCase(
+
+                colleagueRepository = SamplesColleagues(),
 
                 patientAccessRepository = SamplesPatientAccess(),
                 authRepository = SamplesAuthRepository(localUserId = null, liveUserId = null),
@@ -64,6 +67,7 @@ class GetSessionSamplesUseCaseTest {
     @Test
     fun `session owned by user-a returns NotVisible when identity is user-b`() = runTest {
         val useCase = GetSessionSamplesUseCase(
+            colleagueRepository = SamplesColleagues(),
             patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-b", liveUserId = "user-b"),
             sessionRepository = SamplesSessionRepository(sessionsSession(id = "s", userId = "user-a")),
@@ -79,6 +83,7 @@ class GetSessionSamplesUseCaseTest {
     @Test
     fun `missing session returns NotFound`() = runTest {
         val useCase = GetSessionSamplesUseCase(
+            colleagueRepository = SamplesColleagues(),
             patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
             sessionRepository = SamplesSessionRepository(null),
@@ -98,6 +103,8 @@ class GetSessionSamplesUseCaseTest {
         val session = sessionsSession(id = "session-1", userId = "user-a")
 
         val useCase = GetSessionSamplesUseCase(
+
+            colleagueRepository = SamplesColleagues(),
 
             patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
@@ -133,6 +140,8 @@ class GetSessionSamplesUseCaseTest {
 
         val useCase = GetSessionSamplesUseCase(
 
+            colleagueRepository = SamplesColleagues(),
+
             patientAccessRepository = SamplesPatientAccess(),
             // liveUserId = null simulates no network / expired token; local cache has "user-a"
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = null),
@@ -162,6 +171,8 @@ class GetSessionSamplesUseCaseTest {
         val session = sessionsSession(id = "session-u", userId = null)
 
         val useCase = GetSessionSamplesUseCase(
+
+            colleagueRepository = SamplesColleagues(),
 
             patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
@@ -206,6 +217,7 @@ private class SamplesAuthRepository(
     fun `a colleague's session is visible to a medtech assigned to its patient`() = runTest {
         val sample = sessionsSample(id = "s1", sessionId = "session-1", userId = "user-a")
         val useCase = GetSessionSamplesUseCase(
+            colleagueRepository = SamplesColleagues(),
             authRepository = SamplesAuthRepository(localUserId = "user-b", liveUserId = "user-b"),
             sessionRepository = SamplesSessionRepository(sessionsSession(id = "session-1", userId = "user-a")),
             sampleRepository = SamplesSampleRepository(
@@ -343,4 +355,11 @@ private class SamplesPatientAccess(
 ) : PatientAccessRepository {
     override suspend fun isAssignedToSessionPatient(sessionId: String, userId: String): Boolean =
         (sessionId to userId) in assigned
+}
+
+private class SamplesColleagues(
+    private val names: Map<String, String?> = emptyMap(),
+) : ColleagueRepository {
+    override suspend fun nameOf(userId: String): String? = names[userId]
+    override fun observeNames(): Flow<Map<String, String?>> = flowOf(names)
 }

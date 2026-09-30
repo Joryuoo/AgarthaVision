@@ -143,7 +143,13 @@ export enum FrameSource {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin-readable policies
  *   with `public.is_admin(uuid)` to avoid recursive profile reads.
  *
- * Room mirror: none. User identity comes from Supabase Auth session state.
+ * - `0008_colleague_names.sql` (current project): `profiles_select_colleague` lets
+ *   a medtech read the profile of a colleague who authored a session or report on
+ *   a patient they are both assigned to. The app selects `id` and `full_name` only.
+ *
+ * Room mirror: `ColleagueEntity.kt` (`colleagues`, v24) caches colleagues' `id` and
+ * `full_name` for read-only records. The signed-in user's own identity comes from
+ * Supabase Auth session state.
  */
 export interface Profile {
   id: UUID;

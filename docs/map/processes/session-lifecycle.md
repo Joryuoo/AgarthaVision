@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # session-lifecycle
@@ -32,7 +32,11 @@ Opening a smear, working in it, coming back to it, and letting go of it. It neve
    `ActiveSessionIdStore`, the one piece of session state that survives process death.
    `NetworkMonitor` and capture both key off `SessionState`.
 5. **Resume.** Tapping an existing smear calls `SessionManager::resumeSession`: no Room write, no
-   Supabase call, just activation.
+   Supabase call, just activation. **A colleague's session is never resumed** (14zcqntjph6):
+   `resumeSession` throws `ReadOnlyRecordException`, and the Sessions list opens that row in
+   Session Detail instead, captioned with its author (`SessionsState.colleagueAuthors`,
+   `ui/sessions/SessionsScreen.kt::SessionCard`). An active session is one capture adds frames
+   to, and the server lets only the author write to it.
 6. **Restore at launch.** `AgarthaVisionApp.onCreate` calls `restoreActiveSession`, which
    re-activates the stored id only if the state is still `Idle`, with a compare-and-set so a
    user action that raced it wins. A stored id that no longer resolves clears itself.

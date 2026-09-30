@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # delete-sample
@@ -20,7 +20,11 @@ Taking frames out of the queue: a hard delete for a draft, a tombstone for anyth
 1. **Select and confirm.** The verification queue's batch delete
    (`ui/verify/VerificationQueueViewModel.kt`, `DeleteSamplesConfirmDialog.kt`) hands the ids to
    `DeleteQueueItemsUseCase`.
-2. **Branch per sample, on `status`.** `DeleteQueueItemsUseCase::invoke` reads each row including
+2. **Refuse a colleague's sample, whole batch.** If any id is a colleague's
+   (`domain/model/RecordAuthorship.kt::isColleagueRecord`), the batch fails with
+   `ReadOnlyRecordException` before any row is touched (14zcqntjph6). The queue only ever lists
+   the medtech's own frames; this is the backstop.
+3. **Branch per sample, on `status`.** `DeleteQueueItemsUseCase::invoke` reads each row including
    deleted ones, skips any already tombstoned, then:
    - **`flagged`** (never verified) → `DeleteFlaggedSampleUseCase`: deletes the JPEG, then the row.
      C8's local exception — nothing has been asserted about a draft. This includes a frame still
@@ -29,10 +33,10 @@ Taking frames out of the queue: a hard delete for a draft, a tombstone for anyth
      `status` back to `verified`, so the row re-enters the push set.
    The branch uses the same predicate the queue buckets use, so a mixed selection just takes both
    paths.
-3. **Push once.** After the batch, if anything was tombstoned, `SyncPendingDataUseCase` runs once.
-4. **Report honestly.** The result is a `DeleteSummary` of hard-deleted and tombstoned counts.
+4. **Push once.** After the batch, if anything was tombstoned, `SyncPendingDataUseCase` runs once.
+5. **Report honestly.** The result is a `DeleteSummary` of hard-deleted and tombstoned counts.
 
-**Gap, code wins: step 3 does not carry the tombstone.** The push upserts
+**Gap, code wins: step 4 does not carry the tombstone.** The push upserts
 `SampleRemoteDataSource.kt::SampleInsertRow`, which has no `deleted_at`, so Postgres and every
 other device keep the sample live. See [`Sample`](../objects/Sample.md).
 
