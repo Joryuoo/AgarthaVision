@@ -311,12 +311,24 @@ class FetchRemoteDataUseCase @Inject constructor(
      * which requires a data-cleanup pass on the production table that cannot be done safely from
      * here — we reconcile at pull time instead via [upsertSessionReconcilingLabel].
      *
-     * Adding the matching Supabase-side unique constraint is a deliberate follow-up that requires
-     * a separate migration with a pre-flight data-deduplication step against the production table.
+     * **The server now settles new collisions itself** (14zcqntjph7).
+     * `0009_session_label_collisions.sql` renames a label that another session of the same
+     * patient already holds, on insert and on rename, with this same suffix scheme, and the
+     * pull brings the new label back as an ordinary change to a `synced` row. Two phones minting
+     * `S03` offline therefore end with one `S03` and one `S03-XXXX` once both have synced. What is
+     * left for this function is the rows written before that migration, and the window before
+     * this device's own push lands.
+     *
+     * **Collisions are settled after every page, not inside one.** Pages arrive oldest first, so
+     * a colleague's earlier `S03` can be read before this device's own row is updated with the
+     * suffixed label the server gave it. Writing it immediately would suffix the colleague's
+     * row, which the server left alone, and only the next pass would put it back. Deferring the
+     * colliding rows until everything else is written lets the renamed own row move first.
      */
     private suspend fun pullSessions(): Int {
         var fetched = 0
         var offset = 0L
+        val collisions = mutableListOf<SessionEntity>()
         while (true) {
             val page = sessionRemoteDataSource.fetchSessions(offset, PAGE_SIZE.toLong())
             for (remote in page) {
@@ -327,14 +339,25 @@ class FetchRemoteDataUseCase @Inject constructor(
                 val local = sessionDao.getSessionById(remote.sessionId)
                 // E4 guard: only write when absent or already synced; skip pending/sync_failed
                 if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                    upsertSessionReconcilingLabel(remote)
+                    if (collidesLocally(remote)) {
+                        collisions += remote
+                    } else {
+                        upsertSessionReconcilingLabel(remote)
+                    }
                     fetched++
                 }
             }
             if (page.size < PAGE_SIZE) break
             offset += PAGE_SIZE.toLong()
         }
+        collisions.forEach { remote -> upsertSessionReconcilingLabel(remote) }
         return fetched
+    }
+
+    private suspend fun collidesLocally(remote: SessionEntity): Boolean {
+        val label = remote.label
+        return !label.isNullOrBlank() &&
+            sessionDao.countLabelCollisions(remote.patientId, label, remote.sessionId) > 0
     }
 
     /**
@@ -357,9 +380,7 @@ class FetchRemoteDataUseCase @Inject constructor(
      */
     private suspend fun upsertSessionReconcilingLabel(remote: SessionEntity) {
         val rawLabel = remote.label
-        val toWrite = if (!rawLabel.isNullOrBlank() &&
-            sessionDao.countLabelCollisions(remote.patientId, rawLabel, remote.sessionId) > 0
-        ) {
+        val toWrite = if (!rawLabel.isNullOrBlank() && collidesLocally(remote)) {
             val disambiguated =
                 "${rawLabel.trim()}-${remote.sessionId.take(DISAMBIGUATION_SUFFIX_LENGTH)}".uppercase()
             Log.w(

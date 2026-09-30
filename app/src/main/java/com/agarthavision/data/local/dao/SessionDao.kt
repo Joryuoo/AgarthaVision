@@ -64,7 +64,21 @@ interface SessionDao {
     )
     fun observeAllSessions(userId: String?): Flow<List<SessionEntity>>
 
-    @Query("UPDATE sessions SET label = :label WHERE session_id = :sessionId")
+    /**
+     * Renames a session and queues the rename for upload.
+     *
+     * A `synced` row goes back to `pending` (14zcqntjph7). It used to stay `synced`, so the
+     * rename was never pushed and the next pull wrote the server's old label straight back over
+     * it. `sync_failed` and `pending` rows are already queued and keep their state.
+     */
+    @Query(
+        """
+        UPDATE sessions
+        SET label = :label,
+            supabase_status = CASE WHEN supabase_status = 'synced' THEN 'pending' ELSE supabase_status END
+        WHERE session_id = :sessionId
+        """,
+    )
     suspend fun updateSessionLabel(sessionId: String, label: String)
 
     /**

@@ -34,7 +34,7 @@ patient, and unowned data is no longer possible.
 | `patient_id` | **NOT NULL**, FK → `patients(id)` |
 | `device_id` | NOT NULL text |
 | `started_at` | NOT NULL timestamptz, default `now()` |
-| `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`); unconstrained in Postgres |
+| `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`). In Postgres no constraint, but a trigger renames a clashing arrival `<label>-<first 4 of its id>` and never rejects (`0009_session_label_collisions.sql:49-84`) |
 
 Indexes: `sessions_user_started_idx (user_id, started_at desc)` and
 `sessions_patient_idx (patient_id, started_at desc)` (`0001_init.sql:175-176`).

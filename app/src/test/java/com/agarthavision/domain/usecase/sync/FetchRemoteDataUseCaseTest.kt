@@ -992,6 +992,38 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
+    fun `a colleague's session that clashes only with this device's stale label keeps its label`() = runTest {
+        // 14zcqntjph7: both phones minted S03 offline. The server kept the colleague's S03 and
+        // renamed this device's to S03-SESS on push. The colleague's row arrives first (pages are
+        // oldest first) while the local row still reads S03; settling clashes after the page
+        // lets the renamed own row land first, so nothing is suffixed that the server left alone.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val localLabels = mutableMapOf("sess-mine" to "S03")
+        val theirs = fakeSession("sess-theirs").copy(userId = "user-2", label = "S03")
+        val mine = fakeSession("sess-mine").copy(label = "S03-SESS")
+        whenever(sessionRemoteDataSource.fetchSessions()).thenReturn(listOf(theirs, mine))
+        whenever(sessionDao.getSessionById("sess-theirs")).thenReturn(null)
+        whenever(sessionDao.getSessionById("sess-mine")).thenReturn(fakeSession("sess-mine").copy(label = "S03"))
+        whenever(sessionDao.countLabelCollisions(any(), any(), any())).thenAnswer { call ->
+            val label = call.getArgument<String>(1)
+            val excluding = call.getArgument<String>(2)
+            localLabels.count { (id, held) -> id != excluding && held == label }
+        }
+        whenever(sessionDao.upsertSession(any())).thenAnswer { call ->
+            val written = call.getArgument<SessionEntity>(0)
+            localLabels[written.sessionId] = written.label.orEmpty()
+            Unit
+        }
+
+        useCase.invoke()
+
+        verify(sessionDao).upsertSession(mine)
+        verify(sessionDao).upsertSession(theirs)
+        assertEquals(mapOf("sess-mine" to "S03-SESS", "sess-theirs" to "S03"), localLabels)
+    }
+
+    @Test
     fun `pullSessions - non-constraint exception from upsertSession is not swallowed`() = runTest {
         setupOnlineSignedIn()
         val session = fakeSession("sess-1").copy(label = "SMEAR-1")

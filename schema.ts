@@ -271,8 +271,10 @@ export interface Session {
   // Nullable human-friendly smear label. Auto-generated as `LDNJ-M21-S01`
   // (3-letter surname abbreviation + first initial, sex and age, then the Nth
   // smear for that patient; domain/session/SessionLabelGenerator.kt) and editable
-  // thereafter. Unique per patient in Room only (index on patient_id, label);
-  // Postgres does not constrain it — the session UUID is the real key.
+  // thereafter. Unique per patient in Room (index on patient_id, label). Postgres
+  // has no constraint; since `0009_session_label_collisions.sql` a trigger renames
+  // a clashing insert or rename to `<label>-<first 4 of id>` and never rejects it.
+  // The session UUID is the real key.
 
   // ── Deliberately absent, all three ────────────────────────────────────────
   // `notes`     — removed. It was being used as an ad-hoc patient identifier

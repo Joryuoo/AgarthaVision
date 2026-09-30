@@ -91,7 +91,12 @@ findings) → reports, then the frames.
    report whose session is not, is logged and skipped rather than written
    (`PatientDao::patientExists`, `SessionDao::sessionExists`). Room enforces both foreign keys,
    and one such row used to fail its whole entity type on every pass.
-4. **Pushes stay author-only.** Every `get…PendingSync` query filters on `user_id`, so a
+4. **Label clashes are settled after every page.** A pulled session whose label another local
+   session of the patient holds is written last, with the same `-XXXX` suffix the server's
+   0009 trigger uses, so this device's own renamed row lands first and a colleague's row keeps
+   the label the server left it (`FetchRemoteDataUseCase.kt::pullSessions`). A clash never
+   fails or skips a row.
+5. **Pushes stay author-only.** Every `get…PendingSync` query filters on `user_id`, so a
    colleague's row can never enter the push queue.
 
 ## Frames on the device — the image cache
