@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # sync
@@ -71,6 +71,29 @@ longer holds is skipped rather than failing the row (`data/supabase/SyncReportUs
 Because login is mandatory on first launch, every entity has an owner from creation and no
 deferred claiming step is needed.
 
+## Movement — the pull, and whose rows come down
+
+`FetchRemoteDataUseCase` pulls patients → sessions → samples (with predictions, detections and
+findings) → reports, then the frames.
+
+1. **No author filter.** Since `0007_patient_shared_history.sql` the server returns the
+   medtech's own rows plus the full history of every patient they are assigned to, colleagues'
+   rows included, and none of the fetches filter on `user_id`
+   (`SessionRemoteDataSource.kt::fetchSessions`, `SampleRemoteDataSource.kt::fetchSamples`,
+   `ReportRemoteDataSource.kt::fetchReports`). A colleague's row lands `synced` and is never
+   edited here, so the E4 guard lets every later pull refresh it.
+2. **Revoked assignments leave.** After every link page arrives, a local link the server no
+   longer returns is removed — unless its patient is still waiting to push, whose creator link
+   the server has not seen yet (`FetchRemoteDataUseCase.kt::removeRevokedLinks`). Only the
+   access row goes; the patient and its records stay (C8).
+3. **Orphans are skipped.** The server keeps showing an author their own sessions of a patient
+   they were unassigned from, so a session whose patient is not on the device, and a sample or
+   report whose session is not, is logged and skipped rather than written
+   (`PatientDao::patientExists`, `SessionDao::sessionExists`). Room enforces both foreign keys,
+   and one such row used to fail its whole entity type on every pass.
+4. **Pushes stay author-only.** Every `get…PendingSync` query filters on `user_id`, so a
+   colleague's row can never enter the push queue.
+
 ## Frames on the device — the image cache
 
 The pull brings rows; `CacheSampleImagesUseCase` brings the JPEGs they point at, in the same
@@ -124,7 +147,13 @@ and is repaired from the disk rather than trusted.
   `data/supabase/SessionRemoteDataSource.kt`,
   `data/supabase/SampleRemoteDataSource.kt`,
   `data/supabase/ReportRemoteDataSource.kt`).
-- **RLS.** Every insert must satisfy ownership: `auth.uid() = created_by` on patients
+- **RLS, reads.** Since 0007 every clinical table and both buckets are readable by anyone
+  assigned to the patient, through `is_linked_to_patient`, `can_read_session` and
+  `can_read_sample` (`0007_patient_shared_history.sql:44-93`). The phone's session-scoped reads
+  mirror it with an `EXISTS` over `patient_users` (`SampleDao::observeSamplesForSession`,
+  `DetectionDao::getConfirmedEggCountsForSession`, `SampleSpeciesFindingDao::getFindingsForSession`,
+  `ReportDao::observeReportsForSession`, `SampleDao::getCacheableSamples`).
+- **RLS, writes.** Every insert must satisfy ownership: `auth.uid() = created_by` on patients
   (`0001_init.sql:369`), `auth.uid() = user_id` on sessions, samples and reports
   (`0001_init.sql:405`, `:418`, `:497`), and detections and findings are checked through the
   parent sample (`0001_init.sql:431-491`). Sync only ever runs authenticated.

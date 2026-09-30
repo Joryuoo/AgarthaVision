@@ -22,6 +22,7 @@ import com.agarthavision.data.repository.CoverageRepositoryImpl
 import com.agarthavision.data.repository.DetectionRepositoryImpl
 import com.agarthavision.data.repository.DocumentsReportFileStore
 import com.agarthavision.data.repository.LocalReportRepository
+import com.agarthavision.data.repository.PatientAccessRepositoryImpl
 import com.agarthavision.data.repository.PatientRepositoryImpl
 import com.agarthavision.data.repository.PsgcRepositoryImpl
 import com.agarthavision.data.repository.SampleRepositoryImpl
@@ -32,6 +33,7 @@ import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BoundaryRepository
 import com.agarthavision.domain.repository.CoverageRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
@@ -162,6 +164,11 @@ abstract class RepositoryModule {
     abstract fun bindPatientRepository(
         implementation: PatientRepositoryImpl,
     ): PatientRepository
+
+    @Binds
+    abstract fun bindPatientAccessRepository(
+        implementation: PatientAccessRepositoryImpl,
+    ): PatientAccessRepository
 
     @Binds
     abstract fun bindCoverageRepository(

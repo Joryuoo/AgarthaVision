@@ -91,11 +91,19 @@ interface SampleDao {
      *
      * Deleted rows are excluded. A tombstoned sample keeps its detections (C8), but no screen
      * can open its frame, so holding the JPEG buys nothing and spends the budget.
+     *
+     * A colleague's frame is a candidate when its patient is assigned to [userId]: it is part of
+     * a history this medtech works from offline (14zcqntjph5). A frame of a patient they are not
+     * assigned to is not, so a shared phone never spends one medtech's budget on another's
+     * unrelated work. Either way the copy is filed under [userId]'s folder, and evicting it never
+     * touches the author's record or their Storage object.
      */
     @Query(
         """
         SELECT * FROM samples
-        WHERE user_id = :userId
+        WHERE (user_id = :userId
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                          WHERE se.session_id = samples.session_id AND pu.user_id = :userId))
           AND deleted_at IS NULL
           AND storage_path IS NOT NULL
           AND TRIM(storage_path) <> ''
@@ -148,11 +156,21 @@ interface SampleDao {
     @Query("SELECT * FROM samples WHERE sample_id = :sampleId LIMIT 1")
     suspend fun getSampleByIdIncludingDeleted(sampleId: String): SampleEntity?
 
+    /**
+     * The verified samples of one session, as Session Detail and the report read them.
+     *
+     * Visible when the caller wrote them, when they are unowned, or when the session's patient
+     * is assigned to the caller — a colleague's smear is part of the patient's history
+     * (14zcqntjph5). The unverified variants below stay author-only: flagged frames never leave
+     * the device that captured them.
+     */
     @Query(
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
           AND status != 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC
@@ -164,7 +182,9 @@ interface SampleDao {
         """
         SELECT * FROM samples
         WHERE session_id = :sessionId
-          AND (user_id = :userId OR user_id IS NULL)
+          AND (user_id = :userId OR user_id IS NULL
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
           AND status != 'flagged'
           AND deleted_at is null
         ORDER BY timestamp DESC

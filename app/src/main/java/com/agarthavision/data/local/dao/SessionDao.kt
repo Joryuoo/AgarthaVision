@@ -46,6 +46,10 @@ interface SessionDao {
     @Query("SELECT * FROM sessions WHERE session_id = :sessionId LIMIT 1")
     suspend fun getSessionById(sessionId: String): SessionEntity?
 
+    /** Whether the session is on this device — the pull's parent check before a child row. */
+    @Query("SELECT EXISTS (SELECT 1 FROM sessions WHERE session_id = :sessionId)")
+    suspend fun sessionExists(sessionId: String): Boolean
+
     /**
      * Observes sessions visible to the caller: their own rows plus unowned rows recorded while
      * signed out. A null owner (signed out) sees only the unowned rows - never another
@@ -475,11 +479,18 @@ private const val RECORDS_FILTER = """
  * exactly — never hide the smear the medtech is working in — and nothing else.
  * Pass null when there is no active session.
  *
+ * **Every session of the patient, not only the caller's.** A medtech assigned to the patient
+ * through `patient_users` sees the patient's whole history, colleagues' smears included
+ * (14zcqntjph5, `0007_patient_shared_history.sql`), so the author test is `own OR assigned`.
+ * An author who has since been unassigned keeps their own rows, as the server does.
+ *
  * Search LIKE clauses use `ESCAPE '\'` so the caller can safely escape `%`, `_`,
  * and `\` in the needle before passing it in.
  */
 private const val SESSIONS_FILTER = """
-  WHERE s.user_id = :userId
+  WHERE (s.user_id = :userId
+         OR EXISTS (SELECT 1 FROM patient_users pu
+                    WHERE pu.patient_id = :patientId AND pu.user_id = :userId))
     AND s.patient_id = :patientId
     AND ( s.session_id = :activeSessionId
           OR (:startMillis IS NULL AND :endMillis IS NULL AND s.started_at >= :sinceMillis)

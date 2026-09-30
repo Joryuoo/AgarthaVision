@@ -58,7 +58,16 @@ parameter. Do not add a barangay to the patient-facing report.
 ## Changing RLS, auth, or ownership
 
 **Open:** `../objects/Profile.md` · `../objects/StorageObject.md` · `supabase/migrations/0001_init.sql`
-(policies from line 352) · `../processes/sync.md`.
+(policies from line 352) · `supabase/migrations/0007_patient_shared_history.sql` · `../processes/sync.md`.
+
+**Reads are `author OR assigned OR admin`; writes are the author's.** 0007 adds a second
+permissive SELECT policy beside each author-only one — sessions, samples, detections, findings,
+predictions, reports and both buckets — so assignment through `patient_users` opens a patient's
+whole history. Nothing from 0001–0006 is dropped. The phone repeats the rule in SQL, with an
+`EXISTS` over `patient_users`, in every session-scoped read (`../processes/sync.md`, "the pull").
+**Change one side and not the other** and either the phone shows rows the server refuses to
+send, or the server sends rows no screen shows. Cross-patient views — Home, the dashboard, the
+Records tab, the pending counts — stay the medtech's own work on purpose.
 
 In the consolidated schema every table's admin path, `reports` included, resolves through
 `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`). The dev and prod

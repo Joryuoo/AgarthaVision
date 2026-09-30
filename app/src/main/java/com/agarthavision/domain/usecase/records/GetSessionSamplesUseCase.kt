@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -23,7 +24,8 @@ data class SessionSamples(
  * Result of resolving session samples for the current device identity.
  *
  * Unowned rows ([Session.userId] == null) are visible to every caller on the device.
- * Owned rows are visible only to the owner.
+ * Owned rows are visible to the owner, and to every medtech assigned to the session's patient:
+ * a colleague's smear is part of the patient's history (14zcqntjph5).
  *
  * The flow never emits a "loading" value — loading is "not yet emitted".
  */
@@ -34,13 +36,14 @@ sealed interface SessionSamplesResult {
 }
 
 /**
- * Loads the cached local identity's samples and detections for a session.
+ * Loads a session's samples and detections for the cached local identity.
  */
 class GetSessionSamplesUseCase @Inject constructor(
     private val authRepository: AuthRepository,
     private val sessionRepository: SessionRepository,
     private val sampleRepository: SampleRepository,
     private val detectionRepository: DetectionRepository,
+    private val patientAccessRepository: PatientAccessRepository,
 ) {
     operator fun invoke(sessionId: String): Flow<SessionSamplesResult> = flow {
         val userId = authRepository.currentLocalUserId()
@@ -49,7 +52,7 @@ class GetSessionSamplesUseCase @Inject constructor(
             emit(SessionSamplesResult.NotFound)
             return@flow
         }
-        if (!(session.userId == null || session.userId == userId)) {
+        if (!canRead(authorId = session.userId, sessionId = sessionId, userId = userId)) {
             emit(SessionSamplesResult.NotVisible)
             return@flow
         }
@@ -69,5 +72,11 @@ class GetSessionSamplesUseCase @Inject constructor(
                 )
             },
         )
+    }
+
+    /** Unowned, the reader's own, or on a patient the reader is assigned to. */
+    private suspend fun canRead(authorId: String?, sessionId: String, userId: String?): Boolean {
+        if (authorId == null || authorId == userId) return true
+        return userId != null && patientAccessRepository.isAssignedToSessionPatient(sessionId, userId)
     }
 }

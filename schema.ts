@@ -201,7 +201,9 @@ export interface Patient {
 
   created_by: UUID;
   // NOT NULL FK -> profiles(id). Provenance only — it grants no visibility.
-  // Access resolves through `patient_users`.
+  // Access resolves through `patient_users`. Since `0007_patient_shared_history.sql`
+  // the link also opens the patient's whole history — every session, sample,
+  // detection, finding, prediction and report on it, whoever authored them.
 
   created_at: TimestampTZ;
   updated_at: TimestampTZ;
@@ -650,6 +652,10 @@ export interface ValidationRecord {
  * - `0009_storage_admin_read.sql`: adds an admin-only SELECT policy using
  *   `public.is_admin(auth.uid())`. Policies are OR'd, so admins can read across
  *   all user folders while writes stay owner-scoped through `0003`.
+ * - `0007_patient_shared_history.sql` (current project): adds a SELECT policy on
+ *   each bucket for any medtech assigned to the object's patient — `samples` by
+ *   matching `samples.storage_path`, `reports` by the report id in the file name
+ *   and the author in the folder. Writes stay owner-folder only.
  *
  * Room mirror: none. `SampleEntity.storage_path` stores the object key after
  * upload.
@@ -770,7 +776,7 @@ export type RelationshipMatrix = [
     from: "profiles";
     cardinality: "1 -> many";
     to: "storage.objects";
-    description: "Storage RLS permits users to read/write objects only in their own top-level folder.";
+    description: "Storage RLS permits users to write objects only in their own top-level folder. Reads also reach a colleague's object when the reader is assigned to its patient (`0007_patient_shared_history.sql`).";
   },
   {
     from: "samples";

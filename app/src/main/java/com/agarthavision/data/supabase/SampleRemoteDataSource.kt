@@ -111,12 +111,15 @@ class SampleRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     /**
-     * Fetches a page of samples owned by [userId], ordered by capture time ascending.
-     * Inclusive range: rows [offset, offset+limit-1].
+     * Fetches a page of every sample the signed-in medtech may read, ordered by capture time
+     * ascending. Inclusive range: rows [offset, offset+limit-1].
+     *
+     * Unfiltered for the reason on `SessionRemoteDataSource.fetchSessions`: RLS
+     * (`samples_select_via_patient`, 0007) already scopes the result to the caller's own
+     * samples plus those of patients they are assigned to.
      */
-    suspend fun fetchSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
+    suspend fun fetchSamples(offset: Long, limit: Long): List<SampleEntity> =
         supabase.postgrest[SAMPLES_TABLE].select {
-            filter { eq("user_id", userId) }
             order("captured_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<SampleRow>().map { it.toEntity() }

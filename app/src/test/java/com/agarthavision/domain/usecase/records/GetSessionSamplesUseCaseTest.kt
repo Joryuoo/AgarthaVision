@@ -12,6 +12,7 @@ import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,8 @@ class GetSessionSamplesUseCaseTest {
             val session = sessionsSession(id = "session-x", userId = null)
 
             val useCase = GetSessionSamplesUseCase(
+
+                patientAccessRepository = SamplesPatientAccess(),
                 authRepository = SamplesAuthRepository(localUserId = null, liveUserId = null),
                 sessionRepository = SamplesSessionRepository(session),
                 sampleRepository = SamplesSampleRepository(
@@ -61,6 +64,7 @@ class GetSessionSamplesUseCaseTest {
     @Test
     fun `session owned by user-a returns NotVisible when identity is user-b`() = runTest {
         val useCase = GetSessionSamplesUseCase(
+            patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-b", liveUserId = "user-b"),
             sessionRepository = SamplesSessionRepository(sessionsSession(id = "s", userId = "user-a")),
             sampleRepository = SamplesSampleRepository(emptyMap()),
@@ -75,6 +79,7 @@ class GetSessionSamplesUseCaseTest {
     @Test
     fun `missing session returns NotFound`() = runTest {
         val useCase = GetSessionSamplesUseCase(
+            patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
             sessionRepository = SamplesSessionRepository(null),
             sampleRepository = SamplesSampleRepository(emptyMap()),
@@ -93,6 +98,8 @@ class GetSessionSamplesUseCaseTest {
         val session = sessionsSession(id = "session-1", userId = "user-a")
 
         val useCase = GetSessionSamplesUseCase(
+
+            patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
             sessionRepository = SamplesSessionRepository(session),
             sampleRepository = SamplesSampleRepository(
@@ -125,6 +132,8 @@ class GetSessionSamplesUseCaseTest {
         val session = sessionsSession(id = "session-1", userId = "user-a")
 
         val useCase = GetSessionSamplesUseCase(
+
+            patientAccessRepository = SamplesPatientAccess(),
             // liveUserId = null simulates no network / expired token; local cache has "user-a"
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = null),
             sessionRepository = SamplesSessionRepository(session),
@@ -153,6 +162,8 @@ class GetSessionSamplesUseCaseTest {
         val session = sessionsSession(id = "session-u", userId = null)
 
         val useCase = GetSessionSamplesUseCase(
+
+            patientAccessRepository = SamplesPatientAccess(),
             authRepository = SamplesAuthRepository(localUserId = "user-a", liveUserId = "user-a"),
             sessionRepository = SamplesSessionRepository(session),
             sampleRepository = SamplesSampleRepository(
@@ -188,6 +199,27 @@ private class SamplesAuthRepository(
     override suspend fun hasActiveSession(): Boolean = liveUserId != null
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun signOut() = Unit
+
+    // ─────────────────── colleague's session on an assigned patient → Visible ──
+
+    @Test
+    fun `a colleague's session is visible to a medtech assigned to its patient`() = runTest {
+        val sample = sessionsSample(id = "s1", sessionId = "session-1", userId = "user-a")
+        val useCase = GetSessionSamplesUseCase(
+            authRepository = SamplesAuthRepository(localUserId = "user-b", liveUserId = "user-b"),
+            sessionRepository = SamplesSessionRepository(sessionsSession(id = "session-1", userId = "user-a")),
+            sampleRepository = SamplesSampleRepository(
+                samplesBySession = mapOf("session-1" to listOf(sample)),
+            ),
+            detectionRepository = SamplesDetectionRepository(emptyMap()),
+            patientAccessRepository = SamplesPatientAccess(assigned = setOf("session-1" to "user-b")),
+        )
+
+        val result = useCase("session-1").first()
+
+        assertTrue(result is SessionSamplesResult.Visible)
+        assertEquals(listOf("s1"), (result as SessionSamplesResult.Visible).data.samples.map { it.sample.id })
+    }
 }
 
 private class SamplesSessionRepository(
@@ -305,3 +337,10 @@ private fun sessionsDetection(id: String, sampleId: String) = Detection(
     verdict = DetectionVerdict.CONFIRMED,
     expertClass = null,
 )
+
+private class SamplesPatientAccess(
+    private val assigned: Set<Pair<String, String>> = emptySet(),
+) : PatientAccessRepository {
+    override suspend fun isAssignedToSessionPatient(sessionId: String, userId: String): Boolean =
+        (sessionId to userId) in assigned
+}
