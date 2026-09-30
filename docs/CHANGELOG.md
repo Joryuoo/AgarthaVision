@@ -9,6 +9,25 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
+
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Three migrations to apply by hand, in order: 0007,
+0008, 0009. Room 23 → 24.
+
+- **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
+  detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
+  Additive SELECT policies only; writes stay author-only. Reverses 0003's "not patient-linked"
+  reports rule. The pull drops its author filter, skips rows whose parent is not on the device,
+  and removes assignments the server no longer returns.
+- **Read-only colleagues (0008, Room v24).** A colleague's session and sample cannot be resumed,
+  edited, re-verified, deleted or renamed on the phone, and say "Recorded by …". Names come from
+  a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
+- **Distinct labels (0009).** A server trigger renames a clashing session label
+  `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
+  one-time rename. The pull settles clashes after every page. A rename now uploads.
+
+---
+
 ## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
 
 `14zcqntjg5f`. Docs only; no code changed.
