@@ -25,8 +25,10 @@ Verify any entry with `git log --oneline --reverse`.
   `reports` bucket loses `reports: admin read all`, because a report prints the name. The
   admin branch of the detections, findings and predictions policies moves outside their
   subquery on `samples`, so super admins keep reading those. `session_label_duplicates()`
-  returns session ids without the label. **Apply only after the console from step 2 is
-  deployed.**
+  returns session ids without the label. Applied only after the console from step 2 was
+  deployed.
+- **All three steps are live.** The console's step 2 (its PR 11) is deployed, and `0012` and
+  `0013` are applied to `agarthavision`, checked on 2026-10-02.
 - **Unchanged:** medtechs, colleagues on a shared patient (0007), organization admins, report
   rows, patient links, sample frames and `barangay_prevalence()`. The console's
   `bun run test:db` covers each, against both files.
