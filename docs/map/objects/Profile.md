@@ -28,15 +28,17 @@ profile still says `medtech`, so an org admin can sign in on a phone. See
 
 **A profile outlives its login** (`0011_profile_outlives_login.sql`, 14zcqntjph8, 14zcqntjvjx;
 the rule is C8). Offboarding a medtech deletes their login, which frees the email for another
-laboratory or for this one if they are rehired. Until 0011 that was impossible: `profiles.id` referenced `auth.users` ON DELETE CASCADE, and every authored row
-refused the cascade. Now `id` is the person's permanent id with no foreign key, and `account_id`
+laboratory, or for this one if it rehires them. Until 0011 that was impossible: `profiles.id`
+referenced `auth.users` ON DELETE CASCADE, and every authored row refused the cascade. Now `id` is the person's permanent id with no foreign key, and `account_id`
 says which login, if any, the person currently has. It is `text` with no foreign key into the
 provider's schema so it survives a move away from Supabase (D7); the two trigger functions on
 `auth.users` are the only Supabase-specific part.
 
-The rows that cascade *from* a profile (`patient_users.user_id` and the console's
-`organization_members.user_id` ON DELETE CASCADE, `admin_audit_log.actor_id` ON DELETE SET NULL)
-never fire: nothing deletes a profile, and a deleted login no longer reaches one.
+The rows that cascade *from* a profile never fire: nothing deletes a profile, and a deleted
+login no longer reaches one. They are `patient_users.user_id` and the console's
+`organization_members.user_id` (ON DELETE CASCADE), and the console's
+`organizations.created_by`, `organization_members.added_by` and `admin_audit_log.actor_id`
+(ON DELETE SET NULL); checked on `agarthavision` on 2026-10-01.
 
 ## Shape
 
