@@ -112,14 +112,17 @@ read through `ColleagueRepository`. It is a label, never a permission. Because
 
 **Does not hit**
 - The Android app's login flow. It reads `auth.users` metadata for a display name
-  (`SupabaseAuthRepository.kt::cacheIdentity`), never the `profiles` row. Adding a
-  `profiles` column changes nothing client-side until something queries it.
-- Room. There is no local mirror to migrate.
+  (`SupabaseAuthRepository.kt::cacheIdentity`), never the `profiles` row.
+- Room, for a new column. The one client read (`ProfileRemoteDataSource.kt::fetchColleagues`)
+  names its columns, `id` and `full_name`, so adding one changes nothing on the phone. Renaming
+  either of those does: it breaks the pull, and the `colleagues` cache above mirrors them.
 
 ## Surfaces
 
-Written by the Postgres trigger only. Read by RLS policies. **No screen reads it, no sync
-writes it, no report includes it.** The `admin` role has no UI anywhere in the app.
+Written by the Postgres trigger only. Read by RLS policies, and by the pull for colleagues'
+names, which a colleague's read-only record shows as its author. **No sync writes it, no
+report includes it, and nothing on the phone reads `role`.** The `admin` role has no UI
+anywhere in the app.
 
 ## See
 
