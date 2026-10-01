@@ -23,9 +23,9 @@ import kotlinx.serialization.Serializable
  *
  * **Reads are scoped by the caller, not left to RLS** (14zcqntjt3p). The phone holds the
  * patients linked to the signed-in user and nothing else, whatever their role lets them read
- * on the server: an org admin's policies (console `admin/0002`) and a super admin's
- * `is_admin()` both return a whole laboratory or more. So the links are filtered to the user,
- * and patients are fetched by the ids those links name. RLS stays the server's second line.
+ * on the server: an org admin's policies (console `admin/0002`) return a whole laboratory, and
+ * a super admin's `is_admin()` every patient link. So the links are filtered to the user, and
+ * patients are fetched by the ids those links name. RLS stays the server's second line.
  */
 class PatientRemoteDataSource @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,

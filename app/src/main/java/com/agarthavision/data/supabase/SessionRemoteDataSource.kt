@@ -53,7 +53,7 @@ class SessionRemoteDataSource @Inject constructor(
     // assigned to: a patient's full history, colleagues' smears included (14zcqntjph5). That is
     // exactly what 0001's author policy and 0007's `sessions_select_via_patient` give a medtech,
     // and it is asked for in those two halves rather than left to RLS, because RLS gives an org
-    // admin (console `admin/0002`) and a super admin (`is_admin()`) far more (14zcqntjt3p).
+    // admin (console `admin/0002`) their whole laboratory (14zcqntjt3p).
 
     /**
      * Fetches a page of the sessions [userId] authored, ordered by start time ascending.

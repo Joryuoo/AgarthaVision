@@ -85,7 +85,8 @@ findings) → reports, then the frames.
    user's own rows plus the full history of every patient their own `patient_users` rows name,
    colleagues' rows included (`0007_patient_shared_history.sql`). That is what a medtech's
    policies return, and every fetch asks for exactly that, because the same tables give an org
-   admin (console `admin/0002`) their whole laboratory and a super admin everything:
+   admin (console `admin/0002`) their whole laboratory, and a super admin every patient link,
+   report and detection (`0013_super_admin_reads_deidentified.sql` took the rest):
    - links filtered to the user (`PatientRemoteDataSource.kt::fetchPatientLinks`), then those
      patients by id (`::fetchPatients`);
    - sessions, samples and reports each fetched as "own" plus "under these parents"
