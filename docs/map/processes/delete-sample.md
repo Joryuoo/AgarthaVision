@@ -29,10 +29,9 @@ Taking frames out of the queue: a hard delete for a draft, a tombstone for anyth
      `status` back to `verified`, so the row re-enters the push set.
    The branch uses the same predicate the queue buckets use, so a mixed selection just takes both
    paths.
-3. **Push once.** After the batch, if anything was tombstoned, `SyncPendingDataUseCase` runs once.
+3. **Push once.** After the batch, if anything was tombstoned, `SyncPendingDataUseCase` runs once,
+   pushing `deleted_at` to Supabase Postgres via `SampleRemoteDataSource::SampleInsertRow`.
 4. **Report honestly.** The result is a `DeleteSummary` of hard-deleted and tombstoned counts.
-
-**Gap, code wins: step 3 does not carry the tombstone.** The push upserts
 `SampleRemoteDataSource.kt::SampleInsertRow`, which has no `deleted_at`, so Postgres and every
 other device keep the sample live. See [`Sample`](../objects/Sample.md).
 
