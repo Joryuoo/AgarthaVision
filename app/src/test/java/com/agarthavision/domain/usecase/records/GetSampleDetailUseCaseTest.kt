@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
@@ -147,6 +148,8 @@ private class DetailAuthRepository(private val userId: String?) : AuthRepository
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 private class DetailSampleRepository(

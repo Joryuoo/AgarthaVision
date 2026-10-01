@@ -32,6 +32,55 @@ Verify any entry with `git log --oneline --reverse`.
   `bun run test:db` covers each, against both files.
 - `patient-pii-position.md` Position 6 and C10 say what the policies now do.
 
+---
+
+## docs/admin-migrations-schema — the Admin Console's migrations are on the shelf · 2026-10-01
+
+`14zcqntjpha`. Docs only; no code or SQL changed.
+
+The Admin Console now adds its own migrations to the same `agarthavision` database, from its
+own repository (`supabase/migrations/admin/NNNN_*.sql`, own number sequence, additive only).
+Before this change, C6 read as if this repository held the whole schema.
+
+- **`file-tree.md`** gains one section on that set:
+  - where it lives and its additive-only rule
+  - what its three files add
+  - the one trigger on `patients` (`console_on_patient_created`, never raises)
+  - the org-admin read policies on app-owned tables
+  - the app columns it depends on, and its assumption that `profiles.id` is the login id,
+    which `0011`'s `account_id` will one day end
+- **C6** says this folder is the authority for what this repository owns, and points there.
+- **`Patient` and `Profile` cards** note the trigger, the laboratory that owns a patient, and
+  that an org admin is a membership role rather than a `profiles.role` value. Both re-verified
+  at `6590f32f`, after `0007`–`0011`.
+- **Effects:** the data-model checklist asks whether a change touches a name the console reads.
+  The RLS section says not every policy is in this repository.
+- **Recorded, not fixed:** the phone's pull has no user filter on patients, links, sessions,
+  samples, reports or colleagues' names, so an org admin who signs in on a phone downloads the
+  rows of the laboratory's whole clinical record. Has to be fixed before the console's
+  `admin/0002` is applied; none of its set was on `agarthavision` on 2026-10-01.
+
+---
+
+## feat/change-password — change password in Settings · 2026-10-01
+
+`14zcqntjph9`.
+
+- **Settings → Change password.** Current password, new, confirm, each with show/hide. Blank
+  fields (spaces only included, which sign-in would refuse), a mismatched confirmation and an
+  unchanged password are caught on the phone.
+- **Online only.** Offline the screen says it needs a connection and the button is disabled. A
+  connection lost before the server is reached says the password was not changed; one lost after
+  the new password was sent says it may already be changed.
+- **The current password is checked first**, by signing in with it again, so a wrong one is
+  refused on its field before anything changes. The provider's strength rules, and its own
+  explanation, land under the new password.
+- **This phone stays signed in.** Local data, the cached identity and unsynced work are
+  untouched. Supabase signs out the account's other sessions; they need the new password, and
+  other phones go through #98's wipe, keeping unsynced work. On this phone the change and #98's
+  account check share a lock (`AuthSessionLock`), so a renewal of the session being replaced
+  can never be refused and wipe the phone that made the change.
+
 ## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
 
 `14zcqntjph8`.

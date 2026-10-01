@@ -24,6 +24,10 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
+6. Does it rename or change an app-owned name the Admin Console's migration set reads, such as
+   `patients.created_by`, `profiles.role` or `is_admin()`? The full list is in
+   [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+   If so, tell the console team before it merges.
 
 **The non-obvious break:** `core/di/DatabaseModule.kt` still has
 `fallbackToDestructiveMigration(dropAllTables = false)` behind the hand-written migrations. A
@@ -88,6 +92,17 @@ projects still run the legacy history, where `reports` reintroduced an inline
 **A policy change made on those projects has to patch both styles or admin reads diverge by
 table.**
 
+**Not every policy on these tables is in this repository.** The Admin Console's own migration
+set adds permissive org-admin `SELECT` policies on `patients`, `patient_users`, `sessions`,
+`samples`, `detections`, `predictions`, `sample_species_findings`, `reports`, `profiles` and the
+`samples` bucket. It also adds a trigger on `patients`. Read them before reasoning about who can
+read what. They are listed in
+[`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+Because they are combined with `OR`, a policy here can never take away what they grant. And
+since the phone's pull leaves scoping to RLS (`0007`), a phone signed in as an org admin
+downloads the rows of the laboratory's whole clinical record: patients, sessions, samples,
+reports and members' names.
+
 **The non-obvious break:** the Storage object key *is* the permission check. The INSERT policy
 compares `(storage.foldername(name))[1]` against `auth.uid()`
 (`supabase/migrations/0001_init.sql:506-511`), and the client builds that path from the
@@ -115,6 +130,13 @@ identity before the session exists — wipes a working medtech's phone. And wide
 `accessForRenewalStatus` past the server's own refusals wipes phones whenever the server is busy.
 Narrowing `AccountWipeDao` back to "the account's rows" would discard unsynced field work every
 time a medtech changes their password on another device.
+
+**Changing a password signs out every other device of the account** (Supabase revokes their
+sessions, 14zcqntjph9), and those devices go through the wipe above: synced data removed,
+unsynced work kept, the login screen asking for the new password. On the phone that made the
+change, `SupabaseAuthRepository.kt::changePassword` and `checkAccountAccess` share
+`AuthSessionLock`. Drop it and a renewal of the old session, in flight while the password
+changes, is refused and wipes the phone that changed it.
 
 ## Changing patients or the patient form
 

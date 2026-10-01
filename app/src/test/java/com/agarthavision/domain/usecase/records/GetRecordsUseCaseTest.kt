@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
@@ -528,6 +529,8 @@ private class FakeOfflineAuthRepository(private val localUserId: String?) : Auth
     override suspend fun hasActiveSession(): Boolean = false
     override suspend fun getCurrentUserId(): String? = null
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 internal class FakeAuthRepository(private val userId: String?) : AuthRepository {
@@ -539,6 +542,8 @@ internal class FakeAuthRepository(private val userId: String?) : AuthRepository 
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 internal class FakeSessionRepository(
