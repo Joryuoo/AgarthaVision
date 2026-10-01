@@ -280,6 +280,19 @@ storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating contr
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
 
+**Super admins read patients de-identified (D19, 14zcqntjvjw).** `profiles.role = 'admin'` is
+the AgarthaVision team, the clinics' processor, not their controller. Since
+`0013_super_admin_reads_deidentified.sql` the `patients`, `sessions` and `samples` SELECT
+policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_session()` (`:60`),
+so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and
+age) or sample note, and no report file (`:113`). They read the non-identifying columns through
+`patients_deidentified`, `sessions_deidentified` and `samples_deidentified`
+(`0012_deidentified_reads.sql:50-89`), which return rows only to `is_admin(auth.uid())`.
+Detections, findings, predictions, report rows, patient links, frames and
+`barangay_prevalence()` are unchanged. **A new identifying column goes nowhere near those
+views**, and a new super admin read of clinical data goes through them. Medtechs and
+organization admins are unaffected.
+
 
 ## C11 — One design system
 

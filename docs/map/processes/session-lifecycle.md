@@ -69,7 +69,9 @@ rather than on the row.
   (`dedupe_session_label`, `supabase/migrations/0009_session_label_collisions.sql:49-84`), and
   both phones pick that up on their next pull. A report generated offline before then keeps the
   label it printed. Duplicates already on the server: the report query at the top of 0009, the
-  admin RPC `session_label_duplicates()`, and a one-time rename at its end (14zcqntjph7).
+  admin RPC `session_label_duplicates()` (session ids only since
+  `0013_super_admin_reads_deidentified.sql:118-140`: a label identifies), and a one-time
+  rename at its end (14zcqntjph7).
 - The inference queue. Frames already captured keep their session id whatever the active
   session becomes.
 

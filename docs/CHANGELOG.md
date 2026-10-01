@@ -9,6 +9,58 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/assigned-patients-only — a phone holds its user's patients, whatever their role · 2026-10-01
+
+`14zcqntjt3p`.
+
+- **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
+  `admin/0002`) or a super admin (`is_admin()`) who signed in on a phone downloaded their whole
+  laboratory, or everything. Now the links are filtered to the user, patients are fetched by the
+  ids those links name, and sessions, samples and reports are each fetched as the user's own
+  plus those under their patients. That is exactly what a medtech's policies return, so a
+  medtech's phone holds what it did before. Since `0013` (below) a super admin reads no
+  patient, session or sample through `is_admin()`, but still every patient link, which the
+  link fetch now filters out.
+- **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
+  (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
+- **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
+  written once.
+- **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
+  until its storage is cleared.
+
+---
+
+## feat/deidentified-patient-reads — super admins read patients de-identified at the database · 2026-10-01
+
+`14zcqntjvjw`, with the Admin Console's `14zcqntjvky`.
+
+- **`0012_deidentified_reads.sql`, step 1, additive.** Three views a super admin reads instead
+  of the tables: `patients_deidentified` (no name, sex or birthdate), `sessions_deidentified`
+  (no `label`, which spells the patient's initials, sex and age) and `samples_deidentified`
+  (no `user_note`). Each returns rows only to `is_admin(auth.uid())`, is `security_barrier`,
+  and is readable by `authenticated` only.
+- **Step 2 is the console.** It reads a super admin's patients, sessions and samples from the
+  views, and works with or without step 3.
+- **`0013_super_admin_reads_deidentified.sql`, step 3.** The `patients`, `sessions` and
+  `samples` read policies and `can_read_session()` lose their `is_admin()` branch, and the
+  `reports` bucket loses `reports: admin read all`, because a report prints the name. The
+  admin branch of the detections, findings and predictions policies moves outside their
+  subquery on `samples`, so super admins keep reading those. `session_label_duplicates()`
+  returns session ids without the label. Applied only after the console from step 2 was
+  deployed.
+- **All three steps are live.** The console's step 2 (its PR 11) is deployed, and `0012` and
+  `0013` are applied to `agarthavision`, checked on 2026-10-02.
+- **Unchanged:** medtechs, colleagues on a shared patient (0007), organization admins, report
+  rows, patient links, sample frames and `barangay_prevalence()`. The console's
+  `bun run test:db` covers each, against both files.
+- `patient-pii-position.md` Position 6 and C10 say what the policies now do.
+- **The console's set is live, so the entry below is out of date.** `admin/0001`–`0003`
+  merged to the console's `staging` (`cb8246c`, same SQL) and were applied to `agarthavision`
+  on 2026-10-01. `file-tree.md` says so, and that the org-admin phone download recorded below
+  is now real for any org admin who signs in on a phone.
+
+---
+
 ## docs/admin-migrations-schema — the Admin Console's migrations are on the shelf · 2026-10-01
 
 `14zcqntjpha`. Docs only; no code or SQL changed.
@@ -36,23 +88,6 @@ Before this change, C6 read as if this repository held the whole schema.
   `admin/0002` is applied; none of its set was on `agarthavision` on 2026-10-01.
 
 ---
-
-## fix/assigned-patients-only — a phone holds its user's patients, whatever their role · 2026-10-01
-
-`14zcqntjt3p`.
-
-- **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
-  `admin/0002`) or a super admin (`is_admin()`) who signed in on a phone downloaded their whole
-  laboratory, or everything. Now the links are filtered to the user, patients are fetched by the
-  ids those links name, and sessions, samples and reports are each fetched as the user's own
-  plus those under their patients. That is exactly what a medtech's policies return, so a
-  medtech's phone holds what it did before.
-- **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
-  (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
-- **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
-  written once.
-- **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
-  until its storage is cleared.
 
 ## feat/change-password — change password in Settings · 2026-10-01
 

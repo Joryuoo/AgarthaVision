@@ -38,11 +38,12 @@ owns only the buckets' policies (and, for `reports`, the bucket row itself).
 | DELETE | **deliberately absent** | `0001_init.sql:538-540` |
 
 **`reports` bucket** — created and policied by `supabase/migrations/0003_reports_bucket.sql`:
-private, 10 MB limit, PDF and CSV only. Reads mirror the `reports` row: the author, an admin,
-or — since `0007_patient_shared_history.sql:191-193` — anyone assigned to the report's
+private, 10 MB limit, PDF and CSV only. Reads mirror the `reports` row: the author or — since `0007_patient_shared_history.sql:191-193` — anyone assigned to the report's
 patient, matched on the report id in the file name *and* the author in the folder
 (`can_read_report_object`, `:114-140`). This reverses 0003's "not patient-linked" line, for the
-bucket and the rows together. Written and read by `data/supabase/ReportRemoteDataSource.kt`. See
+bucket and the rows together. An admin read every file until
+`0013_super_admin_reads_deidentified.sql:113` dropped `reports: admin read all`: a report prints
+the patient's name. Written and read by `data/supabase/ReportRemoteDataSource.kt`. See
 [`Report`](Report.md).
 
 Supabase-managed columns worth knowing — `id`, `bucket_id`, `name`, `owner` / `owner_id`,
