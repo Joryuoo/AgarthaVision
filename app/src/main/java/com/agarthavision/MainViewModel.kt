@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.usecase.auth.AuthGate
+import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.ResolveAuthGateUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -12,17 +13,20 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 /**
  * Activity-scoped ViewModel exposing the persisted [ThemeMode] that drives
- * AgarthaVisionTheme's dark flag and the first-run [AuthGate].
+ * AgarthaVisionTheme's dark flag, the first-run [AuthGate], and whether the server has signed
+ * this phone out.
  */
 @HiltViewModel
 class MainViewModel @Inject constructor(
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     resolveAuthGateUseCase: ResolveAuthGateUseCase,
+    observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
 ) : ViewModel() {
 
     private val _authGate = MutableStateFlow<AuthGate>(AuthGate.Loading)
@@ -36,6 +40,16 @@ class MainViewModel @Inject constructor(
     init {
         viewModelScope.launch { _authGate.value = resolveAuthGateUseCase() }
     }
+
+    /**
+     * True once the server has signed this phone out (14zcqntjph8), until the next sign-in.
+     * The wipe usually runs in a background sync while some screen is open; this is what takes
+     * the medtech from that screen to the login screen. Eager, so a wipe while no one is
+     * collecting is still seen on the next composition.
+     */
+    val signedOutByServer: StateFlow<Boolean> = observeSignedOutNoticeUseCase()
+        .map { it != null }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     /** Active theme mode; light until the persisted preference loads. */
     val themeMode: StateFlow<ThemeMode> = observeThemeModeUseCase()

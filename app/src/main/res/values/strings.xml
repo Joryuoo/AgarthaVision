@@ -16,6 +16,12 @@
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
+    <string name="login_signed_out_by_server_title">You were signed out</string>
+    <string name="login_signed_out_by_server_body">The server ended this phone\'s sign-in, so uploaded records were removed from it. They come back when you sign in. If your password was changed, sign in with the new one. If you can\'t sign in, ask your laboratory\'s admin.</string>
+    <plurals name="login_signed_out_unsynced_kept">
+        <item quantity="one">%d item that hadn\'t uploaded is still on this phone. It uploads after you sign back in.</item>
+        <item quantity="other">%d items that hadn\'t uploaded are still on this phone. They upload after you sign back in.</item>
+    </plurals>
 
     <!-- Dashboard account / sync banner (ADR-007 offline access) -->
     <string name="dashboard_signed_out">Not signed in</string>
@@ -209,7 +215,7 @@
     <string name="verify_discard_changes_title">Discard changes?</string>
     <string name="verify_discard_changes_body">You have unsaved changes that will be lost if you leave without saving.</string>
     <string name="verify_discard_changes_confirm">Discard</string>
-    <string name="verify_discard_changes_keep">Keep</string>
+    <string name="verify_discard_changes_keep">Keep editing</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
@@ -746,4 +752,8 @@
         <item quantity="other">%1$d years old</item>
     </plurals>
     <string name="patient_preview_age_sex">%1$s | %2$s</string>
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <string name="record_recorded_by">Recorded by %1$s</string>
+    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
+    <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>

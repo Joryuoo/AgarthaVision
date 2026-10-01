@@ -113,12 +113,15 @@ open class ReportRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     /**
-     * Fetches a page of reports owned by [userId], ordered by generated_at ascending.
-     * Inclusive range: rows [offset, offset+limit-1].
+     * Fetches a page of every report the signed-in medtech may read, ordered by generated_at
+     * ascending. Inclusive range: rows [offset, offset+limit-1].
+     *
+     * Unfiltered for the reason on `SessionRemoteDataSource.fetchSessions`:
+     * `reports_select_via_patient` (0007) returns the caller's own reports plus every report
+     * on a session of a patient they are assigned to. This reverses 0003's owner-only rule.
      */
-    open suspend fun fetchReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
+    open suspend fun fetchReports(offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
-            filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<ReportRow>().map { it.toEntity() }

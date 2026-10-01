@@ -35,5 +35,22 @@ val MIGRATION_22_23: Migration = object : Migration(22, 23) {
     }
 }
 
+/**
+ * Version 23 → 24: the `colleagues` name cache (14zcqntjph6).
+ *
+ * One new table and nothing else, so no existing row is touched (C8). It starts empty and the
+ * next pull fills it; until then a colleague's record reads "another medtech". The definition
+ * must match `ColleagueEntity` exactly or Room refuses to open the migrated file, which
+ * `Migration23To24Test` checks by opening one.
+ */
+val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `colleagues` " +
+                "(`user_id` TEXT NOT NULL, `full_name` TEXT, PRIMARY KEY(`user_id`))",
+        )
+    }
+}
+
 /** Every hand-written migration, for `DatabaseModule` and the migration test to share. */
-val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_22_23)
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_22_23, MIGRATION_23_24)

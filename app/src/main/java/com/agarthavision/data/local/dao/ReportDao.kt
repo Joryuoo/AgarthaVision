@@ -22,7 +22,10 @@ interface ReportDao {
     @Query(
         """
         SELECT * FROM reports
-        WHERE session_id = :sessionId AND user_id = :userId
+        WHERE session_id = :sessionId
+          AND (user_id = :userId
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
         ORDER BY generated_at DESC
         LIMIT :limit OFFSET :offset
         """,
@@ -37,8 +40,19 @@ interface ReportDao {
     /**
      * Live count of all reports for [sessionId] / [userId], independent of any page limit —
      * lets the UI show "showing N of total" and offer larger page sizes.
+     *
+     * Same visibility as [observeReportsForSession]: the reader's own reports, plus every report
+     * on a session of a patient they are assigned to (0007), so the count and the page agree.
      */
-    @Query("SELECT COUNT(*) FROM reports WHERE session_id = :sessionId AND user_id = :userId")
+    @Query(
+        """
+        SELECT COUNT(*) FROM reports
+        WHERE session_id = :sessionId
+          AND (user_id = :userId
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
+        """,
+    )
     fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int>
 
     @Query(

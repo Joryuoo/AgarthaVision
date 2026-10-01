@@ -27,6 +27,15 @@ as working.
   untouched; other devices need the new password. `ui/settings/ChangePasswordScreen.kt`,
   `domain/usecase/auth/ChangePasswordUseCase.kt`,
   `data/repository/SupabaseAuthRepository.kt::changePassword`.
+- **Signed out and wiped when the account is removed** (14zcqntjph8). The first sync pass after
+  the server refuses to renew the login (the login was deleted or banned, or its password was
+  changed elsewhere) removes everything synced from the phone: patients, sessions, samples,
+  reports, JPEGs and exported report files. Unsynced work stays and uploads after the medtech
+  signs back in. The login screen says why and how many unuploaded items are waiting. Offline, a
+  timeout, a 5xx or an ordinary expired token change nothing.
+  `domain/usecase/auth/EnforceAccountAccessUseCase.kt`,
+  `domain/usecase/auth/WipeLocalAccountDataUseCase.kt`,
+  `data/repository/SupabaseAccountAccessRepository.kt`.
 
 ### Patients
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
@@ -46,6 +55,16 @@ as working.
 - **Visibility via `patient_users`.** Access resolves through the `patient_users` join table rather
   than `created_by` (`PatientUserEntity.kt`, `0001_init.sql:117-122`). The `on_patient_created`
   trigger auto-links the creator server-side so they can read back the row immediately.
+- **Shared patient history.** A medtech assigned to a patient downloads and reads the patient's
+  whole history — colleagues' sessions, samples, frames and reports included — while authorship
+  stays with whoever recorded it (`0007_patient_shared_history.sql`,
+  `domain/repository/PatientAccessRepository.kt`). An assignment the server removes leaves the
+  patient list at the next pull (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
+- **Colleagues' records are read-only.** A colleague's session opens in Session Detail rather than
+  Capture, and a colleague's sample offers no edit, re-verify, add-species, redraw or delete; both
+  say "Recorded by …" (`ui/components/ReadOnlyAuthorNote.kt`,
+  `domain/model/RecordAuthorship.kt::isColleagueRecord`). Names come from the `colleagues` cache
+  (`0008_colleague_names.sql`, Room v24).
 - **No client delete.** Patient deletion is restricted to server administrators; no client path
   or DAO method allows deleting a patient.
 - **Non-cascading edits.** Editing a patient's details does not cascade to existing session

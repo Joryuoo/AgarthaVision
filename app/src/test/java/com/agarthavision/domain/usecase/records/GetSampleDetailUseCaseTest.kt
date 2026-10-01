@@ -4,10 +4,14 @@ import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.PasswordChangeResult
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.model.isReadOnly
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.ColleagueRepository
+import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.SampleRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -23,6 +27,8 @@ class GetSampleDetailUseCaseTest {
         val sample = detailSample(userId = "user-1")
         val detection = detailDetection(sampleId = sample.id)
         val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            patientAccessRepository = DetailPatientAccess(),
             authRepository = DetailAuthRepository(userId = "user-1"),
             sampleRepository = DetailSampleRepository(sample),
             detectionRepository = DetailDetectionRepository(listOf(detection)),
@@ -39,6 +45,8 @@ class GetSampleDetailUseCaseTest {
     @Test
     fun `returns NotVisible for another users sample`() = runTest {
         val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            patientAccessRepository = DetailPatientAccess(),
             authRepository = DetailAuthRepository(userId = "user-2"),
             sampleRepository = DetailSampleRepository(detailSample(userId = "user-1")),
             detectionRepository = DetailDetectionRepository(emptyList()),
@@ -50,6 +58,8 @@ class GetSampleDetailUseCaseTest {
     @Test
     fun `returns NotFound when sample does not exist`() = runTest {
         val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            patientAccessRepository = DetailPatientAccess(),
             authRepository = DetailAuthRepository(userId = "user-1"),
             sampleRepository = DetailSampleRepository(null),
             detectionRepository = DetailDetectionRepository(emptyList()),
@@ -63,6 +73,8 @@ class GetSampleDetailUseCaseTest {
         val sample = detailSample(userId = null)
         val detection = detailDetection(sampleId = sample.id)
         val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            patientAccessRepository = DetailPatientAccess(),
             authRepository = DetailAuthRepository(userId = "user-2"),
             sampleRepository = DetailSampleRepository(sample),
             detectionRepository = DetailDetectionRepository(listOf(detection)),
@@ -71,6 +83,59 @@ class GetSampleDetailUseCaseTest {
         val result = useCase(sample.id).first()
 
         assertTrue(result is SampleDetailResult.Visible)
+    }
+
+    @Test
+    fun `a colleague's sample is visible to a medtech assigned to its patient`() = runTest {
+        val sample = detailSample(userId = "user-1")
+        val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            authRepository = DetailAuthRepository(userId = "user-2"),
+            sampleRepository = DetailSampleRepository(sample),
+            detectionRepository = DetailDetectionRepository(emptyList()),
+            patientAccessRepository = DetailPatientAccess(assigned = setOf(sample.sessionId to "user-2")),
+        )
+
+        // The patient's history is shared by everyone assigned to it (14zcqntjph5); authorship
+        // is unchanged, so the sample still says who wrote it.
+        val result = useCase(sample.id).first()
+
+        assertTrue(result is SampleDetailResult.Visible)
+        assertEquals("user-1", (result as SampleDetailResult.Visible).data.sample.userId)
+    }
+
+    @Test
+    fun `a colleague's sample is read-only and names its author`() = runTest {
+        val sample = detailSample(userId = "user-1")
+        val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(names = mapOf("user-1" to "Maria Santos")),
+            authRepository = DetailAuthRepository(userId = "user-2"),
+            sampleRepository = DetailSampleRepository(sample),
+            detectionRepository = DetailDetectionRepository(emptyList()),
+            patientAccessRepository = DetailPatientAccess(assigned = setOf(sample.sessionId to "user-2")),
+        )
+
+        // 14zcqntjph6: the screen hides every edit and says whose sample it is.
+        val result = useCase(sample.id).first() as SampleDetailResult.Visible
+
+        assertEquals(RecordAuthor.Colleague(name = "Maria Santos"), result.author)
+        assertTrue(result.author.isReadOnly)
+    }
+
+    @Test
+    fun `the medtech's own sample stays editable`() = runTest {
+        val sample = detailSample(userId = "user-1")
+        val useCase = GetSampleDetailUseCase(
+            colleagueRepository = DetailColleagues(),
+            authRepository = DetailAuthRepository(userId = "user-1"),
+            sampleRepository = DetailSampleRepository(sample),
+            detectionRepository = DetailDetectionRepository(emptyList()),
+            patientAccessRepository = DetailPatientAccess(),
+        )
+
+        val result = useCase(sample.id).first() as SampleDetailResult.Visible
+
+        assertEquals(RecordAuthor.Viewer, result.author)
     }
 }
 
@@ -146,3 +211,17 @@ private fun detailDetection(sampleId: String): Detection =
         verdict = DetectionVerdict.CONFIRMED,
         expertClass = null,
     )
+
+private class DetailPatientAccess(
+    private val assigned: Set<Pair<String, String>> = emptySet(),
+) : PatientAccessRepository {
+    override suspend fun isAssignedToSessionPatient(sessionId: String, userId: String): Boolean =
+        (sessionId to userId) in assigned
+}
+
+private class DetailColleagues(
+    private val names: Map<String, String?> = emptyMap(),
+) : ColleagueRepository {
+    override suspend fun nameOf(userId: String): String? = names[userId]
+    override fun observeNames(): Flow<Map<String, String?>> = flowOf(names)
+}

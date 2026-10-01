@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -96,11 +97,25 @@ sealed class Screen(val route: String) {
 fun AgarthaNavGraph(
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
-    startDestination: String = Screen.Dashboard.route
+    startDestination: String = Screen.Dashboard.route,
+    signedOutByServer: Boolean = false,
 ) {
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
+
+    // 14zcqntjph8: the server signed this phone out and its data is gone, so whatever screen is
+    // open is showing rows that no longer exist. The whole graph is popped, as on a sign-out from
+    // Settings, so back cannot return to it. Already on Login (a cold start after the wipe) is a
+    // no-op; the login screen itself explains why. Keyed on the route too, and skipped while it
+    // is null, because the graph is not set until the NavHost below has composed.
+    LaunchedEffect(signedOutByServer, currentRoute) {
+        if (signedOutByServer && currentRoute != null && currentRoute != Screen.Login.route) {
+            navController.navigate(Screen.Login.route) {
+                popUpTo(navController.graph.id) { inclusive = true }
+            }
+        }
+    }
 
     val showBottomBar = currentRoute != null && currentRoute in bottomBarRoutes
 

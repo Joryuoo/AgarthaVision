@@ -11,7 +11,9 @@ import com.agarthavision.core.sync.DataStoreInitialFetchStateStore
 import com.agarthavision.core.sync.DataStoreLastSyncStore
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
+import com.agarthavision.data.repository.DataStoreSignedOutNoticeStore
 import com.agarthavision.data.repository.ThemePreferenceRepositoryImpl
+import com.agarthavision.domain.repository.SignedOutNoticeStore
 import com.agarthavision.domain.repository.ThemePreferenceRepository
 import com.agarthavision.domain.sync.LastSyncStore
 import dagger.Binds
@@ -69,4 +71,9 @@ abstract class PreferencesRepositoryModule {
     abstract fun bindLastSyncStore(
         implementation: DataStoreLastSyncStore,
     ): LastSyncStore
+
+    @Binds
+    abstract fun bindSignedOutNoticeStore(
+        implementation: DataStoreSignedOutNoticeStore,
+    ): SignedOutNoticeStore
 }

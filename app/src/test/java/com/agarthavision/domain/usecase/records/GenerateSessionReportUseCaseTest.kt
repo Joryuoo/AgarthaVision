@@ -446,6 +446,8 @@ private class FakeReportFileStore : ReportFileStore {
         "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
         else -> null
     }
+
+    override suspend fun delete(path: String): Boolean = false
 }
 
 private fun reportSession(sessionId: String, userId: String): Session =

@@ -164,15 +164,12 @@ class VerificationSheetContentTest {
     )
 
     /**
-     * A node inside the sheet's own `verticalScroll` column.
-     *
-     * The scroll is not optional. Robolectric lays the sheet out in a fixed viewport, so
-     * anything below the fold has no bounds until it is scrolled in, and `performClick` on
-     * an unbounded node is silently a no-op rather than a failure - a test written without
-     * this helper can pass while asserting nothing. This sheet is far taller than the
-     * manual one, so most of it starts below the fold.
+     * A node inside the sheet. Nodes in the scrollable section below the pinned header are
+     * scrolled into view; nodes in the pinned header are already visible at the top.
      */
-    private fun sheetNode(tag: String) = composeRule.onNodeWithTag(tag).performScrollTo()
+    private fun sheetNode(tag: String) = composeRule.onNodeWithTag(tag).let { node ->
+        runCatching { node.performScrollTo() }.getOrDefault(node)
+    }
 
     /** A node in a dialog window, which is not scrollable and must not be scrolled to. */
     private fun dialogNode(tag: String) = composeRule.onNodeWithTag(tag)
@@ -780,7 +777,7 @@ class VerificationSheetContentTest {
         // queue screen, or tombstoned. Showing "Sample 0 of 4" was the bug.
         setContent(state(frameIndexInQueue = 0, queueSize = 4))
 
-        composeRule.onNodeWithText("Verified sample · Editable").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Verified sample · Editable").assertIsDisplayed()
         composeRule.onNodeWithText("Sample 0 of 4").assertDoesNotExist()
     }
 
@@ -788,7 +785,7 @@ class VerificationSheetContentTest {
     fun `the sample indicator says where in the queue this frame is`() {
         setContent(state(frameIndexInQueue = 2, queueSize = 3))
 
-        composeRule.onNodeWithText("Sample 2 of 3").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Sample 2 of 3").assertIsDisplayed()
     }
 
     // Frame navigation

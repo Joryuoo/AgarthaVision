@@ -141,7 +141,6 @@ class VerificationPreviewScreenshotTest {
         }
 
         composeRule.onNodeWithTag(VerifyTestTags.FRAME_PREVIEW)
-            .performScrollTo()
             .captureRoboImage("src/test/roborazzi/verification_preview_manual.png")
     }
 }
