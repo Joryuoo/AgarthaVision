@@ -9,7 +9,10 @@ import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toFindingEntity
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.model.isColleagueRecord
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.sync.SyncScheduler
 import com.agarthavision.domain.usecase.inference.InferencePendingException
 import java.time.Instant
@@ -34,6 +37,7 @@ class SubmitVerificationUseCase @Inject constructor(
     private val findingDao: SampleSpeciesFindingDao,
     private val syncSampleUseCase: SyncSampleUseCase,
     private val syncScheduler: SyncScheduler,
+    private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(
         frame: FlaggedFrame,
@@ -51,6 +55,12 @@ class SubmitVerificationUseCase @Inject constructor(
         // sample re-enters getSamplesPendingSync, so SyncPendingDataUseCase pushes the edit
         // when connectivity returns. Without it an offline edit would never reach Supabase.
         val existingSample = sampleDao.getSampleById(sampleId)
+
+        // A colleague's sample is read-only on this phone (14zcqntjph6): the server lets only the
+        // author update it, so the edit would be written here and refused on push.
+        if (isColleagueRecord(existingSample?.userId, authRepository.currentLocalUserId())) {
+            throw ReadOnlyRecordException(sampleId)
+        }
 
         // A frame still waiting on its model output cannot be verified: its empty prediction
         // list is not a clean field, it is no answer yet (14zcqntj6ny). Checked against both the

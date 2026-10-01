@@ -29,6 +29,26 @@ Verify any entry with `git log --oneline --reverse`.
 - **Sign-out order flipped**: the cached identity is cleared before the Supabase session, so a
   medtech's own sign-out never looks like a refusal.
 
+## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
+
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
+0008, 0009, 0010. Room 23 → 24.
+
+- **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
+  detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
+  Additive SELECT policies only; writes stay author-only. Reverses 0003's "not patient-linked"
+  reports rule. The pull drops its author filter, skips rows whose parent is not on the device,
+  and removes assignments the server no longer returns.
+- **Read-only colleagues (0008, Room v24).** A colleague's session and sample cannot be resumed,
+  edited, re-verified, deleted or renamed on the phone, and say "Recorded by …". Names come from
+  a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
+- **Distinct labels (0009).** A server trigger renames a clashing session label
+  `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
+  one-time rename. The pull settles clashes once every page is in. A rename now uploads.
+- **Writes need the writer's own session (0010).** Restrictive INSERT/UPDATE policies on
+  `samples` and `reports`: a row can only be written into a session its writer authored, now
+  that 0007 hands colleagues' session ids to the phone.
+
 ---
 
 ## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29

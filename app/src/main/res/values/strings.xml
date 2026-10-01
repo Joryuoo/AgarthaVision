@@ -730,4 +730,8 @@
         <item quantity="other">%1$d years old</item>
     </plurals>
     <string name="patient_preview_age_sex">%1$s | %2$s</string>
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <string name="record_recorded_by">Recorded by %1$s</string>
+    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
+    <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>

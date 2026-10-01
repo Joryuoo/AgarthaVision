@@ -4,6 +4,7 @@ import com.agarthavision.core.util.DeviceIdProvider
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.supabase.SessionRemoteDataSource
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.util.MainDispatcherRule
@@ -97,6 +98,29 @@ class SessionManagerTest {
 
             assertEquals(SessionSyncStatus.PENDING.value, entity.supabaseStatus)
             assertEquals("user-1", entity.userId)
+        }
+
+    @Test
+    fun `resumeSession refuses a colleague's session and stays idle`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+            whenever(sessionDao.getSessionById("theirs")).thenReturn(
+                SessionEntity(
+                    sessionId = "theirs",
+                    userId = "user-2",
+                    patientId = "patient-1",
+                    deviceId = "device-2",
+                    startedAt = 1_000L,
+                ),
+            )
+
+            // 14zcqntjph6: an active session is one capture adds frames to. A frame captured into
+            // a colleague's smear is an edit the server would refuse.
+            assertThrows(ReadOnlyRecordException::class.java) {
+                runBlocking { manager.resumeSession("theirs") }
+            }
+            assertTrue(manager.state.value is SessionState.Idle)
+            assertNull(activeSessionIdStore.stored)
         }
 
     @Test

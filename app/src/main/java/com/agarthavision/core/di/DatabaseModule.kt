@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.agarthavision.core.database.ALL_MIGRATIONS
 import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -18,10 +19,12 @@ import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
 import com.agarthavision.data.repository.AndroidReportPdfRenderer
 import com.agarthavision.data.repository.BoundaryRepositoryImpl
+import com.agarthavision.data.repository.ColleagueRepositoryImpl
 import com.agarthavision.data.repository.CoverageRepositoryImpl
 import com.agarthavision.data.repository.DetectionRepositoryImpl
 import com.agarthavision.data.repository.DocumentsReportFileStore
 import com.agarthavision.data.repository.LocalReportRepository
+import com.agarthavision.data.repository.PatientAccessRepositoryImpl
 import com.agarthavision.data.repository.PatientRepositoryImpl
 import com.agarthavision.data.repository.PsgcRepositoryImpl
 import com.agarthavision.data.repository.SampleRepositoryImpl
@@ -32,8 +35,10 @@ import com.agarthavision.data.repository.SupabaseSampleImageRepository
 import com.agarthavision.domain.repository.AccountAccessRepository
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BoundaryRepository
+import com.agarthavision.domain.repository.ColleagueRepository
 import com.agarthavision.domain.repository.CoverageRepository
 import com.agarthavision.domain.repository.DetectionRepository
+import com.agarthavision.domain.repository.PatientAccessRepository
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
@@ -53,6 +58,7 @@ import javax.inject.Singleton
 /**
  * Provides Room database, DAOs, and repository bindings for local persistence.
  */
+@Suppress("TooManyFunctions") // One @Provides per DAO; splitting would just move them.
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -131,6 +137,9 @@ object DatabaseModule {
 
     @Provides
     fun provideCoverageDao(database: AgarthaDatabase): CoverageDao = database.coverageDao()
+
+    @Provides
+    fun provideColleagueDao(database: AgarthaDatabase): ColleagueDao = database.colleagueDao()
 }
 
 /**
@@ -164,6 +173,16 @@ abstract class RepositoryModule {
     abstract fun bindPatientRepository(
         implementation: PatientRepositoryImpl,
     ): PatientRepository
+
+    @Binds
+    abstract fun bindColleagueRepository(
+        implementation: ColleagueRepositoryImpl,
+    ): ColleagueRepository
+
+    @Binds
+    abstract fun bindPatientAccessRepository(
+        implementation: PatientAccessRepositoryImpl,
+    ): PatientAccessRepository
 
     @Binds
     abstract fun bindCoverageRepository(

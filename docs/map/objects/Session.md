@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/SessionEntity.kt
 ---
 
@@ -34,7 +34,7 @@ patient, and unowned data is no longer possible.
 | `patient_id` | **NOT NULL**, FK → `patients(id)` |
 | `device_id` | NOT NULL text |
 | `started_at` | NOT NULL timestamptz, default `now()` |
-| `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`); unconstrained in Postgres |
+| `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`). In Postgres no constraint, but a trigger renames a clashing arrival `<label>-<first 4 of its id>` and never rejects (`0009_session_label_collisions.sql:49-84`) |
 
 Indexes: `sessions_user_started_idx (user_id, started_at desc)` and
 `sessions_patient_idx (patient_id, started_at desc)` (`0001_init.sql:175-176`).
@@ -58,6 +58,10 @@ Documented shape: `schema.ts` (`Session`).
 ## Connected to
 
 - **Owned by** [`Patient`](Patient.md) (`patient_id` FK) and [`Profile`](Profile.md) (`user_id` FK).
+- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:157-159` —
+  every medtech assigned to the patient. `user_id` stays the author. On the phone a patient's Sessions list is `own OR
+  assigned` (`SessionDao.kt::SESSIONS_FILTER`); Home, the dashboard and the pending counts stay
+  the medtech's own work.
 - **Owns** [`Sample`](Sample.md), 1 → many, ON DELETE CASCADE (`supabase/migrations/0001_init.sql:183`).
   (Room declares `NO_ACTION` locally to prevent accidental cascading deletion per C8).
 - **Owns** [`Report`](Report.md), 1 → many, ON DELETE CASCADE (`0001_init.sql:311`). Multiple reports

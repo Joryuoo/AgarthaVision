@@ -15,6 +15,7 @@ import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
@@ -67,6 +68,28 @@ class SessionsViewModelTest {
         private const val PAGE_STEP = 10
         private const val SEARCH_DEBOUNCE_MS = 300L
     }
+
+    // ---------------------------------------------------------------------------
+    // A colleague's session is read-only and named (14zcqntjph6)
+    // ---------------------------------------------------------------------------
+
+    @Test
+    fun `a colleague's session is marked with its author and the medtech's own is not`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val rows = listOf(makeSession("mine", "u1"), makeSession("theirs", "u2"))
+            val vm = viewModelWith(
+                userId = "u1",
+                rowsByLimit = { rows },
+                colleagueNames = mapOf("u2" to "Maria Santos"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals(mapOf("theirs" to "Maria Santos"), settled.colleagueAuthors)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
 
     // ---------------------------------------------------------------------------
     // First page is 5 rows
@@ -1281,9 +1304,10 @@ class SessionsViewModelTest {
         rowsByLimit: (Int) -> List<SessionWithStats>,
         counts: SessionsCounts = SessionsCounts(),
         syncInProgressFlow: Flow<Boolean> = flowOf(false),
+        colleagueNames: Map<String, String?> = emptyMap(),
     ): SessionsViewModel {
         val repo = LambdaSessionRepository(rowsByLimit, counts)
-        return buildViewModel(repo, userId, syncInProgressFlow)
+        return buildViewModel(repo, userId, syncInProgressFlow, colleagueNames)
     }
 
     private fun viewModelWithRecording(
@@ -1295,6 +1319,7 @@ class SessionsViewModelTest {
         repo: SessionRepository,
         userId: String?,
         syncInProgressFlow: Flow<Boolean> = flowOf(false),
+        colleagueNames: Map<String, String?> = emptyMap(),
     ): SessionsViewModel {
         val identityFlow = MutableStateFlow(
             userId?.let { LocalIdentity(userId = it, email = "user@example.com") }
@@ -1302,7 +1327,7 @@ class SessionsViewModelTest {
         return buildViewModelWithIdentityFlow(
             repo,
             identityFlow,
-            deps = IdentityFlowDeps(syncInProgressFlow = syncInProgressFlow),
+            deps = IdentityFlowDeps(syncInProgressFlow = syncInProgressFlow, colleagueNames = colleagueNames),
         )
     }
 
@@ -1332,6 +1357,7 @@ class SessionsViewModelTest {
             patientRepository = patientRepo,
             psgcRepository = psgcRepo,
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
     }
@@ -1354,6 +1380,7 @@ class SessionsViewModelTest {
         val psgcRepo: PsgcRepository? = null,
         val patientId: String? = "patient-1",
         val syncInProgressFlow: Flow<Boolean> = flowOf(false),
+        val colleagueNames: Map<String, String?> = emptyMap(),
     )
 
     private fun buildViewModelWithIdentityFlow(
@@ -1379,6 +1406,7 @@ class SessionsViewModelTest {
             patientRepository = deps.patientRepo ?: stubPatientRepository(),
             psgcRepository = deps.psgcRepo ?: stubPsgcRepository(),
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
+            observeColleagueNamesUseCase = stubColleagueNamesUseCase(deps.colleagueNames),
             savedStateHandle = SavedStateHandle(
                 if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
             ),
@@ -1639,3 +1667,6 @@ private fun makeSession(id: String, userId: String): SessionWithStats =
         unverifiedSamples = 0,
         totalEggs = 0,
     )
+
+private fun stubColleagueNamesUseCase(names: Map<String, String?> = emptyMap()): ObserveColleagueNamesUseCase =
+    mock { on { invoke() } doReturn flowOf(names) }

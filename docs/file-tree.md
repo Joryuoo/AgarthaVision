@@ -56,7 +56,7 @@ app/
 |---|---|
 | `camera/` | `CameraManager` binds Preview + ImageAnalysis; `FrameSampler` caches every analyzed frame as time-stamped JPEG bytes — no timer, no dispatch to inference (the shutter does that) |
 | `connectivity/` | `NetworkMonitor` polls inference `/health`; `ConnectivityObserver` reports device network state |
-| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v23); `Migrations.kt` — the hand-written migrations, from 22 → 23 on |
+| `database/` | `AgarthaDatabase` — the Room database declaration and its version number (v24); `Migrations.kt` — the hand-written migrations, from 22 → 23 on |
 | `di/` | Hilt modules. `DatabaseModule` also carries every repository `@Binds` |
 | `session/` | `SessionManager` + `SessionState` + `ActiveSessionIdStore`. The app-scoped record of which smear is open, and the pointer that survives process death |
 | `sync/` | DataStore-backed sync bookkeeping: `DataStoreLastSyncStore`, `FetchOutcomeStore`, `InitialFetchStateStore` |

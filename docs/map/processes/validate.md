@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # validate
@@ -61,6 +61,17 @@ sync attempt.
 8. **Sync.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()` enqueues
    the background pass; offline, the inline call fails safely and the worker catches up. See
    [`sync`](sync.md).
+
+## A colleague's sample is read-only
+
+A sample another medtech wrote — on a patient both are assigned to (14zcqntjph5) — opens in
+Sample Detail with no Edit and no View detection, and a "Recorded by …" note in their place
+(`SampleDetailScreen.kt::SampleDetailContent`, `ui/components/ReadOnlyAuthorNote.kt`). Every
+editing action lives behind those two — re-verify, add species, redraw, remarks — so none is
+reachable. `OpenVerificationTargetUseCase` and `SubmitVerificationUseCase` both refuse the sample
+with `ReadOnlyRecordException` as the backstop: the server lets only the author update it, so an
+edit would otherwise be written here and refused on push without an error (14zcqntjph6). The rule
+is one function, `domain/model/RecordAuthorship.kt::isColleagueRecord`.
 
 ## Manual captures take the same path
 

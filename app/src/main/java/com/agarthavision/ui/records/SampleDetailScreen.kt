@@ -60,11 +60,13 @@ import coil.request.ImageRequest
 import com.agarthavision.R
 import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
 import com.agarthavision.domain.model.Detection
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.domain.usecase.records.SampleRecordItem
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.EmptyState
+import com.agarthavision.ui.components.ReadOnlyAuthorNote
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.Spacing
@@ -111,6 +113,7 @@ fun SampleDetailScreen(
                 imageSource = state.imageSource,
                 onBack = onBack,
                 onViewDetection = viewModel::onViewDetection,
+                author = state.author,
             )
             else -> SampleDetailSkeleton(onBack = onBack)
         }
@@ -137,8 +140,13 @@ internal fun SampleDetailContent(
     imageSource: SampleImageSource,
     onBack: () -> Unit,
     onViewDetection: () -> Unit,
+    author: RecordAuthor = RecordAuthor.Viewer,
 ) {
     val colors = AgarthaTheme.colors
+    // A colleague's sample is shown and never changed here (14zcqntjph6): no Edit, no View
+    // detection, and so no re-verify, add-species, redraw or delete, all of which live in the
+    // edit screen those two open. The note below says whose it is instead.
+    val readOnlyAuthor = author as? RecordAuthor.Colleague
     val capturedAt = remember(item.sample.timestamp) {
         Instant.ofEpochMilli(item.sample.timestamp)
             .atZone(ZoneId.systemDefault())
@@ -160,7 +168,7 @@ internal fun SampleDetailContent(
             title = capturedAt,
             isEdited = item.sample.isEdited,
             onBack = onBack,
-            onEditClick = onViewDetection,
+            onEditClick = onViewDetection.takeIf { readOnlyAuthor == null },
         )
 
         LazyColumn(
@@ -264,10 +272,17 @@ internal fun SampleDetailContent(
             }
 
             item {
-                ViewDetectionButton(
-                    onClick = onViewDetection,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
+                if (readOnlyAuthor != null) {
+                    ReadOnlyAuthorNote(
+                        authorName = readOnlyAuthor.name,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                } else {
+                    ViewDetectionButton(
+                        onClick = onViewDetection,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
             }
 
             item { Spacer(modifier = Modifier.height(24.dp)) }
