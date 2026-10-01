@@ -9,6 +9,16 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## docs/profile-outlives-login — authorship outlives the login, written down · 2026-10-01
+
+`14zcqntjvjx`. Docs only; the schema change is `0011_profile_outlives_login.sql` from
+`feat/deactivation-sign-out`.
+
+- **C8 states the rule.** Offboarding deletes the login; the profile and everything it authored
+  stay, still naming the person, and the email is free for another laboratory or a rehire.
+- **`Profile` card** names the ticket and notes that the cascades *from* a profile
+  (`patient_users`, the console's `organization_members` and audit log) never fire.
+
 ## feat/change-password — change password in Settings · 2026-10-01
 
 `14zcqntjph9`.

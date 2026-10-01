@@ -182,6 +182,17 @@ its own ticket.
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
 
+**Authorship outlives the login** (`0011_profile_outlives_login.sql`, 14zcqntjph8,
+14zcqntjvjx). A medtech who leaves a laboratory is offboarded by deleting their login. That frees
+the email for the next laboratory that hires them, and lets an admin reconnect a rehire to the
+profile they already have. Deleting the login never touches their work: `profiles.id` is the
+person's permanent id and no longer references `auth.users`, so nothing cascades. Their profile,
+every patient, session, sample and report they authored, their organization membership and their
+audit-log entries all stay, still naming them. Only `profiles.account_id` changes, to null,
+meaning "no login now". Every table that names a person references `profiles`, never
+`auth.users`, so this one link is the only thing a deleted login can reach. Nothing in the app
+deletes a login: sign-out and the deactivation wipe remove the phone's local copy only.
+
 **Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
 images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
 data (patient names, birthdates, sex, barangays) is governed by Philippine RA 10173 and clinical
