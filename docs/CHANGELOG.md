@@ -9,6 +9,25 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/change-password — change password in Settings · 2026-10-01
+
+`14zcqntjph9`.
+
+- **Settings → Change password.** Current password, new, confirm, each with show/hide. Blank
+  fields (spaces only included, which sign-in would refuse), a mismatched confirmation and an
+  unchanged password are caught on the phone.
+- **Online only.** Offline the screen says it needs a connection and the button is disabled. A
+  connection lost before the server is reached says the password was not changed; one lost after
+  the new password was sent says it may already be changed.
+- **The current password is checked first**, by signing in with it again, so a wrong one is
+  refused on its field before anything changes. The provider's strength rules, and its own
+  explanation, land under the new password.
+- **This phone stays signed in.** Local data, the cached identity and unsynced work are
+  untouched. Supabase signs out the account's other sessions; they need the new password, and
+  other phones go through #98's wipe, keeping unsynced work. On this phone the change and #98's
+  account check share a lock (`AuthSessionLock`), so a renewal of the session being replaced
+  can never be refused and wipe the phone that made the change.
+
 ## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
 
 `14zcqntjph8`.

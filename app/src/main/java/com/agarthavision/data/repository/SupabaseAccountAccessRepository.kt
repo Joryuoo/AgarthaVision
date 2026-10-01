@@ -8,8 +8,6 @@ import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.status.SessionStatus
 import io.github.jan.supabase.exceptions.RestException
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.minutes
@@ -44,12 +42,13 @@ import kotlin.time.TimeSource
 class SupabaseAccountAccessRepository @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,
     private val authRepository: AuthRepository,
+    // Shared with the password change, which swaps this session out (AuthSessionLock).
+    private val sessionLock: AuthSessionLock,
 ) : AccountAccessRepository {
 
-    private val mutex = Mutex()
     private var lastAllowed: TimeSource.Monotonic.ValueTimeMark? = null
 
-    override suspend fun checkAccountAccess(): AccountAccess = mutex.withLock {
+    override suspend fun checkAccountAccess(): AccountAccess = sessionLock.withLock {
         if (authRepository.currentLocalUserId() == null) return@withLock AccountAccess.UNKNOWN
         val auth = supabaseProvider.get().auth
         auth.awaitInitialization()

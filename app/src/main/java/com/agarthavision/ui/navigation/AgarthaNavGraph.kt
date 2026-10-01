@@ -38,6 +38,7 @@ import com.agarthavision.ui.records.SampleDetailScreen
 import com.agarthavision.ui.records.SessionDetailScreen
 import com.agarthavision.ui.patients.PatientsScreen
 import com.agarthavision.ui.sessions.SessionsScreen
+import com.agarthavision.ui.settings.ChangePasswordScreen
 import com.agarthavision.ui.settings.SettingsScreen
 import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.SessionListFilter
@@ -83,6 +84,7 @@ sealed class Screen(val route: String) {
     }
     data object VerificationQueue : Screen("verification_queue")
     data object Settings : Screen("settings")
+    data object ChangePassword : Screen("settings/password")
     data object Activity : Screen("activity")
 
     /** The full-screen My coverage map drill-down from the Home coverage card. */
@@ -499,7 +501,12 @@ fun AgarthaNavHost(
                         popUpTo(navController.graph.id) { inclusive = true }
                     }
                 },
+                onChangePasswordClick = { navController.navigate(Screen.ChangePassword.route) },
             )
+        }
+
+        composable(Screen.ChangePassword.route) {
+            ChangePasswordScreen(onBack = { navController.popBackStack() })
         }
     }
 }

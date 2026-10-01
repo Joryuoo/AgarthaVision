@@ -4,6 +4,7 @@ import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
@@ -232,6 +233,8 @@ private class SamplesAuthRepository(
     override suspend fun hasActiveSession(): Boolean = liveUserId != null
     override suspend fun signIn(email: String, password: String) = Unit
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 private class SamplesSessionRepository(

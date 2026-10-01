@@ -112,6 +112,13 @@ identity before the session exists — wipes a working medtech's phone. And wide
 Narrowing `AccountWipeDao` back to "the account's rows" would discard unsynced field work every
 time a medtech changes their password on another device.
 
+**Changing a password signs out every other device of the account** (Supabase revokes their
+sessions, 14zcqntjph9), and those devices go through the wipe above: synced data removed,
+unsynced work kept, the login screen asking for the new password. On the phone that made the
+change, `SupabaseAuthRepository.kt::changePassword` and `checkAccountAccess` share
+`AuthSessionLock`. Drop it and a renewal of the old session, in flight while the password
+changes, is refused and wipes the phone that changed it.
+
 ## Changing patients or the patient form
 
 **Open:** `../processes/register-patient.md` · `../objects/Patient.md`.

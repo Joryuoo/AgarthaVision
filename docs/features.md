@@ -21,6 +21,12 @@ as working.
 - **Sign-out** revokes the Supabase token *and* clears the cached identity, returning the
   device to the signed-out state. `domain/usecase/auth/SignOutUseCase.kt`,
   `data/repository/SupabaseAuthRepository.kt::signOut`.
+- **Change password** from Settings (14zcqntjph9): current password, new, confirm. Online only;
+  offline the screen says so and the button is disabled. The current password is checked first,
+  and a wrong one is refused on its field. This phone stays signed in and local data is
+  untouched; other devices need the new password. `ui/settings/ChangePasswordScreen.kt`,
+  `domain/usecase/auth/ChangePasswordUseCase.kt`,
+  `data/repository/SupabaseAuthRepository.kt::changePassword`.
 - **Signed out and wiped when the account is removed** (14zcqntjph8). The first sync pass after
   the server refuses to renew the login (the login was deleted or banned, or its password was
   changed elsewhere) removes everything synced from the phone: patients, sessions, samples,
@@ -173,11 +179,12 @@ as working.
 ### Shell and appearance
 - **Screens**: the `Screen` routes in `ui/navigation/AgarthaNavGraph.kt` — Login, Dashboard,
   Patients, PatientSessions, PatientForm, Capture, Reports, VerificationQueue, SessionDetail,
-  SampleDetail, SessionList, MyCoverage, Activity, Settings.
+  SampleDetail, SessionList, MyCoverage, Activity, Settings, ChangePassword.
 - **Bottom tab bar with four tabs**: Home, Patients, Reports, Settings
   (`ui/components/AgarthaBottomBar.kt::Tab`).
 - **Light/dark toggle** persisted in DataStore; Capture is exempt and stays dark (`ui/theme/Theme.kt`).
-- **Settings**: account details, sync queue status, manual sync triggers, theme toggle, sign-out.
+- **Settings**: account details, change password, sync queue status, manual sync triggers, theme
+  toggle, sign-out.
 
 ### Backend and inference service
 - **Postgres schema**: see [`file-tree.md`](file-tree.md#supabasemigrations) for the migration
