@@ -222,6 +222,61 @@ internal fun VerificationSheetContent(
                 onBack = actions.onCancel,
             )
 
+            // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val imageModel = rememberFrameImageModel(frame, state.imageSource)
+                val frameModifier = Modifier
+                    .heightIn(max = 220.dp)
+                    .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AgarthaTheme.colors.surfaceVariant)
+                    .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+
+                if (imageModel == null) {
+                    FrameUnavailable(
+                        reason = state.imageSource,
+                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
+                    )
+                } else {
+                    FrameWithBoxes(
+                        imageModel = imageModel,
+                        boxes = state.findings.frameBoxes(
+                            active = DrawTarget(state.currentDetectionIndex),
+                        ),
+                        showBoxes = state.showBoundingBoxes,
+                        inferenceImageWidth = frame.imageWidth,
+                        inferenceImageHeight = frame.imageHeight,
+                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+                    )
+                }
+
+                CycleRow(
+                    indicator = if (state.frameIndexInQueue > 0) {
+                        stringResource(
+                            R.string.verify_sample_indicator,
+                            state.frameIndexInQueue,
+                            state.queueSize,
+                        )
+                    } else {
+                        stringResource(R.string.verify_sample_out_of_queue)
+                    },
+                    prevDescription = stringResource(R.string.verify_prev_frame),
+                    nextDescription = stringResource(R.string.verify_next_frame),
+                    prevTag = VerifyTestTags.FRAME_PREV,
+                    nextTag = VerifyTestTags.FRAME_NEXT,
+                    canGoPrev = state.canGoPrev,
+                    canGoNext = state.canGoNext,
+                    onPrev = actions.onFramePrev,
+                    onNext = actions.onFrameNext,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -236,67 +291,8 @@ internal fun VerificationSheetContent(
                     .verticalScroll(scrollState),
             ) {
                 Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-                    // 2. Frame section: the image, then one row carrying where you are and how to move.
-                    val imageModel = rememberFrameImageModel(frame, state.imageSource)
-                    if (imageModel == null) {
-                        // Honest about it, rather than opening a blank canvas the medtech might
-                        // annotate into the void. A missing image and an empty one used to be
-                        // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
-                        // and every sample synced from another device opened silently empty.
-                        FrameUnavailable(
-                            reason = state.imageSource,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(frame.previewAspectRatio())
-                                .testTag(VerifyTestTags.FRAME_UNAVAILABLE)
-                                .clip(RoundedCornerShape(18.dp))
-                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-                        )
-                    } else {
-                        FrameWithBoxes(
-                            imageModel = imageModel,
-                            // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
-                            // `frame.predictions` alone never held a hand-drawn box, so every one of them
-                            // was invisible and a replaced box left the model's wrong rectangle on screen.
-                            boxes = state.findings.frameBoxes(
-                                active = DrawTarget(state.currentDetectionIndex),
-                            ),
-                            showBoxes = state.showBoundingBoxes,
-                            inferenceImageWidth = frame.imageWidth,
-                            inferenceImageHeight = frame.imageHeight,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(frame.previewAspectRatio())
-                                .testTag(VerifyTestTags.FRAME_PREVIEW)
-                                .clip(RoundedCornerShape(18.dp))
-                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-                        )
-                    }
-
-                    CycleRow(
-                        indicator = if (state.frameIndexInQueue > 0) {
-                            stringResource(
-                                R.string.verify_sample_indicator,
-                                state.frameIndexInQueue,
-                                state.queueSize,
-                            )
-                        } else {
-                            stringResource(R.string.verify_sample_out_of_queue)
-                        },
-                        prevDescription = stringResource(R.string.verify_prev_frame),
-                        nextDescription = stringResource(R.string.verify_next_frame),
-                        prevTag = VerifyTestTags.FRAME_PREV,
-                        nextTag = VerifyTestTags.FRAME_NEXT,
-                        canGoPrev = state.canGoPrev,
-                        canGoNext = state.canGoNext,
-                        onPrev = actions.onFramePrev,
-                        onNext = actions.onFrameNext,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
-                    )
-
                     // 3. Model output: what the container said, or that it said nothing, or that it has
-                    //    not answered yet. Always present, never collapsed to two states. A frame still
-                    //    in the inference queue offers the way out of waiting for it (14zcqntj6p1).
+                    //    not answered yet. Always present, never collapsed to two states.
                     ModelOutputSection(
                         output = frame.modelOutput(),
                         onCancelInference = actions.onCancelInferenceRequested
