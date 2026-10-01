@@ -11,6 +11,9 @@ package com.agarthavision.domain.model
  * A barangay code resolves upward to city/municipality, province and region through the code
  * itself, which is why a session stores this one value rather than four denormalised columns.
  *
+ * [fullAddress] is the single display form for anything showing a patient's location — the
+ * session patient card today, the patient report next.
+ *
  * See `docs/map/objects/PsgcBarangay.md`.
  */
 data class PsgcBarangay(
@@ -30,4 +33,11 @@ data class PsgcBarangay(
      */
     val parentPath: String
         get() = listOfNotNull(cityMuniName, provinceName ?: regionName).joinToString(separator = " · ")
+
+    /**
+     * "Lahug, City of Cebu" (no province: the chartered city stands in) / "Adams, Adams,
+     * Ilocos Norte".
+     */
+    val fullAddress: String
+        get() = listOfNotNull(name, cityMuniName, provinceName).joinToString(separator = ", ")
 }

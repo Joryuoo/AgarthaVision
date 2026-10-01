@@ -65,9 +65,10 @@ and after every local write.
    `sessions.patient_id` references `patients(id)`. A per-row failure marks that row and
    does not abort the pass.
 
-A report push is the row, then its PDF or CSV into the `reports` bucket; a file the device no
+A report push is the row, then its PDF into the `reports` bucket; a file the device no
 longer holds is skipped rather than failing the row (`data/supabase/SyncReportUseCase.kt`).
-`RestoreReportFilesUseCase` pulls a file back on first open on another device.
+PDF-only since 86d4be47c — a report never carries a CSV to push.
+`RestoreReportFilesUseCase` pulls the file back on first open on another device.
 Because login is mandatory on first launch, every entity has an owner from creation and no
 deferred claiming step is needed.
 
@@ -131,6 +132,12 @@ and is repaired from the disk rather than trusted.
 - **Four separate sync-state enums** — `PatientSyncStatus`, `SessionSyncStatus`,
   `SampleStatus`, `ReportSyncStatus` — all managing pending/synced/sync_failed states. Changing the
   vocabulary means changing all four plus every raw query that names a value.
+- **The pull side skips a bad row too, not just the push side.** A patient report whose patient
+  hasn't landed on this device yet fails its FK on insert; `FetchRemoteDataUseCase.pullReports`
+  catches `SQLiteConstraintException` per row rather than letting it abort the rest of the page,
+  the same convention `upsertSessionReconcilingLabel` already used for sessions. The skipped row
+  is retried on the next pull once its patient exists locally — one unlinked patient must not
+  block every other report in the same account from downloading.
 
 ## Does not hit
 

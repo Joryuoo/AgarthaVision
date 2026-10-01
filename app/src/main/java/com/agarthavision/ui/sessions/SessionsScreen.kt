@@ -1,6 +1,5 @@
 package com.agarthavision.ui.sessions
 
-import android.content.Intent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,8 +29,12 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -83,6 +86,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Visibility
@@ -97,6 +101,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -111,27 +116,24 @@ fun SessionsScreen(
     val context = LocalContext.current
     val colors = AgarthaTheme.colors
     var showCreateDialog by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
+    val generatedSnackbarLabel = stringResource(R.string.patient_report_generated_snackbar)
+    val openActionLabel = stringResource(R.string.reports_open_pdf)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
-            when (event) {
-                is SessionsEvent.NavigateToCapture -> {
-                    showCreateDialog = false
-                    onNavigateToCapture(event.sessionId)
-                }
-                is SessionsEvent.NavigateToVerificationQueue -> {
-                    onNavigate(Screen.VerificationQueue.route)
-                }
-                is SessionsEvent.ShareExport -> {
-                    val sendIntent = Intent().apply {
-                        action = Intent.ACTION_SEND
-                        putExtra(Intent.EXTRA_TEXT, event.content)
-                        type = "text/plain"
-                    }
-                    val shareIntent = Intent.createChooser(sendIntent, null)
-                    context.startActivity(shareIntent)
-                }
-            }
+            handleSessionsEvent(
+                event = event,
+                context = context,
+                coroutineScope = coroutineScope,
+                snackbarHostState = snackbarHostState,
+                generatedSnackbarLabel = generatedSnackbarLabel,
+                openActionLabel = openActionLabel,
+                onNavigateToCapture = onNavigateToCapture,
+                onNavigate = onNavigate,
+                setShowCreateDialog = { showCreateDialog = it },
+            )
         }
     }
 
@@ -153,13 +155,14 @@ fun SessionsScreen(
                 // latter would have counted every session and said nothing.
                 AppBar(
                     onBack = onBack,
+                    onGenerateReportClick = viewModel::onOpenGenerateReport,
                 )
 
                 // Patient Identity Preview Header / Card
                 state.patient?.let { patient ->
                     PatientPreviewCard(
                         patient = patient,
-                        barangayName = state.barangayName,
+                        barangayAddress = state.barangayAddress,
                         counts = PatientPreviewCounts(
                             totalCount = state.totalCount,
                             unverifiedCount = state.unverifiedCount,
@@ -310,6 +313,11 @@ fun SessionsScreen(
                     }
                 }
             }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
         }
 
     if (showCreateDialog) {
@@ -326,6 +334,16 @@ fun SessionsScreen(
             onSubmit = { label ->
                 viewModel.onCreateSession(label)
             }
+        )
+    }
+
+    state.reportSheet?.let { sheet ->
+        PatientReportSheet(
+            sheet = sheet,
+            onDismiss = viewModel::onDismissReportSheet,
+            onDateRangeSelected = viewModel::onReportDateRangeSelected,
+            onToggleSession = viewModel::onToggleReportSession,
+            onGenerate = viewModel::onGeneratePatientReport,
         )
     }
 }
@@ -346,7 +364,7 @@ fun SessionsScreen(
  * Pattern matches `SessionDetailScreen.SessionDetailAppBar`.
  */
 @Composable
-private fun AppBar(onBack: () -> Unit) {
+private fun AppBar(onBack: () -> Unit, onGenerateReportClick: () -> Unit) {
     val colors = AgarthaTheme.colors
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -370,15 +388,22 @@ private fun AppBar(onBack: () -> Unit) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
+        IconButton(onClick = onGenerateReportClick) {
+            Icon(
+                imageVector = Icons.Outlined.Description,
+                contentDescription = stringResource(R.string.patient_report_generate_action),
+                tint = colors.textPrimary,
+            )
+        }
     }
 }
 
 /**
  * Patient identity preview card shown below the app bar.
  *
- * Establishes immediate clinical context (full name, age, sex, barangay) so the medtech
- * can verify they are reading smears for the correct patient without navigating back.
- * Persists while scrolling the session list below.
+ * Establishes immediate clinical context (full name, age, sex, barangay address) so the
+ * medtech can verify they are reading smears for the correct patient without navigating
+ * back. Persists while scrolling the session list below.
  */
 /** Counts + loading state for [PatientPreviewCard] — bundled since they always travel together. */
 private data class PatientPreviewCounts(
@@ -390,7 +415,7 @@ private data class PatientPreviewCounts(
 @Composable
 private fun PatientPreviewCard(
     patient: Patient,
-    barangayName: String?,
+    barangayAddress: String?,
     counts: PatientPreviewCounts,
     modifier: Modifier = Modifier,
 ) {
@@ -405,7 +430,7 @@ private fun PatientPreviewCard(
         null -> stringResource(R.string.patients_sex_unknown)
     }
     val ageSex = stringResource(R.string.patient_preview_age_sex, ageText, sexLabel)
-    val barangay = barangayName ?: patient.psgcBarangayCode
+    val barangay = barangayAddress ?: patient.psgcBarangayCode
 
     Column(
         modifier = modifier
@@ -468,7 +493,7 @@ private fun PatientPreviewCard(
                 lineHeight = 16.sp,
             ),
             color = colors.onBrandFill.copy(alpha = 0.9f),
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
         )
         if (counts.isLoading) {
@@ -890,8 +915,9 @@ private fun NewSessionSheet(
     }
 }
 
-private fun formatDate(millis: Long): String =
+internal fun formatDate(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
 private fun formatTime(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
+

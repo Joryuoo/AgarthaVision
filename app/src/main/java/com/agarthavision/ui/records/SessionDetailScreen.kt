@@ -138,10 +138,7 @@ fun SessionDetailScreen(
                         duration = SnackbarDuration.Long,
                     )
                     if (result == SnackbarResult.ActionPerformed) {
-                        shareError = when (event.format) {
-                            ExportFormat.PDF -> shareReportPdf(context, event.pdfPath)
-                            ExportFormat.CSV -> shareReportCsv(context, event.csvPath)
-                        }
+                        shareError = shareReportPdf(context, event.pdfPath)
                     }
                 }
 
@@ -153,10 +150,10 @@ fun SessionDetailScreen(
                 }
 
                 is SessionDetailEvent.ReportRestored -> {
-                    shareError = when {
-                        event.pdfPath != null -> viewReportPdf(context, event.pdfPath)
-                        event.csvPath != null -> viewReportCsv(context, event.csvPath)
-                        else -> R.string.report_share_file_gone
+                    shareError = if (event.pdfPath != null) {
+                        viewReportPdf(context, event.pdfPath)
+                    } else {
+                        R.string.report_share_file_gone
                     }
                 }
 
@@ -218,10 +215,10 @@ fun SessionDetailScreen(
             isGenerating = state.isGenerating,
             onGenerate = viewModel::generateReport,
             onOpenReport = { report ->
-                val result = when {
-                    report.pdfFilePath != null -> viewReportPdf(context, report.pdfFilePath)
-                    report.csvFilePath != null -> viewReportCsv(context, report.csvFilePath)
-                    else -> R.string.report_share_missing_path
+                val result = if (report.pdfFilePath != null) {
+                    viewReportPdf(context, report.pdfFilePath)
+                } else {
+                    R.string.report_share_missing_path
                 }
                 // A file this device has never had is the synced-from-elsewhere case, not a
                 // mistake to scold the medtech for. Fetch it instead of reporting it.
@@ -423,7 +420,7 @@ internal data class SessionDetailContentState(
     val totalReports: Int,
     val currentPage: Int,
     val isGenerating: Boolean,
-    val onGenerate: (ExportFormat) -> Unit,
+    val onGenerate: () -> Unit,
     val onOpenReport: (Report) -> Unit,
     val onPrevPage: () -> Unit,
     val onNextPage: () -> Unit,

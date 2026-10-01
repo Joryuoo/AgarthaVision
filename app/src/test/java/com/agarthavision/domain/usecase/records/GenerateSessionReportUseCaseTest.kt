@@ -3,26 +3,36 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.supabase.SyncReportUseCase
+import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
-import com.agarthavision.domain.model.SessionsCounts
-import com.agarthavision.domain.model.ReportFormat
+import com.agarthavision.domain.model.ReportPdfDocument
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.model.SessionsCounts
+import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.DetectionRepository
-import com.agarthavision.domain.model.ReportPdfDocument
+import com.agarthavision.domain.repository.PatientRepository
+import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
 import com.agarthavision.domain.repository.ReportPdfRenderer
 import com.agarthavision.domain.repository.ReportRepository
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
+import com.agarthavision.domain.sync.RecordingSyncScheduler
+import com.agarthavision.domain.usecase.patients.PatientSort
+import java.time.Instant
+import java.time.LocalDate
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -31,24 +41,22 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import com.agarthavision.domain.sync.RecordingSyncScheduler
-
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class GenerateSessionReportUseCaseTest {
     @Test
-    fun `generates a csv report, writes only the csv, and persists metadata`() = runTest {
+    fun `generates a pdf report and persists metadata`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
         val useCase = standardUseCase(reportRepository, reportFileStore)
 
-        val result = useCase("session-1", ReportFormat.CSV)
+        val result = useCase("session-1")
 
         assertTrue(result.isSuccess)
         val report = result.getOrThrow()
-        assertEquals(report.id, reportFileStore.lastReportId)
+        assertEquals(report.id, reportFileStore.lastPdfReportId)
         assertEquals(report.id, reportRepository.lastInserted?.id)
         assertEquals("session-1", report.sessionId)
         assertEquals("user-1", report.userId)
@@ -67,84 +75,155 @@ class GenerateSessionReportUseCaseTest {
         val trichuris = report.lpfPerSpecies["Trichuris trichiura"]!!
         assertEquals(0, trichuris.min)
         assertEquals(1, trichuris.max)
-        assertEquals("/Documents/AgarthaVision/report.csv", report.csvFilePath)
-        // CSV-format report carries no PDF, and the PDF renderer was never invoked.
-        assertNull(report.pdfFilePath)
-        assertNull(reportFileStore.lastPdfReportId)
+        assertEquals("/Documents/AgarthaVision/report.pdf", report.pdfFilePath)
+        // PDF-only: no report carries a CSV any more.
+        assertNull(report.csvFilePath)
         assertEquals(ReportSyncStatus.PENDING, report.supabaseStatus)
         assertNotNull(report.generatedAt)
-        assertTrue(reportFileStore.lastCsv.contains("# report_id: ${report.id}"))
-    }
-
-    @Test
-    fun `generates a pdf report and writes only the pdf`() = runTest {
-        val reportRepository = FakeReportRepository()
-        val reportFileStore = FakeReportFileStore()
-        val useCase = standardUseCase(reportRepository, reportFileStore)
-
-        val result = useCase("session-1", ReportFormat.PDF)
-
-        assertTrue(result.isSuccess)
-        val report = result.getOrThrow()
-        assertEquals("/Documents/AgarthaVision/report.pdf", report.pdfFilePath)
-        // PDF-format report carries no CSV, and the CSV builder never wrote anything.
-        assertNull(report.csvFilePath)
-        assertEquals("", reportFileStore.lastCsv)
-        assertEquals(report.id, reportFileStore.lastPdfReportId)
         assertTrue(FAKE_PDF_BYTES.contentEquals(reportFileStore.lastPdfBytes))
     }
 
     @Test
-    fun `carries the verified species into the generated csv without re-entry`() = runTest {
+    fun `carries patient age, sex, barangay label and medtech name into the pdf header`() = runTest {
         val reportRepository = FakeReportRepository()
         val reportFileStore = FakeReportFileStore()
-        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
-        val findings = listOf(
-            SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2)
+        val renderer = FakeReportPdfRenderer()
+        val patient = patient(
+            lastname = "Cruz",
+            firstname = "Gerald",
+            sex = Sex.MALE,
+            birthdate = LocalDate.of(2000, 1, 1),
+            psgcBarangayCode = "0723017001",
         )
-        org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
-            .thenReturn(findings)
+        val useCase = standardUseCase(
+            reportRepository,
+            reportFileStore,
+            renderer = renderer,
+            patient = patient,
+            barangay = barangay(),
+            identity = LocalIdentity(userId = "user-1", email = "medtech@example.com", displayName = "Dr. Reyes"),
+        )
 
+        val result = useCase("session-1")
+
+        assertTrue(result.isSuccess)
+        val header = renderer.lastDocument!!.header
+        assertEquals(patient.displayName, header.patientName)
+        assertEquals(Sex.MALE, header.patientSex)
+        assertEquals(patient.ageYears(header.generatedAt), header.patientAgeYears)
+        assertEquals("Lahug, City of Cebu", header.barangayLabel)
+        assertEquals("Dr. Reyes", header.generatedByName)
+        // The same instant used for the report row's timestamp is the one age was computed
+        // from — not a beat apart, which would let the printed age and "Generated at" disagree.
+        assertEquals(reportRepository.lastInserted?.generatedAt, header.generatedAt)
+    }
+
+    @Test
+    fun `falls back to email then user id when display name is blank`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val useCaseBlankName = standardUseCase(
+            reportRepository,
+            reportFileStore,
+            renderer = renderer,
+            identity = LocalIdentity(userId = "user-1", email = "medtech@example.com", displayName = " "),
+        )
+
+        useCaseBlankName("session-1")
+        assertEquals("medtech@example.com", renderer.lastDocument!!.header.generatedByName)
+
+        val useCaseNoIdentity = standardUseCase(
+            reportRepository,
+            reportFileStore,
+            renderer = renderer,
+            identity = null,
+        )
+        useCaseNoIdentity("session-1")
+        assertEquals("user-1", renderer.lastDocument!!.header.generatedByName)
+    }
+
+    @Test
+    fun `an unknown psgc code prints the raw code`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val patient = patient(psgcBarangayCode = "9999999999")
+        val useCase = standardUseCase(
+            reportRepository,
+            reportFileStore,
+            renderer = renderer,
+            patient = patient,
+            barangay = null,
+        )
+
+        useCase("session-1")
+
+        assertEquals("9999999999", renderer.lastDocument!!.header.barangayLabel)
+    }
+
+    @Test
+    fun `a null sex prints without failing`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val patient = patient(sex = null)
+        val useCase = standardUseCase(reportRepository, reportFileStore, renderer = renderer, patient = patient)
+
+        useCase("session-1")
+
+        assertNull(renderer.lastDocument!!.header.patientSex)
+    }
+
+    @Test
+    fun `a codenamed patient prints the codename`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val renderer = FakeReportPdfRenderer()
+        val patient = patient(lastname = "ALPHA-M24", firstname = "")
+        val useCase = standardUseCase(reportRepository, reportFileStore, renderer = renderer, patient = patient)
+
+        useCase("session-1")
+
+        assertEquals("ALPHA-M24", renderer.lastDocument!!.header.patientName)
+    }
+
+    @Test
+    fun `fails and writes nothing when the session's patient is not on this device`() = runTest {
+        val reportRepository = FakeReportRepository()
+        val reportFileStore = FakeReportFileStore()
+        val syncScheduler = RecordingSyncScheduler()
         val useCase = GenerateSessionReportUseCase(
             authRepository = ReportAuthRepository(userId = "user-1"),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
-                samples = listOf(
-                    reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1"),
-                ),
+                samples = listOf(reportSample(id = "sample-1", sessionId = "session-1", userId = "user-1")),
             ),
             detectionRepository = ReportDetectionRepository(
-                detectionsBySample = mapOf(
-                    "sample-1" to listOf(
-                        reportDetection(
-                            sampleId = "sample-1",
-                            classLabel = "Ascaris",
-                            confidence = 0.91f,
-                            expertClass = "Ascaris lumbricoides",
-                        ),
-                    ),
-                ),
-                eggCounts = listOf(EggCount("Ascaris lumbricoides", 2)),
+                detectionsBySample = emptyMap(),
+                eggCounts = emptyList(),
             ),
-            findingDao = findingDao,
+            findingDao = mockFindingDao(emptyList()),
+            patientRepository = FakePatientRepository(patient = null),
+            psgcRepository = FakePsgcRepository(barangay = null),
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
-            reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
-            syncScheduler = RecordingSyncScheduler(),
+            syncScheduler = syncScheduler,
         )
 
-        val result = useCase("session-1", ReportFormat.CSV)
+        val result = useCase("session-1")
 
-        assertTrue(result.isSuccess)
-        val dataRow = reportFileStore.lastCsv
-            .lines()
-            .firstOrNull { it.startsWith("sample-1,") }
-        assertNotNull(dataRow)
-        val fields = dataRow!!.split(",")
-        assertEquals("Ascaris lumbricoides", fields[5])
+        assertTrue(result.isFailure)
+        assertEquals(
+            GenerateSessionReportUseCase.PATIENT_NOT_ON_DEVICE_MESSAGE,
+            result.exceptionOrNull()?.message,
+        )
+        assertNull(reportRepository.lastInserted)
+        assertNull(reportFileStore.lastPdfReportId)
+        assertEquals(0, syncScheduler.requests)
     }
 
     @Test
@@ -154,17 +233,18 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = null),
             sampleRepository = ReportSampleRepository(samples = emptyList()),
             detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
-            findingDao = org.mockito.kotlin.mock(),
+            findingDao = mockFindingDao(emptyList()),
+            patientRepository = FakePatientRepository(patient = patient()),
+            psgcRepository = FakePsgcRepository(barangay = barangay()),
             reportRepository = FakeReportRepository(),
             reportFileStore = FakeReportFileStore(),
-            reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
             syncScheduler = RecordingSyncScheduler(),
         )
 
-        val result = useCase("session-1", ReportFormat.PDF)
+        val result = useCase("session-1")
 
         assertTrue(result.isFailure)
     }
@@ -181,17 +261,18 @@ class GenerateSessionReportUseCaseTest {
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(samples = emptyList()),
             detectionRepository = ReportDetectionRepository(detectionsBySample = emptyMap(), eggCounts = emptyList()),
-            findingDao = org.mockito.kotlin.mock(),
+            findingDao = mockFindingDao(emptyList()),
+            patientRepository = FakePatientRepository(patient = patient()),
+            psgcRepository = FakePsgcRepository(barangay = barangay()),
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
-            reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
             reportPdfRenderer = FakeReportPdfRenderer(),
             syncReportUseCase = noOpSyncReportUseCase(),
             syncScheduler = syncScheduler,
         )
 
-        val result = useCase("session-1", ReportFormat.PDF)
+        val result = useCase("session-1")
 
         assertTrue(result.isFailure)
         assertEquals(
@@ -200,27 +281,24 @@ class GenerateSessionReportUseCaseTest {
         )
         assertNull(reportRepository.lastInserted)
         assertNull(reportFileStore.lastPdfReportId)
-        assertNull(reportFileStore.lastReportId)
         assertEquals(0, syncScheduler.requests)
     }
 
+    @Suppress("LongParameterList")
     private fun standardUseCase(
         reportRepository: FakeReportRepository,
         reportFileStore: FakeReportFileStore,
+        renderer: ReportPdfRenderer = FakeReportPdfRenderer(),
+        patient: Patient = patient(),
+        barangay: PsgcBarangay? = barangay(),
+        identity: LocalIdentity? = LocalIdentity(userId = "user-1", email = "medtech@example.com"),
     ): GenerateSessionReportUseCase {
-        val findingDao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
-        // Default mock behavior for 2 samples, one with Ascaris(2) + Trichuris(1), one clean.
-        // Mean Ascaris = (2+0)/2 = 1.0, Mean Trichuris = (1+0)/2 = 0.5
         val findings = listOf(
             SampleSpeciesFindingEntity("f1", "sample-1", "Ascaris lumbricoides", null, 2),
             SampleSpeciesFindingEntity("f2", "sample-1", "Trichuris trichiura", null, 1),
         )
-        kotlinx.coroutines.runBlocking {
-            org.mockito.kotlin.whenever(findingDao.getFindingsForSession("session-1", "user-1"))
-                .thenReturn(findings)
-        }
         return GenerateSessionReportUseCase(
-            authRepository = ReportAuthRepository(userId = "user-1"),
+            authRepository = ReportAuthRepository(userId = "user-1", identity = identity),
             sessionRepository = ReportSessionRepository(session = reportSession("session-1", "user-1")),
             sampleRepository = ReportSampleRepository(
                 samples = listOf(
@@ -237,15 +315,25 @@ class GenerateSessionReportUseCaseTest {
                     EggCount("Trichuris trichiura", 1),
                 ),
             ),
-            findingDao = findingDao,
+            findingDao = mockFindingDao(findings),
+            patientRepository = FakePatientRepository(patient = patient),
+            psgcRepository = FakePsgcRepository(barangay = barangay),
             reportRepository = reportRepository,
             reportFileStore = reportFileStore,
-            reportCsvBuilder = ReportCsvBuilder(),
             reportPdfBuilder = ReportPdfBuilder(),
-            reportPdfRenderer = FakeReportPdfRenderer(),
+            reportPdfRenderer = renderer,
             syncReportUseCase = noOpSyncReportUseCase(),
             syncScheduler = RecordingSyncScheduler(),
         )
+    }
+
+    private fun mockFindingDao(findings: List<SampleSpeciesFindingEntity>): SampleSpeciesFindingDao {
+        val dao: SampleSpeciesFindingDao = org.mockito.kotlin.mock()
+        kotlinx.coroutines.runBlocking {
+            org.mockito.kotlin.whenever(dao.getFindingsForSession("session-1", "user-1"))
+                .thenReturn(findings)
+        }
+        return dao
     }
 }
 
@@ -257,12 +345,19 @@ private fun isVisible(rowUserId: String?, callerId: String?) =
 private val FAKE_PDF_BYTES = byteArrayOf('%'.code.toByte(), 'P'.code.toByte(), 'D'.code.toByte(), 'F'.code.toByte())
 
 private class FakeReportPdfRenderer : ReportPdfRenderer {
-    override suspend fun render(document: ReportPdfDocument): ByteArray = FAKE_PDF_BYTES
+    var lastDocument: ReportPdfDocument? = null
+
+    override suspend fun render(document: ReportPdfDocument): ByteArray {
+        lastDocument = document
+        return FAKE_PDF_BYTES
+    }
 }
 
-private class ReportAuthRepository(private val userId: String?) : AuthRepository {
-    override fun observeLocalIdentity(): Flow<com.agarthavision.domain.model.LocalIdentity?> =
-        flowOf(userId?.let { com.agarthavision.domain.model.LocalIdentity(userId = it, email = "user@example.com") })
+private class ReportAuthRepository(
+    private val userId: String?,
+    private val identity: LocalIdentity? = userId?.let { LocalIdentity(userId = it, email = "user@example.com") },
+) : AuthRepository {
+    override fun observeLocalIdentity(): Flow<LocalIdentity?> = flowOf(identity)
     override suspend fun currentLocalUserId(): String? = userId
     override suspend fun isAuthenticated(): Boolean = userId != null
     override suspend fun signIn(email: String, password: String) = Unit
@@ -421,16 +516,8 @@ private class FakeReportRepository : ReportRepository {
 }
 
 private class FakeReportFileStore : ReportFileStore {
-    var lastReportId: String? = null
-    var lastCsv: String = ""
     var lastPdfReportId: String? = null
     var lastPdfBytes: ByteArray = ByteArray(0)
-
-    override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String {
-        lastReportId = reportId
-        lastCsv = csv
-        return "/Documents/AgarthaVision/report.csv"
-    }
 
     override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String {
         lastPdfReportId = reportId
@@ -438,12 +525,102 @@ private class FakeReportFileStore : ReportFileStore {
         return "/Documents/AgarthaVision/report.pdf"
     }
 
+    override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String {
+        lastPdfReportId = reportId
+        lastPdfBytes = pdf
+        return "/Documents/AgarthaVision/patient-report.pdf"
+    }
+
     override suspend fun readBytes(path: String): ByteArray? = when (path) {
         "/Documents/AgarthaVision/report.pdf" -> lastPdfBytes
-        "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
+        "/Documents/AgarthaVision/patient-report.pdf" -> lastPdfBytes
         else -> null
     }
 }
+
+private class FakePatientRepository(private val patient: Patient?) : PatientRepository {
+    override fun observePatients(
+        userId: String,
+        query: String,
+        limit: Int,
+        sort: PatientSort,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
+    ): Flow<List<Patient>> = flowOf(patient?.let(::listOf).orEmpty())
+
+    override fun observePatientCount(
+        userId: String,
+        query: String,
+        sex: Sex?,
+        barangayCode: String?,
+        minBirthdate: Long?,
+        maxBirthdate: Long?,
+        sort: PatientSort,
+        todayStartMillis: Long?,
+        sevenDaysAgoMillis: Long?,
+    ): Flow<Int> = flowOf(if (patient != null) 1 else 0)
+
+    override suspend fun getPatientById(patientId: String): Patient? = patient?.takeIf { it.id == patientId }
+
+    override fun observePatientById(patientId: String): Flow<Patient?> = flowOf(patient)
+
+    override suspend fun insert(patient: Patient) = Unit
+
+    override suspend fun update(patient: Patient) = Unit
+
+    override suspend fun findDuplicates(
+        userId: String,
+        lastname: String,
+        firstname: String,
+        middleName: String?,
+        birthdate: LocalDate,
+        sex: Sex,
+        excludingId: String,
+    ): List<Patient> = emptyList()
+
+    override suspend fun getExistingCodenamesByPrefix(userId: String, prefix: String): List<String> = emptyList()
+
+    override fun observeAddedActivity(userId: String, limit: Int): Flow<List<ActivityItem.PatientAdded>> =
+        flowOf(emptyList())
+}
+
+private class FakePsgcRepository(private val barangay: PsgcBarangay?) : PsgcRepository {
+    override suspend fun searchBarangays(query: String, limit: Int): List<PsgcBarangay> = emptyList()
+    override suspend fun getBarangay(code: String): PsgcBarangay? = barangay
+}
+
+@Suppress("LongParameterList") // Every parameter is an independent test fixture field; a
+// wrapper object would add ceremony for a private test helper with a handful of call sites.
+private fun patient(
+    id: String = "patient-1",
+    lastname: String = "Cruz",
+    firstname: String = "Gerald",
+    sex: Sex? = Sex.MALE,
+    birthdate: LocalDate = LocalDate.of(2000, 1, 1),
+    psgcBarangayCode: String = "0723017001",
+): Patient = Patient(
+    id = id,
+    lastname = lastname,
+    firstname = firstname,
+    sex = sex,
+    birthdate = birthdate,
+    psgcBarangayCode = psgcBarangayCode,
+    createdBy = "user-1",
+    createdAt = Instant.ofEpochMilli(0),
+    updatedAt = Instant.ofEpochMilli(0),
+)
+
+private fun barangay(): PsgcBarangay = PsgcBarangay(
+    code = "0723017001",
+    name = "Lahug",
+    cityMuniName = "City of Cebu",
+    provinceName = null,
+    regionName = "Region VII (Central Visayas)",
+)
 
 private fun reportSession(sessionId: String, userId: String): Session =
     Session(
@@ -498,6 +675,7 @@ private fun noOpSyncReportUseCase(): SyncReportUseCase =
 
 private class NoOpReportDao : com.agarthavision.data.local.dao.ReportDao {
     override suspend fun insertReport(report: com.agarthavision.data.local.entity.ReportEntity) = Unit
+    override suspend fun countReportsForPatient(patientId: String): Int = 0
     override suspend fun updateFilePaths(
         reportId: String,
         pdfFilePath: String?,

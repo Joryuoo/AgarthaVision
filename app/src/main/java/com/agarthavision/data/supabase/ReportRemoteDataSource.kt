@@ -20,9 +20,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * Writes persisted session reports to Supabase Postgres. Row-only sync — the
- * CSV file stays local on the device; only the metadata + aggregate stats are
- * mirrored to `public.reports`.
+ * Writes persisted session reports to Supabase Postgres. Metadata + aggregate stats are mirrored
+ * to `public.reports`; the PDF itself is uploaded separately to the `reports` bucket (see
+ * [uploadReportFile]). `csv_file_path`/`CSV_EXTENSION` are gone from generation (PDF-only
+ * reports); `csvFilePath` stays only as a legacy column for reports generated before this change.
  *
  * **`epg_per_species` is gone from both sides,** and `lpf_per_species` took its place on
  * both at once. `0001_init.sql` declares `lpf_per_species jsonb not null default '{}'` and
@@ -95,9 +96,14 @@ open class ReportRemoteDataSource @Inject constructor(
         val lpf: Map<String, LpfDensity> = runCatching {
             gson.fromJson<Map<String, LpfDensity>>(lpfPerSpeciesJson, stringLpfDensityMapType)
         }.getOrNull().orEmpty()
+        val sessionIds: List<String>? = runCatching {
+            sessionIdsJson?.let { gson.fromJson<List<String>>(it, stringListType) }
+        }.getOrNull()
         return ReportInsertRow(
             id = reportId,
             sessionId = sessionId,
+            patientId = patientId,
+            sessionIds = sessionIds,
             userId = userId,
             reportType = reportType,
             generatedAt = Instant.ofEpochMilli(generatedAt).toString(),
@@ -138,7 +144,11 @@ open class ReportRemoteDataSource @Inject constructor(
         @SerialName("id")
         val id: String,
         @SerialName("session_id")
-        val sessionId: String,
+        val sessionId: String?,
+        @SerialName("patient_id")
+        val patientId: String? = null,
+        @SerialName("session_ids")
+        val sessionIds: List<String>? = null,
         @SerialName("user_id")
         val userId: String,
         @SerialName("report_type")
@@ -164,7 +174,9 @@ open class ReportRemoteDataSource @Inject constructor(
     @Serializable
     private data class ReportRow(
         @SerialName("id") val id: String,
-        @SerialName("session_id") val sessionId: String,
+        @SerialName("session_id") val sessionId: String? = null,
+        @SerialName("patient_id") val patientId: String? = null,
+        @SerialName("session_ids") val sessionIds: List<String>? = null,
         @SerialName("user_id") val userId: String,
         @SerialName("report_type") val reportType: String,
         @SerialName("generated_at") val generatedAt: String,
@@ -193,6 +205,8 @@ open class ReportRemoteDataSource @Inject constructor(
         return ReportEntity(
             reportId = id,
             sessionId = sessionId,
+            patientId = patientId,
+            sessionIdsJson = sessionIds?.let { gson.toJson(it) },
             userId = userId,
             reportType = reportType,
             generatedAt = generatedAtMs,
@@ -213,9 +227,6 @@ open class ReportRemoteDataSource @Inject constructor(
 
         /** File extension for a report PDF, as used by [objectPathFor]. */
         const val PDF_EXTENSION = "pdf"
-
-        /** File extension for a report CSV, as used by [objectPathFor]. */
-        const val CSV_EXTENSION = "csv"
 
         /**
          * The object path a report's file occupies: `{userId}/{reportId}.{extension}`.

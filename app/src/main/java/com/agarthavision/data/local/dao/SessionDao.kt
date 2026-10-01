@@ -128,6 +128,20 @@ interface SessionDao {
     suspend fun countSessionsForPatient(patientId: String): Int
 
     /**
+     * All of [userId]'s sessions for [patientId], oldest first — the candidate pool for a
+     * patient report: a date range and/or a session-id subset are applied above this, in
+     * [com.agarthavision.domain.usecase.records.resolvePatientReportSessions].
+     */
+    @Query(
+        """
+        SELECT * FROM sessions
+        WHERE patient_id = :patientId AND user_id = :userId
+        ORDER BY started_at ASC
+        """
+    )
+    suspend fun getSessionsForPatient(patientId: String, userId: String): List<SessionEntity>
+
+    /**
      * Counts how many sessions for [patientId] already carry [label], excluding
      * [excludingSessionId] so an in-place rename does not flag itself.
      *

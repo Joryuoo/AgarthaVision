@@ -37,26 +37,36 @@ interface PsgcBarangayDao {
     suspend fun getByCode(code: String): PsgcBarangayEntity?
 
     /**
-     * Barangays whose [PsgcBarangayEntity.searchText] contains **every** term, ranked by
-     * how closely the `name` column matches the joined query, then alphabetical.
+     * Barangays whose [PsgcBarangayEntity.searchText] contains **every** term in [terms],
+     * ranked by how closely the `name` column matches the joined [nameTerms], then
+     * alphabetical.
      *
-     * [terms] must come from [com.agarthavision.data.local.psgc.PsgcSearchQuery.terms],
-     * which folds case and escapes the `LIKE` wildcards. Returns nothing for no terms
+     * [terms] and [nameTerms] must come from
+     * [com.agarthavision.data.local.psgc.PsgcSearchQuery.parse], which folds case and
+     * escapes the `LIKE` wildcards. [nameTerms] defaults to [terms] — the no-comma case —
+     * and drives ranking alone when the caller typed a comma, so "lahug, city of cebu"
+     * ranks by "lahug" rather than the full, diluted phrase. Returns nothing for no terms
      * rather than the whole country.
      *
      * Ranking tiers (ORDER BY CASE on `name`):
-     *   0 – exact name match (`lower(name) == joined terms`)
-     *   1 – name starts with the joined terms
-     *   2 – name contains the joined terms as a contiguous substring
-     *   3 – every individual term appears somewhere in name (any order/position)
+     *   0 – exact name match (`lower(name) == joined nameTerms`)
+     *   1 – name starts with the joined nameTerms
+     *   2 – name contains the joined nameTerms as a contiguous substring
+     *   3 – every individual nameTerm appears somewhere in name (any order/position)
      *   4 – everything else (still included via the WHERE filter)
      *
      * A full 42k-row scan, measured in single-digit milliseconds, which is why
      * [PsgcBarangayEntity] carries no index: a leading-wildcard `LIKE` cannot use one.
      */
-    suspend fun search(terms: List<String>, limit: Int): List<PsgcBarangayEntity> {
+    suspend fun search(
+        terms: List<String>,
+        limit: Int,
+        nameTerms: List<String> = terms,
+    ): List<PsgcBarangayEntity> {
         if (terms.isEmpty()) return emptyList()
-        return searchRaw(psgcSearchQuery(terms = terms, limit = limit))
+        return searchRaw(
+            psgcSearchQuery(terms = terms, nameTerms = nameTerms.ifEmpty { terms }, limit = limit),
+        )
     }
 
     /**
@@ -70,31 +80,36 @@ interface PsgcBarangayDao {
 private const val TERM_PREDICATE = """search_text LIKE '%' || ? || '%' ESCAPE '\'"""
 
 /**
- * Builds the statement for [PsgcBarangayDao.search]: one `LIKE` per term, ANDed, ranked
- * by how closely the row's `name` column matches the joined query (5-tier CASE).
+ * Builds the statement for [PsgcBarangayDao.search]: one `LIKE` per [terms] entry, ANDed,
+ * ranked by how closely the row's `name` column matches the joined [nameTerms] (5-tier
+ * CASE).
  *
  * A file-private function rather than a DAO member because Room only processes annotated
  * methods, and an interface cannot hold a private companion.
  */
-private fun psgcSearchQuery(terms: List<String>, limit: Int): SupportSQLiteQuery {
+private fun psgcSearchQuery(
+    terms: List<String>,
+    nameTerms: List<String>,
+    limit: Int,
+): SupportSQLiteQuery {
     val where = terms.joinToString(separator = " AND ") { TERM_PREDICATE }
-    // Tier 3: every individual term must appear in name. Generates one LIKE predicate
+    // Tier 3: every individual nameTerm must appear in name. Generates one LIKE predicate
     // per term so the WHEN clause works for any number of search words.
-    val tier3When = terms.joinToString(separator = " AND ") {
+    val tier3When = nameTerms.joinToString(separator = " AND ") {
         """lower(name) LIKE '%' || ? || '%' ESCAPE '\'"""
     }
-    val joinedTerms = terms.joinToString(" ")
+    val joinedName = nameTerms.joinToString(" ")
     // Bind-argument order must mirror the positional ? in the SQL string:
     //   1. WHERE-clause: one bind per term
-    //   2. ORDER BY tier 0 (exact), tier 1 (starts-with), tier 2 (contains): joinedTerms x3
-    //   3. ORDER BY tier 3: one bind per term again
+    //   2. ORDER BY tier 0 (exact), tier 1 (starts-with), tier 2 (contains): joinedName x3
+    //   3. ORDER BY tier 3: one bind per nameTerm again
     //   4. LIMIT
     val args = buildList<Any> {
         addAll(terms)       // WHERE
-        add(joinedTerms)    // tier 0
-        add(joinedTerms)    // tier 1
-        add(joinedTerms)    // tier 2
-        addAll(terms)       // tier 3
+        add(joinedName)     // tier 0
+        add(joinedName)     // tier 1
+        add(joinedName)     // tier 2
+        addAll(nameTerms)   // tier 3
         add(limit)
     }
     return SimpleSQLiteQuery(

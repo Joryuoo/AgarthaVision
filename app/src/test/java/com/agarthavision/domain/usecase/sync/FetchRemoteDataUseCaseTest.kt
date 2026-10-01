@@ -1113,6 +1113,68 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
+    fun `an unrecognised report_type is skipped rather than stored or crashing`() = runTest {
+        // A server-side type this build doesn't know how to render yet (e.g. a future
+        // "administrative" type, or a bad row) must be dropped, not stored under a guessed
+        // type nor left to crash a later decode.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val unknownTyped = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(unknownTyped))
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(reportDao, never()).insertReport(any())
+        assertEquals(0, summary.reportsFetched)
+        // Skipping an unrecognised row is not itself a failure of the reports pull.
+        assertFalse(FetchType.REPORTS in summary.failed)
+    }
+
+    @Test
+    fun `a page mixing a known and an unrecognised report_type only stores the known one`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val known = fakeReport("rep-known", "sess-1")
+        val unknown = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(known, unknown))
+        whenever(reportDao.getReportById("rep-known")).thenReturn(null)
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        assertEquals(1, summary.reportsFetched)
+        val written = argumentCaptor<ReportEntity>()
+        verify(reportDao, times(1)).insertReport(written.capture())
+        assertEquals("rep-known", written.firstValue.reportId)
+    }
+
+    @Test
+    fun `a patient report whose patient is not on device is skipped, the rest of the page still lands`() = runTest {
+        // The patient FK fails for one row (its patient hasn't been pulled down yet, or this
+        // account can't see it). That is one bad row, not a reason to drop the whole page.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val orphanPatientReport = fakeReport("rep-orphan", sessionId = "sess-1").copy(
+            patientId = "patient-missing",
+            sessionId = null,
+        )
+        val ok = fakeReport("rep-ok", "sess-1")
+        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(orphanPatientReport, ok))
+        whenever(reportDao.getReportById("rep-orphan")).thenReturn(null)
+        whenever(reportDao.getReportById("rep-ok")).thenReturn(null)
+        whenever(reportDao.insertReport(orphanPatientReport)).thenAnswer {
+            throw android.database.sqlite.SQLiteConstraintException("FOREIGN KEY constraint failed")
+        }
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(reportDao).insertReport(ok)
+        assertEquals(1, summary.reportsFetched)
+        // One row failing its FK is not the whole reports pull failing (E2) — the account's
+        // patient likely just hasn't landed on this device yet, and the next pull retries it.
+        assertFalse(FetchType.REPORTS in summary.failed)
+    }
+
+    @Test
     fun `a report this device has never held takes the remote paths`() = runTest {
         setupOnlineSignedIn()
         stubEmptyPulls()

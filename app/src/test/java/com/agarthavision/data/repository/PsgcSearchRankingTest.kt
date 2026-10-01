@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
 import com.agarthavision.data.local.dao.PsgcBarangayDao
 import com.agarthavision.data.local.entity.PsgcBarangayEntity
+import com.agarthavision.data.local.psgc.PsgcSearchQuery
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -303,6 +304,132 @@ class PsgcSearchRankingTest {
         val results = dao.search(terms = listOf("barangay"), limit = 5)
 
         assertEquals("limit should cap results to 5", 5, results.size)
+    }
+
+    // -------------------------------------------------------------------------
+    // Comma-separated search: a comma narrows name ranking to the segment before
+    // it, while every segment still has to match somewhere in the row.
+    // -------------------------------------------------------------------------
+
+    @Test
+    fun `comma segment after the name narrows to the matching province`() = runTest {
+        dao.insertAll(
+            listOf(
+                barangay(
+                    code = "1600000001",
+                    name = "Poblacion",
+                    cityMuniName = "Gapan City",
+                    provinceName = "Nueva Ecija",
+                ),
+                barangay(
+                    code = "1600000002",
+                    name = "Poblacion",
+                    cityMuniName = "Daet",
+                    provinceName = "Camarines Norte",
+                ),
+            ),
+        )
+
+        val parsed = PsgcSearchQuery.parse("poblacion, nueva ecija")
+        val results = dao.search(terms = parsed.terms, limit = 80, nameTerms = parsed.nameTerms)
+
+        assertEquals(
+            "only the row whose province matches 'nueva ecija' should be returned",
+            1,
+            results.size,
+        )
+        assertEquals("Nueva Ecija", results[0].provinceName)
+    }
+
+    @Test
+    fun `comma ranks by the name segment ahead of what follows the comma`() = runTest {
+        dao.insertAll(
+            listOf(
+                // Query "san isidro, san jose": name contains "san jose" only via search_text
+                // (city/province), so this row must rank behind the name match below.
+                barangay(
+                    code = "1700000001",
+                    name = "San Jose",
+                    cityMuniName = "San Isidro",
+                    provinceName = "Nueva Ecija",
+                ),
+                barangay(
+                    code = "1700000002",
+                    name = "San Isidro",
+                    cityMuniName = "San Jose City",
+                    provinceName = "Nueva Ecija",
+                ),
+            ),
+        )
+
+        val parsed = PsgcSearchQuery.parse("san isidro, san jose")
+        val results = dao.search(terms = parsed.terms, limit = 80, nameTerms = parsed.nameTerms)
+
+        assertEquals(2, results.size)
+        assertEquals(
+            "'San Isidro' (exact name match on the pre-comma segment) must rank first",
+            "San Isidro",
+            results[0].name,
+        )
+        assertEquals("San Jose", results[1].name)
+    }
+
+    @Test
+    fun `comma in the barangay name itself is found by a matching comma query`() = runTest {
+        dao.insertAll(
+            listOf(
+                barangay(
+                    code = "1800000001",
+                    name = "Bgy. No. 42, Apaya",
+                    cityMuniName = "Tuguegarao City",
+                    provinceName = "Cagayan",
+                ),
+            ),
+        )
+
+        val parsed = PsgcSearchQuery.parse("bgy. no. 42, apaya")
+        val results = dao.search(terms = parsed.terms, limit = 80, nameTerms = parsed.nameTerms)
+
+        assertEquals(1, results.size)
+        assertEquals("Bgy. No. 42, Apaya", results[0].name)
+    }
+
+    @Test
+    fun `lahug cebu regression still narrows to one barangay`() = runTest {
+        dao.insertAll(
+            listOf(
+                barangay(
+                    code = "1900000001",
+                    name = "Lahug",
+                    cityMuniName = "City of Cebu",
+                    provinceName = null,
+                ),
+                barangay(
+                    code = "1900000002",
+                    name = "Poblacion",
+                    cityMuniName = "Cebu City",
+                    provinceName = "Cebu",
+                ),
+            ),
+        )
+
+        val results = dao.search(terms = listOf("lahug", "cebu"), limit = 80)
+
+        assertEquals(1, results.size)
+        assertEquals("Lahug", results[0].name)
+    }
+
+    @Test
+    fun `search with an explicit empty name terms list does not throw`() = runTest {
+        dao.insertAll(
+            listOf(
+                barangay("9100000001", "Xylophone", "City of Test", "Test Province"),
+            ),
+        )
+
+        val results = dao.search(listOf("x"), 80, emptyList())
+
+        assertEquals(1, results.size)
     }
 
     // -------------------------------------------------------------------------
