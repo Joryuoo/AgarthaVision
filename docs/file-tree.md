@@ -158,10 +158,10 @@ set does to it. The decision behind it is D4 and the migration convention in the
 policies. It never `ALTER`s or `DROP`s a table, column, function or policy this repository owns.
 A change to the shape or the policies of an app-owned table belongs in this folder instead.
 
-**What it adds**, as of the console's open branches (`feat/organizations` `219d9cc4`,
-`feat/lab-scoping` `ce0dd6cb`, `feat/audit-trail` `4e5390d4`, 2026-10-01). None of these were on
-the console's `staging` yet, so the file numbers can still change before they merge. On
-2026-10-01 none of the set had been applied to `agarthavision`.
+**What it adds**, as of the console's `staging` (`cb8246c`, 2026-10-01), which holds the same
+SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scoping` `ce0dd6cb`,
+`feat/audit-trail` `4e5390d4`). All three files were applied to `agarthavision` on 2026-10-01;
+`admin/0001`'s backfill is logged in `admin_audit_log` at 14:17 UTC.
 
 | Admin file | Adds |
 |---|---|
@@ -213,8 +213,9 @@ the console's `staging` yet, so the file numbers can still change before they me
   (`SampleDao.kt::getCacheableSamples`), still scope through the signed-in user's own
   `patient_users` rows, so most of it is stored without being shown and its frames are not
   fetched, but the rows are on the device.
-  Keeping an org admin's phone to their own patients is not done yet, and has to land before
-  `admin/0002` is applied. A super admin got every row the same way, through the `is_admin()`
+  Keeping an org admin's phone to their own patients is not done yet. It was meant to land
+  before `admin/0002` was applied, and `admin/0002` is now live, so this is the case today for
+  any org admin who signs in on a phone. A super admin got every row the same way, through the `is_admin()`
   branch of `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), until
   `0013_super_admin_reads_deidentified.sql:38` removed it. They still read every patient link
   (`patient_users_select_own`, `0001_init.sql:396-398`), but patients, sessions and samples only

@@ -31,6 +31,10 @@ Verify any entry with `git log --oneline --reverse`.
   rows, patient links, sample frames and `barangay_prevalence()`. The console's
   `bun run test:db` covers each, against both files.
 - `patient-pii-position.md` Position 6 and C10 say what the policies now do.
+- **The console's set is live, so the entry below is out of date.** `admin/0001`–`0003`
+  merged to the console's `staging` (`cb8246c`, same SQL) and were applied to `agarthavision`
+  on 2026-10-01. `file-tree.md` says so, and that the org-admin phone download recorded below
+  is now real for any org admin who signs in on a phone.
 
 ---
 
