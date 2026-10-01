@@ -194,27 +194,26 @@ the console's `staging` yet, so the file numbers can still change before they me
   read. Nothing a medtech or a super admin can see changes, and the app holds no organization
   data.
 
-  **One exception: the phone itself.** The phone's pull has no user filter on any of the tables
-  these policies open, and leaves the scoping to RLS (since `0007`, so that an assigned medtech
-  gets a patient's whole history):
-  - patients and patient links (`data/supabase/PatientRemoteDataSource.kt::fetchPatients`,
-    `::fetchPatientLinks`)
-  - sessions (`SessionRemoteDataSource.kt::fetchSessions`)
-  - samples, and their detections, predictions and findings (`SampleRemoteDataSource.kt`)
-  - reports (`ReportRemoteDataSource.kt::fetchReports`)
-  - colleagues' names (`ProfileRemoteDataSource.kt::fetchColleagues`)
+  **The phone does not pick these up.** Org admins and super admins may use the phone app (a small
+  laboratory can run on one account that is both). The phone's pull therefore scopes itself rather
+  than leaving it to RLS (14zcqntjt3p), so whoever signs in downloads what a medtech's policies
+  would give them and no more. That is their own rows, plus the full history of the patients
+  their own `patient_users` rows name (`domain/usecase/sync/FetchRemoteDataUseCase.kt`):
+  - their own links only (`data/supabase/PatientRemoteDataSource.kt::fetchPatientLinks`), then
+    those patients by id (`::fetchPatients`)
+  - sessions, samples and reports, each as "own" plus "under these parents"
+    (`SessionRemoteDataSource.kt::fetchOwnSessions` / `::fetchSessionsForPatients`, and the
+    same pair on `SampleRemoteDataSource.kt` and `ReportRemoteDataSource.kt`). The parents are
+    read from the device (`SessionDao::getSessionIdsOnLinkedPatients`)
+  - colleagues' names by id, for the authors on those patients only
+    (`ColleagueDao::getColleagueIdsOnLinkedPatients`, `ProfileRemoteDataSource.kt::fetchColleagues`)
 
-  The app never checks `role` or membership, and an org admin's profile role is `medtech`, so an
-  org admin can sign in on a phone. If they do, the phone downloads the rows of the laboratory's
-  whole clinical record — every patient, session, smear, report and member's name — not just
-  what is assigned to them. Local queries, and the frame cache
-  (`SampleDao.kt::getCacheableSamples`), still scope through the signed-in user's own
-  `patient_users` rows, so most of it is stored without being shown and its frames are not
-  fetched, but the rows are on the device.
-  Keeping an org admin's phone to their own patients is not done yet, and has to land before
-  `admin/0002` is applied. A super admin already gets everything the same
-  way, through the `is_admin()` branch of `patients_select_linked` and `patient_users_select_own`
-  (`supabase/migrations/0001_init.sql:359-367`, `:396-398`).
+  So `admin/0002` changes nothing on a phone, and neither does a super admin's `is_admin()`
+  branch of `patients_select_linked` and `patient_users_select_own`
+  (`supabase/migrations/0001_init.sql:359-367`, `:396-398`). A phone that synced as an org admin
+  before this landed may still hold their laboratory's rows. Nothing removes them: they stay hidden
+  behind the same `patient_users` scoping every local query uses, and an ordinary sign-out keeps
+  local data. Clearing the app's storage, or reinstalling, does remove them.
 - **Foreign keys into app tables.**
   - Both of these cascade on delete, though C8 means neither delete happens:
     - `patient_organizations.patient_id → patients(id)`

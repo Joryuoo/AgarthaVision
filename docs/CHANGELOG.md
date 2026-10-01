@@ -37,6 +37,23 @@ Before this change, C6 read as if this repository held the whole schema.
 
 ---
 
+## fix/assigned-patients-only — a phone holds its user's patients, whatever their role · 2026-10-01
+
+`14zcqntjt3p`.
+
+- **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
+  `admin/0002`) or a super admin (`is_admin()`) who signed in on a phone downloaded their whole
+  laboratory, or everything. Now the links are filtered to the user, patients are fetched by the
+  ids those links name, and sessions, samples and reports are each fetched as the user's own
+  plus those under their patients. That is exactly what a medtech's policies return, so a
+  medtech's phone holds what it did before.
+- **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
+  (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
+- **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
+  written once.
+- **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
+  until its storage is cleared.
+
 ## feat/change-password — change password in Settings · 2026-10-01
 
 `14zcqntjph9`.

@@ -11,10 +11,12 @@ import javax.inject.Inject
 /**
  * Reads colleagues' names from Supabase `profiles`.
  *
- * `profiles_select_colleague` (`supabase/migrations/0008_colleague_names.sql`) returns a
- * colleague's row only when the caller can already read something that colleague authored on
- * a patient they are both assigned to, so this never lists a laboratory's staff. The caller's
- * own row is filtered out: their name comes from the signed-in session, not from here.
+ * A colleague is someone who authored a session or report on a patient the signed-in user is
+ * assigned to, the rule `profiles_select_colleague` (`supabase/migrations/0008_colleague_names.sql`)
+ * gives a medtech. The pull works out those ids from the rows on the device and asks for them
+ * by id, because the same table also hands an org admin every profile in their laboratory and a
+ * super admin every profile (14zcqntjt3p). The caller's own name comes from the signed-in
+ * session, not from here.
  *
  * Only `id` and `full_name` are selected. Role is never read from a colleague's row, and the
  * app reads no role or organization from `user_metadata` either.
@@ -24,9 +26,10 @@ class ProfileRemoteDataSource @Inject constructor(
 ) {
     private val supabase: SupabaseClient get() = supabaseProvider.get()
 
-    suspend fun fetchColleagues(userId: String): List<ColleagueEntity> =
+    /** Callers chunk the ids and must guard against an empty list. */
+    suspend fun fetchColleagues(colleagueIds: List<String>): List<ColleagueEntity> =
         supabase.postgrest[PROFILES_TABLE].select(Columns.list("id", "full_name")) {
-            filter { neq("id", userId) }
+            filter { isIn("id", colleagueIds) }
         }.decodeList<ColleagueRow>().map { ColleagueEntity(userId = it.id, fullName = it.fullName) }
 
     @Serializable

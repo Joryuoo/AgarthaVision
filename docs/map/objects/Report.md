@@ -70,7 +70,7 @@ PK column is `report_id`. Differences:
 - **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:177-179` —
   every medtech assigned to the patient. This reverses `0003_reports_bucket.sql`'s "not
   patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
-  (`ReportRemoteDataSource.kt::fetchReports`) and Session Detail lists them
+  (`ReportRemoteDataSource.kt::fetchReportsForSessions`, beside `::fetchOwnReports`) and Session Detail lists them
   (`ReportDao::observeReportsForSession`).
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,

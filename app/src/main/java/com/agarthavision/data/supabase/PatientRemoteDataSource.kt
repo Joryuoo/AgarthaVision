@@ -21,10 +21,11 @@ import kotlinx.serialization.Serializable
  * this data source is the translation boundary between those shapes, as
  * [SessionRemoteDataSource] is for sessions.
  *
- * **Reads carry no `user_id` filter.** `patients_select_linked` and
- * `patient_users_select_own` in `0001_init.sql` already scope every row to the
- * authenticated caller. Re-applying the rule here would give the client a second
- * definition of visibility that could drift from the policy.
+ * **Reads are scoped by the caller, not left to RLS** (14zcqntjt3p). The phone holds the
+ * patients linked to the signed-in user and nothing else, whatever their role lets them read
+ * on the server: an org admin's policies (console `admin/0002`) and a super admin's
+ * `is_admin()` both return a whole laboratory or more. So the links are filtered to the user,
+ * and patients are fetched by the ids those links name. RLS stays the server's second line.
  */
 class PatientRemoteDataSource @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,
@@ -86,17 +87,20 @@ class PatientRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ───────────────────────────────────────────────
 
     /**
-     * Fetches a page of patients the authenticated caller can see, ordered by creation time ascending.
-     * Inclusive range: rows [offset, offset+limit-1].
+     * Fetches the patients with the given [patientIds], the ones the caller's own links name.
+     * Callers chunk the ids and must guard against an empty list — isIn with no values is
+     * undefined. One row per id at most, so a chunk needs no paging.
      */
-    suspend fun fetchPatients(offset: Long = 0L, limit: Long = 500L): List<PatientEntity> =
+    suspend fun fetchPatients(patientIds: List<String>): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
-            order("created_at", Order.ASCENDING)
-            range(offset, offset + limit - 1)
+            filter { isIn("id", patientIds) }
         }.decodeList<PatientRow>().map { it.toEntity() }
 
     /**
-     * The caller's own `patient_users` rows.
+     * The `patient_users` rows of [userId], the signed-in user.
+     *
+     * Filtered here rather than by `patient_users_select_own`, which also hands an admin every
+     * link in the project and an org admin every link in their laboratory (14zcqntjt3p).
      *
      * Pulled alongside the patients themselves because `PatientDao` resolves visibility
      * through this join: a patient row with no matching link is present on the device and
@@ -107,8 +111,13 @@ class PatientRemoteDataSource @Inject constructor(
      * remove assignments the server no longer holds, and an unordered range can repeat one row
      * and skip another between pages, which would read a live assignment as a removed one.
      */
-    suspend fun fetchPatientLinks(offset: Long = 0L, limit: Long = 500L): List<PatientUserEntity> =
+    suspend fun fetchPatientLinks(
+        userId: String,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<PatientUserEntity> =
         supabase.postgrest[PATIENT_USERS_TABLE].select {
+            filter { eq("user_id", userId) }
             order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<PatientUserRow>()

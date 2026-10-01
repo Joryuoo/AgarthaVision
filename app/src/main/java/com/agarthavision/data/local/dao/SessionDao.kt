@@ -51,6 +51,19 @@ interface SessionDao {
     suspend fun sessionExists(sessionId: String): Boolean
 
     /**
+     * The sessions on this device of a patient [userId] is assigned to, whoever authored them:
+     * the sessions the pull fetches samples and reports under (14zcqntjt3p).
+     */
+    @Query(
+        """
+        SELECT s.session_id FROM sessions s
+        JOIN patient_users pu ON pu.patient_id = s.patient_id
+        WHERE pu.user_id = :userId
+        """,
+    )
+    suspend fun getSessionIdsOnLinkedPatients(userId: String): List<String>
+
+    /**
      * Observes sessions visible to the caller: their own rows plus unowned rows recorded while
      * signed out. A null owner (signed out) sees only the unowned rows - never another
      * medtech's data left on a shared phone.

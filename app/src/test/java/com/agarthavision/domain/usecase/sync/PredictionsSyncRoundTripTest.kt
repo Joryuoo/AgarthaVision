@@ -98,10 +98,12 @@ class PredictionsSyncRoundTripTest {
         whenever(authRepository.currentLocalUserId()).thenReturn(USER_ID)
         whenever(authRepository.isAuthenticated()).thenReturn(true)
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
-        whenever(patientRemote.fetchPatients()).thenReturn(emptyList())
-        whenever(patientRemote.fetchPatientLinks()).thenReturn(emptyList())
-        whenever(sessionRemote.fetchSessions()).thenReturn(emptyList())
-        whenever(reportRemote.fetchReports()).thenReturn(emptyList())
+        whenever(patientRemote.fetchPatientLinks(USER_ID)).thenReturn(emptyList())
+        whenever(sessionRemote.fetchOwnSessions(USER_ID)).thenReturn(emptyList())
+        whenever(sessionRemote.fetchSessionsForPatients(any(), any(), any())).thenReturn(emptyList())
+        whenever(sampleRemote.fetchSamplesForSessions(any(), any(), any())).thenReturn(emptyList())
+        whenever(reportRemote.fetchOwnReports(USER_ID)).thenReturn(emptyList())
+        whenever(reportRemote.fetchReportsForSessions(any(), any(), any())).thenReturn(emptyList())
         whenever(sampleRemote.fetchFindings(any())).thenReturn(emptyList())
         whenever(sampleImageStore.cachedPathOrNull(any(), any())).thenReturn(null)
         whenever(resolveImageSource(any())).thenReturn(
@@ -212,7 +214,7 @@ class PredictionsSyncRoundTripTest {
 
     private suspend fun serverHolds(predictions: List<SamplePrediction>, detections: List<DetectionEntity>) {
         // The server's sample row, as SampleRemoteDataSource maps it: no model output.
-        whenever(sampleRemote.fetchSamples(0L, 500L))
+        whenever(sampleRemote.fetchOwnSamples(USER_ID, 0L, 500L))
             .thenReturn(listOf(sample(status = SampleStatus.SYNCED.value)))
         whenever(sampleRemote.fetchPredictions(listOf(SAMPLE_ID))).thenReturn(predictions)
         whenever(sampleRemote.fetchDetections(listOf(SAMPLE_ID))).thenReturn(detections)
