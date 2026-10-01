@@ -139,7 +139,7 @@ This is the one home for which file describes which project.
 | `0004_predictions.sql` | The `predictions` table and `detections.prediction_id` |
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
-| `0010_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
+| `0011_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ## `inference/`

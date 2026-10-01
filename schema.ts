@@ -142,7 +142,7 @@ export enum FrameSource {
  * - `0001_init.sql`: creates `profiles`, `handle_new_user()`, base RLS.
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin-readable policies
  *   with `public.is_admin(uuid)` to avoid recursive profile reads.
- * - `0010_profile_outlives_login.sql`: `id` stops referencing `auth.users`;
+ * - `0011_profile_outlives_login.sql`: `id` stops referencing `auth.users`;
  *   adds `account_id`, cleared when the login is deleted (14zcqntjph8).
  *
  * Room mirror: none. User identity comes from Supabase Auth session state.
@@ -150,7 +150,7 @@ export enum FrameSource {
 export interface Profile {
   id: UUID;
   // PK. The person's permanent id, referenced by every authored row. Equal to
-  // the login id for every profile `handle_new_user()` creates. No FK since 0010.
+  // the login id for every profile `handle_new_user()` creates. No FK since 0011.
 
   account_id: string | null;
   // UNIQUE. The login this profile belongs to, as the provider's subject id

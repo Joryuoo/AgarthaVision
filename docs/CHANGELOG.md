@@ -22,7 +22,7 @@ Verify any entry with `git log --oneline --reverse`.
   on the web or another phone gets the same refusal as a deleted login, and the phone cannot
   tell them apart. Then sign-out, and the login screen says why and how many unuploaded items
   are waiting for the next sign-in.
-- **`0010_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
+- **`0011_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
   authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
   login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is
   deleted. Not applied; nothing reads `account_id` yet.

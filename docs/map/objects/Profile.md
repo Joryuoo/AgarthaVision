@@ -22,8 +22,8 @@ a row always exists before the first query — there is no sign-up flow to hook 
 
 The role column is where all admin capability lives, and nothing in the Android app reads it.
 
-**A profile outlives its login** (`0010_profile_outlives_login.sql`, 14zcqntjph8). Offboarding
-a medtech deletes their login, which frees the email for another laboratory. Until 0010 that was
+**A profile outlives its login** (`0011_profile_outlives_login.sql`, 14zcqntjph8). Offboarding
+a medtech deletes their login, which frees the email for another laboratory. Until 0011 that was
 impossible: `profiles.id` referenced `auth.users` ON DELETE CASCADE, and every authored row
 refused the cascade. Now `id` is the person's permanent id with no foreign key, and `account_id`
 says which login, if any, the person currently has. It is `text` with no foreign key into the
@@ -34,15 +34,15 @@ provider's schema so it survives a move away from Supabase (D7); the two trigger
 
 | Field | Constraint | Cited |
 |---|---|---|
-| `id` | PK. FK → `auth.users(id)` ON DELETE CASCADE until 0010, which drops it | `supabase/migrations/0001_init.sql:35`, `0010_profile_outlives_login.sql:48-64` |
-| `account_id` | nullable text, UNIQUE; the login's subject id, null once the login is deleted | `supabase/migrations/0010_profile_outlives_login.sql:42-46` |
+| `id` | PK. FK → `auth.users(id)` ON DELETE CASCADE until 0011, which drops it | `supabase/migrations/0001_init.sql:35`, `0011_profile_outlives_login.sql:48-64` |
+| `account_id` | nullable text, UNIQUE; the login's subject id, null once the login is deleted | `supabase/migrations/0011_profile_outlives_login.sql:42-46` |
 | `full_name` | nullable text | `supabase/migrations/0001_init.sql:36` |
 | `role` | NOT NULL, default `medtech`, CHECK in (`medtech`, `admin`) | `supabase/migrations/0001_init.sql:37` |
 | `created_at` | NOT NULL, default `now()` | `supabase/migrations/0001_init.sql:38` |
 
 Auto-creation: `handle_new_user()` inserts `(id, 'medtech')` on every `auth.users` insert —
-`supabase/migrations/0001_init.sql:42-52` — and since 0010 also `account_id = id`
-(`0010_profile_outlives_login.sql:66-73`). `handle_deleted_user()` sets `account_id` to null when
+`supabase/migrations/0001_init.sql:42-52` — and since 0011 also `account_id = id`
+(`0011_profile_outlives_login.sql:66-73`). `handle_deleted_user()` sets `account_id` to null when
 a login is deleted (`:75-87`). Note neither populates `full_name`, so that column is null in
 practice.
 
@@ -100,5 +100,5 @@ writes it, no report includes it.** The `admin` role has no UI anywhere in the a
 
 ## See
 
-`supabase/migrations/0001_init.sql:30-72`, `supabase/migrations/0010_profile_outlives_login.sql`,
+`supabase/migrations/0001_init.sql:30-72`, `supabase/migrations/0011_profile_outlives_login.sql`,
 `schema.ts` (`Profile`).

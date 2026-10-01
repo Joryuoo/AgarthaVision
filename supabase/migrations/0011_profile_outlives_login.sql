@@ -1,8 +1,8 @@
--- 0010 · A profile outlives its login
+-- 0011 · A profile outlives its login
 --
 -- Run via: Supabase dashboard → SQL Editor → paste → Run. By hand, once, per C6.
 -- Target: project `agarthavision` (zxojfpfarhhoxjjicphi).
--- Requires: 0001_init.sql. Independent of 0007–0009; numbered after them only because they
+-- Requires: 0001_init.sql. Independent of 0007–0010; numbered after them only because they
 -- are already taken on another branch.
 --
 -- ── Why ──────────────────────────────────────────────────────────────────────
