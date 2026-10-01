@@ -34,6 +34,67 @@ Before this change, C6 read as if this repository held the whole schema.
 
 ---
 
+## feat/change-password — change password in Settings · 2026-10-01
+
+`14zcqntjph9`.
+
+- **Settings → Change password.** Current password, new, confirm, each with show/hide. Blank
+  fields (spaces only included, which sign-in would refuse), a mismatched confirmation and an
+  unchanged password are caught on the phone.
+- **Online only.** Offline the screen says it needs a connection and the button is disabled. A
+  connection lost before the server is reached says the password was not changed; one lost after
+  the new password was sent says it may already be changed.
+- **The current password is checked first**, by signing in with it again, so a wrong one is
+  refused on its field before anything changes. The provider's strength rules, and its own
+  explanation, land under the new password.
+- **This phone stays signed in.** Local data, the cached identity and unsynced work are
+  untouched. Supabase signs out the account's other sessions; they need the new password, and
+  other phones go through #98's wipe, keeping unsynced work. On this phone the change and #98's
+  account check share a lock (`AuthSessionLock`), so a renewal of the session being replaced
+  can never be refused and wipe the phone that made the change.
+
+## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
+
+`14zcqntjph8`.
+
+- **The signal is a refused login renewal.** At the start of every sync pass the phone asks the
+  server to renew its login (at most every five minutes). A 4xx answer, or the SDK having dropped
+  the session for one, means the account is gone; 408, 429, 5xx, timeouts and no network do not.
+  It does not matter whether the Admin Console deleted the login or banned it.
+- **The wipe.** Every synced row on the phone, the `colleagues` name cache from #97, its JPEGs,
+  Coil's image caches and its exported report files. Every unsynced row stays, the signed-out
+  account's included: a password changed on the web or another phone gets the same refusal as
+  a deleted login, and the phone cannot tell them apart. Then sign-out, and the login screen
+  says why and how many unuploaded items are waiting for the next sign-in.
+- **`0011_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
+  authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
+  login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is
+  deleted. Applied to `agarthavision` on 2026-10-01; nothing reads `account_id` yet.
+- **Sign-out order flipped**: the cached identity is cleared before the Supabase session, so a
+  medtech's own sign-out never looks like a refusal.
+
+## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
+
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
+0008, 0009, 0010. Room 23 → 24.
+
+- **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
+  detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
+  Additive SELECT policies only; writes stay author-only. Reverses 0003's "not patient-linked"
+  reports rule. The pull drops its author filter, skips rows whose parent is not on the device,
+  and removes assignments the server no longer returns.
+- **Read-only colleagues (0008, Room v24).** A colleague's session and sample cannot be resumed,
+  edited, re-verified, deleted or renamed on the phone, and say "Recorded by …". Names come from
+  a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
+- **Distinct labels (0009).** A server trigger renames a clashing session label
+  `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
+  one-time rename. The pull settles clashes once every page is in. A rename now uploads.
+- **Writes need the writer's own session (0010).** Restrictive INSERT/UPDATE policies on
+  `samples` and `reports`: a row can only be written into a session its writer authored, now
+  that 0007 hands colleagues' session ids to the phone.
+
+---
+
 ## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
 
 `14zcqntjg5f`. Docs only; no code changed.

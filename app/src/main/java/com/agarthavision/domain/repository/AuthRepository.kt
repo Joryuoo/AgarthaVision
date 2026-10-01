@@ -1,6 +1,7 @@
 package com.agarthavision.domain.repository
 
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -44,6 +45,16 @@ interface AuthRepository {
      * Returns the current user's ID, or null if not logged in.
      */
     suspend fun getCurrentUserId(): String?
+
+    /**
+     * Changes the signed-in medtech's password (14zcqntjph9). Online only.
+     *
+     * Checks [currentPassword] with the provider first, so a phone left unlocked cannot have its
+     * password changed by whoever picks it up. Then sets [newPassword]. This phone stays signed
+     * in; the provider may end the account's other sign-ins, which then need the new password.
+     * Local data is never touched.
+     */
+    suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResult
 
     /**
      * Signs the medtech out per ADR-008: revokes the live Supabase session **and** clears

@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # session-lifecycle
@@ -20,7 +20,9 @@ Opening a smear, working in it, coming back to it, and letting go of it. It neve
 1. **Label it.** The New Session sheet (`SessionsScreen.kt::NewSessionSheet`) pre-fills a label
    from `GenerateSessionLabelUseCase`, built by `domain/session/SessionLabelGenerator.kt`:
    `LDNJ-M21-S01` — surname abbreviation and first initial, sex and age, the patient's smear
-   sequence. The medtech may edit it.
+   sequence. The sequence counts every session of the patient on the phone, colleagues'
+   included since 0007. The medtech may edit it; a rename marks the session `pending` so it
+   uploads (`SessionDao::updateSessionLabel`).
 2. **Validate.** `SessionsViewModel::onCreateSession` trims and uppercases the label, rejects a
    blank one, and rejects one this patient already has (`SessionRepository.isSessionLabelTaken`)
    before the Room unique index on `(patient_id, label)` would.
@@ -32,7 +34,11 @@ Opening a smear, working in it, coming back to it, and letting go of it. It neve
    `ActiveSessionIdStore`, the one piece of session state that survives process death.
    `NetworkMonitor` and capture both key off `SessionState`.
 5. **Resume.** Tapping an existing smear calls `SessionManager::resumeSession`: no Room write, no
-   Supabase call, just activation.
+   Supabase call, just activation. **A colleague's session is never resumed** (14zcqntjph6):
+   `resumeSession` throws `ReadOnlyRecordException`, and the Sessions list opens that row in
+   Session Detail instead, captioned with its author (`SessionsState.colleagueAuthors`,
+   `ui/sessions/SessionsScreen.kt::SessionCard`). An active session is one capture adds frames
+   to, and the server lets only the author write to it.
 6. **Restore at launch.** `AgarthaVisionApp.onCreate` calls `restoreActiveSession`, which
    re-activates the stored id only if the state is still `Idle`, with a compare-and-set so a
    user action that raced it wins. A stored id that no longer resolves clears itself.
@@ -51,14 +57,19 @@ rather than on the row.
 **Hits**
 - Capture. `CaptureViewModel.onCapture` needs `SessionState.Active` and files the frame under its
   id; a wrong active id files a patient's image under another patient's smear.
-- The label rules, in three places that must agree: the generator, the ViewModel pre-check, and
-  the Room unique index. `MAX_LABEL_LENGTH` in the generator and `SESSION_LABEL_MAX_LENGTH` in
+- The label rules, in four places that must agree: the generator, the ViewModel pre-check, the
+  Room unique index, and the server trigger's suffix, which the pull's own clash handling
+  repeats character for character (`FetchRemoteDataUseCase.kt::upsertSessionReconcilingLabel`). `MAX_LABEL_LENGTH` in the generator and `SESSION_LABEL_MAX_LENGTH` in
   `ui/sessions/SessionInputLimits.kt` are separate constants kept in step by hand.
 - Sync order: patients before sessions ([`sync`](sync.md)).
 
 **Does not hit**
-- Postgres uniqueness. Labels are unique per patient only on the device; the server does not
-  constrain them.
+- Postgres rejecting a clash. Two phones offline can both mint `S03`; nothing on either can see
+  the other. The server keeps the first to arrive and renames the second
+  (`dedupe_session_label`, `supabase/migrations/0009_session_label_collisions.sql:49-84`), and
+  both phones pick that up on their next pull. A report generated offline before then keeps the
+  label it printed. Duplicates already on the server: the report query at the top of 0009, the
+  admin RPC `session_label_duplicates()`, and a one-time rename at its end (14zcqntjph7).
 - The inference queue. Frames already captured keep their session id whatever the active
   session becomes.
 

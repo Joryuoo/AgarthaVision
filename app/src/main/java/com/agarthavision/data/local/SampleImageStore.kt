@@ -1,6 +1,8 @@
 package com.agarthavision.data.local
 
 import android.content.Context
+import coil.annotation.ExperimentalCoilApi
+import coil.imageLoader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,4 +57,16 @@ class SampleImageStore @Inject constructor(
     /** Drops this sample's cached JPEG. Returns true when a file was actually removed. */
     suspend fun evict(userId: String, sampleId: String): Boolean =
         deleteJpeg(pathFor(userId, sampleId))
+
+    /**
+     * Empties Coil's memory and disk caches, which hold sample images loaded from Storage under
+     * their storage path, outside `users/`. For a phone the server signed out (14zcqntjph8), whose
+     * synced samples were just removed and must not keep rendering from cache.
+     */
+    @OptIn(ExperimentalCoilApi::class)
+    suspend fun clearImageLoaderCaches() = withContext(Dispatchers.IO) {
+        val loader = context.imageLoader
+        loader.memoryCache?.clear()
+        loader.diskCache?.clear()
+    }
 }

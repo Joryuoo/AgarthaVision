@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
+            val signedOutByServer by mainViewModel.signedOutByServer.collectAsStateWithLifecycle()
             val isDark = when (themeMode) {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             Screen.Dashboard.route
                         },
+                        signedOutByServer = signedOutByServer,
                     )
                 }
             }

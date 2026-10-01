@@ -6,6 +6,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.model.ReportFormat
@@ -269,6 +270,8 @@ private class ReportAuthRepository(private val userId: String?) : AuthRepository
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 private class ReportSessionRepository(private val session: Session?) : SessionRepository {
@@ -443,6 +446,8 @@ private class FakeReportFileStore : ReportFileStore {
         "/Documents/AgarthaVision/report.csv" -> lastCsv.toByteArray()
         else -> null
     }
+
+    override suspend fun delete(path: String): Boolean = false
 }
 
 private fun reportSession(sessionId: String, userId: String): Session =
