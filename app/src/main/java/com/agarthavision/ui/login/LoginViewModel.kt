@@ -3,7 +3,9 @@ package com.agarthavision.ui.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -28,6 +30,8 @@ data class LoginUiState(
     val isSubmitting: Boolean = false,
     val emailError: Boolean = false,
     val passwordError: Boolean = false,
+    /** Set when the server signed this phone out (14zcqntjph8); the screen says why. */
+    val signedOutNotice: SignedOutNotice? = null,
 ) {
     /**
      * Whether the form can accept a submit tap: not mid-submit and online (login always
@@ -64,6 +68,7 @@ class LoginViewModel @Inject constructor(
     private val connectivityObserver: ConnectivityObserver,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
+    private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
 ) : ViewModel() {
     private val _state = MutableStateFlow(LoginUiState(isOffline = !connectivityObserver.currentlyOnline()))
 
@@ -81,6 +86,7 @@ class LoginViewModel @Inject constructor(
 
     init {
         observeConnectivity()
+        observeSignedOutNotice()
     }
 
     /**
@@ -170,6 +176,14 @@ class LoginViewModel @Inject constructor(
         viewModelScope.launch {
             connectivityObserver.isOnline.collect { online ->
                 _state.update { it.copy(isOffline = !online) }
+            }
+        }
+    }
+
+    private fun observeSignedOutNotice() {
+        viewModelScope.launch {
+            observeSignedOutNoticeUseCase().collect { notice ->
+                _state.update { it.copy(signedOutNotice = notice) }
             }
         }
     }

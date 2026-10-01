@@ -5,6 +5,8 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.agarthavision.domain.model.AccountAccess
+import com.agarthavision.domain.usecase.auth.EnforceAccountAccessUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
@@ -29,9 +31,18 @@ class SyncWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
     private val fetchRemoteDataUseCase: FetchRemoteDataUseCase,
+    private val enforceAccountAccessUseCase: EnforceAccountAccessUseCase,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
+        val access = runCatching { enforceAccountAccessUseCase() }
+            .onFailure { Log.e(TAG, "Account check failed", it) }
+            .getOrNull()
+        if (access == AccountAccess.REFUSED) return Result.success()
+        return pushThenPull()
+    }
+
+    private suspend fun pushThenPull(): Result {
         val push = syncPendingDataUseCase()
         val fetch = fetchRemoteDataUseCase()
 

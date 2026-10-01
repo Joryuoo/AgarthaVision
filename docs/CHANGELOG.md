@@ -9,6 +9,26 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
+
+`14zcqntjph8`.
+
+- **The signal is a refused login renewal.** At the start of every sync pass the phone asks the
+  server to renew its login (at most every five minutes). A 4xx answer, or the SDK having dropped
+  the session for one, means the account is gone; 408, 429, 5xx, timeouts and no network do not.
+  It does not matter whether the Admin Console deleted the login or banned it.
+- **The wipe.** Every synced row on the phone, the `colleagues` name cache from #97, its JPEGs,
+  Coil's image caches and its exported report files. Every unsynced row stays, the signed-out
+  account's included: a password changed on the web or another phone gets the same refusal as
+  a deleted login, and the phone cannot tell them apart. Then sign-out, and the login screen
+  says why and how many unuploaded items are waiting for the next sign-in.
+- **`0011_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
+  authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
+  login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is
+  deleted. Applied to `agarthavision` on 2026-10-01; nothing reads `account_id` yet.
+- **Sign-out order flipped**: the cached identity is cleared before the Supabase session, so a
+  medtech's own sign-out never looks like a refusal.
+
 ## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
 
 `14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,

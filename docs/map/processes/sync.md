@@ -1,7 +1,7 @@
 ---
 type: process
 status: verified
-verified: 2026-09-30
+verified: 2026-10-01
 commit: b64271d2
 ---
 
@@ -57,6 +57,11 @@ it. See [`Sample`](../objects/Sample.md).
 `SyncPendingDataUseCase` is the trigger-based sweep. It runs on login success, on app start,
 and after every local write.
 
+0. **Check the account first** (14zcqntjph8). `SyncWorker::doWork` runs
+   `EnforceAccountAccessUseCase` before the push. If the server refuses the account, the phone's
+   synced data is removed, it is signed out, and the pass ends there; otherwise nothing changes. See
+   [`sign-in`](sign-in.md), "the server refuses the account". The direct call from
+   `LoginViewModel::syncAndFetch` skips this: the medtech has just signed in.
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —
    returning `SyncSummary.Skipped`, not a failure
    (`SyncPendingDataUseCase::invoke`).

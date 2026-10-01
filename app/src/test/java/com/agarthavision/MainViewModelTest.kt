@@ -1,16 +1,20 @@
 package com.agarthavision
 
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.usecase.auth.AuthGate
+import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.ResolveAuthGateUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -30,6 +34,12 @@ class MainViewModelTest {
 
     private val observeThemeModeUseCase: ObserveThemeModeUseCase = mock()
     private val resolveAuthGateUseCase: ResolveAuthGateUseCase = mock()
+    private val signedOutNotice = MutableStateFlow<SignedOutNotice?>(null)
+    private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase =
+        mock<ObserveSignedOutNoticeUseCase>().also { whenever(it.invoke()).thenReturn(signedOutNotice) }
+
+    private fun viewModel() =
+        MainViewModel(observeThemeModeUseCase, resolveAuthGateUseCase, observeSignedOutNoticeUseCase)
 
     @Test
     fun `authGate starts Loading and resolves to Authed once the use case returns`() =
@@ -37,7 +47,7 @@ class MainViewModelTest {
             whenever(observeThemeModeUseCase.invoke()).thenReturn(flowOf(ThemeMode.LIGHT))
             runBlocking { whenever(resolveAuthGateUseCase.invoke()).thenReturn(AuthGate.Authed) }
 
-            val viewModel = MainViewModel(observeThemeModeUseCase, resolveAuthGateUseCase)
+            val viewModel = viewModel()
 
             // The splash is held on Loading until the coroutine launched in init completes.
             assertTrue(viewModel.authGate.value is AuthGate.Loading)
@@ -53,7 +63,7 @@ class MainViewModelTest {
             whenever(observeThemeModeUseCase.invoke()).thenReturn(flowOf(ThemeMode.LIGHT))
             runBlocking { whenever(resolveAuthGateUseCase.invoke()).thenReturn(AuthGate.NeedsLogin) }
 
-            val viewModel = MainViewModel(observeThemeModeUseCase, resolveAuthGateUseCase)
+            val viewModel = viewModel()
             advanceUntilIdle()
 
             assertEquals(AuthGate.NeedsLogin, viewModel.authGate.value)
@@ -65,10 +75,31 @@ class MainViewModelTest {
             whenever(observeThemeModeUseCase.invoke()).thenReturn(flowOf(ThemeMode.DARK))
             runBlocking { whenever(resolveAuthGateUseCase.invoke()).thenReturn(AuthGate.Authed) }
 
-            val viewModel = MainViewModel(observeThemeModeUseCase, resolveAuthGateUseCase)
+            val viewModel = viewModel()
 
             assertEquals(ThemeMode.LIGHT, viewModel.themeMode.value)
 
             advanceUntilIdle()
+        }
+
+    @Test
+    fun `signedOutByServer follows the stored notice`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // 14zcqntjph8: the wipe runs in a background sync, and this is the only thing that
+            // takes an open screen to Login afterwards.
+            whenever(observeThemeModeUseCase.invoke()).thenReturn(flowOf(ThemeMode.LIGHT))
+            runBlocking { whenever(resolveAuthGateUseCase.invoke()).thenReturn(AuthGate.Authed) }
+
+            val viewModel = viewModel()
+            advanceUntilIdle()
+            assertFalse(viewModel.signedOutByServer.value)
+
+            signedOutNotice.value = SignedOutNotice(unsyncedKept = 0)
+            advanceUntilIdle()
+            assertTrue(viewModel.signedOutByServer.value)
+
+            signedOutNotice.value = null
+            advanceUntilIdle()
+            assertFalse(viewModel.signedOutByServer.value)
         }
 }

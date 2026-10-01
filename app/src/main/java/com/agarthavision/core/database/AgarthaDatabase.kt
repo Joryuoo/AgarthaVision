@@ -2,6 +2,7 @@ package com.agarthavision.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.agarthavision.data.local.dao.AccountWipeDao
 import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
@@ -146,6 +147,8 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
     version = 24,
     exportSchema = true,
 )
+// One accessor per DAO is how Room exposes them; splitting the class is not an option.
+@Suppress("TooManyFunctions")
 abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleDao(): SampleDao
     abstract fun sessionDao(): SessionDao
@@ -159,5 +162,6 @@ abstract class AgarthaDatabase : RoomDatabase() {
 
     abstract fun coverageDao(): CoverageDao
 
+    abstract fun accountWipeDao(): AccountWipeDao
     abstract fun colleagueDao(): ColleagueDao
 }

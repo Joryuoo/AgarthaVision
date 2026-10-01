@@ -103,6 +103,15 @@ reports (`DiscardUnsyncedDataUseCase`), and it must run before `signOut` clears 
 scoped by. Reorder `SignOutUseCase` and it silently discards nothing — and leaves another
 medtech's rows stranded on the device.
 
+**The third one:** a cached identity with no Supabase session reads as "the server refused this
+account", and the phone wipes its synced data (`SupabaseAccountAccessRepository::checkAccountAccess`,
+14zcqntjph8). Anything that leaves the app in that state on purpose — reordering
+`SupabaseAuthRepository.kt::signOut` so the session goes first, a sign-in that caches the
+identity before the session exists — wipes a working medtech's phone. And widening
+`accessForRenewalStatus` past the server's own refusals wipes phones whenever the server is busy.
+Narrowing `AccountWipeDao` back to "the account's rows" would discard unsynced field work every
+time a medtech changes their password on another device.
+
 ## Changing patients or the patient form
 
 **Open:** `../processes/register-patient.md` · `../objects/Patient.md`.
