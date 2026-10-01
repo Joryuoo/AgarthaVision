@@ -2,7 +2,7 @@
 type: object
 status: verified
 verified: 2026-10-01
-commit: b64271d2
+commit: 6590f32f
 entity: supabase/migrations/0001_init.sql
 ---
 
@@ -20,7 +20,11 @@ purely to hang a `role` and a display name off an auth identity, and to give eve
 a foreign key it is allowed to reference. It is created by a trigger rather than by the app so
 a row always exists before the first query — there is no sign-up flow to hook into.
 
-The role column is where all admin capability lives, and nothing in the Android app reads it.
+The role column is where **super admin** capability lives (`admin`), and nothing in the Android
+app reads it. An **org admin** is not a value here. It is a role on the membership in
+`organization_members`, which the Admin Console's own migration set adds. An org admin's
+profile still says `medtech`, so an org admin can sign in on a phone. See
+[`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 
 **A profile outlives its login** (`0011_profile_outlives_login.sql`, 14zcqntjph8). Offboarding
 a medtech deletes their login, which frees the email for another laboratory. Until 0011 that was
@@ -93,6 +97,14 @@ read through `ColleagueRepository`. It is a label, never a permission. Because
 - On the dev and prod projects, which still run the legacy history, `legacy-dev/0008_reports.sql:36-38`
   and `legacy-dev/0012` reintroduced the inline `(select role from profiles …)` subquery. A change
   to the role column's name or values there must patch both styles.
+- The Admin Console's migration set. It reads `id`, `role` (through `is_admin()`) and `full_name`,
+  and it assumes `id` *is* the login id: it compares `auth.uid()` with
+  `organization_members.user_id` and joins `auth.users` on `id`. Resolving a profile through
+  `account_id` instead (the rehire step above) breaks it without an error here. It also holds
+  foreign keys to `profiles(id)`: `organization_members.user_id` cascades on delete, and the
+  actor columns are set null. Since 0011 a deleted login no longer deletes the profile, so an
+  offboarded medtech's membership stays, still `active`, with no login behind it. Its org-admin
+  policy also lets an org admin read their laboratory's members.
 - Sign-in, if you add a required column with no default — `handle_new_user()` inserts only
   `id`, `role` and `account_id`.
 - Offboarding, if anything brings back a cascade from `auth.users` to `profiles`: deleting a
@@ -100,14 +112,17 @@ read through `ColleagueRepository`. It is a label, never a permission. Because
 
 **Does not hit**
 - The Android app's login flow. It reads `auth.users` metadata for a display name
-  (`SupabaseAuthRepository.kt::cacheIdentity`), never the `profiles` row. Adding a
-  `profiles` column changes nothing client-side until something queries it.
-- Room. There is no local mirror to migrate.
+  (`SupabaseAuthRepository.kt::cacheIdentity`), never the `profiles` row.
+- Room, for a new column. The one client read (`ProfileRemoteDataSource.kt::fetchColleagues`)
+  names its columns, `id` and `full_name`, so adding one changes nothing on the phone. Renaming
+  either of those does: it breaks the pull, and the `colleagues` cache above mirrors them.
 
 ## Surfaces
 
-Written by the Postgres trigger only. Read by RLS policies. **No screen reads it, no sync
-writes it, no report includes it.** The `admin` role has no UI anywhere in the app.
+Written by the Postgres trigger only. Read by RLS policies, and by the pull for colleagues'
+names, which a colleague's read-only record shows as its author. **No sync writes it, no
+report includes it, and nothing on the phone reads `role`.** The `admin` role has no UI
+anywhere in the app.
 
 ## See
 
