@@ -17,7 +17,7 @@ import javax.inject.Inject
 enum class PasswordFieldError { REQUIRED, WRONG_CURRENT, MISMATCH, SAME_AS_CURRENT, WEAK }
 
 /** Why the whole change failed when no field is at fault. */
-enum class ChangePasswordFailure { NO_CONNECTION, FAILED }
+enum class ChangePasswordFailure { NO_CONNECTION, UNCONFIRMED, FAILED }
 
 data class ChangePasswordUiState(
     val currentPassword: String = "",
@@ -104,9 +104,11 @@ class ChangePasswordViewModel @Inject constructor(
     }
 
     private fun ChangePasswordUiState.withFieldErrors(): ChangePasswordUiState = copy(
-        currentError = PasswordFieldError.REQUIRED.takeIf { currentPassword.isEmpty() },
+        // Blank, not just empty: the login form refuses a password of spaces, so one set here
+        // could never be signed in with.
+        currentError = PasswordFieldError.REQUIRED.takeIf { currentPassword.isBlank() },
         newError = when {
-            newPassword.isEmpty() -> PasswordFieldError.REQUIRED
+            newPassword.isBlank() -> PasswordFieldError.REQUIRED
             newPassword == currentPassword -> PasswordFieldError.SAME_AS_CURRENT
             else -> null
         },
@@ -126,6 +128,7 @@ class ChangePasswordViewModel @Inject constructor(
                 copy(newError = PasswordFieldError.WEAK, weakPasswordDetail = result.detail)
             PasswordChangeResult.SamePassword -> copy(newError = PasswordFieldError.SAME_AS_CURRENT)
             PasswordChangeResult.NoConnection -> copy(failure = ChangePasswordFailure.NO_CONNECTION)
+            PasswordChangeResult.Unconfirmed -> copy(failure = ChangePasswordFailure.UNCONFIRMED)
             PasswordChangeResult.Failed -> copy(failure = ChangePasswordFailure.FAILED)
         }
 }

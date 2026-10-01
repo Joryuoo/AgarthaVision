@@ -22,9 +22,13 @@ class PasswordChangeFailureTest {
     }
 
     @Test
-    fun `no connection is never a wrong password`() {
+    fun `no connection on the check is never a wrong password`() {
         assertEquals(PasswordChangeResult.NoConnection, passwordCheckFailure(IOException("timeout")))
-        assertEquals(PasswordChangeResult.NoConnection, passwordUpdateFailure(IOException("timeout")))
+    }
+
+    @Test
+    fun `no connection on the update may have lost only the answer`() {
+        assertEquals(PasswordChangeResult.Unconfirmed, passwordUpdateFailure(IOException("timeout")))
     }
 
     @Test

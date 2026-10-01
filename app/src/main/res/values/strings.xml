@@ -699,6 +699,7 @@
     <string name="change_password_error_same">Choose a password different from your current one.</string>
     <string name="change_password_error_weak">Choose a stronger password.</string>
     <string name="change_password_failed_offline">Couldn\'t reach the server, so your password was not changed. Check your connection and try again.</string>
+    <string name="change_password_failed_unconfirmed">The connection dropped before the server answered, so your password may already be changed. Once you\'re back online, try again with your new password as the current one if your old one is refused.</string>
     <string name="change_password_failed">Your password was not changed. Try again in a moment.</string>
     <string name="change_password_done_title">Password changed</string>
     <string name="change_password_done_body">Use your new password the next time you sign in, on this phone, another phone or the Admin Console. Your unsynced work is untouched.</string>

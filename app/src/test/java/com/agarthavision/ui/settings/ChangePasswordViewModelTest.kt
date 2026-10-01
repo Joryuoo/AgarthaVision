@@ -136,6 +136,33 @@ class ChangePasswordViewModelTest {
         }
 
     @Test
+    fun `a new password of only spaces is refused, since the login form would refuse it too`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val viewModel = viewModel()
+            viewModel.fill(current = "old-pass", new = "      ", confirm = "      ")
+
+            viewModel.onSubmit()
+            advanceUntilIdle()
+
+            assertEquals(PasswordFieldError.REQUIRED, viewModel.state.value.newError)
+            verify(changePasswordUseCase, never()).invoke(any(), any())
+        }
+
+    @Test
+    fun `a connection lost after the new password was sent does not say nothing changed`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            whenever(changePasswordUseCase.invoke("old-pass", "new-pass")).thenReturn(PasswordChangeResult.Unconfirmed)
+            val viewModel = viewModel()
+            viewModel.fill(current = "old-pass", new = "new-pass", confirm = "new-pass")
+
+            viewModel.onSubmit()
+            advanceUntilIdle()
+
+            assertEquals(ChangePasswordFailure.UNCONFIRMED, viewModel.state.value.failure)
+            assertFalse(viewModel.state.value.isChanged)
+        }
+
+    @Test
     fun `a dropped connection mid-request says nothing changed`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             whenever(changePasswordUseCase.invoke("old-pass", "new-pass")).thenReturn(PasswordChangeResult.NoConnection)

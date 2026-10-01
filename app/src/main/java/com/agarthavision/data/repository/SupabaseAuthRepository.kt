@@ -32,6 +32,7 @@ import javax.inject.Inject
 class SupabaseAuthRepository @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,
     private val dataStore: DataStore<Preferences>,
+    private val sessionLock: AuthSessionLock,
 ) : AuthRepository {
 
     private val supabase: SupabaseClient get() = supabaseProvider.get()
@@ -76,25 +77,27 @@ class SupabaseAuthRepository @Inject constructor(
      * session also satisfies Supabase's "secure password change", which wants a recent sign-in.
      *
      * Supabase then ends every other session of the account, so other phones and the Admin
-     * Console need the new password: their next login renewal is refused.
+     * Console need the new password: their next login renewal is refused. This phone's old
+     * session is one of those, so the account check waits on [AuthSessionLock] meanwhile.
      */
-    override suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResult {
-        val email = signedInEmail() ?: return PasswordChangeResult.Failed
-        return runCatching {
-            supabase.auth.signInWith(Email) {
-                this.email = email
-                this.password = currentPassword
-            }
-        }.fold(
-            onSuccess = {
-                runCatching { supabase.auth.updateUser { password = newPassword } }.fold(
-                    onSuccess = { PasswordChangeResult.Changed },
-                    onFailure = ::passwordUpdateFailure,
-                )
-            },
-            onFailure = ::passwordCheckFailure,
-        )
-    }
+    override suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResult =
+        sessionLock.withLock {
+            val email = signedInEmail() ?: return@withLock PasswordChangeResult.Failed
+            runCatching {
+                supabase.auth.signInWith(Email) {
+                    this.email = email
+                    this.password = currentPassword
+                }
+            }.fold(
+                onSuccess = {
+                    runCatching { supabase.auth.updateUser { password = newPassword } }.fold(
+                        onSuccess = { PasswordChangeResult.Changed },
+                        onFailure = ::passwordUpdateFailure,
+                    )
+                },
+                onFailure = ::passwordCheckFailure,
+            )
+        }
 
     /** The live session's email, else the one this phone signed in with. */
     private suspend fun signedInEmail(): String? {
@@ -148,10 +151,14 @@ internal fun passwordCheckFailure(error: Throwable): PasswordChangeResult = when
     else -> PasswordChangeResult.Failed
 }
 
-/** Maps a failed update of the password, after the current one was accepted (14zcqntjph9). */
+/**
+ * Maps a failed update of the password, after the current one was accepted (14zcqntjph9). A
+ * connection lost here may have lost the answer rather than the request, so it is
+ * [PasswordChangeResult.Unconfirmed], never "nothing changed".
+ */
 internal fun passwordUpdateFailure(error: Throwable): PasswordChangeResult = when {
     error is CancellationException -> throw error
-    error.isNoConnection() -> PasswordChangeResult.NoConnection
+    error.isNoConnection() -> PasswordChangeResult.Unconfirmed
     error is AuthWeakPasswordException -> PasswordChangeResult.WeakPassword(error.message?.takeIf { it.isNotBlank() })
     error is RestException && error.error == SAME_PASSWORD -> PasswordChangeResult.SamePassword
     else -> PasswordChangeResult.Failed

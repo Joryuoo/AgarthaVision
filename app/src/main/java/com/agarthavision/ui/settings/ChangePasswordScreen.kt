@@ -185,6 +185,7 @@ private fun ChangePasswordForm(state: ChangePasswordUiState, actions: ChangePass
             text = stringResource(
                 when (failure) {
                     ChangePasswordFailure.NO_CONNECTION -> R.string.change_password_failed_offline
+                    ChangePasswordFailure.UNCONFIRMED -> R.string.change_password_failed_unconfirmed
                     ChangePasswordFailure.FAILED -> R.string.change_password_failed
                 },
             ),

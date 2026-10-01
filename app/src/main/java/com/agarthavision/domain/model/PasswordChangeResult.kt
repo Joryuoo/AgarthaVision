@@ -29,6 +29,13 @@ sealed interface PasswordChangeResult {
     /** No connection reached the server. Nothing changed. */
     data object NoConnection : PasswordChangeResult
 
+    /**
+     * The current password was accepted and the new one sent, but the connection dropped before
+     * the answer came back. The server may have set it, so the medtech is not told nothing
+     * changed.
+     */
+    data object Unconfirmed : PasswordChangeResult
+
     /** Anything else the server answered. Nothing the medtech typed is at fault. */
     data object Failed : PasswordChangeResult
 }
