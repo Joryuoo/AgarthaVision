@@ -162,7 +162,6 @@ private fun ChangePasswordForm(state: ChangePasswordUiState, actions: ChangePass
         value = state.currentPassword,
         onValueChange = actions.onCurrentPasswordChanged,
         error = state.currentError?.let { fieldErrorText(it, null) },
-        imeAction = ImeAction.Next,
     )
     Spacer(Modifier.height(14.dp))
     PasswordField(
@@ -170,7 +169,6 @@ private fun ChangePasswordForm(state: ChangePasswordUiState, actions: ChangePass
         value = state.newPassword,
         onValueChange = actions.onNewPasswordChanged,
         error = state.newError?.let { fieldErrorText(it, state.weakPasswordDetail) },
-        imeAction = ImeAction.Next,
     )
     Spacer(Modifier.height(14.dp))
     PasswordField(
@@ -178,7 +176,6 @@ private fun ChangePasswordForm(state: ChangePasswordUiState, actions: ChangePass
         value = state.confirmPassword,
         onValueChange = actions.onConfirmPasswordChanged,
         error = state.confirmError?.let { fieldErrorText(it, null) },
-        imeAction = ImeAction.Done,
         onDone = actions.onSubmit,
     )
 
@@ -279,15 +276,17 @@ private fun NoticeBox(text: String, danger: Boolean, modifier: Modifier = Modifi
     }
 }
 
-/** A labelled password field with a show/hide toggle, styled like the login form's fields. */
+/**
+ * A labelled password field with a show/hide toggle, styled like the login form's fields. The
+ * keyboard offers Next, or Done when [onDone] is given (the last field submits the form).
+ */
 @Composable
 private fun PasswordField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
     error: String?,
-    imeAction: ImeAction,
-    onDone: () -> Unit = {},
+    onDone: (() -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
     var visible by remember { mutableStateOf(false) }
@@ -308,8 +307,11 @@ private fun PasswordField(
             textStyle = TextStyle(color = colors.textPrimary, fontSize = 15.sp),
             singleLine = true,
             visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = imeAction),
-            keyboardActions = KeyboardActions(onDone = { onDone() }),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Password,
+                imeAction = if (onDone != null) ImeAction.Done else ImeAction.Next,
+            ),
+            keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
             cursorBrush = SolidColor(colors.accent),
             decorationBox = { innerTextField ->
                 Row(
