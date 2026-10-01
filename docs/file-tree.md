@@ -140,6 +140,8 @@ This is the one home for which file describes which project.
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
 | `0011_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
+| `0012_deidentified_reads.sql` | `patients_deidentified`, `sessions_deidentified`, `samples_deidentified`: super-admin-only views without name, sex, birthdate, session label or sample note. Additive; step 1 of 3 |
+| `0013_super_admin_reads_deidentified.sql` | Removes the super admin branch from the `patients`, `sessions` and `samples` read policies and the `reports` bucket. Step 3: apply only after the Admin Console reads the views (14zcqntjvky) |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ## `inference/`

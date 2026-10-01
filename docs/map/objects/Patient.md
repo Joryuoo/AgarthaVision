@@ -32,6 +32,10 @@ had no way to track multiple smears from the same person across time.
   second medtech. The `on_patient_created` trigger writes the creator's own row server-side,
   because the SELECT policy reads that table and PostgREST returns the inserted row on insert —
   without the trigger link, the creating medtech cannot read back the patient they just made.
+- **A super admin never reads this table** (`0013_super_admin_reads_deidentified.sql:38`).
+  They read `patients_deidentified` (`0012_deidentified_reads.sql:50`): every column but
+  `lastname`, `firstname`, `middle_name`, `sex` and `birthdate`. The clinic's organization
+  admin reads it in full through the Admin Console's own policies.
 - **Assignment opens the whole history.** Since `0007_patient_shared_history.sql` a medtech
   linked through `patient_users` reads every session, sample, detection, finding, prediction and
   report on the patient, whoever wrote them (`is_linked_to_patient`, `:44-56`). `user_id` on

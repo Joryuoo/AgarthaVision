@@ -9,6 +9,29 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/deidentified-patient-reads — super admins read patients de-identified at the database · 2026-10-01
+
+`14zcqntjvjw`, with the Admin Console's `14zcqntjvky`.
+
+- **`0012_deidentified_reads.sql`, step 1, additive.** Three views a super admin reads instead
+  of the tables: `patients_deidentified` (no name, sex or birthdate), `sessions_deidentified`
+  (no `label`, which spells the patient's initials, sex and age) and `samples_deidentified`
+  (no `user_note`). Each returns rows only to `is_admin(auth.uid())`, is `security_barrier`,
+  and is readable by `authenticated` only.
+- **Step 2 is the console.** It reads a super admin's patients, sessions and samples from the
+  views, and works with or without step 3.
+- **`0013_super_admin_reads_deidentified.sql`, step 3.** The `patients`, `sessions` and
+  `samples` read policies and `can_read_session()` lose their `is_admin()` branch, and the
+  `reports` bucket loses `reports: admin read all`, because a report prints the name. The
+  admin branch of the detections, findings and predictions policies moves outside their
+  subquery on `samples`, so super admins keep reading those. `session_label_duplicates()`
+  returns session ids without the label. **Apply only after the console from step 2 is
+  deployed.**
+- **Unchanged:** medtechs, colleagues on a shared patient (0007), organization admins, report
+  rows, patient links, sample frames and `barangay_prevalence()`. The console's
+  `bun run test:db` covers each, against both files.
+- `patient-pii-position.md` Position 6 and C10 say what the policies now do.
+
 ## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
 
 `14zcqntjph8`.

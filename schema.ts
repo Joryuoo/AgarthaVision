@@ -180,6 +180,10 @@ export interface Profile {
  * Supabase migrations:
  * - `0001_init.sql` (patient-based consolidation): creates `patients`, the
  *   `patient_users` join, and the `on_patient_created` auto-link trigger.
+ * - `0012_deidentified_reads.sql`: `patients_deidentified`, a super-admin-only view
+ *   of every column but `lastname`, `firstname`, `middle_name`, `sex`, `birthdate`.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `PatientEntity.kt`
@@ -253,6 +257,10 @@ export interface PatientUser {
  * - `0001_init.sql` (patient-based consolidation): creates `sessions` with
  *   `patient_id`, `label` and the two indexes. Three columns present in the
  *   legacy-dev history are deliberately absent — see the interface below.
+ * - `0012_deidentified_reads.sql`: `sessions_deidentified`, a super-admin-only view
+ *   without `label`, which encodes the patient's initials, sex and age.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `SessionEntity.kt`
@@ -345,6 +353,10 @@ export interface PsgcBarangay {
  *   `verified_at`, `storage_path`, `inference_model_version`, `user_note`,
  *   `needs_reannotation`, `is_manual`, and `deleted_at`.
  * - Historical development migrations archived under `legacy-dev/` (`0001` through `0013`).
+ * - `0012_deidentified_reads.sql`: `samples_deidentified`, a super-admin-only view
+ *   without `user_note`.
+ * - `0013_super_admin_reads_deidentified.sql`: the SELECT policy loses its
+ *   `is_admin()` branch; a super admin reads the view, never this table (D19).
  *
  * Room mirror:
  * - `SampleEntity.kt`
@@ -672,6 +684,8 @@ export interface ValidationRecord {
  *   each bucket for any medtech assigned to the object's patient — `samples` by
  *   matching `samples.storage_path`, `reports` by the report id in the file name
  *   and the author in the folder. Writes stay owner-folder only.
+ * - `0013_super_admin_reads_deidentified.sql`: drops `reports: admin read all`;
+ *   a report file prints the patient's name. The `samples` admin read stays.
  *
  * Room mirror: none. `SampleEntity.storage_path` stores the object key after
  * upload.
