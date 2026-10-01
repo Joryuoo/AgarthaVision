@@ -2,6 +2,7 @@ package com.agarthavision.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.agarthavision.data.local.dao.AccountWipeDao
 import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -151,4 +152,6 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
 
     abstract fun coverageDao(): CoverageDao
+
+    abstract fun accountWipeDao(): AccountWipeDao
 }

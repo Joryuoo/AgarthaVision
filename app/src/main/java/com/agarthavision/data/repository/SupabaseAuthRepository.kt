@@ -64,12 +64,15 @@ class SupabaseAuthRepository @Inject constructor(
     override suspend fun getCurrentUserId(): String? = supabase.auth.currentUserOrNull()?.id
 
     override suspend fun signOut() {
-        runCatching { supabase.auth.signOut() }
+        // Identity first, then the Supabase session. A cached identity with no Supabase session
+        // is what SupabaseAccountAccessRepository reads as "the server refused this account"
+        // (14zcqntjph8), so the medtech's own sign-out must never pass through that state.
         dataStore.edit { preferences ->
             preferences.remove(USER_ID_KEY)
             preferences.remove(EMAIL_KEY)
             preferences.remove(DISPLAY_NAME_KEY)
         }
+        runCatching { supabase.auth.signOut() }
     }
 
     /** Persists the signed-in user's identity for offline attribution. */

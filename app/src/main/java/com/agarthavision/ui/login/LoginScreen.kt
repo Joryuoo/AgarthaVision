@@ -41,6 +41,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
+import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastState
 import com.agarthavision.ui.components.AgarthaToastVariant
@@ -171,6 +174,11 @@ private fun LoginScreenContent(
                     }
                     Spacer(modifier = Modifier.height(32.dp))
 
+                    state.signedOutNotice?.let { notice ->
+                        SignedOutNoticeCard(notice)
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
                     if (state.isOffline) {
                         OfflineNotice()
                         Spacer(modifier = Modifier.height(16.dp))
@@ -198,6 +206,55 @@ private fun LoginScreenContent(
         }
     }
 }
+
+/**
+ * Why the phone is back at the login screen when the medtech did not sign out (14zcqntjph8).
+ * Stays until the next successful sign-in, so it is read even if the wipe ran in the background.
+ */
+@Composable
+private fun SignedOutNoticeCard(notice: SignedOutNotice) {
+    val colors = AgarthaTheme.colors
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(LOGIN_SIGNED_OUT_NOTICE_TAG)
+            .background(colors.dangerTint, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.danger, RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.login_signed_out_by_server_title),
+            color = colors.dangerText,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            lineHeight = 18.sp,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = stringResource(R.string.login_signed_out_by_server_body),
+            color = colors.dangerText,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+        )
+        if (notice.unsyncedRemoved > 0) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = pluralStringResource(
+                    R.plurals.login_signed_out_unsynced_removed,
+                    notice.unsyncedRemoved,
+                    notice.unsyncedRemoved,
+                ),
+                color = colors.dangerText,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                lineHeight = 18.sp,
+            )
+        }
+    }
+}
+
+/** Test tag on [SignedOutNoticeCard]. */
+const val LOGIN_SIGNED_OUT_NOTICE_TAG = "login_signed_out_notice"
 
 @Composable
 private fun OfflineNotice() {

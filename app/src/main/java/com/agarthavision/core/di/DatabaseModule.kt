@@ -26,8 +26,10 @@ import com.agarthavision.data.repository.PatientRepositoryImpl
 import com.agarthavision.data.repository.PsgcRepositoryImpl
 import com.agarthavision.data.repository.SampleRepositoryImpl
 import com.agarthavision.data.repository.SessionRepositoryImpl
+import com.agarthavision.data.repository.SupabaseAccountAccessRepository
 import com.agarthavision.data.repository.SupabaseAuthRepository
 import com.agarthavision.data.repository.SupabaseSampleImageRepository
+import com.agarthavision.domain.repository.AccountAccessRepository
 import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BoundaryRepository
 import com.agarthavision.domain.repository.CoverageRepository
@@ -202,4 +204,9 @@ abstract class RepositoryModule {
     abstract fun bindAuthRepository(
         implementation: SupabaseAuthRepository,
     ): AuthRepository
+
+    @Binds
+    abstract fun bindAccountAccessRepository(
+        implementation: SupabaseAccountAccessRepository,
+    ): AccountAccessRepository
 }

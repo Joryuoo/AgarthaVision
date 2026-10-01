@@ -1,6 +1,8 @@
 package com.agarthavision.data.local
 
 import android.content.Context
+import coil.annotation.ExperimentalCoilApi
+import coil.imageLoader
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -55,4 +57,24 @@ class SampleImageStore @Inject constructor(
     /** Drops this sample's cached JPEG. Returns true when a file was actually removed. */
     suspend fun evict(userId: String, sampleId: String): Boolean =
         deleteJpeg(pathFor(userId, sampleId))
+
+    /**
+     * Removes every JPEG this account captured or cached on the phone, captured or pulled, in one
+     * go: the whole `users/<userId>` folder. For an account the server no longer accepts
+     * (14zcqntjph8), never for a sign-out, where unsynced frames of a later login may live here.
+     */
+    suspend fun deleteAllFor(userId: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { File(context.filesDir, "users/$userId").deleteRecursively() }.getOrDefault(false)
+    }
+
+    /**
+     * Empties Coil's memory and disk caches, which hold sample images loaded from Storage under
+     * their storage path, outside `users/`. Same caller and reason as [deleteAllFor].
+     */
+    @OptIn(ExperimentalCoilApi::class)
+    suspend fun clearImageLoaderCaches() = withContext(Dispatchers.IO) {
+        val loader = context.imageLoader
+        loader.memoryCache?.clear()
+        loader.diskCache?.clear()
+    }
 }

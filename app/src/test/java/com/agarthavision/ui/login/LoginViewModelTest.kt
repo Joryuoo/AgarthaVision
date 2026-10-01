@@ -2,7 +2,9 @@ package com.agarthavision.ui.login
 
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.FetchSummary
@@ -47,13 +49,36 @@ class LoginViewModelTest {
         runBlocking { whenever(it.invoke()).thenReturn(Result.success(FetchSummary.Skipped)) }
     }
 
+    private val signedOutNotice = MutableStateFlow<SignedOutNotice?>(null)
+    private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase =
+        mock<ObserveSignedOutNoticeUseCase>().also { whenever(it.invoke()).thenReturn(signedOutNotice) }
+
     private fun viewModel() = LoginViewModel(
         signInUseCase = signInUseCase,
         authRepository = authRepository,
         connectivityObserver = connectivityObserver,
         syncPendingDataUseCase = syncPendingDataUseCase,
         fetchRemoteDataUseCase = fetchRemoteDataUseCase,
+        observeSignedOutNoticeUseCase = observeSignedOutNoticeUseCase,
     )
+
+    @Test
+    fun `a sign-out by the server reaches the screen with its count`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // 14zcqntjph8: the wipe may have happened in a background sync with no screen open,
+            // so the reason is read back from the store, not passed along a navigation.
+            signedOutNotice.value = SignedOutNotice(unsyncedRemoved = 2)
+
+            val viewModel = viewModel()
+            advanceUntilIdle()
+
+            assertEquals(SignedOutNotice(unsyncedRemoved = 2), viewModel.state.value.signedOutNotice)
+
+            signedOutNotice.value = null
+            advanceUntilIdle()
+
+            assertEquals(null, viewModel.state.value.signedOutNotice)
+        }
 
     @Test
     fun `submit with malformed email flags emailError and skips signIn`() =

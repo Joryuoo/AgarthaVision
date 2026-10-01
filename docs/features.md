@@ -21,6 +21,14 @@ as working.
 - **Sign-out** revokes the Supabase token *and* clears the cached identity, returning the
   device to the signed-out state. `domain/usecase/auth/SignOutUseCase.kt`,
   `data/repository/SupabaseAuthRepository.kt::signOut`.
+- **Signed out and wiped when the account is removed** (14zcqntjph8). The first sync pass after
+  the server refuses to renew the login (the login was deleted or banned) removes the account's
+  patients, sessions, samples, reports, JPEGs and exported report files from the phone, signs
+  out, and the login screen says why and how many unuploaded items went with it. Offline, a
+  timeout, a 5xx or an ordinary expired token change nothing.
+  `domain/usecase/auth/EnforceAccountAccessUseCase.kt`,
+  `domain/usecase/auth/WipeLocalAccountDataUseCase.kt`,
+  `data/repository/SupabaseAccountAccessRepository.kt`.
 
 ### Patients
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
