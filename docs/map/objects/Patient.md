@@ -2,7 +2,7 @@
 type: object
 status: verified
 verified: 2026-10-01
-commit: b64271d2
+commit: 6590f32f
 entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
 ---
 

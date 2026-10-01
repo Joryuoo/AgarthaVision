@@ -94,8 +94,10 @@ set adds permissive org-admin `SELECT` policies on `patients`, `patient_users`, 
 `samples` bucket. It also adds a trigger on `patients`. Read them before reasoning about who can
 read what. They are listed in
 [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
-Because they are combined with `OR`, a policy here can never take away what they grant, and a
-phone signed in as an org admin downloads the whole laboratory's patients.
+Because they are combined with `OR`, a policy here can never take away what they grant. And
+since the phone's pull leaves scoping to RLS (`0007`), a phone signed in as an org admin
+downloads the rows of the laboratory's whole clinical record: patients, sessions, samples,
+reports and members' names.
 
 **The non-obvious break:** the Storage object key *is* the permission check. The INSERT policy
 compares `(storage.foldername(name))[1]` against `auth.uid()`

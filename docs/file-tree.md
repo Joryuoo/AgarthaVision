@@ -156,9 +156,10 @@ set does to it. The decision behind it is D4 and the migration convention in the
 policies. It never `ALTER`s or `DROP`s a table, column, function or policy this repository owns.
 A change to the shape or the policies of an app-owned table belongs in this folder instead.
 
-**What it adds**, as of the console's open branches (`feat/organizations` `ed59346c`,
-`feat/lab-scoping` `f99fd4cd`, `feat/audit-trail` `2e139983`, 2026-09-30). None of these were on
-the console's `staging` yet, so the file numbers can still change before they merge.
+**What it adds**, as of the console's open branches (`feat/organizations` `219d9cc4`,
+`feat/lab-scoping` `ce0dd6cb`, `feat/audit-trail` `4e5390d4`, 2026-10-01). None of these were on
+the console's `staging` yet, so the file numbers can still change before they merge. On
+2026-10-01 none of the set had been applied to `agarthavision`.
 
 | Admin file | Adds |
 |---|---|
@@ -174,8 +175,10 @@ the console's `staging` yet, so the file numbers can still change before they me
   and the patient is left without an organization (risk R4). An error raised there would fail
   patient sync for every medtech. It sits beside the app's own `on_patient_created`, and neither
   depends on the other.
-- **Permissive `SELECT` policies for the org admin**, named `"<table>: org admin reads their
-  organization"`, on these app-owned tables:
+- **Permissive `SELECT` policies for the org admin**, mostly named `"<table>: org admin reads
+  their organization"` (the findings one says `findings:`, and the `profiles` and Storage ones
+  end in `organization's members` and `samples: … organization's frames`), on these app-owned
+  tables:
   - `patients`
   - `patient_users`
   - `sessions`
@@ -191,17 +194,32 @@ the console's `staging` yet, so the file numbers can still change before they me
   read. Nothing a medtech or a super admin can see changes, and the app holds no organization
   data.
 
-  **One exception: the phone itself.** The phone reads patients and patient links without a
-  user filter (`data/supabase/PatientRemoteDataSource.kt::fetchPatients`, `::fetchPatientLinks`),
-  and the app never checks `role` or membership. An org admin's profile role is `medtech`, so an
-  org admin can sign in on a phone. If they do, the phone downloads every patient in the
-  laboratory, not just the ones assigned to them. A super admin already gets everything the same
+  **One exception: the phone itself.** The phone's pull has no user filter on any of the tables
+  these policies open, and leaves the scoping to RLS (since `0007`, so that an assigned medtech
+  gets a patient's whole history):
+  - patients and patient links (`data/supabase/PatientRemoteDataSource.kt::fetchPatients`,
+    `::fetchPatientLinks`)
+  - sessions (`SessionRemoteDataSource.kt::fetchSessions`)
+  - samples, and their detections, predictions and findings (`SampleRemoteDataSource.kt`)
+  - reports (`ReportRemoteDataSource.kt::fetchReports`)
+  - colleagues' names (`ProfileRemoteDataSource.kt::fetchColleagues`)
+
+  The app never checks `role` or membership, and an org admin's profile role is `medtech`, so an
+  org admin can sign in on a phone. If they do, the phone downloads the rows of the laboratory's
+  whole clinical record — every patient, session, smear, report and member's name — not just
+  what is assigned to them. Local queries, and the frame cache
+  (`SampleDao.kt::getCacheableSamples`), still scope through the signed-in user's own
+  `patient_users` rows, so most of it is stored without being shown and its frames are not
+  fetched, but the rows are on the device.
+  Keeping an org admin's phone to their own patients is not done yet, and has to land before
+  `admin/0002` is applied. A super admin already gets everything the same
   way, through the `is_admin()` branch of `patients_select_linked` and `patient_users_select_own`
   (`supabase/migrations/0001_init.sql:359-367`, `:396-398`).
 - **Foreign keys into app tables.**
   - Both of these cascade on delete, though C8 means neither delete happens:
     - `patient_organizations.patient_id → patients(id)`
-    - `organization_members.user_id → profiles(id)`
+    - `organization_members.user_id → profiles(id)`. Since app `0011` a deleted login keeps its
+      profile, so an offboarded medtech's membership stays, still `active`, with no login.
   - Three actor columns set null on delete:
     - `organizations.created_by → profiles(id)`
     - `organization_members.added_by → profiles(id)`
@@ -216,6 +234,10 @@ the console's `staging` yet, so the file numbers can still change before they me
 - `reports.session_id`
 - `patient_users.patient_id`
 - `profiles.id`, `profiles.role` and `profiles.full_name`
+- that `profiles.id` *is* the login id: the set compares `auth.uid()` with
+  `organization_members.user_id` and joins `auth.users` on `profiles.id`. Since `0011` the login
+  is `profiles.account_id`, equal to `id` today; resolving profiles through `account_id` (the
+  rehire step) breaks the console
 - `public.is_admin(uuid)`
 - the `{user_id}/{sample_id}.jpg` key shape in the `samples` bucket
 

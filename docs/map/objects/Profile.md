@@ -2,7 +2,7 @@
 type: object
 status: verified
 verified: 2026-10-01
-commit: b64271d2
+commit: 6590f32f
 entity: supabase/migrations/0001_init.sql
 ---
 
@@ -97,10 +97,14 @@ read through `ColleagueRepository`. It is a label, never a permission. Because
 - On the dev and prod projects, which still run the legacy history, `legacy-dev/0008_reports.sql:36-38`
   and `legacy-dev/0012` reintroduced the inline `(select role from profiles …)` subquery. A change
   to the role column's name or values there must patch both styles.
-- The Admin Console's migration set. It reads `id`, `role` (through `is_admin()`) and `full_name`.
-  It also holds foreign keys to `profiles(id)`: `organization_members.user_id` cascades on
-  delete, and the actor columns are set null. Its org-admin policy also lets an org admin read
-  their laboratory's members.
+- The Admin Console's migration set. It reads `id`, `role` (through `is_admin()`) and `full_name`,
+  and it assumes `id` *is* the login id: it compares `auth.uid()` with
+  `organization_members.user_id` and joins `auth.users` on `id`. Resolving a profile through
+  `account_id` instead (the rehire step above) breaks it without an error here. It also holds
+  foreign keys to `profiles(id)`: `organization_members.user_id` cascades on delete, and the
+  actor columns are set null. Since 0011 a deleted login no longer deletes the profile, so an
+  offboarded medtech's membership stays, still `active`, with no login behind it. Its org-admin
+  policy also lets an org admin read their laboratory's members.
 - Sign-in, if you add a required column with no default — `handle_new_user()` inserts only
   `id`, `role` and `account_id`.
 - Offboarding, if anything brings back a cascade from `auth.users` to `profiles`: deleting a

@@ -22,15 +22,18 @@ Before this change, C6 read as if this repository held the whole schema.
   - what its three files add
   - the one trigger on `patients` (`console_on_patient_created`, never raises)
   - the org-admin read policies on app-owned tables
-  - the app columns it depends on
+  - the app columns it depends on, and its assumption that `profiles.id` is the login id,
+    which `0011`'s `account_id` will one day end
 - **C6** says this folder is the authority for what this repository owns, and points there.
 - **`Patient` and `Profile` cards** note the trigger, the laboratory that owns a patient, and
   that an org admin is a membership role rather than a `profiles.role` value. Both re-verified
-  at `b64271d2`.
+  at `6590f32f`, after `0007`–`0011`.
 - **Effects:** the data-model checklist asks whether a change touches a name the console reads.
   The RLS section says not every policy is in this repository.
-- **Recorded, not fixed:** the phone reads patients and links without a user filter, so an org
-  admin who signs in on a phone downloads the whole laboratory's patients.
+- **Recorded, not fixed:** the phone's pull has no user filter on patients, links, sessions,
+  samples, reports or colleagues' names, so an org admin who signs in on a phone downloads the
+  rows of the laboratory's whole clinical record. Has to be fixed before the console's
+  `admin/0002` is applied; none of its set was on `agarthavision` on 2026-10-01.
 
 ---
 
