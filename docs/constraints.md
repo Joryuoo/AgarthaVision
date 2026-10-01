@@ -287,7 +287,7 @@ policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_sessi
 so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and
 age) or sample note, and no report file (`:113`). They read the non-identifying columns through
 `patients_deidentified`, `sessions_deidentified` and `samples_deidentified`
-(`0012_deidentified_reads.sql:50-84`), which return rows only to `is_admin(auth.uid())`.
+(`0012_deidentified_reads.sql:50-89`), which return rows only to `is_admin(auth.uid())`.
 Detections, findings, predictions, report rows, patient links, frames and
 `barangay_prevalence()` are unchanged. **A new identifying column goes nowhere near those
 views**, and a new super admin read of clinical data goes through them. Medtechs and

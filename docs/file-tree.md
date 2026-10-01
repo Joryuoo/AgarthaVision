@@ -214,9 +214,12 @@ the console's `staging` yet, so the file numbers can still change before they me
   `patient_users` rows, so most of it is stored without being shown and its frames are not
   fetched, but the rows are on the device.
   Keeping an org admin's phone to their own patients is not done yet, and has to land before
-  `admin/0002` is applied. A super admin already gets everything the same
-  way, through the `is_admin()` branch of `patients_select_linked` and `patient_users_select_own`
-  (`supabase/migrations/0001_init.sql:359-367`, `:396-398`).
+  `admin/0002` is applied. A super admin got every row the same way, through the `is_admin()`
+  branch of `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), until
+  `0013_super_admin_reads_deidentified.sql:38` removed it. They still read every patient link
+  (`patient_users_select_own`, `0001_init.sql:396-398`), but patients, sessions and samples only
+  through the de-identified views of `0012_deidentified_reads.sql`. No phone build signs a super
+  admin in.
 - **Foreign keys into app tables.**
   - Both of these cascade on delete, though C8 means neither delete happens:
     - `patient_organizations.patient_id → patients(id)`
