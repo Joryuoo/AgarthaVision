@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-10-01
+commit: b64271d2
 ---
 
 # sign-in
@@ -11,7 +11,8 @@ Getting a medtech onto the device, and off it.
 
 **Input** — a dashboard-provisioned email and password, and a network.
 **Output** — a cached `LocalIdentity` that every later write is owned by; on sign-out, that
-identity gone and the medtech's unsynced work discarded.
+identity gone and the medtech's unsynced work discarded; on a password change, the same identity
+signing in with a new password.
 
 **consumes** [`Profile`](../objects/Profile.md) (through Supabase Auth)
 **produces** the cached identity; pulls [`Patient`](../objects/Patient.md),
@@ -54,6 +55,31 @@ identity gone and the medtech's unsynced work discarded.
 3. **Sign out and forget.** `SupabaseAuthRepository.kt::signOut` revokes the Supabase session and
    removes the three cached keys.
 
+## Movement — change password (14zcqntjph9)
+
+Accounts are invite-only: the invitee sets a first password on the Admin Console. After that
+the medtech changes it from Settings.
+
+1. **Reached from Settings, signed in only.** `SettingsCards.kt::ChangePasswordRow` opens
+   `ui/settings/ChangePasswordScreen.kt` (`Screen.ChangePassword`). The row stays tappable
+   offline; the screen says it needs a connection.
+2. **Checked on the phone first.** `ChangePasswordViewModel::onSubmit` refuses an empty field, a
+   confirmation that does not match, and a new password equal to the current one, without
+   calling the server. Offline, `canSubmit` is false and the form shows
+   `change_password_offline_notice`.
+3. **Online only.** `ChangePasswordUseCase` answers `NoConnection` offline without trying.
+4. **Current password, then new.** `SupabaseAuthRepository.kt::changePassword` signs in again
+   with the session's email and the current password. A wrong one is
+   `WrongCurrentPassword` (`passwordCheckFailure`) and nothing changes. Then `updateUser` sets
+   the new one; the provider's strength rules, and its `same_password`, come back through
+   `passwordUpdateFailure`. Supabase does not require the current password, so checking it is
+   our choice: a phone left unlocked cannot have its password changed by whoever picks it up.
+5. **This phone stays signed in.** The re-sign-in replaced its session with a fresh one for the
+   same account, and Supabase keeps the session that made the change. The cached identity is
+   untouched, so every owner-scoped query and the unsynced push queue carry on as before.
+6. **Other sign-ins end.** Supabase revokes every other session of the account on a password
+   change. Other phones and the Admin Console then need the new password.
+
 ## Why this shape
 
 Offline-first work needs an owner before it exists: a patient belongs to a user, a session to a
@@ -70,15 +96,21 @@ upload.
 - `DiscardUnsyncedDataUseCase` deletes verified samples outright. That is inside C8 only because
   they never reached the corpus; anything that widens what it selects has to keep that true.
 
+- Re-checking the current password by signing in. Swap it for `updateUser` alone and anyone
+  holding an unlocked phone can change the password; swap it for Supabase's reauthentication
+  nonce and the medtech needs their email open to change a password they already know.
+
 **Does not hit**
+- Local data, on a password change. Nothing is pushed, pulled, discarded or re-owned.
 - `profiles`. The app never reads the row; role and admin capability live only in RLS
   ([`Profile`](../objects/Profile.md)).
 - Frames still queued for inference in a session that *did* sync. They stay on the device.
 
 ## Surfaces
 
-`ui/login/LoginScreen.kt` and `LoginViewModel`, the splash gate in `MainActivity`, and the
-sign-out button and dialog on `ui/settings/SettingsScreen.kt`.
+`ui/login/LoginScreen.kt` and `LoginViewModel`, the splash gate in `MainActivity`, the
+sign-out button and dialog on `ui/settings/SettingsScreen.kt`, and
+`ui/settings/ChangePasswordScreen.kt` with `ChangePasswordViewModel`.
 
 ## See
 

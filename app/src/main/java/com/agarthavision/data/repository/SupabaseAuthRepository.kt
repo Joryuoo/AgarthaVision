@@ -5,15 +5,21 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.repository.AuthRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.auth.exception.AuthWeakPasswordException
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.exceptions.HttpRequestException
+import io.github.jan.supabase.exceptions.RestException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import java.io.IOException
 import javax.inject.Inject
 
 /**
@@ -63,6 +69,40 @@ class SupabaseAuthRepository @Inject constructor(
 
     override suspend fun getCurrentUserId(): String? = supabase.auth.currentUserOrNull()?.id
 
+    /**
+     * Supabase does not ask for the current password before an update; checking it is our choice
+     * (14zcqntjph9). It is checked by signing in with it again, which works on every project
+     * setting and replaces this phone's session with a fresh one for the same account. That fresh
+     * session also satisfies Supabase's "secure password change", which wants a recent sign-in.
+     *
+     * Supabase then ends every other session of the account, so other phones and the Admin
+     * Console need the new password: their next login renewal is refused.
+     */
+    override suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResult {
+        val email = signedInEmail() ?: return PasswordChangeResult.Failed
+        return runCatching {
+            supabase.auth.signInWith(Email) {
+                this.email = email
+                this.password = currentPassword
+            }
+        }.fold(
+            onSuccess = {
+                runCatching { supabase.auth.updateUser { password = newPassword } }.fold(
+                    onSuccess = { PasswordChangeResult.Changed },
+                    onFailure = ::passwordUpdateFailure,
+                )
+            },
+            onFailure = ::passwordCheckFailure,
+        )
+    }
+
+    /** The live session's email, else the one this phone signed in with. */
+    private suspend fun signedInEmail(): String? {
+        supabase.auth.awaitInitialization()
+        return supabase.auth.currentUserOrNull()?.email?.takeIf { it.isNotBlank() }
+            ?: dataStore.data.first()[EMAIL_KEY]?.takeIf { it.isNotBlank() }
+    }
+
     override suspend fun signOut() {
         runCatching { supabase.auth.signOut() }
         dataStore.edit { preferences ->
@@ -93,3 +133,30 @@ class SupabaseAuthRepository @Inject constructor(
         val DISPLAY_NAME_KEY = stringPreferencesKey("local_identity_display_name")
     }
 }
+
+/**
+ * Maps a failed check of the current password to what the medtech can act on (14zcqntjph9).
+ * Top-level and internal so the mapping is tested without a Supabase client.
+ */
+internal fun passwordCheckFailure(error: Throwable): PasswordChangeResult = when {
+    error is CancellationException -> throw error
+    error.isNoConnection() -> PasswordChangeResult.NoConnection
+    error is RestException && error.error == INVALID_CREDENTIALS -> PasswordChangeResult.WrongCurrentPassword
+    else -> PasswordChangeResult.Failed
+}
+
+/** Maps a failed update of the password, after the current one was accepted (14zcqntjph9). */
+internal fun passwordUpdateFailure(error: Throwable): PasswordChangeResult = when {
+    error is CancellationException -> throw error
+    error.isNoConnection() -> PasswordChangeResult.NoConnection
+    error is AuthWeakPasswordException -> PasswordChangeResult.WeakPassword(error.message?.takeIf { it.isNotBlank() })
+    error is RestException && error.error == SAME_PASSWORD -> PasswordChangeResult.SamePassword
+    else -> PasswordChangeResult.Failed
+}
+
+// supabase-kt wraps every transport failure in HttpRequestException except a timeout, which is
+// Ktor's HttpRequestTimeoutException, an IOException.
+private fun Throwable.isNoConnection(): Boolean = this is HttpRequestException || this is IOException
+
+private const val INVALID_CREDENTIALS = "invalid_credentials"
+private const val SAME_PASSWORD = "same_password"

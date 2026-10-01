@@ -86,6 +86,10 @@ reports (`DiscardUnsyncedDataUseCase`), and it must run before `signOut` clears 
 scoped by. Reorder `SignOutUseCase` and it silently discards nothing — and leaves another
 medtech's rows stranded on the device.
 
+**Changing a password signs out every other device of the account** (Supabase revokes their
+sessions, 14zcqntjph9). Anything on those devices that treats a revoked session as "this account
+was removed" fires on a routine password change too.
+
 ## Changing patients or the patient form
 
 **Open:** `../processes/register-patient.md` · `../objects/Patient.md`.
