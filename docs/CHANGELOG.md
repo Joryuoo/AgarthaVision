@@ -11,8 +11,8 @@ Verify any entry with `git log --oneline --reverse`.
 
 ## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
 
-`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Three migrations to apply by hand, in order: 0007,
-0008, 0009. Room 23 → 24.
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
+0008, 0009, 0010. Room 23 → 24.
 
 - **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
   detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
@@ -24,7 +24,10 @@ Verify any entry with `git log --oneline --reverse`.
   a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
 - **Distinct labels (0009).** A server trigger renames a clashing session label
   `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
-  one-time rename. The pull settles clashes after every page. A rename now uploads.
+  one-time rename. The pull settles clashes once every page is in. A rename now uploads.
+- **Writes need the writer's own session (0010).** Restrictive INSERT/UPDATE policies on
+  `samples` and `reports`: a row can only be written into a session its writer authored, now
+  that 0007 hands colleagues' session ids to the phone.
 
 ---
 
