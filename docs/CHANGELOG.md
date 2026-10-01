@@ -17,10 +17,11 @@ Verify any entry with `git log --oneline --reverse`.
   server to renew its login (at most every five minutes). A 4xx answer, or the SDK having dropped
   the session for one, means the account is gone; 408, 429, 5xx, timeouts and no network do not.
   It does not matter whether the Admin Console deleted the login or banned it.
-- **The wipe.** The account's unsynced work (counted), then every synced row on the phone, its
-  JPEG folder, Coil's image caches and its exported report files. Another account's unsynced
-  rows stay (C8). Then sign-out, and the login screen says why and how many unuploaded items
-  were removed.
+- **The wipe.** Every synced row on the phone, its JPEGs, Coil's image caches and its exported
+  report files. Every unsynced row stays, the signed-out account's included: a password changed
+  on the web or another phone gets the same refusal as a deleted login, and the phone cannot
+  tell them apart. Then sign-out, and the login screen says why and how many unuploaded items
+  are waiting for the next sign-in.
 - **`0010_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
   authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
   login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is

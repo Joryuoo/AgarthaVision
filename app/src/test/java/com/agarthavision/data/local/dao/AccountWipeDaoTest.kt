@@ -23,11 +23,12 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
 /**
- * Pins what [AccountWipeDao] removes when the server refuses an account (14zcqntjph8), against a
+ * Pins what [AccountWipeDao] removes when the server signs a phone out (14zcqntjph8), against a
  * real in-memory Room so the foreign keys are enforced as on the phone.
  *
- * The two rules: everything the refused account holds, and everything synced, goes; another
- * account's unsynced work, and the parents it hangs from, stays (C8).
+ * The rule: everything synced goes, whoever owns it; everything unsynced stays, the signed-out
+ * account's included, with the parents it hangs from. The server refuses a login both for a
+ * removed account and for a password changed elsewhere, and the second must not cost field work.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -49,22 +50,21 @@ class AccountWipeDaoTest {
     fun tearDown() = db.close()
 
     @Test
-    fun `the refused account's synced rows and drafts all go`() = runTest {
-        seedPatient("p-1", createdBy = LEAVER, status = SYNCED)
-        db.patientDao().linkPatientToUser(PatientUserEntity("p-1", LEAVER, linkedAt = 1L))
-        seedSession("s-1", userId = LEAVER, patientId = "p-1", status = SYNCED)
-        seedSample("smp-synced", sessionId = "s-1", userId = LEAVER, status = SampleStatus.SYNCED)
-        seedSample("smp-draft", sessionId = "s-1", userId = LEAVER, status = SampleStatus.FLAGGED)
-        seedReport("r-1", sessionId = "s-1", userId = LEAVER, status = SYNCED)
+    fun `the signed-out account's synced rows all go`() = runTest {
+        seedPatient("p-1", createdBy = SIGNED_OUT, status = SYNCED)
+        db.patientDao().linkPatientToUser(PatientUserEntity("p-1", SIGNED_OUT, linkedAt = 1L))
+        seedSession("s-1", userId = SIGNED_OUT, patientId = "p-1", status = SYNCED)
+        seedSample("smp-1", sessionId = "s-1", userId = SIGNED_OUT, status = SampleStatus.SYNCED)
+        seedReport("r-1", sessionId = "s-1", userId = SIGNED_OUT, status = SYNCED)
 
         wipe()
 
         assertNull(db.patientDao().getPatientById("p-1"))
         assertNull(db.sessionDao().getSessionById("s-1"))
-        assertNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-synced"))
-        assertNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-draft"))
+        assertNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-1"))
         assertNull(db.reportDao().getReportById("r-1"))
-        assertTrue(db.patientDao().getLinksForUser(LEAVER).isEmpty())
+        // The link cascades with its patient.
+        assertTrue(db.patientDao().getLinksForUser(SIGNED_OUT).isEmpty())
     }
 
     @Test
@@ -81,42 +81,62 @@ class AccountWipeDaoTest {
     }
 
     @Test
-    fun `another account's unsynced work and its parents stay`() = runTest {
-        // A colleague worked offline on this phone and never signed out. That work has not
-        // reached Supabase and is not the refused account's to lose (C8).
-        seedPatient("p-3", createdBy = COLLEAGUE, status = SYNCED)
-        seedSession("s-3", userId = COLLEAGUE, patientId = "p-3", status = SYNCED)
-        seedSample("smp-3", sessionId = "s-3", userId = COLLEAGUE, status = SampleStatus.VERIFIED)
-        seedPatient("p-4", createdBy = COLLEAGUE, status = PENDING)
+    fun `the signed-out account's own unsynced work and drafts stay, with their parents`() = runTest {
+        // A medtech whose password was changed on the web: this work uploads after they sign
+        // back in with the new one.
+        seedPatient("p-3", createdBy = SIGNED_OUT, status = SYNCED)
+        seedSession("s-3", userId = SIGNED_OUT, patientId = "p-3", status = SYNCED)
+        seedSample("smp-synced", sessionId = "s-3", userId = SIGNED_OUT, status = SampleStatus.SYNCED)
+        seedSample("smp-verified", sessionId = "s-3", userId = SIGNED_OUT, status = SampleStatus.VERIFIED)
+        seedSample("smp-draft", sessionId = "s-3", userId = SIGNED_OUT, status = SampleStatus.FLAGGED)
+        seedPatient("p-4", createdBy = SIGNED_OUT, status = PENDING)
+        seedReport("r-3", sessionId = "s-3", userId = SIGNED_OUT, status = PENDING)
 
         wipe()
 
-        assertNotNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-3"))
+        assertNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-synced"))
+        assertNotNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-verified"))
+        assertNotNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-draft"))
+        assertNotNull(db.reportDao().getReportById("r-3"))
         assertNotNull(db.sessionDao().getSessionById("s-3"))
         assertNotNull(db.patientDao().getPatientById("p-3"))
         assertNotNull(db.patientDao().getPatientById("p-4"))
     }
 
     @Test
-    fun `it reports the files it orphaned so the caller can delete them`() = runTest {
-        seedPatient("p-5", createdBy = LEAVER, status = SYNCED)
-        seedSession("s-5", userId = LEAVER, patientId = "p-5", status = SYNCED)
-        seedSample("smp-5", sessionId = "s-5", userId = LEAVER, status = SampleStatus.SYNCED)
-        seedReport("r-5", sessionId = "s-5", userId = LEAVER, status = SYNCED)
+    fun `another account's unsynced work and its parents stay`() = runTest {
+        seedPatient("p-5", createdBy = COLLEAGUE, status = SYNCED)
+        seedSession("s-5", userId = COLLEAGUE, patientId = "p-5", status = SYNCED)
+        seedSample("smp-5", sessionId = "s-5", userId = COLLEAGUE, status = SampleStatus.VERIFIED)
 
-        assertEquals(listOf("/files/smp-5.jpg"), wipeDao.getWipedSampleImagePaths(LEAVER))
+        wipe()
+
+        assertNotNull(db.sampleDao().getSampleByIdIncludingDeleted("smp-5"))
+        assertNotNull(db.sessionDao().getSessionById("s-5"))
+        assertNotNull(db.patientDao().getPatientById("p-5"))
+    }
+
+    @Test
+    fun `it reports the files of the rows it removes, and only those`() = runTest {
+        seedPatient("p-6", createdBy = SIGNED_OUT, status = SYNCED)
+        seedSession("s-6", userId = SIGNED_OUT, patientId = "p-6", status = SYNCED)
+        seedSample("smp-6", sessionId = "s-6", userId = SIGNED_OUT, status = SampleStatus.SYNCED)
+        seedSample("smp-7", sessionId = "s-6", userId = SIGNED_OUT, status = SampleStatus.VERIFIED)
+        seedReport("r-6", sessionId = "s-6", userId = SIGNED_OUT, status = SYNCED)
+        seedReport("r-7", sessionId = "s-6", userId = SIGNED_OUT, status = PENDING)
+
+        assertEquals(listOf("/files/smp-6.jpg"), wipeDao.getSyncedSampleImagePaths())
         assertEquals(
-            listOf(ReportFilePaths(csvFilePath = "/docs/r-5.csv", pdfFilePath = "content://docs/r-5")),
-            wipeDao.getWipedReportFiles(LEAVER),
+            listOf(ReportFilePaths(csvFilePath = "/docs/r-6.csv", pdfFilePath = "content://docs/r-6")),
+            wipeDao.getSyncedReportFiles(),
         )
     }
 
     private suspend fun wipe() {
-        wipeDao.deleteReports(LEAVER)
-        wipeDao.deleteSamples(LEAVER)
-        wipeDao.deleteSessions(LEAVER)
-        wipeDao.deletePatientLinks(LEAVER)
-        wipeDao.deletePatients(LEAVER)
+        wipeDao.deleteSyncedReports()
+        wipeDao.deleteSyncedSamples()
+        wipeDao.deleteSyncedSessions()
+        wipeDao.deleteSyncedPatients()
     }
 
     private suspend fun seedPatient(id: String, createdBy: String, status: String) {
@@ -185,7 +205,7 @@ class AccountWipeDaoTest {
     }
 
     private companion object {
-        const val LEAVER = "user-leaver"
+        const val SIGNED_OUT = "user-signed-out"
         const val COLLEAGUE = "user-colleague"
         const val SYNCED = "synced"
         const val PENDING = "pending"

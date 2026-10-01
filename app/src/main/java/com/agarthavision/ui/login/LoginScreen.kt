@@ -218,13 +218,13 @@ private fun SignedOutNoticeCard(notice: SignedOutNotice) {
         modifier = Modifier
             .fillMaxWidth()
             .testTag(LOGIN_SIGNED_OUT_NOTICE_TAG)
-            .background(colors.dangerTint, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.danger, RoundedCornerShape(12.dp))
+            .background(colors.warningTint, RoundedCornerShape(12.dp))
+            .border(1.dp, colors.warning, RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Text(
             text = stringResource(R.string.login_signed_out_by_server_title),
-            color = colors.dangerText,
+            color = colors.warningText,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,
             lineHeight = 18.sp,
@@ -232,19 +232,19 @@ private fun SignedOutNoticeCard(notice: SignedOutNotice) {
         Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = stringResource(R.string.login_signed_out_by_server_body),
-            color = colors.dangerText,
+            color = colors.warningText,
             fontSize = 13.sp,
             lineHeight = 18.sp,
         )
-        if (notice.unsyncedRemoved > 0) {
+        if (notice.unsyncedKept > 0) {
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = pluralStringResource(
-                    R.plurals.login_signed_out_unsynced_removed,
-                    notice.unsyncedRemoved,
-                    notice.unsyncedRemoved,
+                    R.plurals.login_signed_out_unsynced_kept,
+                    notice.unsyncedKept,
+                    notice.unsyncedKept,
                 ),
-                color = colors.dangerText,
+                color = colors.warningText,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,
                 lineHeight = 18.sp,

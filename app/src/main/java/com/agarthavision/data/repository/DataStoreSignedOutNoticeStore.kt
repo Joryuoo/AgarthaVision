@@ -16,17 +16,17 @@ class DataStoreSignedOutNoticeStore @Inject constructor(
 ) : SignedOutNoticeStore {
 
     override fun observe(): Flow<SignedOutNotice?> =
-        dataStore.data.map { prefs -> prefs[UNSYNCED_REMOVED_KEY]?.let(::SignedOutNotice) }
+        dataStore.data.map { prefs -> prefs[UNSYNCED_KEPT_KEY]?.let(::SignedOutNotice) }
 
     override suspend fun record(notice: SignedOutNotice) {
-        dataStore.edit { prefs -> prefs[UNSYNCED_REMOVED_KEY] = notice.unsyncedRemoved }
+        dataStore.edit { prefs -> prefs[UNSYNCED_KEPT_KEY] = notice.unsyncedKept }
     }
 
     override suspend fun clear() {
-        dataStore.edit { prefs -> prefs.remove(UNSYNCED_REMOVED_KEY) }
+        dataStore.edit { prefs -> prefs.remove(UNSYNCED_KEPT_KEY) }
     }
 
     private companion object {
-        val UNSYNCED_REMOVED_KEY = intPreferencesKey("signed_out_by_server_unsynced_removed")
+        val UNSYNCED_KEPT_KEY = intPreferencesKey("signed_out_by_server_unsynced_kept")
     }
 }

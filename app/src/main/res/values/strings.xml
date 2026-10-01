@@ -17,10 +17,10 @@
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
     <string name="login_signed_out_by_server_title">You were signed out</string>
-    <string name="login_signed_out_by_server_body">This account no longer has access to AgarthaVision, so its patients and records were removed from this phone. Everything that was uploaded is safe on the server. If this is unexpected, ask your laboratory\'s admin.</string>
-    <plurals name="login_signed_out_unsynced_removed">
-        <item quantity="one">%d item had not been uploaded and was removed.</item>
-        <item quantity="other">%d items had not been uploaded and were removed.</item>
+    <string name="login_signed_out_by_server_body">The server ended this phone\'s sign-in, so uploaded records were removed from it. They come back when you sign in. If your password was changed, sign in with the new one. If you can\'t sign in, ask your laboratory\'s admin.</string>
+    <plurals name="login_signed_out_unsynced_kept">
+        <item quantity="one">%d item that hadn\'t uploaded is still on this phone. It uploads after you sign back in.</item>
+        <item quantity="other">%d items that hadn\'t uploaded are still on this phone. They upload after you sign back in.</item>
     </plurals>
 
     <!-- Dashboard account / sync banner (ADR-007 offline access) -->

@@ -94,7 +94,7 @@ class MainViewModelTest {
             advanceUntilIdle()
             assertFalse(viewModel.signedOutByServer.value)
 
-            signedOutNotice.value = SignedOutNotice(unsyncedRemoved = 0)
+            signedOutNotice.value = SignedOutNotice(unsyncedKept = 0)
             advanceUntilIdle()
             assertTrue(viewModel.signedOutByServer.value)
 

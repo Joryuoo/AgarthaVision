@@ -58,8 +58,8 @@ it. See [`Sample`](../objects/Sample.md).
 and after every local write.
 
 0. **Check the account first** (14zcqntjph8). `SyncWorker::doWork` runs
-   `EnforceAccountAccessUseCase` before the push. If the server refuses the account, the phone is
-   wiped and signed out and the pass ends there; otherwise nothing changes. See
+   `EnforceAccountAccessUseCase` before the push. If the server refuses the account, the phone's
+   synced data is removed, it is signed out, and the pass ends there; otherwise nothing changes. See
    [`sign-in`](sign-in.md), "the server refuses the account". The direct call from
    `LoginViewModel::syncAndFetch` skips this: the medtech has just signed in.
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —

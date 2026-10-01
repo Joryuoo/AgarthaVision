@@ -67,12 +67,12 @@ class LoginViewModelTest {
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             // 14zcqntjph8: the wipe may have happened in a background sync with no screen open,
             // so the reason is read back from the store, not passed along a navigation.
-            signedOutNotice.value = SignedOutNotice(unsyncedRemoved = 2)
+            signedOutNotice.value = SignedOutNotice(unsyncedKept = 2)
 
             val viewModel = viewModel()
             advanceUntilIdle()
 
-            assertEquals(SignedOutNotice(unsyncedRemoved = 2), viewModel.state.value.signedOutNotice)
+            assertEquals(SignedOutNotice(unsyncedKept = 2), viewModel.state.value.signedOutNotice)
 
             signedOutNotice.value = null
             advanceUntilIdle()

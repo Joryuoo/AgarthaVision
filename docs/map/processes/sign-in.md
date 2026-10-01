@@ -60,7 +60,9 @@ the identity gone and the account's clinical data wiped from the phone.
 ## Movement — the server refuses the account (14zcqntjph8)
 
 An org admin offboards a medtech by deleting their login (or banning it). The phone learns it
-the next time it reaches the server, and wipes itself.
+the next time it reaches the server, and wipes itself. A password changed on the web or on
+another phone revokes this phone's login the same way, and the phone cannot tell the two
+apart, so the wipe is shaped to cost that medtech nothing but a sign-in.
 
 1. **Checked at every sync pass, online only.** `data/sync/SyncWorker.kt::doWork` runs
    `EnforceAccountAccessUseCase` before pushing. Offline or with nobody signed in it does nothing
@@ -75,15 +77,16 @@ the next time it reaches the server, and wipes itself.
    expired offline is the SDK's `RefreshFailure` and renews when the signal returns. Provider-
    neutral: it does not care whether the login was deleted or banned (D7). A successful answer is
    trusted for five minutes.
-3. **On a refusal:** detach from the active session; `WipeLocalAccountDataUseCase` removes the
-   account's unsynced subtree (`DiscardUnsyncedDataUseCase`, counted) and then everything synced
-   (`data/local/dao/AccountWipeDao.kt`), the account's JPEG folder, Coil's image caches and the
-   exported report files, and clears the initial-fetch flag; the reason is stored
-   (`SignedOutNoticeStore`); then `signOut`. Another account's unsynced rows, and their parents,
-   are kept (C8).
+3. **On a refusal:** detach from the active session; `WipeLocalAccountDataUseCase` removes
+   everything synced (`data/local/dao/AccountWipeDao.kt`), those rows' JPEGs, Coil's image caches
+   and the exported report files, clears the initial-fetch flag, and counts the account's
+   unsynced items; the count is stored (`SignedOutNoticeStore`); then `signOut`. **Every unsynced
+   row stays, the signed-out account's included**, with the parents it needs: it uploads after
+   that medtech signs back in (C8).
 4. **The medtech sees why.** `MainViewModel.signedOutByServer` sends any open screen to Login with
-   the graph popped (`AgarthaNavGraph`); `LoginScreen.kt::SignedOutNoticeCard` says the account no
-   longer has access and how many unuploaded items were removed. The notice stays until the next
+   the graph popped (`AgarthaNavGraph`); `LoginScreen.kt::SignedOutNoticeCard` says the phone was
+   signed out, to sign in with the new password if it changed, and how many unuploaded items
+   are waiting. The notice stays until the next
    successful sign-in (`SignInUseCase`).
 
 ## Why this shape

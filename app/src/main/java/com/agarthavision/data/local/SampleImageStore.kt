@@ -59,17 +59,9 @@ class SampleImageStore @Inject constructor(
         deleteJpeg(pathFor(userId, sampleId))
 
     /**
-     * Removes every JPEG this account captured or cached on the phone, captured or pulled, in one
-     * go: the whole `users/<userId>` folder. For an account the server no longer accepts
-     * (14zcqntjph8), never for a sign-out, where unsynced frames of a later login may live here.
-     */
-    suspend fun deleteAllFor(userId: String): Boolean = withContext(Dispatchers.IO) {
-        runCatching { File(context.filesDir, "users/$userId").deleteRecursively() }.getOrDefault(false)
-    }
-
-    /**
      * Empties Coil's memory and disk caches, which hold sample images loaded from Storage under
-     * their storage path, outside `users/`. Same caller and reason as [deleteAllFor].
+     * their storage path, outside `users/`. For a phone the server signed out (14zcqntjph8), whose
+     * synced samples were just removed and must not keep rendering from cache.
      */
     @OptIn(ExperimentalCoilApi::class)
     suspend fun clearImageLoaderCaches() = withContext(Dispatchers.IO) {

@@ -58,7 +58,7 @@ class EnforceAccountAccessUseCaseTest {
         inOrder(sessionManager, wipe, noticeStore, authRepository) {
             verify(sessionManager).clearActive()
             verify(wipe).invoke(USER_ID)
-            verify(noticeStore).record(SignedOutNotice(unsyncedRemoved = 2))
+            verify(noticeStore).record(SignedOutNotice(unsyncedKept = 2))
             verify(authRepository).signOut()
         }
     }
