@@ -19,6 +19,7 @@ import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.agarthavision.domain.usecase.records.SampleImageUnavailableReason
 import com.agarthavision.util.MainDispatcherRule
+import com.agarthavision.domain.repository.AuthRepository
 import com.google.gson.Gson
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
@@ -55,12 +56,17 @@ class OpenVerificationTargetUseCaseTest {
     private val findingDao: SampleSpeciesFindingDao = mock()
     private val resolveImageSource: ResolveSampleImageSourceUseCase = mock()
 
+    // No cached identity by default: nothing to compare an author against, so every suite that
+    // predates the read-only rule keeps opening its samples.
+    private val authRepository: AuthRepository = mock()
+
     private val useCase = OpenVerificationTargetUseCase(
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         findingDao = findingDao,
         resolveSampleImageSource = resolveImageSource,
         gson = Gson(),
+        authRepository = authRepository,
     )
 
     private val sampleId = "sample-1"

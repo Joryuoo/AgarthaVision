@@ -18,6 +18,9 @@ import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.EggStage
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.FrameSource
+import com.agarthavision.domain.model.ReadOnlyRecordException
+import com.agarthavision.domain.model.isColleagueRecord
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.records.ResolveSampleImageSourceUseCase
 import com.agarthavision.domain.usecase.records.SampleImageSource
 import com.google.gson.Gson
@@ -38,10 +41,16 @@ class OpenVerificationTargetUseCase @Inject constructor(
     private val findingDao: SampleSpeciesFindingDao,
     private val resolveSampleImageSource: ResolveSampleImageSourceUseCase,
     private val gson: Gson,
+    private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(sampleId: String): Result<VerificationTarget> = runCatching {
         val entity = requireNotNull(sampleDao.getSampleById(sampleId)) {
             "Sample $sampleId not found."
+        }
+        // Edit mode on a colleague's sample would end in a submit the server refuses
+        // (14zcqntjph6). Sample Detail hides the way in; this refuses it if reached anyway.
+        if (isColleagueRecord(entity.userId, authRepository.currentLocalUserId())) {
+            throw ReadOnlyRecordException(sampleId)
         }
         val storedDetections = detectionDao.getDetectionsForSample(sampleId)
 

@@ -102,9 +102,14 @@ class PatientRemoteDataSource @Inject constructor(
      * through this join: a patient row with no matching link is present on the device and
      * invisible to every query that reads it.
      * Inclusive range: rows [offset, offset+limit-1].
+     *
+     * Ordered by patient id so the pages are stable. The pull now reads the complete set to
+     * remove assignments the server no longer holds, and an unordered range can repeat one row
+     * and skip another between pages, which would read a live assignment as a removed one.
      */
     suspend fun fetchPatientLinks(offset: Long = 0L, limit: Long = 500L): List<PatientUserEntity> =
         supabase.postgrest[PATIENT_USERS_TABLE].select {
+            order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<PatientUserRow>()
             .map { it.toEntity() }

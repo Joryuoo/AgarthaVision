@@ -1,7 +1,10 @@
 package com.agarthavision.domain.usecase.verify
 
 import com.agarthavision.data.local.dao.SampleDao
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.model.isColleagueRecord
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.capture.DeleteFlaggedSampleUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import java.time.Instant
@@ -32,13 +35,23 @@ data class DeleteSummary(
  * The branch is `status == FLAGGED`, which is the same predicate the queue buckets use, so there
  * is no second definition of "verified" anywhere in the app. A mixed selection simply takes both
  * branches.
+ *
+ * **A colleague's sample is never deleted or tombstoned here** (14zcqntjph6). The server would
+ * refuse the tombstone on push, so the batch is checked before any row is touched and refused
+ * whole with [ReadOnlyRecordException], rather than half-applied.
  */
 class DeleteQueueItemsUseCase @Inject constructor(
     private val sampleDao: SampleDao,
     private val deleteFlaggedSampleUseCase: DeleteFlaggedSampleUseCase,
     private val syncPendingDataUseCase: SyncPendingDataUseCase,
+    private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(sampleIds: Set<String>): Result<DeleteSummary> = runCatching {
+        val viewerId = authRepository.currentLocalUserId()
+        sampleIds.firstOrNull { sampleId ->
+            isColleagueRecord(sampleDao.getSampleByIdIncludingDeleted(sampleId)?.userId, viewerId)
+        }?.let { sampleId -> throw ReadOnlyRecordException(sampleId) }
+
         var hardDeleted = 0
         var tombstoned = 0
 

@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/DetectionEntity.kt
 ---
 
@@ -106,7 +106,8 @@ Documented shape: `schema.ts` (`Detection`).
 - **Aggregated into** [`Report`](Report.md) — counted, never copied.
 - **Scoped by** [`Profile`](Profile.md) indirectly: `detections` RLS runs through the parent
   sample's `user_id`, not its own (`supabase/migrations/0001_init.sql:431-455`).
-  There is no `user_id` on this table.
+  There is no `user_id` on this table. Reads also pass for anyone assigned to the patient
+  (`can_read_sample`, `supabase/migrations/0007_patient_shared_history.sql:165-167`); writes do not.
 - **Looks like but is not** `PredictionDto` (`data/remote/dto/InferenceResponseDto.kt::PredictionDto`).
   That is the wire shape from the inference server: `class`, `confidence`, `x`, `y`, `width`,
   `height`, with no verdict and no id. It becomes a `DetectionEntity` only at verification

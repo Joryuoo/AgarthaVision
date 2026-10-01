@@ -143,7 +143,13 @@ export enum FrameSource {
  * - `0004_fix_profiles_rls_recursion.sql`: replaces admin-readable policies
  *   with `public.is_admin(uuid)` to avoid recursive profile reads.
  *
- * Room mirror: none. User identity comes from Supabase Auth session state.
+ * - `0008_colleague_names.sql` (current project): `profiles_select_colleague` lets
+ *   a medtech read the profile of a colleague who authored a session or report on
+ *   a patient they are both assigned to. The app selects `id` and `full_name` only.
+ *
+ * Room mirror: `ColleagueEntity.kt` (`colleagues`, v24) caches colleagues' `id` and
+ * `full_name` for read-only records. The signed-in user's own identity comes from
+ * Supabase Auth session state.
  */
 export interface Profile {
   id: UUID;
@@ -201,7 +207,9 @@ export interface Patient {
 
   created_by: UUID;
   // NOT NULL FK -> profiles(id). Provenance only — it grants no visibility.
-  // Access resolves through `patient_users`.
+  // Access resolves through `patient_users`. Since `0007_patient_shared_history.sql`
+  // the link also opens the patient's whole history — every session, sample,
+  // detection, finding, prediction and report on it, whoever authored them.
 
   created_at: TimestampTZ;
   updated_at: TimestampTZ;
@@ -263,8 +271,10 @@ export interface Session {
   // Nullable human-friendly smear label. Auto-generated as `LDNJ-M21-S01`
   // (3-letter surname abbreviation + first initial, sex and age, then the Nth
   // smear for that patient; domain/session/SessionLabelGenerator.kt) and editable
-  // thereafter. Unique per patient in Room only (index on patient_id, label);
-  // Postgres does not constrain it — the session UUID is the real key.
+  // thereafter. Unique per patient in Room (index on patient_id, label). Postgres
+  // has no constraint; since `0009_session_label_collisions.sql` a trigger renames
+  // a clashing insert or rename to `<label>-<first 4 of id>` and never rejects it.
+  // The session UUID is the real key.
 
   // ── Deliberately absent, all three ────────────────────────────────────────
   // `notes`     — removed. It was being used as an ad-hoc patient identifier
@@ -650,6 +660,10 @@ export interface ValidationRecord {
  * - `0009_storage_admin_read.sql`: adds an admin-only SELECT policy using
  *   `public.is_admin(auth.uid())`. Policies are OR'd, so admins can read across
  *   all user folders while writes stay owner-scoped through `0003`.
+ * - `0007_patient_shared_history.sql` (current project): adds a SELECT policy on
+ *   each bucket for any medtech assigned to the object's patient — `samples` by
+ *   matching `samples.storage_path`, `reports` by the report id in the file name
+ *   and the author in the folder. Writes stay owner-folder only.
  *
  * Room mirror: none. `SampleEntity.storage_path` stores the object key after
  * upload.
@@ -770,7 +784,7 @@ export type RelationshipMatrix = [
     from: "profiles";
     cardinality: "1 -> many";
     to: "storage.objects";
-    description: "Storage RLS permits users to read/write objects only in their own top-level folder.";
+    description: "Storage RLS permits users to write objects only in their own top-level folder. Reads also reach a colleague's object when the reader is assigned to its patient (`0007_patient_shared_history.sql`).";
   },
   {
     from: "samples";

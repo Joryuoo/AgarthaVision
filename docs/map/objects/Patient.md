@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
 ---
 
@@ -32,6 +32,12 @@ had no way to track multiple smears from the same person across time.
   second medtech. The `on_patient_created` trigger writes the creator's own row server-side,
   because the SELECT policy reads that table and PostgREST returns the inserted row on insert —
   without the trigger link, the creating medtech cannot read back the patient they just made.
+- **Assignment opens the whole history.** Since `0007_patient_shared_history.sql` a medtech
+  linked through `patient_users` reads every session, sample, detection, finding, prediction and
+  report on the patient, whoever wrote them (`is_linked_to_patient`, `:44-56`). `user_id` on
+  those rows stays the author. The phone mirrors the rule through its local links
+  (`PatientAccessRepository`), and the pull removes a link the server no longer returns, so an
+  unassigned patient leaves the list (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
 - **There is no delete.** Removing a patient is an admin-side action only; no client path,
   DAO method, or client RLS policy allows deletion.
 - **Editing does not cascade.** Existing session labels keep the initials and barangay they were

@@ -122,8 +122,8 @@ is the first. Add the next one to `ALL_MIGRATIONS` and export its schema JSON be
 Destructive fallback remains only for installs older than 22.
 
 **Enforcement:** partly mechanical on the Room side. `AgarthaDatabaseSchemaTest` pins the Room
-version and the columns each branch added, and `Migration22To23Test` builds a v22 database from
-`app/schemas/.../22.json` and migrates it. The Postgres side has no migration runner and no
+version and the columns each branch added, and `Migration22To23Test` and `Migration23To24Test`
+each build the previous version from its committed `app/schemas/.../<n>.json` and migrate it. The Postgres side has no migration runner and no
 schema-diff test. `schema.ts` is documentation and is never compiled (its header comment).
 
 **Known drift, code wins:** `schema.ts` previously named Room entity names (`samples.timestamp`,

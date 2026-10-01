@@ -17,6 +17,7 @@ import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toSamplePredictions
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
+import com.agarthavision.data.supabase.ProfileRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -70,6 +71,9 @@ class PredictionsSyncRoundTripTest {
     private val sessionRemote: SessionRemoteDataSource = mock()
     private val reportRemote: ReportRemoteDataSource = mock()
     private val sampleRemote: SampleRemoteDataSource = mock()
+    private val profileRemote: ProfileRemoteDataSource = mock {
+        onBlocking { fetchColleagues(any()) } doReturn emptyList()
+    }
     private val sampleImageStore: SampleImageStore = mock()
     private val cacheSampleImages: CacheSampleImagesUseCase = mock {
         onBlocking { invoke(any()) } doReturn ImageCacheSummary()
@@ -96,8 +100,8 @@ class PredictionsSyncRoundTripTest {
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
         whenever(patientRemote.fetchPatients()).thenReturn(emptyList())
         whenever(patientRemote.fetchPatientLinks()).thenReturn(emptyList())
-        whenever(sessionRemote.fetchSessions(USER_ID)).thenReturn(emptyList())
-        whenever(reportRemote.fetchReports(USER_ID)).thenReturn(emptyList())
+        whenever(sessionRemote.fetchSessions()).thenReturn(emptyList())
+        whenever(reportRemote.fetchReports()).thenReturn(emptyList())
         whenever(sampleRemote.fetchFindings(any())).thenReturn(emptyList())
         whenever(sampleImageStore.cachedPathOrNull(any(), any())).thenReturn(null)
         whenever(resolveImageSource(any())).thenReturn(
@@ -208,7 +212,7 @@ class PredictionsSyncRoundTripTest {
 
     private suspend fun serverHolds(predictions: List<SamplePrediction>, detections: List<DetectionEntity>) {
         // The server's sample row, as SampleRemoteDataSource maps it: no model output.
-        whenever(sampleRemote.fetchSamples(USER_ID, 0L, 500L))
+        whenever(sampleRemote.fetchSamples(0L, 500L))
             .thenReturn(listOf(sample(status = SampleStatus.SYNCED.value)))
         whenever(sampleRemote.fetchPredictions(listOf(SAMPLE_ID))).thenReturn(predictions)
         whenever(sampleRemote.fetchDetections(listOf(SAMPLE_ID))).thenReturn(detections)
@@ -234,6 +238,8 @@ class PredictionsSyncRoundTripTest {
             cacheSampleImages = cacheSampleImages,
             sampleImageStore = sampleImageStore,
             gson = gson,
+            profileRemoteDataSource = profileRemote,
+            colleagueDao = db.colleagueDao(),
         ).invoke().getOrThrow() as FetchSummary.Ran
         assertTrue("the pull must succeed: ${summary.failed}", FetchType.SAMPLES !in summary.failed)
     }
@@ -244,6 +250,7 @@ class PredictionsSyncRoundTripTest {
         findingDao = db.sampleSpeciesFindingDao(),
         resolveSampleImageSource = resolveImageSource,
         gson = gson,
+        authRepository = authRepository,
     ).invoke(SAMPLE_ID).getOrThrow()
 
     private fun prediction(x: Float) = Prediction(
