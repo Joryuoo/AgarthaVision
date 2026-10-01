@@ -242,13 +242,11 @@ fun SessionsScreen(
                                     // or correct a frame. A colleague's row is read-only
                                     // (14zcqntjph6) — capturing into it would add to someone
                                     // else's record — so it opens Session Detail to read.
-                                    onClick = {
-                                        if (isColleagueSession) {
-                                            onNavigate(Screen.SessionDetail.createRoute(sessionId))
-                                        } else {
-                                            viewModel.onResumeSession(sessionId)
-                                        }
-                                    },
+                                    onClick = sessionRowClick(
+                                        isColleagueSession = isColleagueSession,
+                                        openDetail = { onNavigate(Screen.SessionDetail.createRoute(sessionId)) },
+                                        resume = { viewModel.onResumeSession(sessionId) },
+                                    ),
                                     onVerifyClick = {
                                         viewModel.onOpenVerificationQueue(sessionData.session.id)
                                     },
@@ -555,11 +553,8 @@ private fun SessionCard(
     // Date and time, and on a colleague's smear whose it is (14zcqntjph6). The note that used
     // to tail this line was an ad-hoc patient identifier; the patient is a record of its own
     // now and the column is gone.
-    val meta = if (isColleagueSession) {
-        "$date · $time · ${recordedByText(colleagueAuthor)}"
-    } else {
-        "$date · $time"
-    }
+    val recordedBy = recordedByText(colleagueAuthor)
+    val meta = sessionMeta(date, time, recordedBy.takeIf { isColleagueSession })
 
     val (bgColor, borderColor) = if (isActive) {
         colors.accentTint2 to colors.accentTint

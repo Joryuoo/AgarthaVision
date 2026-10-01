@@ -49,7 +49,8 @@ interface ReportDao {
         SELECT COUNT(*) FROM reports
         WHERE session_id = :sessionId
           AND (user_id = :userId
-               OR """+LINK_S+""")
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
         """,
     )
     fun observeReportCountForSession(sessionId: String, userId: String): Flow<Int>

@@ -189,27 +189,6 @@ class GetSessionSamplesUseCaseTest {
 
         assertTrue(result is SessionSamplesResult.Visible)
     }
-}
-
-// ─────────────────────────────── fakes ───────────────────────────────────────
-
-/**
- * Auth fake that lets tests set the cached local identity independently from the
- * "live" identity so offline scenarios can be modelled precisely.
- */
-private class SamplesAuthRepository(
-    private val localUserId: String?,
-    private val liveUserId: String?,
-) : AuthRepository {
-    override fun observeLocalIdentity(): Flow<LocalIdentity?> =
-        flowOf(localUserId?.let { LocalIdentity(userId = it, email = "user@example.com") })
-
-    override suspend fun currentLocalUserId(): String? = localUserId
-    override suspend fun getCurrentUserId(): String? = liveUserId
-    override suspend fun isAuthenticated(): Boolean = liveUserId != null
-    override suspend fun hasActiveSession(): Boolean = liveUserId != null
-    override suspend fun signIn(email: String, password: String) = Unit
-    override suspend fun signOut() = Unit
 
     // ─────────────────── colleague's session on an assigned patient → Visible ──
 
@@ -232,6 +211,27 @@ private class SamplesAuthRepository(
         assertTrue(result is SessionSamplesResult.Visible)
         assertEquals(listOf("s1"), (result as SessionSamplesResult.Visible).data.samples.map { it.sample.id })
     }
+}
+
+// ─────────────────────────────── fakes ───────────────────────────────────────
+
+/**
+ * Auth fake that lets tests set the cached local identity independently from the
+ * "live" identity so offline scenarios can be modelled precisely.
+ */
+private class SamplesAuthRepository(
+    private val localUserId: String?,
+    private val liveUserId: String?,
+) : AuthRepository {
+    override fun observeLocalIdentity(): Flow<LocalIdentity?> =
+        flowOf(localUserId?.let { LocalIdentity(userId = it, email = "user@example.com") })
+
+    override suspend fun currentLocalUserId(): String? = localUserId
+    override suspend fun getCurrentUserId(): String? = liveUserId
+    override suspend fun isAuthenticated(): Boolean = liveUserId != null
+    override suspend fun hasActiveSession(): Boolean = liveUserId != null
+    override suspend fun signIn(email: String, password: String) = Unit
+    override suspend fun signOut() = Unit
 }
 
 private class SamplesSessionRepository(

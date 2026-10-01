@@ -319,7 +319,7 @@ class FetchRemoteDataUseCase @Inject constructor(
      * left for this function is the rows written before that migration, and the window before
      * this device's own push lands.
      *
-     * **Collisions are settled after every page, not inside one.** Pages arrive oldest first, so
+     * **Collisions are settled once every page is in, not inside one.** Pages arrive oldest first, so
      * a colleague's earlier `S03` can be read before this device's own row is updated with the
      * suffixed label the server gave it. Writing it immediately would suffix the colleague's
      * row, which the server left alone, and only the next pass would put it back. Deferring the
@@ -332,26 +332,35 @@ class FetchRemoteDataUseCase @Inject constructor(
         while (true) {
             val page = sessionRemoteDataSource.fetchSessions(offset, PAGE_SIZE.toLong())
             for (remote in page) {
-                if (!patientDao.patientExists(remote.patientId)) {
-                    Log.w(TAG, "pullSessions: patient ${remote.patientId} not on device; skipping ${remote.sessionId}")
-                    continue
-                }
-                val local = sessionDao.getSessionById(remote.sessionId)
-                // E4 guard: only write when absent or already synced; skip pending/sync_failed
-                if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                    if (collidesLocally(remote)) {
-                        collisions += remote
-                    } else {
-                        upsertSessionReconcilingLabel(remote)
-                    }
-                    fetched++
-                }
+                if (pullSession(remote, collisions)) fetched++
             }
             if (page.size < PAGE_SIZE) break
             offset += PAGE_SIZE.toLong()
         }
         collisions.forEach { remote -> upsertSessionReconcilingLabel(remote) }
         return fetched
+    }
+
+    /**
+     * Writes one pulled session, or defers it to [collisions] when its label clashes locally.
+     * Returns whether the row counts as fetched.
+     */
+    private suspend fun pullSession(remote: SessionEntity, collisions: MutableList<SessionEntity>): Boolean {
+        if (!patientDao.patientExists(remote.patientId)) {
+            Log.w(TAG, "pullSessions: patient ${remote.patientId} not on device; skipping ${remote.sessionId}")
+            return false
+        }
+        val local = sessionDao.getSessionById(remote.sessionId)
+        // E4 guard: only write when absent or already synced; skip pending/sync_failed
+        val writable = local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value
+        if (writable) {
+            if (collidesLocally(remote)) {
+                collisions += remote
+            } else {
+                upsertSessionReconcilingLabel(remote)
+            }
+        }
+        return writable
     }
 
     private suspend fun collidesLocally(remote: SessionEntity): Boolean {
