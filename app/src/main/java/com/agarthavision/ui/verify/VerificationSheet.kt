@@ -106,10 +106,10 @@ fun VerificationSheet(
     val toastState = rememberAgarthaToastState()
     val finishFirst = stringResource(R.string.verify_add_species_blocked)
 
-    // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
+    // Keyed on the id and prior target: FlaggedFrame equality covers mutable fields
     // such as the answers already given, so keying on the frame would re-seed it — and wipe
     // the in-progress answers — every time the store re-emits.
-    LaunchedEffect(frame.sampleId) {
+    LaunchedEffect(frame.sampleId, prior) {
         viewModel.setFrame(frame, prior)
     }
 
