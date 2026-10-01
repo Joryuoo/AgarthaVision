@@ -78,11 +78,11 @@ apart, so the wipe is shaped to cost that medtech nothing but a sign-in.
    neutral: it does not care whether the login was deleted or banned (D7). A successful answer is
    trusted for five minutes.
 3. **On a refusal:** detach from the active session; `WipeLocalAccountDataUseCase` removes
-   everything synced (`data/local/dao/AccountWipeDao.kt`), those rows' JPEGs, Coil's image caches
-   and the exported report files, clears the initial-fetch flag, and counts the account's
-   unsynced items; the count is stored (`SignedOutNoticeStore`); then `signOut`. **Every unsynced
-   row stays, the signed-out account's included**, with the parents it needs: it uploads after
-   that medtech signs back in (C8).
+   everything synced (`data/local/dao/AccountWipeDao.kt`) and the `colleagues` name cache, those
+   rows' JPEGs, Coil's image caches and the exported report files, clears the initial-fetch flag,
+   and counts the account's unsynced items; the count is stored (`SignedOutNoticeStore`); then
+   `signOut`. **Every unsynced row stays, the signed-out account's included**, with the parents
+   it needs: it uploads after that medtech signs back in (C8).
 4. **The medtech sees why.** `MainViewModel.signedOutByServer` sends any open screen to Login with
    the graph popped (`AgarthaNavGraph`); `LoginScreen.kt::SignedOutNoticeCard` says the phone was
    signed out, to sign in with the new password if it changed, and how many unuploaded items

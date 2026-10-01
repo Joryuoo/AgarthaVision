@@ -3,6 +3,7 @@ package com.agarthavision.data.local.dao
 import android.content.Context
 import androidx.room.Room
 import com.agarthavision.core.database.AgarthaDatabase
+import com.agarthavision.data.local.entity.ColleagueEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
@@ -117,6 +118,15 @@ class AccountWipeDaoTest {
     }
 
     @Test
+    fun `colleagues' names go, since every one came from the server`() = runTest {
+        db.colleagueDao().upsertColleagues(listOf(ColleagueEntity(userId = COLLEAGUE, fullName = "Test Zero")))
+
+        wipe()
+
+        assertNull(db.colleagueDao().getFullName(COLLEAGUE))
+    }
+
+    @Test
     fun `it reports the files of the rows it removes, and only those`() = runTest {
         seedPatient("p-6", createdBy = SIGNED_OUT, status = SYNCED)
         seedSession("s-6", userId = SIGNED_OUT, patientId = "p-6", status = SYNCED)
@@ -137,6 +147,7 @@ class AccountWipeDaoTest {
         wipeDao.deleteSyncedSamples()
         wipeDao.deleteSyncedSessions()
         wipeDao.deleteSyncedPatients()
+        wipeDao.deleteColleagues()
     }
 
     private suspend fun seedPatient(id: String, createdBy: String, status: String) {

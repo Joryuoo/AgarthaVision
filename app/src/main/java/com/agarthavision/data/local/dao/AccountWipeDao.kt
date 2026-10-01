@@ -23,6 +23,9 @@ data class ReportFilePaths(
  * means a medtech who only changed their password signs back in and uploads it; an account that
  * really was removed leaves it on a phone nobody can open it on without signing in (C8).
  *
+ * **Colleagues' names go too.** They are a cache of other medtechs' `profiles` rows, all of it
+ * server data, and they name people who are not the one signing out.
+ *
  * Every statement runs inside one transaction in [WipeLocalAccountDataUseCase]. Deepest first,
  * because Room enforces `samples → sessions` and `sessions → patients` as NO ACTION.
  *
@@ -64,4 +67,8 @@ interface AccountWipeDao {
         """,
     )
     suspend fun deleteSyncedPatients(): Int
+
+    /** The whole cache: every name in it came from the server, and the next pull refills it. */
+    @Query("DELETE FROM colleagues")
+    suspend fun deleteColleagues(): Int
 }

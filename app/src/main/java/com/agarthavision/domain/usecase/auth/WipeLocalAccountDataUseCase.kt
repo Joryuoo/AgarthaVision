@@ -11,7 +11,8 @@ import javax.inject.Inject
 
 /**
  * Removes what already reached Supabase from a phone the server has signed out (14zcqntjph8):
- * patients, sessions, samples, verdicts, reports, their JPEGs and exported report files.
+ * patients, sessions, samples, verdicts, reports, colleagues' names, their JPEGs and exported
+ * report files.
  *
  * **Wider than a sign-out on synced data.** [SignOutUseCase] leaves synced rows behind, hidden by
  * `user_id`, for the next login on this phone. Here the phone may belong to someone who has left
@@ -42,6 +43,7 @@ class WipeLocalAccountDataUseCase @Inject constructor(
             wipeDao.deleteSyncedSamples()
             wipeDao.deleteSyncedSessions()
             wipeDao.deleteSyncedPatients()
+            wipeDao.deleteColleagues()
             images to files
         }
 
