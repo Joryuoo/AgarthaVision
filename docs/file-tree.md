@@ -14,7 +14,7 @@ AgarthaVision/
 ├── docs/                      This shelf. See docs/CONTEXT.md
 │
 ├── app/                       The one Gradle module. Everything Android lives here
-├── supabase/migrations/       Postgres schema + RLS (0001_init.sql; legacy-dev/ archive)
+├── supabase/migrations/       Postgres schema + RLS this repo owns (legacy-dev/ archive; the console's admin set is elsewhere)
 ├── inference/                 The self-hosted FastAPI inference container
 ├── branding/                  Logo SVGs
 ├── tools/psgc/                Generator for the bundled PSGC asset. Run by hand, output committed
@@ -140,6 +140,87 @@ This is the one home for which file describes which project.
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
+
+### The Admin Console's migrations — same database, other repository
+
+The `agarthavision` database has a **second migration set** that this repository does not hold:
+`supabase/migrations/admin/NNNN_*.sql` in the Admin Console's repository
+(`kazuretsu/AgarthaVision-Admin`). It has its own number sequence, so the two repositories never
+mint the same number, and it is applied by hand in the dashboard like this one. **Reading only
+this folder no longer gives you the whole schema.** This section is the one home for what that
+set does to it. The decision behind it is D4 and the migration convention in the ClickUp page
+*Decisions & Risks*. No admin SQL is copied here.
+
+**The rule: additive only.** An admin migration adds tables, functions, triggers and permissive
+policies. It never `ALTER`s or `DROP`s a table, column, function or policy this repository owns.
+A change to the shape or the policies of an app-owned table belongs in this folder instead.
+
+**What it adds**, as of the console's open branches (`feat/organizations` `ed59346c`,
+`feat/lab-scoping` `f99fd4cd`, `feat/audit-trail` `2e139983`, 2026-09-30). None of these were on
+the console's `staging` yet, so the file numbers can still change before they merge.
+
+| Admin file | Adds |
+|---|---|
+| `admin/0001_organizations.sql` | Laboratory organizations. New tables `organizations`, `organization_members` (one organization per user; `org_admin` / `medtech` is a role on the membership, never on `profiles`), `patient_organizations` (which laboratory owns a patient) and the append-only `admin_audit_log`. Also `console_*` functions, and a backfill that puts every existing non-admin profile and every existing patient in one starting organization. Requires app `0001`–`0006` |
+| `admin/0002_patient_scoping.sql` | The `patients` trigger below, and org-admin read access to the laboratory's records |
+| `admin/0003_audit_exports.sql` | `console_record_export`, which records research exports in the audit log. No app-owned object touched |
+
+**Where it touches app-owned objects**:
+
+- **One trigger on `patients`.** `console_on_patient_created` is `AFTER INSERT` and runs
+  `console_assign_patient_organization()`. It files the new patient under the organization of
+  `created_by`'s membership. It **never raises**: every error is caught and logged as a warning,
+  and the patient is left without an organization (risk R4). An error raised there would fail
+  patient sync for every medtech. It sits beside the app's own `on_patient_created`, and neither
+  depends on the other.
+- **Permissive `SELECT` policies for the org admin**, named `"<table>: org admin reads their
+  organization"`, on these app-owned tables:
+  - `patients`
+  - `patient_users`
+  - `sessions`
+  - `samples`
+  - `detections`
+  - `predictions`
+  - `sample_species_findings`
+  - `reports`
+  - `profiles` (the laboratory's own members only)
+  - `storage.objects` (the `samples` bucket only)
+
+  Permissive policies are combined with `OR`, so these policies only add rows an org admin can
+  read. Nothing a medtech or a super admin can see changes, and the app holds no organization
+  data.
+
+  **One exception: the phone itself.** The phone reads patients and patient links without a
+  user filter (`data/supabase/PatientRemoteDataSource.kt::fetchPatients`, `::fetchPatientLinks`),
+  and the app never checks `role` or membership. An org admin's profile role is `medtech`, so an
+  org admin can sign in on a phone. If they do, the phone downloads every patient in the
+  laboratory, not just the ones assigned to them. A super admin already gets everything the same
+  way, through the `is_admin()` branch of `patients_select_linked` and `patient_users_select_own`
+  (`supabase/migrations/0001_init.sql:359-367`, `:396-398`).
+- **Foreign keys into app tables.**
+  - Both of these cascade on delete, though C8 means neither delete happens:
+    - `patient_organizations.patient_id → patients(id)`
+    - `organization_members.user_id → profiles(id)`
+  - Three actor columns set null on delete:
+    - `organizations.created_by → profiles(id)`
+    - `organization_members.added_by → profiles(id)`
+    - `admin_audit_log.actor_id → profiles(id)`
+
+**What this means for a migration written here.** The admin set reads these app-owned names:
+
+- `patients.id` and `patients.created_by`
+- `sessions.patient_id`
+- `samples.session_id` and `samples.storage_path`
+- the `sample_id` columns of `detections`, `predictions` and `sample_species_findings`
+- `reports.session_id`
+- `patient_users.patient_id`
+- `profiles.id`, `profiles.role` and `profiles.full_name`
+- `public.is_admin(uuid)`
+- the `{user_id}/{sample_id}.jpg` key shape in the `samples` bucket
+
+Renaming or changing any of these breaks the console without an error on this side. The
+`patients` trigger fails **silently**: new patients stop being assigned to a laboratory, and sync
+carries on. Tell the console team before merging such a change.
 
 ## `inference/`
 

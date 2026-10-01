@@ -9,6 +9,31 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## docs/admin-migrations-schema — the Admin Console's migrations are on the shelf · 2026-10-01
+
+`14zcqntjpha`. Docs only; no code or SQL changed.
+
+The Admin Console now adds its own migrations to the same `agarthavision` database, from its
+own repository (`supabase/migrations/admin/NNNN_*.sql`, own number sequence, additive only).
+Before this change, C6 read as if this repository held the whole schema.
+
+- **`file-tree.md`** gains one section on that set:
+  - where it lives and its additive-only rule
+  - what its three files add
+  - the one trigger on `patients` (`console_on_patient_created`, never raises)
+  - the org-admin read policies on app-owned tables
+  - the app columns it depends on
+- **C6** says this folder is the authority for what this repository owns, and points there.
+- **`Patient` and `Profile` cards** note the trigger, the laboratory that owns a patient, and
+  that an org admin is a membership role rather than a `profiles.role` value. Both re-verified
+  at `b64271d2`.
+- **Effects:** the data-model checklist asks whether a change touches a name the console reads.
+  The RLS section says not every policy is in this repository.
+- **Recorded, not fixed:** the phone reads patients and links without a user filter, so an org
+  admin who signs in on a phone downloads the whole laboratory's patients.
+
+---
+
 ## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
 
 `14zcqntjg5f`. Docs only; no code changed.

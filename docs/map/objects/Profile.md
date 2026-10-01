@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-10-01
+commit: b64271d2
 entity: supabase/migrations/0001_init.sql
 ---
 
@@ -19,7 +19,11 @@ purely to hang a `role` and a display name off an auth identity, and to give eve
 a foreign key it is allowed to reference. It is created by a trigger rather than by the app so
 a row always exists before the first query — there is no sign-up flow to hook into.
 
-The role column is where all admin capability lives, and nothing in the Android app reads it.
+The role column is where **super admin** capability lives (`admin`), and nothing in the Android
+app reads it. An **org admin** is not a value here. It is a role on the membership in
+`organization_members`, which the Admin Console's own migration set adds. An org admin's
+profile still says `medtech`, so an org admin can sign in on a phone. See
+[`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 
 ## Shape
 
@@ -65,6 +69,10 @@ Documented shape: `schema.ts` (`Profile`).
 - On the dev and prod projects, which still run the legacy history, `legacy-dev/0008_reports.sql:36-38`
   and `legacy-dev/0012` reintroduced the inline `(select role from profiles …)` subquery. A change
   to the role column's name or values there must patch both styles.
+- The Admin Console's migration set. It reads `id`, `role` (through `is_admin()`) and `full_name`.
+  It also holds foreign keys to `profiles(id)`: `organization_members.user_id` cascades on
+  delete, and the actor columns are set null. Its org-admin policy also lets an org admin read
+  their laboratory's members.
 - Sign-in, if you add a required column with no default — `handle_new_user()` inserts only
   `id` and `role`.
 

@@ -114,6 +114,19 @@ dashboard SQL editor — never applied programmatically (`supabase/migrations/00
 Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
 (`core/database/AgarthaDatabase.kt`).
 
+**This folder is the authority for what this repository owns, not for the whole database.** The
+Admin Console runs a second migration set against the same `agarthavision` database. It lives in
+its own repository at `supabase/migrations/admin/NNNN_*.sql`, with its own number sequence, and
+covers organizations, memberships, patient ownership and the audit log. That set is **additive
+only**: it adds tables, functions, triggers and permissive policies, and never alters or drops
+a table, column, function or policy this repository owns. Anything that changes an app-owned
+table's shape or policies is written here. It does reach app-owned tables in two ways: one
+`AFTER INSERT` trigger on `patients` that never raises, and org-admin `SELECT` policies. It also
+depends on app columns that a migration here must not rename without telling the console team.
+What it adds, and those columns:
+[`file-tree.md`](file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+Never copy admin SQL into this repository.
+
 **From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
 to a destructive rebuild, which was acceptable while the local database held nothing Supabase
 did not. Version 23 added the inference queue: frames that are captured, waiting on a model
