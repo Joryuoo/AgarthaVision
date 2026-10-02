@@ -127,6 +127,14 @@ What it adds, and those columns:
 [`file-tree.md`](file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 Never copy admin SQL into this repository.
 
+**Super admins live in `super_admins`, not on the profile** (`0014_super_admins.sql`, D22). A
+user is a super admin while they hold a row there with `revoked_at` null, and `is_admin()` is the
+one way to ask. `profiles.role` is retired and grants nothing. No signed-in caller reads or
+writes `super_admins`, and a revoke sets `revoked_at` rather than deleting the row (C8). Do not
+put authority back on `profiles`, and do not add a policy that lets a client touch
+`super_admins`. Details:
+[`Profile`](map/objects/Profile.md#super-admins).
+
 **From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
 to a destructive rebuild, which was acceptable while the local database held nothing Supabase
 did not. Version 23 added the inference queue: frames that are captured, waiting on a model
@@ -293,8 +301,9 @@ storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating contr
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
 
-**Super admins read patients de-identified (D19, 14zcqntjvjw).** `profiles.role = 'admin'` is
-the AgarthaVision team, the clinics' processor, not their controller. Since
+**Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
+`super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision
+team, the clinics' processor, not their controller. Since
 `0013_super_admin_reads_deidentified.sql` the `patients`, `sessions` and `samples` SELECT
 policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_session()` (`:60`),
 so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and

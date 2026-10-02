@@ -25,7 +25,7 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
 6. Does it rename or change an app-owned name the Admin Console's migration set reads, such as
-   `patients.created_by`, `profiles.role` or `is_admin()`? The full list is in
+   `patients.created_by`, `profiles.role`, `is_admin()` or `super_admins`? The full list is in
    [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
    If so, tell the console team before it merges.
 
@@ -82,12 +82,13 @@ path on a session or sample needs the same check**, or its edit is written local
 refused on push. The push queues filter on `user_id`, so a colleague's row can never be pushed.
 
 In the consolidated schema every table's admin path, the `reports` rows included, resolves
-through `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`) — except
-`patients`, `sessions` and `samples`, which a super admin reads only through the
-de-identified views since `0013_super_admin_reads_deidentified.sql`, and the `reports` bucket,
-whose admin read 0013 drops (`:113`). **A new identifying
-column must stay out of `0012_deidentified_reads.sql`'s views, and a new admin read of those
-three tables goes through them** (C10). The dev and prod
+through `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`), which
+since `0014` reads `super_admins`, not `profiles.role` (`../objects/Profile.md`, "Super
+admins") — except `patients`, `sessions` and `samples`, which a super admin reads only through
+the de-identified views since `0013_super_admin_reads_deidentified.sql`, and the `reports`
+bucket, whose admin read 0013 drops (`:113`). **A new identifying column must stay out of
+`0012_deidentified_reads.sql`'s views, and a new admin read of those three tables goes through
+them** (C10). The dev and prod
 projects still run the legacy history, where `reports` reintroduced an inline
 `(select role from profiles …)` subquery (`supabase/migrations/legacy-dev/0008_reports.sql:36-38`).
 **A policy change made on those projects has to patch both styles or admin reads diverge by
