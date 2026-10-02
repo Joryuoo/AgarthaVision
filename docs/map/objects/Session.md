@@ -58,8 +58,10 @@ Documented shape: `schema.ts` (`Session`).
 ## Connected to
 
 - **Owned by** [`Patient`](Patient.md) (`patient_id` FK) and [`Profile`](Profile.md) (`user_id` FK).
-- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:157-159` —
-  every medtech assigned to the patient. `user_id` stays the author. On the phone a patient's Sessions list is `own OR
+- **Read by** the author and — since `0007_patient_shared_history.sql:157-159` —
+  every medtech assigned to the patient. A super admin reads `sessions_deidentified` instead,
+  without `label`, which spells the patient's initials, sex and age
+  (`0012_deidentified_reads.sql:62`, `0013_super_admin_reads_deidentified.sql:48`). `user_id` stays the author. On the phone a patient's Sessions list is `own OR
   assigned` (`SessionDao.kt::SESSIONS_FILTER`); Home, the dashboard and the pending counts stay
   the medtech's own work.
 - **Owns** [`Sample`](Sample.md), 1 → many, ON DELETE CASCADE (`supabase/migrations/0001_init.sql:183`).

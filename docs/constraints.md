@@ -203,6 +203,19 @@ its own ticket.
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
 
+**Authorship outlives the login** (`0011_profile_outlives_login.sql`, 14zcqntjph8,
+14zcqntjvjx). A medtech who leaves a laboratory is offboarded by deleting their login, which
+frees the email for the next laboratory that hires them, or for this one if it rehires them.
+Deleting the login never touches their work: `profiles.id` is the person's permanent id and no
+longer references `auth.users`, so nothing cascades. Their profile, every patient, session,
+sample and report they authored, their organization membership and their audit-log entries all
+stay, still naming them. Only `profiles.account_id` changes, to null, meaning "no login now".
+Every table that names a person references `profiles`, never `auth.users`, so this one link is
+the only thing a deleted login can reach. A rehire is not yet reconnected to the profile they
+already have: their new login gets a fresh one (see [`Profile`](map/objects/Profile.md)).
+Nothing in this repository deletes a login. Sign-out and the deactivation wipe act on the phone
+only, and the wipe keeps work that has not synced (`WipeLocalAccountDataUseCase`).
+
 **Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
 images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
 data (patient names, birthdates, sex, barangays) is governed by Philippine RA 10173 and clinical
@@ -287,6 +300,20 @@ history, test artifacts, or logs. Local on-device SQLite storage (Room) and repo
 storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
+**Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
+`super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision
+team, the clinics' processor, not their controller. Since
+`0013_super_admin_reads_deidentified.sql` the `patients`, `sessions` and `samples` SELECT
+policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_session()` (`:60`),
+so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and
+age) or sample note, and no report file (`:113`). They read the non-identifying columns through
+`patients_deidentified`, `sessions_deidentified` and `samples_deidentified`
+(`0012_deidentified_reads.sql:50-89`), which return rows only to `is_admin(auth.uid())`.
+Detections, findings, predictions, report rows, patient links, frames and
+`barangay_prevalence()` are unchanged. **A new identifying column goes nowhere near those
+views**, and a new super admin read of clinical data goes through them. Medtechs and
+organization admins are unaffected.
 
 
 ## C11 — One design system

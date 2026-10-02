@@ -97,8 +97,11 @@ from it.
 ## Connected to
 
 - **Owned by** [`Session`](Session.md) and, remotely, [`Profile`](Profile.md).
-- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:161-163` —
-  every medtech assigned to the patient. Locally, Session Detail's list and the report read a colleague's samples on
+- **Read by** the author and — since `0007_patient_shared_history.sql:161-163` —
+  every medtech assigned to the patient. A super admin reads `samples_deidentified` instead,
+  without `user_note` (`0012_deidentified_reads.sql:74`,
+  `0013_super_admin_reads_deidentified.sql:53`); detections, findings and predictions stay
+  readable to them (`:80-108`). Locally, Session Detail's list and the report read a colleague's samples on
   an assigned patient (`SampleDao::observeSamplesForSession`, `GetSessionSamplesUseCase`,
   `GetSampleDetailUseCase`); the push queue and the flagged queue stay author-only.
 - **Owns** [`Prediction`](Prediction.md), 1 → many, CASCADE

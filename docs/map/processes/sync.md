@@ -81,12 +81,26 @@ deferred claiming step is needed.
 `FetchRemoteDataUseCase` pulls patients → sessions → samples (with predictions, detections and
 findings) → reports, then the frames.
 
-1. **No author filter.** Since `0007_patient_shared_history.sql` the server returns the
-   medtech's own rows plus the full history of every patient they are assigned to, colleagues'
-   rows included, and none of the fetches filter on `user_id`
-   (`SessionRemoteDataSource.kt::fetchSessions`, `SampleRemoteDataSource.kt::fetchSamples`,
-   `ReportRemoteDataSource.kt::fetchReports`). A colleague's row lands `synced` and is never
-   edited here, so the E4 guard lets every later pull refresh it.
+1. **The pull scopes itself; RLS is the second line** (14zcqntjt3p). The device holds the
+   user's own rows plus the full history of every patient their own `patient_users` rows name,
+   colleagues' rows included (`0007_patient_shared_history.sql`). That is what a medtech's
+   policies return, and every fetch asks for exactly that, because the same tables give an org
+   admin (console `admin/0002`) their whole laboratory, and a super admin every patient link,
+   report and detection (`0013_super_admin_reads_deidentified.sql` took the rest):
+   - links filtered to the user (`PatientRemoteDataSource.kt::fetchPatientLinks`), then those
+     patients by id (`::fetchPatients`);
+   - sessions, samples and reports each fetched as "own" plus "under these parents"
+     (`SessionRemoteDataSource.kt::fetchOwnSessions` / `::fetchSessionsForPatients`, and the same
+     pair on `SampleRemoteDataSource.kt` and `ReportRemoteDataSource.kt`), ids sent 100 at a
+     time. The parents are read from the device after the step before has written them
+     (`PatientDao::getLinksForUser`, `SessionDao::getSessionIdsOnLinkedPatients`), so a step
+     that failed still leaves the next one a scope;
+   - a row that arrives in both halves is handled once;
+   - colleagues' names by id, for the authors on those patients only
+     (`ColleagueDao::getColleagueIdsOnLinkedPatients`).
+
+   A colleague's row lands `synced` and is never edited here, so the E4 guard lets every later
+   pull refresh it.
 2. **Revoked assignments leave.** After every link page arrives, a local link the server no
    longer returns is removed — unless its patient is still waiting to push, whose creator link
    the server has not seen yet (`FetchRemoteDataUseCase.kt::removeRevokedLinks`). Only the
