@@ -49,18 +49,35 @@ class SessionRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // The phone holds the signed-in user's own sessions plus every session of a patient they are
+    // assigned to: a patient's full history, colleagues' smears included (14zcqntjph5). That is
+    // exactly what 0001's author policy and 0007's `sessions_select_via_patient` give a medtech,
+    // and it is asked for in those two halves rather than left to RLS, because RLS gives an org
+    // admin (console `admin/0002`) their whole laboratory (14zcqntjt3p).
+
     /**
-     * Fetches a page of every session the signed-in medtech may read, ordered by start time
-     * ascending. Inclusive range: rows [offset, offset+limit-1].
-     *
-     * **No `user_id` filter, on purpose.** `sessions_select_via_patient`
-     * (`0007_patient_shared_history.sql`) returns the caller's own sessions plus every session
-     * of a patient they are assigned to, which is exactly the set the device should hold: a
-     * patient's full history, colleagues' smears included (14zcqntjph5). Filtering on the
-     * author here would silently undo that policy.
+     * Fetches a page of the sessions [userId] authored, ordered by start time ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchSessions(offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
+    suspend fun fetchOwnSessions(userId: String, offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
         supabase.postgrest[SESSIONS_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("started_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<SessionRow>().map { it.toEntity() }
+
+    /**
+     * Fetches a page of the sessions of the given [patientIds], whoever authored them, ordered by
+     * start time ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the ids
+     * and must guard against an empty list.
+     */
+    suspend fun fetchSessionsForPatients(
+        patientIds: List<String>,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<SessionEntity> =
+        supabase.postgrest[SESSIONS_TABLE].select {
+            filter { isIn("patient_id", patientIds) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<SessionRow>().map { it.toEntity() }

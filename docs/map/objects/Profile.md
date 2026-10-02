@@ -78,10 +78,11 @@ record can name its author (14zcqntjph6).
 (`app/src/main/java/com/agarthavision/domain/model/LocalIdentity.kt`,
 `SupabaseAuthRepository.kt::observeLocalIdentity`), not a `profiles` row. The `colleagues` table
 (`data/local/entity/ColleagueEntity.kt`, Room v24) caches `id` and `full_name` of those
-colleagues, filled by the pull (`data/supabase/ProfileRemoteDataSource.kt::fetchColleagues`) and
-read through `ColleagueRepository`. It is a label, never a permission. Because
-`handle_new_user()` writes no name, a colleague reads as "another medtech" until something sets
-`full_name`.
+colleagues, filled by the pull (`data/supabase/ProfileRemoteDataSource.kt::fetchColleagues`, by
+the ids `ColleagueDao::getColleagueIdsOnLinkedPatients` reads off the device, so an org admin's
+phone never lists their laboratory's staff) and read through `ColleagueRepository`. It is a
+label, never a permission. Because `handle_new_user()` writes no name, a colleague reads as
+"another medtech" until something sets `full_name`.
 
 ## Connected to
 

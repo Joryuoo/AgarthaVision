@@ -112,16 +112,33 @@ open class ReportRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // Own reports plus every report on a session of a patient the user is assigned to (0007
+    // reversed 0003's owner-only rule), asked for in those two halves for the reason on
+    // `SessionRemoteDataSource.fetchOwnSessions` (14zcqntjt3p).
+
     /**
-     * Fetches a page of every report the signed-in medtech may read, ordered by generated_at
-     * ascending. Inclusive range: rows [offset, offset+limit-1].
-     *
-     * Unfiltered for the reason on `SessionRemoteDataSource.fetchSessions`:
-     * `reports_select_via_patient` (0007) returns the caller's own reports plus every report
-     * on a session of a patient they are assigned to. This reverses 0003's owner-only rule.
+     * Fetches a page of the reports [userId] generated, ordered by generated_at ascending.
+     * Inclusive range: rows [offset, offset+limit-1].
      */
-    open suspend fun fetchReports(offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
+    open suspend fun fetchOwnReports(userId: String, offset: Long = 0L, limit: Long = 500L): List<ReportEntity> =
         supabase.postgrest[REPORTS_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("generated_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<ReportRow>().map { it.toEntity() }
+
+    /**
+     * Fetches a page of the reports on the given [sessionIds], whoever generated them, ordered by
+     * generated_at ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the
+     * ids and must guard against an empty list.
+     */
+    open suspend fun fetchReportsForSessions(
+        sessionIds: List<String>,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<ReportEntity> =
+        supabase.postgrest[REPORTS_TABLE].select {
+            filter { isIn("session_id", sessionIds) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<ReportRow>().map { it.toEntity() }

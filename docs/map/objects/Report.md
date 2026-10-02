@@ -71,8 +71,8 @@ PK column is `report_id`. Differences:
   every medtech assigned to the patient. An admin reads the row but not the file, which prints
   the patient's name (`0013_super_admin_reads_deidentified.sql:113`). This reverses `0003_reports_bucket.sql`'s "not
   patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
-  (`ReportRemoteDataSource.kt::fetchReports`) and Session Detail lists them
-  (`ReportDao::observeReportsForSession`).
+  (`ReportRemoteDataSource.kt::fetchReportsForSessions`, beside `::fetchOwnReports`) and
+  Session Detail lists them (`ReportDao::observeReportsForSession`).
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.

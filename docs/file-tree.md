@@ -196,31 +196,30 @@ SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scopin
   read. Nothing a medtech or a super admin can see changes, and the app holds no organization
   data.
 
-  **One exception: the phone itself.** The phone's pull has no user filter on any of the tables
-  these policies open, and leaves the scoping to RLS (since `0007`, so that an assigned medtech
-  gets a patient's whole history):
-  - patients and patient links (`data/supabase/PatientRemoteDataSource.kt::fetchPatients`,
-    `::fetchPatientLinks`)
-  - sessions (`SessionRemoteDataSource.kt::fetchSessions`)
-  - samples, and their detections, predictions and findings (`SampleRemoteDataSource.kt`)
-  - reports (`ReportRemoteDataSource.kt::fetchReports`)
-  - colleagues' names (`ProfileRemoteDataSource.kt::fetchColleagues`)
+  **The phone does not pick these up.** An org admin may use the phone app; in a small laboratory
+  the org admin is often a medtech as well. The phone's pull therefore scopes itself rather than
+  leaving it to RLS (14zcqntjt3p), so whoever signs in downloads what a medtech's policies would
+  give them and no more. That is their own rows, plus the full history of the patients
+  their own `patient_users` rows name (`domain/usecase/sync/FetchRemoteDataUseCase.kt`):
+  - their own links only (`data/supabase/PatientRemoteDataSource.kt::fetchPatientLinks`), then
+    those patients by id (`::fetchPatients`)
+  - sessions, samples and reports, each as "own" plus "under these parents"
+    (`SessionRemoteDataSource.kt::fetchOwnSessions` / `::fetchSessionsForPatients`, and the
+    same pair on `SampleRemoteDataSource.kt` and `ReportRemoteDataSource.kt`). The parents are
+    read from the device (`SessionDao::getSessionIdsOnLinkedPatients`)
+  - colleagues' names by id, for the authors on those patients only
+    (`ColleagueDao::getColleagueIdsOnLinkedPatients`,
+    `ProfileRemoteDataSource.kt::fetchColleagues`)
 
-  The app never checks `role` or membership, and an org admin's profile role is `medtech`, so an
-  org admin can sign in on a phone. If they do, the phone downloads the rows of the laboratory's
-  whole clinical record — every patient, session, smear, report and member's name — not just
-  what is assigned to them. Local queries, and the frame cache
-  (`SampleDao.kt::getCacheableSamples`), still scope through the signed-in user's own
-  `patient_users` rows, so most of it is stored without being shown and its frames are not
-  fetched, but the rows are on the device.
-  Keeping an org admin's phone to their own patients is not done yet. It was meant to land
-  before `admin/0002` was applied, and `admin/0002` is now live, so this is the case today for
-  any org admin who signs in on a phone. A super admin got every row the same way, through the `is_admin()`
-  branch of `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), until
-  `0013_super_admin_reads_deidentified.sql:38` removed it. They still read every patient link
-  (`patient_users_select_own`, `0001_init.sql:396-398`), but patients, sessions and samples only
-  through the de-identified views of `0012_deidentified_reads.sql`. No phone build signs a super
-  admin in.
+  So `admin/0002` changes nothing on a phone. **A super admin does not use the phone**: they
+  belong to no organization, so a patient they registered would have none. Were one to sign in,
+  `0013_super_admin_reads_deidentified.sql:38` has already taken `is_admin()` off
+  `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), and the branch left on
+  `patient_users_select_own` (`0001_init.sql:396-398`) is filtered out by the link fetch above.
+  A phone that synced as an org admin before this landed may still hold their laboratory's rows.
+  Nothing removes them: they stay hidden behind the same `patient_users` scoping every local
+  query uses, and an ordinary sign-out keeps local data. Clearing the app's storage, or
+  reinstalling, does remove them.
 - **Foreign keys into app tables.**
   - Both of these cascade on delete, though C8 means neither delete happens:
     - `patient_organizations.patient_id → patients(id)`
