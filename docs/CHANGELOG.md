@@ -16,7 +16,8 @@ phone reads `role`.
 
 - **`0014_super_admins.sql`** creates `super_admins`, one row per grant, and points
   `is_admin()` at it with the same signature. Every `role = 'admin'` profile is copied in as one
-  active row, so `is_admin()` answers the same for everyone. Not applied by this change.
+  active row, so `is_admin()` answers the same for everyone. Applied by hand to
+  `agarthavision` on 2026-10-02.
 - **Nobody signed in can read or write it.** RLS with no policy, and no privilege for `anon` or
   `authenticated`. Colleagues and org admins can no longer learn who the super admins are from it.
 - **Revoking is a tombstone (C8).** A trigger allows only setting `revoked_at` on an active grant.
