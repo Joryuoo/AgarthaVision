@@ -68,7 +68,8 @@ PK column is `report_id`. Differences:
 ## Connected to
 
 - **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:177-179` —
-  every medtech assigned to the patient. This reverses `0003_reports_bucket.sql`'s "not
+  every medtech assigned to the patient. An admin reads the row but not the file, which prints
+  the patient's name (`0013_super_admin_reads_deidentified.sql:113`). This reverses `0003_reports_bucket.sql`'s "not
   patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
   (`ReportRemoteDataSource.kt::fetchReports`) and Session Detail lists them
   (`ReportDao::observeReportsForSession`).
