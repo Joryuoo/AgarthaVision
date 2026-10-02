@@ -140,6 +140,8 @@ This is the one home for which file describes which project.
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
 | `0011_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
+| `0012_deidentified_reads.sql` | `patients_deidentified`, `sessions_deidentified`, `samples_deidentified`: super-admin-only views without name, sex, birthdate, session label or sample note. Additive; step 1 of 3 |
+| `0013_super_admin_reads_deidentified.sql` | Removes the super admin branch from the `patients`, `sessions` and `samples` read policies and the `reports` bucket. Step 3, applied after the Admin Console started reading the views (14zcqntjvky). Both files are applied to `agarthavision`, checked on 2026-10-02 |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ### The Admin Console's migrations — same database, other repository
@@ -156,10 +158,10 @@ set does to it. The decision behind it is D4 and the migration convention in the
 policies. It never `ALTER`s or `DROP`s a table, column, function or policy this repository owns.
 A change to the shape or the policies of an app-owned table belongs in this folder instead.
 
-**What it adds**, as of the console's open branches (`feat/organizations` `219d9cc4`,
-`feat/lab-scoping` `ce0dd6cb`, `feat/audit-trail` `4e5390d4`, 2026-10-01). None of these were on
-the console's `staging` yet, so the file numbers can still change before they merge. On
-2026-10-01 none of the set had been applied to `agarthavision`.
+**What it adds**, as of the console's `staging` (`cb8246c`, 2026-10-01), which holds the same
+SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scoping` `ce0dd6cb`,
+`feat/audit-trail` `4e5390d4`). All three files were applied to `agarthavision` on 2026-10-01;
+`admin/0001`'s backfill is logged in `admin_audit_log` at 14:17 UTC.
 
 | Admin file | Adds |
 |---|---|
@@ -211,10 +213,14 @@ the console's `staging` yet, so the file numbers can still change before they me
   (`SampleDao.kt::getCacheableSamples`), still scope through the signed-in user's own
   `patient_users` rows, so most of it is stored without being shown and its frames are not
   fetched, but the rows are on the device.
-  Keeping an org admin's phone to their own patients is not done yet, and has to land before
-  `admin/0002` is applied. A super admin already gets everything the same
-  way, through the `is_admin()` branch of `patients_select_linked` and `patient_users_select_own`
-  (`supabase/migrations/0001_init.sql:359-367`, `:396-398`).
+  Keeping an org admin's phone to their own patients is not done yet. It was meant to land
+  before `admin/0002` was applied, and `admin/0002` is now live, so this is the case today for
+  any org admin who signs in on a phone. A super admin got every row the same way, through the `is_admin()`
+  branch of `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), until
+  `0013_super_admin_reads_deidentified.sql:38` removed it. They still read every patient link
+  (`patient_users_select_own`, `0001_init.sql:396-398`), but patients, sessions and samples only
+  through the de-identified views of `0012_deidentified_reads.sql`. No phone build signs a super
+  admin in.
 - **Foreign keys into app tables.**
   - Both of these cascade on delete, though C8 means neither delete happens:
     - `patient_organizations.patient_id → patients(id)`

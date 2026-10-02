@@ -81,8 +81,13 @@ server, so the phone treats a colleague's session and sample as read-only: one r
 path on a session or sample needs the same check**, or its edit is written locally and silently
 refused on push. The push queues filter on `user_id`, so a colleague's row can never be pushed.
 
-In the consolidated schema every table's admin path, `reports` included, resolves through
-`public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`). The dev and prod
+In the consolidated schema every table's admin path, the `reports` rows included, resolves
+through `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`) — except
+`patients`, `sessions` and `samples`, which a super admin reads only through the
+de-identified views since `0013_super_admin_reads_deidentified.sql`, and the `reports` bucket,
+whose admin read 0013 drops (`:113`). **A new identifying
+column must stay out of `0012_deidentified_reads.sql`'s views, and a new admin read of those
+three tables goes through them** (C10). The dev and prod
 projects still run the legacy history, where `reports` reintroduced an inline
 `(select role from profiles …)` subquery (`supabase/migrations/legacy-dev/0008_reports.sql:36-38`).
 **A policy change made on those projects has to patch both styles or admin reads diverge by
