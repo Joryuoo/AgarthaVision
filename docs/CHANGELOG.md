@@ -9,24 +9,40 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
-## fix/assigned-patients-only — a phone holds its user's patients, whatever their role · 2026-10-01
+## fix/assigned-patients-only — an org admin's phone holds only their own patients · 2026-10-01
 
 `14zcqntjt3p`.
 
 - **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
-  `admin/0002`) or a super admin (`is_admin()`) who signed in on a phone downloaded their whole
-  laboratory, or everything. Now the links are filtered to the user, patients are fetched by the
-  ids those links name, and sessions, samples and reports are each fetched as the user's own
-  plus those under their patients. That is exactly what a medtech's policies return, so a
-  medtech's phone holds what it did before. Since `0013` (below) a super admin reads no
-  patient, session or sample through `is_admin()`, but still every patient link, which the
-  link fetch now filters out.
+  `admin/0002`) who signed in on a phone downloaded their whole laboratory. An org admin may
+  use the phone, and in a small laboratory is often a medtech as well. Now the links are
+  filtered to the user, patients are fetched by the ids those links name, and sessions, samples
+  and reports are each fetched as the user's own plus those under their patients. That is
+  exactly what a medtech's policies return, so a medtech's phone holds what it did before.
+- **Super admins do not use the phone.** They belong to no organization, so a patient they
+  registered would have none. Were one to sign in, the same scoping holds: since `0013`
+  (below) `is_admin()` gives them no patient, session or sample, and the link fetch filters
+  out every patient link it still does.
 - **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
   (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
 - **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
   written once.
 - **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
   until its storage is cleared.
+
+---
+
+## docs/profile-outlives-login — authorship outlives the login, written down · 2026-10-01
+
+`14zcqntjvjx`. Docs only; the schema change is `0011_profile_outlives_login.sql` from
+`feat/deactivation-sign-out` (#98).
+
+- **C8 states the rule.** Offboarding deletes the login; the profile and everything it authored
+  stay, still naming the person, and the email is free for another laboratory or a rehire. It
+  also says a rehire still gets a fresh profile, since reconnecting them is its own ticket.
+- **`Profile` card** names the ticket and notes that the cascades *from* a profile
+  (`patient_users`, and the console's `organizations`, `organization_members` and audit log)
+  never fire.
 
 ---
 
