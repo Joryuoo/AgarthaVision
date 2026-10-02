@@ -345,10 +345,9 @@ class FetchRemoteDataUseCaseTest {
 
     // ── Scope: the user's own patients and nothing else (14zcqntjt3p) ────────
     //
-    // An org admin's policies hand them their whole laboratory, and a super admin's hand them
-    // everything. These pin that the pull never asks the server for more than a medtech's
-    // policies would give: the user's own rows, plus the full history of the patients their own
-    // links name.
+    // An org admin's policies hand them their whole laboratory. These pin that the pull never
+    // asks the server for more than a medtech's policies would give: the user's own rows, plus
+    // the full history of the patients their own links name.
 
     @Test
     fun `only the user's own links are read, and only the patients they name are fetched`() = runTest {

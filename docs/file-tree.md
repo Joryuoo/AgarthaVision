@@ -196,10 +196,10 @@ SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scopin
   read. Nothing a medtech or a super admin can see changes, and the app holds no organization
   data.
 
-  **The phone does not pick these up.** Org admins and super admins may use the phone app (a small
-  laboratory can run on one account that is both). The phone's pull therefore scopes itself rather
-  than leaving it to RLS (14zcqntjt3p), so whoever signs in downloads what a medtech's policies
-  would give them and no more. That is their own rows, plus the full history of the patients
+  **The phone does not pick these up.** An org admin may use the phone app; in a small laboratory
+  the org admin is often a medtech as well. The phone's pull therefore scopes itself rather than
+  leaving it to RLS (14zcqntjt3p), so whoever signs in downloads what a medtech's policies would
+  give them and no more. That is their own rows, plus the full history of the patients
   their own `patient_users` rows name (`domain/usecase/sync/FetchRemoteDataUseCase.kt`):
   - their own links only (`data/supabase/PatientRemoteDataSource.kt::fetchPatientLinks`), then
     those patients by id (`::fetchPatients`)
@@ -211,11 +211,11 @@ SQL as the branches it merged (`feat/organizations` `219d9cc4`, `feat/lab-scopin
     (`ColleagueDao::getColleagueIdsOnLinkedPatients`,
     `ProfileRemoteDataSource.kt::fetchColleagues`)
 
-  So `admin/0002` changes nothing on a phone. Nor does what is left of a super admin's
-  `is_admin()` access: `0013_super_admin_reads_deidentified.sql:38` took it off
-  `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), and the branch that
-  remains on `patient_users_select_own` (`0001_init.sql:396-398`) is filtered out by the link
-  fetch above. A super admin's phone holds their own patients, identified, as a medtech's does.
+  So `admin/0002` changes nothing on a phone. **A super admin does not use the phone**: they
+  belong to no organization, so a patient they registered would have none. Were one to sign in,
+  `0013_super_admin_reads_deidentified.sql:38` has already taken `is_admin()` off
+  `patients_select_linked` (`supabase/migrations/0001_init.sql:359-367`), and the branch left on
+  `patient_users_select_own` (`0001_init.sql:396-398`) is filtered out by the link fetch above.
   A phone that synced as an org admin before this landed may still hold their laboratory's rows.
   Nothing removes them: they stay hidden behind the same `patient_users` scoping every local
   query uses, and an ordinary sign-out keeps local data. Clearing the app's storage, or

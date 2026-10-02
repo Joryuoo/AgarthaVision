@@ -91,8 +91,8 @@ enum class FetchType {
  * rows. That is exactly what a medtech's policies return (0001's author policies plus 0007's
  * `*_select_via_patient`), and every fetch below asks for it explicitly, as "own" plus "under
  * these parents", because the same tables give an org admin their whole laboratory (console
- * `admin/0002`) and a super admin every link, report and detection (`is_admin()`). Signing in
- * on a phone gives neither of them anything beyond their own patients. The parents come from
+ * `admin/0002`). An org admin may use the phone, often as a laboratory's medtech too, and gets
+ * only their own patients here. A super admin does not use the phone. The parents come from
  * the device, read after the step before has written them, so a failed step still leaves the
  * next one a scope.
  * A colleague's row lands `synced` and is never edited here (14zcqntjph6), so the E4 guard lets
