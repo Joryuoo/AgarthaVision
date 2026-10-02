@@ -127,6 +127,14 @@ What it adds, and those columns:
 [`file-tree.md`](file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 Never copy admin SQL into this repository.
 
+**Super admins live in `super_admins`, not on the profile** (`0014_super_admins.sql`, D22). A
+user is a super admin while they hold a row there with `revoked_at` null, and `is_admin()` is the
+one way to ask. `profiles.role` is retired and grants nothing. No signed-in caller reads or
+writes `super_admins`, and a revoke sets `revoked_at` rather than deleting the row (C8). Do not
+put authority back on `profiles`, and do not add a policy that lets a client touch
+`super_admins`. Details:
+[`Profile`](map/objects/Profile.md#super-admins).
+
 **From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
 to a destructive rebuild, which was acceptable while the local database held nothing Supabase
 did not. Version 23 added the inference queue: frames that are captured, waiting on a model

@@ -140,6 +140,7 @@ This is the one home for which file describes which project.
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
 | `0011_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
+| `0014_super_admins.sql` | Super admins become rows in `super_admins`, one per grant, revoked by tombstone; `is_admin()` reads it, and `profiles.role` is retired in place |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ### The Admin Console's migrations — same database, other repository
@@ -233,12 +234,15 @@ the console's `staging` yet, so the file numbers can still change before they me
 - the `sample_id` columns of `detections`, `predictions` and `sample_species_findings`
 - `reports.session_id`
 - `patient_users.patient_id`
-- `profiles.id`, `profiles.role` and `profiles.full_name`
+- `profiles.id`, `profiles.role` and `profiles.full_name`. Since `0014`, `role` grants nothing in
+  the database, but the console's own gate still reads it until it switches to `is_admin()`
+  (14zcqntjwjf). Until then a super admin granted by hand needs both a `super_admins` row and
+  `role = 'admin'`
 - that `profiles.id` *is* the login id: the set compares `auth.uid()` with
   `organization_members.user_id` and joins `auth.users` on `profiles.id`. Since `0011` the login
   is `profiles.account_id`, equal to `id` today; resolving profiles through `account_id` (the
   rehire step) breaks the console
-- `public.is_admin(uuid)`
+- `public.is_admin(uuid)`, which since `0014` reads `super_admins`. Same signature, same answers
 - the `{user_id}/{sample_id}.jpg` key shape in the `samples` bucket
 
 Renaming or changing any of these breaks the console without an error on this side. The

@@ -144,6 +144,8 @@ export enum FrameSource {
  *   with `public.is_admin(uuid)` to avoid recursive profile reads.
  * - `0011_profile_outlives_login.sql`: `id` stops referencing `auth.users`;
  *   adds `account_id`, cleared when the login is deleted (14zcqntjph8).
+ * - `0014_super_admins.sql`: retires `role`. Super admins are rows in
+ *   `super_admins` (below), and `handle_new_user()` no longer names a role.
  *
  * - `0008_colleague_names.sql` (current project): `profiles_select_colleague` lets
  *   a medtech read the profile of a colleague who authored a session or report on
@@ -167,7 +169,8 @@ export interface Profile {
   // Nullable display name copied from auth metadata on signup when available.
 
   role: "medtech" | "admin";
-  // NOT NULL. Default `medtech`. CHECK in migration `0001`.
+  // NOT NULL. Default `medtech`. CHECK in migration `0001`. Retired by `0014`:
+  // grants nothing, kept in place. A super admin is a `SuperAdmin` row.
 
   created_at: TimestampTZ;
   // NOT NULL. Default `now()`.
@@ -222,6 +225,42 @@ export interface Patient {
   created_at: TimestampTZ;
   updated_at: TimestampTZ;
   // Both NOT NULL, default `now()`.
+}
+
+/**
+ * One super admin grant (D22, 14zcqntjwje). A user is a super admin while they
+ * hold a row with `revoked_at` null; `public.is_admin(uuid)` reads exactly that.
+ *
+ * Supabase migrations:
+ * - `0014_super_admins.sql`: creates the table, backfills one active row per
+ *   `profiles.role = 'admin'`, and repoints `is_admin()`.
+ *
+ * No client reads or writes it: RLS is on with no policy, and `anon` and
+ * `authenticated` hold no privilege. Revoking sets `revoked_at`; a trigger
+ * refuses a delete, a truncate and any other update (C8). Grants are made by
+ * hand in the SQL editor until the console adds its own guarded functions.
+ *
+ * Room mirror: none. The app never reads it.
+ */
+export interface SuperAdmin {
+  id: UUID;
+  // PK. Default `uuid_generate_v4()`.
+
+  user_id: UUID;
+  // NOT NULL. FK → `profiles(id)`. At most one active row per user (partial
+  // unique index `where revoked_at is null`, which `is_admin()` also uses).
+
+  granted_by: UUID | null;
+  // FK → `profiles(id)`. Null on the rows `0014` copied from `profiles.role`.
+
+  granted_at: TimestampTZ;
+  // NOT NULL. Default `now()`; on backfilled rows, when `0014` ran.
+
+  revoked_by: UUID | null;
+  // FK → `profiles(id)`. Only with `revoked_at`.
+
+  revoked_at: TimestampTZ | null;
+  // Null while the grant is active. Never set back to null.
 }
 
 /**
@@ -726,7 +765,13 @@ export type RelationshipMatrix = [
     from: "auth.users";
     cardinality: "1 -> 0..1";
     to: "profiles";
-    description: "Each Supabase Auth user receives one profile via `handle_new_user()`; profile deletion cascades from auth user deletion.";
+    description: "Each Supabase Auth user receives one profile via `handle_new_user()`. Since `0011` deleting the login keeps the profile and clears `account_id`.";
+  },
+  {
+    from: "profiles";
+    cardinality: "1 -> many";
+    to: "super_admins";
+    description: "A user holds any number of grants over time, at most one active. `is_admin()` reads the active one.";
   },
   {
     from: "profiles";
