@@ -125,5 +125,4 @@ box (`BOX_INCORRECT`) is still a confirmed egg — only rejected boxes (`FALSE_P
 excluded. This ensures that the patient's Sessions list cards, Session Detail, and generated
 reports always agree on the exact same total egg count.
 
-`SessionDao::observeSessionsPage`, `SessionDao::observeSessionsWithStats`, and
-`DetectionDao::observeConfirmedEggCountsSince` all filter `d.verdict != 'false_positive'`.
+`SessionDao::observeSessionsPage` filters `d.verdict != 'false_positive'`.

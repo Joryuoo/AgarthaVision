@@ -204,7 +204,6 @@ as working.
 | `reports.supabase_status` in Postgres | `schema.ts` `Report.supabase_status` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | `is_admin()` exists in SQL; no admin UI in the mobile client |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path; self-hosted container is the single inference backend |
-| `observeConfirmedEggCountsSince`, `observeSessionsWithStats` | `DetectionDao`, `SessionDao` and their repositories | Declared and implemented, called by nothing. Both use the confirmed-only counting rule the live report does not |
 | `commitlint` / `lint-staged` | `commitlint.config.js`, `lint-staged.config.js` | Config files committed; `.husky/commit-msg` enforces format directly |
 
 ## Phase 2 — deferred by decision, not oversight

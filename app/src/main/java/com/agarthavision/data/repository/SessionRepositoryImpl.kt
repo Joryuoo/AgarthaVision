@@ -28,19 +28,6 @@ class SessionRepositoryImpl @Inject constructor(
     override suspend fun getSessionById(sessionId: String): Session? =
         sessionDao.getSessionById(sessionId)?.toDomain()
 
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        sessionDao.observeSessionsWithStats(userId, sinceMillis).map { list ->
-            list.map { item ->
-                SessionWithStats(
-                    session = item.session.toDomain(),
-                    totalSamples = item.totalSamples,
-                    verifiedSamples = item.verifiedSamples,
-                    unverifiedSamples = item.unverifiedSamples,
-                    totalEggs = item.totalEggs
-                )
-            }
-        }
-
     override suspend fun updateSessionLabel(sessionId: String, label: String) {
         sessionDao.updateSessionLabel(sessionId, label)
     }

@@ -279,9 +279,6 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         session?.let(::listOf).orEmpty().filter { isVisible(it.userId, userId) },
     )
     override suspend fun getSessionById(sessionId: String): Session? = session?.takeIf { it.id == sessionId }
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
-
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(
@@ -360,10 +357,6 @@ private class ReportDetectionRepository(
 
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCounts
-
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
