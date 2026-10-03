@@ -51,7 +51,9 @@ def pick_devices() -> list[str]:
 
 def run_batch(model: YOLO, device: str, images: list[Image.Image]) -> list:
     # One forward pass for the whole batch. Ultralytics letterboxes each image itself.
-    return model.predict(images, device=device, verbose=False)
+    # agnostic_nms: an egg the model can't place would otherwise get one box per species it
+    # considered (14zcqntk1vd). The app's on-device decoder applies the same rule.
+    return model.predict(images, device=device, verbose=False, agnostic_nms=True)
 
 
 async def worker(device: str, model: YOLO, queue: asyncio.Queue) -> None:

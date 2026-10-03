@@ -79,7 +79,9 @@ returns. The model output arrives later.
    (`inference/server.py`).
 4. **Apply no filter.** The server returns every box the model produced. There is no
    confidence threshold on either side; the human is the threshold
-   (`../../constraints.md` C7).
+   (`../../constraints.md` C7). Duplicate removal is class-agnostic (`agnostic_nms=True`): boxes
+   overlapping past IoU 0.7 keep only the most confident, whatever its species, so one egg is
+   one detection and not one per species the model considered (14zcqntk1vd).
 5. **Record empties too.** An empty `predictions` list is still a result a model returned, so
    the row becomes `ready` like any other: a clean field is a normal negative result.
 6. **Write it back.** Any answer, detections or none, lands on the row through
@@ -127,7 +129,7 @@ counterpart, and the queue's fallback whenever the cloud fails or the circuit br
   one dedicated thread.
 - **Matching the cloud.** Preprocessing is Ultralytics' letterbox (114 grey, same rounding),
   a no-op for 640x640 captures. The head is not end-to-end, so `YoloOutputDecoder` runs
-  per-class NMS with the container's own defaults (conf 0.25, IoU 0.7, 300 boxes), un-letterboxes,
+  class-agnostic NMS with the container's settings (conf 0.25, IoU 0.7, 300 boxes), un-letterboxes,
   clips to the frame, and returns centre-based pixels like `server.py`. The TFLite head emits
   box geometry **normalised to 0..1**; the manifest's `box_coordinates` says so and the
   decoder scales it. Reading it as pixels was the zero-match fault the first attempt hit.
