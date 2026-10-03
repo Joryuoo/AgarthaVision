@@ -299,4 +299,28 @@ class SessionSummaryQueryTest {
         val countExcluded = sessionDao.observeEmptySessionCount(testUserId, excludeSessionId = "s-empty-1").first()
         assertEquals(2, countExcluded)
     }
+
+    @Test
+    fun `observeSessionsPage counts WRONG_CLASS and BOX_INCORRECT detections as valid eggs`() = runTest {
+        insertSession("s-corrected")
+        insertSample("samp-c1", "s-corrected", status = "verified")
+        insertDetection("det-wrong-class", "samp-c1", verdict = DetectionVerdict.WRONG_CLASS.value)
+        insertDetection("det-box-incorrect", "samp-c1", verdict = DetectionVerdict.BOX_INCORRECT.value)
+        insertDetection("det-fp", "samp-c1", verdict = DetectionVerdict.FALSE_POSITIVE.value)
+
+        val sessions = sessionDao.observeSessionsPage(
+            userId = testUserId,
+            patientId = patientId,
+            activeSessionId = null,
+            sinceMillis = 0L,
+            startMillis = null,
+            endMillis = null,
+            query = "",
+            limit = 10,
+        ).first()
+
+        assertEquals(1, sessions.size)
+        // 2 non-false-positive eggs (WRONG_CLASS + BOX_INCORRECT)
+        assertEquals(2, sessions.first().totalEggs)
+    }
 }
