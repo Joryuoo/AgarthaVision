@@ -242,8 +242,6 @@ private class SamplesSessionRepository(
 ) : SessionRepository {
     override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = session?.takeIf { it.id == sessionId }
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(
@@ -313,8 +311,6 @@ private class SamplesDetectionRepository(
         flowOf(detectionsBySample[sampleId].orEmpty())
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) =
         emptyList<EggCount>()
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
 }

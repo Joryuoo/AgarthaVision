@@ -177,10 +177,6 @@ private class DetailDetectionRepository(
 
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) = emptyList<EggCount>()
 
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-
-
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
 }

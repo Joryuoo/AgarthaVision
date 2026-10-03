@@ -559,9 +559,6 @@ internal class FakeSessionRepository(
     override suspend fun getSessionById(sessionId: String): Session? =
         rows.map { it.session }.firstOrNull { it.id == sessionId }
 
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
-
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(
@@ -628,10 +625,6 @@ internal class FakeDetectionRepository(
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) =
         emptyList<EggCount>()
 
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-
-
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         speciesMap.filterKeys { it in sessionIds }
 }
@@ -646,8 +639,6 @@ private class MultiEmitSessionRepository(
 ) : SessionRepository {
     override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = null
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(

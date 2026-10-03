@@ -60,8 +60,6 @@ class SessionPickerViewModelTest {
             ),
         )
             .thenReturn(countsFlow)
-        // Keep the old stub so any residual call doesn't NPE (defensive).
-        whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
         // Unstubbed, this suspend fun returns null through Mockito's default answer, which
         // NPEs when unboxed to Boolean and silently kills onCreateSession's coroutine.
         it.stub {

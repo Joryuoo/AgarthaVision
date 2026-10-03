@@ -15,11 +15,6 @@ interface DetectionRepository {
     suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount>
 
     /**
-     * Observes confirmed egg counts aggregated by species over a specific time window.
-     */
-    fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>>
-
-    /**
      * Bulk-fetches distinct species labels for the given set of session IDs, grouped
      * into a [Map] keyed by session ID. Species within each list are sorted ascending.
      */

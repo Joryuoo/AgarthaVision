@@ -207,26 +207,6 @@ interface SessionDao {
     /**
      * Observes sessions with their associated sample, verification, and egg counts.
      */
-    @Query(
-        """
-        SELECT s.*,
-               COUNT(DISTINCT smp.sample_id) AS totalSamples,
-               SUM(CASE WHEN smp.verified_at > 0 THEN 1 ELSE 0 END) AS verifiedSamples,
-               SUM(
-                 CASE WHEN smp.status = 'flagged' THEN 1 ELSE 0 END
-               ) AS unverifiedSamples,
-               COUNT(d.detection_id) AS totalEggs
-        FROM sessions s
-        LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
-        LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
-        WHERE s.user_id = :userId
-          AND s.started_at >= :sinceMillis
-        GROUP BY s.session_id
-        ORDER BY s.started_at DESC
-        """
-    )
-    fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
-
     /**
      * Observes a paginated, filtered window of sessions for the Records screen.
      * Non-flagged sample counts and non-false-positive detection totals are
@@ -298,7 +278,7 @@ interface SessionDao {
 
     /**
      * Observes a paginated, filtered window of sessions for the Sessions screen.
-     * Aggregate columns mirror [observeSessionsWithStats] so [SessionCard] can display
+     * Aggregate columns provide sample and egg counts so [SessionCard] can display
      * the same metrics. The active session is always included; every other session
      * appears only within the recent window or the explicit date range.
      *
@@ -317,7 +297,7 @@ interface SessionDao {
         "  COUNT(d.detection_id) AS totalEggs " +
         "FROM sessions s " +
         "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null " +
-        "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'" +
+        "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict != 'false_positive'" +
         SESSIONS_FILTER +
         " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT :limit"
     )
