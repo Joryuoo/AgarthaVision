@@ -201,6 +201,7 @@ class SampleRemoteDataSource @Inject constructor(
             needsReannotation = needsReannotation,
             isManual = isManual,
             userNote = userNote?.takeIf { it.isNotBlank() },
+            deletedAt = deletedAt?.takeIf { it > 0L }?.let { Instant.ofEpochMilli(it).toString() },
         )
     }
 
@@ -272,6 +273,8 @@ class SampleRemoteDataSource @Inject constructor(
         val isManual: Boolean,
         @SerialName("user_note")
         val userNote: String?,
+        @SerialName("deleted_at")
+        val deletedAt: String? = null,
     )
 
     @Serializable
