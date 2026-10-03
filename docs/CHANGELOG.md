@@ -9,6 +9,23 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/one-box-per-egg — one egg, one detection · 2026-10-04
+
+`14zcqntk1vd`.
+
+- **Duplicate removal ignores species.** Both engines removed overlapping boxes only within a
+  species, so an egg the model could not place came back once per species it considered.
+  Sample `ec940c6e`: two eggs, four detections, three of them stacked on one egg at 92–96% IoU
+  (Trichuris 0.50, Hookworm 0.44, Ascaris 0.29). Now the most confident box wins.
+- **Cloud:** `inference/server.py` passes `agnostic_nms=True`; the container must be
+  redeployed for it to reach phones. `make_parity_fixture.py` does the same.
+- **On-device:** `YoloOutputDecoder` runs one greedy NMS across all classes.
+- **Separate eggs are untouched.** Boxes under the IoU threshold (0.7) are all kept, whatever
+  their species. The 20 parity fixtures give identical results under either rule, so they
+  were not regenerated.
+
+---
+
 ## refactor/super-admins-table — super admins get their own table · 2026-10-02
 
 `14zcqntjwje`, Admin decision D22. SQL and docs; no app code changed, because nothing on the

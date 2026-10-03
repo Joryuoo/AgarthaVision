@@ -15,8 +15,9 @@ import javax.inject.Singleton
  * Ultralytics' `non_max_suppression` as the cloud container runs it:
  *  1. **Gate.** Keep boxes whose best class score clears the threshold, one label per box.
  *     Decode mechanics, not a clinical filter: see C7.
- *  2. **Suppress.** Greedy NMS within each class; boxes of different classes never suppress
- *     each other.
+ *  2. **Suppress.** Greedy class-agnostic NMS (`agnostic_nms=True` on the cloud): a box
+ *     suppresses any weaker box it overlaps past the IoU threshold, whatever its class. An
+ *     egg the model can't place gets one box with its best guess, not one per species.
  *  3. **Cap** at the manifest's `max_detections`, highest score first.
  *  4. **Rescale and clip.** Undo the letterbox, clip to the frame, and return centre-based
  *     boxes, exactly the geometry `inference/server.py` sends.
@@ -70,18 +71,16 @@ class YoloOutputDecoder @Inject constructor() {
     private fun scoreIndex(classIndex: Int, anchor: Int, anchors: Int): Int =
         (ModelManifest.BOX_GEOMETRY_ROWS + classIndex) * anchors + anchor
 
-    /** Greedy per-class NMS. Returns survivors across all classes, highest score first. */
+    /** Greedy class-agnostic NMS. Returns survivors highest score first. */
     private fun suppress(candidates: List<Candidate>, iouThreshold: Float): List<Candidate> {
         val kept = ArrayList<Candidate>()
-        candidates.groupBy { it.classIndex }.values.forEach { ofClass ->
-            val remaining = ofClass.sortedByDescending { it.score }.toMutableList()
-            while (remaining.isNotEmpty()) {
-                val best = remaining.removeAt(0)
-                kept += best
-                remaining.removeAll { iou(best, it) > iouThreshold }
-            }
+        val remaining = candidates.sortedByDescending { it.score }.toMutableList()
+        while (remaining.isNotEmpty()) {
+            val best = remaining.removeAt(0)
+            kept += best
+            remaining.removeAll { iou(best, it) > iouThreshold }
         }
-        return kept.sortedByDescending { it.score }
+        return kept
     }
 
     private fun iou(a: Candidate, b: Candidate): Float {

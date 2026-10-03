@@ -26,6 +26,7 @@ def jpeg() -> bytes:
 @pytest.fixture(autouse=True)
 def reset(monkeypatch):
     FakeYOLO.batches.clear()
+    FakeYOLO.agnostic_nms.clear()
     FakeYOLO.delay_s = 0.0
     FakeYOLO.fail = False
     monkeypatch.setattr(server, "INFERENCE_DEVICES", "cuda:0,cuda:1")
@@ -70,6 +71,15 @@ def test_infer_keeps_the_response_shape_the_app_parses():
         "width": 30.0,
         "height": 20.0,
     }]
+
+
+def test_overlapping_boxes_are_suppressed_across_species():
+    # One egg must not come back as a box per species the model considered (14zcqntk1vd).
+    async def test(client):
+        return await client.post("/infer", content=jpeg(), headers=AUTH)
+
+    assert serve(test).status_code == 200
+    assert FakeYOLO.agnostic_nms and all(FakeYOLO.agnostic_nms)
 
 
 def test_a_wrong_key_is_refused():
