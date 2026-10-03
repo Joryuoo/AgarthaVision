@@ -221,10 +221,9 @@ sensitive code in the repo.
 (`domain/model/DetectionVerdict.kt::DetectionVerdict`). Adding a value means the enum, the
 Postgres CHECK, **and** every raw SQL string that names a verdict, in `DetectionDao`,
 `CoverageDao`, `PatientDao` and `SessionDao` — `grep -n "false_positive'\|'confirmed'"
-app/src/main/java/com/agarthavision/data/local/dao/*.kt` lists them. Those do not agree with each
-other today: most count everything that is not `false_positive`, while
-`SessionDao::observeSessionsPage` (the Sessions list egg total) counts only `confirmed` — see
-[`validate`](../processes/validate.md#the-inconsistency-worth-knowing).
+app/src/main/java/com/agarthavision/data/local/dao/*.kt` lists them. All egg counting queries
+consistently filter `d.verdict != 'false_positive'` so `WRONG_CLASS` and `BOX_INCORRECT` eggs
+count as confirmed eggs everywhere. See [`validate`](../processes/validate.md#unified-egg-counting-rule).
 
 **The second one:** species-first counting. An added species row carries the field's **total**
 (`VerificationAnswers.fieldTotal`), and `List<Finding>.toDetectionEntities` writes one detection

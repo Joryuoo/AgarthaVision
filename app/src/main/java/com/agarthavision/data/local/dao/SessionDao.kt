@@ -218,7 +218,7 @@ interface SessionDao {
                COUNT(d.detection_id) AS totalEggs
         FROM sessions s
         LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null
-        LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'
+        LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict != 'false_positive'
         WHERE s.user_id = :userId
           AND s.started_at >= :sinceMillis
         GROUP BY s.session_id
@@ -317,7 +317,7 @@ interface SessionDao {
         "  COUNT(d.detection_id) AS totalEggs " +
         "FROM sessions s " +
         "LEFT JOIN samples smp ON s.session_id = smp.session_id AND smp.deleted_at is null " +
-        "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict = 'confirmed'" +
+        "LEFT JOIN detections d ON smp.sample_id = d.sample_id AND d.verdict != 'false_positive'" +
         SESSIONS_FILTER +
         " GROUP BY s.session_id ORDER BY s.started_at DESC LIMIT :limit"
     )
