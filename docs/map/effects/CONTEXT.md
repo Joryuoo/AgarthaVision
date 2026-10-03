@@ -24,6 +24,10 @@ Cards live in `../objects/` and `../processes/`. Rules live in `../../constraint
 4. Update `schema.ts` in the same change.
 5. Write the numbered SQL file. It is applied by hand in the dashboard — never
    programmatically.
+6. Does it rename or change an app-owned name the Admin Console's migration set reads, such as
+   `patients.created_by`, `profiles.role`, `is_admin()` or `super_admins`? The full list is in
+   [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+   If so, tell the console team before it merges.
 
 **The non-obvious break:** `core/di/DatabaseModule.kt` still has
 `fallbackToDestructiveMigration(dropAllTables = false)` behind the hand-written migrations. A
@@ -58,14 +62,48 @@ parameter. Do not add a barangay to the patient-facing report.
 ## Changing RLS, auth, or ownership
 
 **Open:** `../objects/Profile.md` · `../objects/StorageObject.md` · `supabase/migrations/0001_init.sql`
-(policies from line 352) · `../processes/sync.md`.
+(policies from line 352) · `supabase/migrations/0007_patient_shared_history.sql` · `../processes/sync.md`.
 
-In the consolidated schema every table's admin path, `reports` included, resolves through
-`public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`). The dev and prod
+**Reads are `author OR assigned OR admin`; writes are the author's.** 0007 adds a second
+permissive SELECT policy beside each author-only one — sessions, samples, detections, findings,
+predictions, reports and both buckets — so assignment through `patient_users` opens a patient's
+whole history. Nothing from 0001–0006 is dropped. The phone repeats the rule in SQL, with an
+`EXISTS` over `patient_users`, in every session-scoped read (`../processes/sync.md`, "the pull").
+**Change one side and not the other** and either the phone shows rows the server refuses to
+send, or the server sends rows no screen shows. Cross-patient views — Home, the dashboard, the
+Records tab, the pending counts — stay the medtech's own work on purpose.
+
+**Reading a colleague's row is not permission to change it.** Writes stay author-only on the
+server, so the phone treats a colleague's session and sample as read-only: one rule,
+`domain/model/RecordAuthorship.kt::isColleagueRecord`, enforced in `SessionManager::resumeSession`,
+`OpenVerificationTargetUseCase`, `SubmitVerificationUseCase`, `DeleteQueueItemsUseCase` and
+`SessionsViewModel::onRenameSession`, with the screens hiding the actions first. **A new write
+path on a session or sample needs the same check**, or its edit is written locally and silently
+refused on push. The push queues filter on `user_id`, so a colleague's row can never be pushed.
+
+In the consolidated schema every table's admin path, the `reports` rows included, resolves
+through `public.is_admin(uuid)` (`supabase/migrations/0001_init.sql:58`, `:493-495`), which
+since `0014` reads `super_admins`, not `profiles.role` (`../objects/Profile.md`, "Super
+admins") — except `patients`, `sessions` and `samples`, which a super admin reads only through
+the de-identified views since `0013_super_admin_reads_deidentified.sql`, and the `reports`
+bucket, whose admin read 0013 drops (`:113`). **A new identifying column must stay out of
+`0012_deidentified_reads.sql`'s views, and a new admin read of those three tables goes through
+them** (C10). The dev and prod
 projects still run the legacy history, where `reports` reintroduced an inline
 `(select role from profiles …)` subquery (`supabase/migrations/legacy-dev/0008_reports.sql:36-38`).
 **A policy change made on those projects has to patch both styles or admin reads diverge by
 table.**
+
+**Not every policy on these tables is in this repository.** The Admin Console's own migration
+set adds permissive org-admin `SELECT` policies on `patients`, `patient_users`, `sessions`,
+`samples`, `detections`, `predictions`, `sample_species_findings`, `reports`, `profiles` and the
+`samples` bucket. It also adds a trigger on `patients`. Read them before reasoning about who can
+read what. They are listed in
+[`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+Because they are combined with `OR`, a policy here can never take away what they grant. And
+since the phone's pull leaves scoping to RLS (`0007`), a phone signed in as an org admin
+downloads the rows of the laboratory's whole clinical record: patients, sessions, samples,
+reports and members' names.
 
 **The non-obvious break:** the Storage object key *is* the permission check. The INSERT policy
 compares `(storage.foldername(name))[1]` against `auth.uid()`
@@ -85,6 +123,22 @@ with an expired token is locked out of their own device.
 reports (`DiscardUnsyncedDataUseCase`), and it must run before `signOut` clears the id it is
 scoped by. Reorder `SignOutUseCase` and it silently discards nothing — and leaves another
 medtech's rows stranded on the device.
+
+**The third one:** a cached identity with no Supabase session reads as "the server refused this
+account", and the phone wipes its synced data (`SupabaseAccountAccessRepository::checkAccountAccess`,
+14zcqntjph8). Anything that leaves the app in that state on purpose — reordering
+`SupabaseAuthRepository.kt::signOut` so the session goes first, a sign-in that caches the
+identity before the session exists — wipes a working medtech's phone. And widening
+`accessForRenewalStatus` past the server's own refusals wipes phones whenever the server is busy.
+Narrowing `AccountWipeDao` back to "the account's rows" would discard unsynced field work every
+time a medtech changes their password on another device.
+
+**Changing a password signs out every other device of the account** (Supabase revokes their
+sessions, 14zcqntjph9), and those devices go through the wipe above: synced data removed,
+unsynced work kept, the login screen asking for the new password. On the phone that made the
+change, `SupabaseAuthRepository.kt::changePassword` and `checkAccountAccess` share
+`AuthSessionLock`. Drop it and a renewal of the old session, in flight while the password
+changes, is refused and wipes the phone that changed it.
 
 ## Changing patients or the patient form
 

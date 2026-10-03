@@ -110,13 +110,28 @@ class SampleRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // Own samples plus those of the sessions of patients the user is assigned to, asked for in
+    // those two halves for the reason on `SessionRemoteDataSource.fetchOwnSessions` (14zcqntjt3p).
+
     /**
-     * Fetches a page of samples owned by [userId], ordered by capture time ascending.
+     * Fetches a page of the samples [userId] captured, ordered by capture time ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
+    suspend fun fetchOwnSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
         supabase.postgrest[SAMPLES_TABLE].select {
             filter { eq("user_id", userId) }
+            order("captured_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<SampleRow>().map { it.toEntity() }
+
+    /**
+     * Fetches a page of the samples of the given [sessionIds], whoever captured them, ordered by
+     * capture time ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the
+     * ids and must guard against an empty list.
+     */
+    suspend fun fetchSamplesForSessions(sessionIds: List<String>, offset: Long, limit: Long): List<SampleEntity> =
+        supabase.postgrest[SAMPLES_TABLE].select {
+            filter { isIn("session_id", sessionIds) }
             order("captured_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<SampleRow>().map { it.toEntity() }

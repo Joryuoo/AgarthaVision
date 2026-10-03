@@ -99,6 +99,8 @@ class SessionDetailViewModelRestoreTest {
                 WRITTEN_PDF
 
             override suspend fun readBytes(path: String): ByteArray? = null
+
+            override suspend fun delete(path: String): Boolean = false
         }
         val sessionManager: SessionManager = mock()
         whenever(sessionManager.state).thenReturn(MutableStateFlow(SessionState.Idle))

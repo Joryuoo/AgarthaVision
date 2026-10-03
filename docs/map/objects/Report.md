@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt
 ---
 
@@ -67,6 +67,12 @@ PK column is `report_id`. Differences:
 
 ## Connected to
 
+- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:177-179` —
+  every medtech assigned to the patient. An admin reads the row but not the file, which prints
+  the patient's name (`0013_super_admin_reads_deidentified.sql:113`). This reverses `0003_reports_bucket.sql`'s "not
+  patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
+  (`ReportRemoteDataSource.kt::fetchReportsForSessions`, beside `::fetchOwnReports`) and
+  Session Detail lists them (`ReportDao::observeReportsForSession`).
 - **Owned by** [`Session`](Session.md) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
   never rows.

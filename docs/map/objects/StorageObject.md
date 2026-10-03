@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: supabase/migrations/0001_init.sql
 ---
 
@@ -34,11 +34,17 @@ owns only the buckets' policies (and, for `reports`, the bucket row itself).
 | SELECT | same predicate | `0001_init.sql:513-518` |
 | UPDATE | same predicate in both `using` and `with check` — needed for upsert | `0001_init.sql:521-530` |
 | SELECT (admin) | `bucket_id = 'samples'` and `is_admin(auth.uid())` | `0001_init.sql:534-536` |
+| SELECT (assigned) | `bucket_id = 'samples'` and `can_read_sample_object(name)`: a sample row with this exact `storage_path` whose patient the reader is assigned to | `0007_patient_shared_history.sql:187-189` |
 | DELETE | **deliberately absent** | `0001_init.sql:538-540` |
 
 **`reports` bucket** — created and policied by `supabase/migrations/0003_reports_bucket.sql`:
-private, 10 MB limit, PDF and CSV only, visibility mirroring `reports_select_own` (owner or
-admin). Written and read by `data/supabase/ReportRemoteDataSource.kt`. See [`Report`](Report.md).
+private, 10 MB limit, PDF and CSV only. Reads mirror the `reports` row: the author or — since `0007_patient_shared_history.sql:191-193` — anyone assigned to the report's
+patient, matched on the report id in the file name *and* the author in the folder
+(`can_read_report_object`, `:114-140`). This reverses 0003's "not patient-linked" line, for the
+bucket and the rows together. An admin read every file until
+`0013_super_admin_reads_deidentified.sql:113` dropped `reports: admin read all`: a report prints
+the patient's name. Written and read by `data/supabase/ReportRemoteDataSource.kt`. See
+[`Report`](Report.md).
 
 Supabase-managed columns worth knowing — `id`, `bucket_id`, `name`, `owner` / `owner_id`,
 `metadata`, `path_tokens`, `version` — are catalogued in `schema.ts` (`StorageObject`). Do not
@@ -49,7 +55,8 @@ write any of them directly.
 - Upload with `upsert = true` to `"$userId/${sample.sampleId}.jpg"`, where `userId` comes from
   the **live Supabase session**, not from the Room row (`::syncSample`).
 - Download with the session's own auth, for the background image cache (`::downloadSampleImage`,
-  called by `CacheSampleImagesUseCase`).
+  called by `CacheSampleImagesUseCase`). The cache also holds colleagues' frames of assigned
+  patients, filed under the *reader's* folder on the device (`SampleDao::getCacheableSamples`).
 - A signed URL valid for **15 minutes**, for opening one sample (`::createSignedSampleImageUrl`).
 
 Images are resized to **640×640 at JPEG quality 80** before upload
@@ -61,7 +68,8 @@ Images are resized to **640×640 at JPEG quality 80** before upload
   synced has no object.
 - **Pointed at by** [`Report`](Report.md), by derivation from its id — no key column.
 - **Scoped by** [`Profile`](Profile.md) — but through `auth.uid()` in the policy, not through a
-  foreign key. There is no FK from `storage.objects` to `profiles`.
+  foreign key. There is no FK from `storage.objects` to `profiles`. Writes are own-folder only;
+  reads also reach a colleague's object on a patient the reader is assigned to (0007).
 - **Looks like but is not** the local JPEG. `SampleImageStore` writes device files under
   `filesDir/users/{owner}/samples/{sampleId}.jpg` (`SampleImageStore.kt::persistJpeg`) — a
   different path, a different lifetime, and the one that gets read first. The code still has an
@@ -97,5 +105,6 @@ cache after a pull and by Sample Detail when the local file is absent. No screen
 ## See
 
 `supabase/migrations/0001_init.sql:502-540`, `supabase/migrations/0003_reports_bucket.sql`,
+`supabase/migrations/0007_patient_shared_history.sql`,
 `data/supabase/SampleRemoteDataSource.kt`, `data/supabase/SyncSampleUseCase.kt`,
 `schema.ts` (`StorageObject`).

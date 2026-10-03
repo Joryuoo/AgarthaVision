@@ -14,7 +14,9 @@ import com.agarthavision.domain.usecase.inference.InferencePendingException
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.util.MainDispatcherRule
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -57,12 +59,17 @@ class SubmitVerificationUseCaseTest {
 
     private val syncScheduler = RecordingSyncScheduler()
 
+    private val authRepository: AuthRepository = mock {
+        onBlocking { currentLocalUserId() } doReturn "user-1"
+    }
+
     private val useCase = SubmitVerificationUseCase(
         sampleDao = sampleDao,
         detectionDao = detectionDao,
         findingDao = findingDao,
         syncSampleUseCase = syncSampleUseCase,
         syncScheduler = syncScheduler,
+        authRepository = authRepository,
     )
 
     private val prediction = Prediction(
@@ -461,5 +468,30 @@ class SubmitVerificationUseCaseTest {
 
             assertTrue(result.exceptionOrNull() is InferencePendingException)
             verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+        }
+
+    @Test
+    fun `a colleague's sample is refused and nothing is written`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // 14zcqntjph6: the server lets only the author update it, so an edit here would be
+            // written locally and silently refused on push.
+            whenever(sampleDao.getSampleById("sample-1")).thenReturn(
+                SampleEntity(
+                    sampleId = "sample-1",
+                    sessionId = "session-1",
+                    userId = "user-2",
+                    deviceId = "device-1",
+                    timestamp = 0L,
+                    imagePath = "/tmp/sample-1.jpg",
+                    status = SampleStatus.SYNCED.value,
+                ),
+            )
+
+            val result = useCase(frame, findings = emptyList(), missedEgg = false)
+
+            assertTrue(result.exceptionOrNull() is ReadOnlyRecordException)
+            verify(sampleDao, never()).updateSampleOnVerify(any(), any(), any(), any(), anyOrNull(), any())
+            verify(detectionDao, never()).insertDetections(any())
+            verify(syncSampleUseCase, never()).invoke(any())
         }
 }
