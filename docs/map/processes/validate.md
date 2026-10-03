@@ -117,13 +117,13 @@ Every text-entry field reachable from verification and the records screens.
   `ExposedDropdownMenu`s; a value comes only from a menu tap. The field total is a number.
 - **No editable fields** on `SampleDetailScreen` or `SessionDetailScreen`.
 
-## The inconsistency worth knowing
+## Unified egg counting rule
 
-Queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession` — the one
-behind the report egg count — counts everything with `verdict != 'false_positive'`, so
-`WRONG_CLASS` and `BOX_INCORRECT` eggs count. `SessionDao::observeSessionsPage`, which gives the
-patient's Sessions list its `totalEggs`, joins only `verdict = 'confirmed'`, so the same smear
-can show fewer eggs on its session card than in its report. Clinically the first is
-defensible — a misclassified egg is still an egg — but the two should not silently differ.
-`DetectionDao::observeConfirmedEggCountsSince` and `SessionDao::observeSessionsWithStats` use the
-confirmed-only rule too, but nothing calls them (ghosts).
+All queries counting eggs across sessions, reports, and patients use the single rule
+`d.verdict != 'false_positive'`. Clinically, a misclassified egg (`WRONG_CLASS`) or misplaced
+box (`BOX_INCORRECT`) is still a confirmed egg — only rejected boxes (`FALSE_POSITIVE`) are
+excluded. This ensures that the patient's Sessions list cards, Session Detail, and generated
+reports always agree on the exact same total egg count.
+
+`SessionDao::observeSessionsPage`, `SessionDao::observeSessionsWithStats`, and
+`DetectionDao::observeConfirmedEggCountsSince` all filter `d.verdict != 'false_positive'`.

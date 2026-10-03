@@ -78,7 +78,7 @@ interface DetectionDao {
         WHERE s.deleted_at is null
           AND s.user_id = :userId
           AND s.timestamp >= :sinceTimestamp
-          AND d.verdict = 'confirmed'
+          AND d.verdict != 'false_positive'
         GROUP BY species
         ORDER BY eggCount DESC
         """,
