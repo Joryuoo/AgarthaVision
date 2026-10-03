@@ -67,6 +67,7 @@ import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.records.labelRes
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.HeroDensityStyle
@@ -662,8 +663,14 @@ internal fun LpfHeroCard(
                         modifier = Modifier.weight(1f),
                     )
                     density.descriptor?.let { descriptor ->
+                        val burden = density.burdenLevel
+                        val labelText = if (burden != null) {
+                            "${stringResource(descriptor.labelRes)} · ${stringResource(burden.labelRes)}"
+                        } else {
+                            stringResource(descriptor.labelRes)
+                        }
                         Text(
-                            stringResource(descriptor.labelRes),
+                            labelText,
                             fontSize = 12.sp,
                             color = onCardMuted,
                             modifier = Modifier.padding(end = 10.dp),
