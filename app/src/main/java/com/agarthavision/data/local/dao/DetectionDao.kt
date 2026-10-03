@@ -51,7 +51,9 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.deleted_at is null
           AND s.session_id = :sessionId
-          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND (s.user_id = :userId OR s.user_id IS NULL
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
           AND s.status != 'flagged'
           AND d.verdict != 'false_positive'
         GROUP BY species

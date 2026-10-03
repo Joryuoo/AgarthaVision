@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import org.junit.Rule
 import org.junit.Test
@@ -74,7 +75,24 @@ class ReportsSectionTest {
         composeRule.onNodeWithContentDescription("Generating…").assertIsNotEnabled()
     }
 
-    private fun render(verifiedSamples: List<SampleUi>, isGenerating: Boolean = false) {
+    @Test
+    fun `a colleague's session offers no generate button and says whose it is`() {
+        // 14zcqntjph6: its author generates its reports. The reports it already has stay listed.
+        render(
+            verifiedSamples = listOf(sample()),
+            readOnlyAuthor = RecordAuthor.Colleague(name = "Maria Santos"),
+        )
+
+        composeRule.onNodeWithContentDescription("Export report").assertDoesNotExist()
+        composeRule.onNodeWithText("Recorded by Maria Santos").assertExists()
+        composeRule.onNodeWithText("No reports yet.").assertExists()
+    }
+
+    private fun render(
+        verifiedSamples: List<SampleUi>,
+        isGenerating: Boolean = false,
+        readOnlyAuthor: RecordAuthor.Colleague? = null,
+    ) {
         val state = SessionDetailContentState(
             session = SessionDetailUi(
                 id = "abcd",
@@ -96,6 +114,7 @@ class ReportsSectionTest {
             onOpenReport = {},
             onPrevPage = {},
             onNextPage = {},
+            readOnlyAuthor = readOnlyAuthor,
         )
         composeRule.setContent {
             AgarthaVisionTheme {

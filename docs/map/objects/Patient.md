@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-10-01
+commit: 6590f32f
 entity: app/src/main/java/com/agarthavision/data/local/entity/PatientEntity.kt
 ---
 
@@ -32,6 +32,24 @@ had no way to track multiple smears from the same person across time.
   second medtech. The `on_patient_created` trigger writes the creator's own row server-side,
   because the SELECT policy reads that table and PostgREST returns the inserted row on insert —
   without the trigger link, the creating medtech cannot read back the patient they just made.
+- **A super admin never reads this table** (`0013_super_admin_reads_deidentified.sql:38`).
+  They read `patients_deidentified` (`0012_deidentified_reads.sql:50`): every column but
+  `lastname`, `firstname`, `middle_name`, `sex` and `birthdate`. The clinic's organization
+  admin reads it in full through the Admin Console's own policies.
+- **Assignment opens the whole history.** Since `0007_patient_shared_history.sql` a medtech
+  linked through `patient_users` reads every session, sample, detection, finding, prediction and
+  report on the patient, whoever wrote them (`is_linked_to_patient`, `:44-56`). `user_id` on
+  those rows stays the author. The phone mirrors the rule through its local links
+  (`PatientAccessRepository`), and the pull removes a link the server no longer returns, so an
+  unassigned patient leaves the list (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
+- **A second trigger, from the Admin Console, files the patient under a laboratory.**
+  `console_on_patient_created` (`AFTER INSERT`) comes from the console's own migration set, not
+  this repository. It writes `patient_organizations` from the organization of `created_by`'s
+  membership, because the laboratory owns the patient (D11). It catches every error and leaves
+  the patient unassigned rather than fail the app's insert (R4). If `created_by` stops meaning
+  "the creating medtech", or is renamed, new patients silently stop being assigned. The same set
+  adds an org-admin `SELECT` policy on `patients`. See
+  [`file-tree.md`](../../file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
 - **There is no delete.** Removing a patient is an admin-side action only; no client path,
   DAO method, or client RLS policy allows deletion.
 - **Editing does not cascade.** Existing session labels keep the initials and barangay they were
@@ -79,6 +97,9 @@ Documented shape: `schema.ts` (`Patient`).
 - **Owns** [`Session`](Session.md), 1 → many (`sessions.patient_id` FK).
 - **Joined to** [`Profile`](Profile.md) via `patient_users` join table (`0001_init.sql:117-122`).
 - **References** [`PsgcBarangay`](PsgcBarangay.md) by canonical 10-digit code.
+- **Owned by** a laboratory organization through `patient_organizations`, 1 row per patient.
+  That table and the organizations live in the Admin Console's migration set and have no Room
+  mirror. The app never reads them.
 
 ## If you change this
 
@@ -91,6 +112,8 @@ Documented shape: `schema.ts` (`Patient`).
   the Recent sort (`PatientDao.observePatients`) reads `sessions.started_at` and
   `samples.timestamp`/`verified_at`; `updated_at` alone is only the patient's own last-edit time.
 - `barangay_prevalence()` surveillance RPC in Postgres.
+- The Admin Console's `patients` trigger and org-admin policy, through `patients.id` and
+  `created_by`. They break without an error on this side, so tell the console team first.
 
 **Does not hit**
 

@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # report
@@ -23,7 +23,11 @@ over.
 1. **Require cached identity and ownership.** `GenerateSessionReportUseCase` fails if there is
    no cached local identity, if the session is missing, or if the session is not owned by the current user
    (`GenerateSessionReportUseCase::invoke`). A session with no verified samples is refused too.
-   Works offline when signed in.
+   Works offline when signed in. On a colleague's session Session Detail offers no generate
+   button and names the author instead (`SessionDetailContentState.readOnlyAuthor`,
+   14zcqntjph6); the reports that session already has stay listed and open for the assigned
+   medtech, files included (`RestoreReportFilesUseCase` builds the path from the report's own
+   `user_id`).
 2. **Gather.** Fetch the session's live verified samples (`deleted_at is null`), their detections,
    and findings (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 3. **Count.** `getConfirmedEggCountsForSession` groups by `COALESCE(expert_class, class_label)`,

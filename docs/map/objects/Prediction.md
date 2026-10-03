@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: supabase/migrations/0004_predictions.sql
 ---
 
@@ -56,6 +56,8 @@ in ordinal order (`data/inference/PredictionMapper.kt`).
 
 ## Connected to
 
+- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:173-175` —
+  every medtech assigned to the patient. Still no UPDATE or DELETE policy.
 - **Owned by** [`Sample`](Sample.md). CASCADE.
 - **Ruled on by** at most one [`Detection`](Detection.md), through `detections.prediction_id`
   (partial unique index). A prediction with no detection does not occur in practice — every
