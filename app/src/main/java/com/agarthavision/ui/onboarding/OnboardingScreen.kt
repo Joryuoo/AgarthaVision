@@ -1,14 +1,9 @@
 package com.agarthavision.ui.onboarding
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ContentTransform
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +17,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.CheckCircle
@@ -32,13 +30,11 @@ import androidx.compose.material.icons.outlined.Layers
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.agarthavision.R
 import com.agarthavision.ui.theme.AgarthaTheme
+import kotlinx.coroutines.launch
 
 private data class OnboardingStep(
     val icon: ImageVector,
@@ -83,11 +80,19 @@ fun OnboardingScreen(
     viewModel: OnboardingViewModel = hiltViewModel(),
 ) {
     val colors = AgarthaTheme.colors
-    var currentStep by remember { mutableIntStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(pageCount = { onboardingSteps.size })
 
     fun finishOnboarding() {
         viewModel.onCompleteOnboarding()
         onComplete()
+    }
+
+    // Handle system back button when on step > 0
+    BackHandler(enabled = pagerState.currentPage > 0) {
+        coroutineScope.launch {
+            pagerState.animateScrollToPage(pagerState.currentPage - 1)
+        }
     }
 
     Box(
@@ -97,8 +102,29 @@ fun OnboardingScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        // Skip Button Top Right
-        if (currentStep < onboardingSteps.size - 1) {
+        // Back Button Top Left (on step > 0)
+        if (pagerState.currentPage > 0) {
+            IconButton(
+                onClick = {
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 12.dp, top = 8.dp)
+                    .testTag("onboardingBack"),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.onboarding_back),
+                    tint = colors.textSecondary,
+                )
+            }
+        }
+
+        // Skip Button Top Right (on step < last)
+        if (pagerState.currentPage < onboardingSteps.size - 1) {
             TextButton(
                 onClick = ::finishOnboarding,
                 modifier = Modifier
@@ -115,22 +141,19 @@ fun OnboardingScreen(
             }
         }
 
-        // Animated Step Content
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 28.dp, vertical = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
         ) {
             Spacer(modifier = Modifier.weight(1f))
 
-            AnimatedContent(
-                targetState = currentStep,
-                transitionSpec = { slideTransition() },
-                label = "OnboardingContentTransition",
-            ) { stepIndex ->
-                val step = onboardingSteps[stepIndex]
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth(),
+            ) { page ->
+                val step = onboardingSteps[page]
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth(),
@@ -183,13 +206,18 @@ fun OnboardingScreen(
                 modifier = Modifier.padding(bottom = 32.dp),
             ) {
                 onboardingSteps.indices.forEach { index ->
-                    val isActive = index == currentStep
+                    val isActive = index == pagerState.currentPage
                     Box(
                         modifier = Modifier
                             .height(8.dp)
                             .width(if (isActive) 24.dp else 8.dp)
                             .clip(CircleShape)
-                            .background(if (isActive) colors.accent else colors.border),
+                            .background(if (isActive) colors.accent else colors.border)
+                            .clickable {
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(index)
+                                }
+                            },
                     )
                 }
             }
@@ -197,8 +225,10 @@ fun OnboardingScreen(
             // Navigation CTA Button
             Button(
                 onClick = {
-                    if (currentStep < onboardingSteps.size - 1) {
-                        currentStep++
+                    if (pagerState.currentPage < onboardingSteps.size - 1) {
+                        coroutineScope.launch {
+                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                        }
                     } else {
                         finishOnboarding()
                     }
@@ -214,7 +244,7 @@ fun OnboardingScreen(
                 ),
             ) {
                 Text(
-                    text = if (currentStep < onboardingSteps.size - 1) {
+                    text = if (pagerState.currentPage < onboardingSteps.size - 1) {
                         stringResource(R.string.onboarding_next)
                     } else {
                         stringResource(R.string.onboarding_finish)
@@ -222,7 +252,7 @@ fun OnboardingScreen(
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (currentStep < onboardingSteps.size - 1) {
+                if (pagerState.currentPage < onboardingSteps.size - 1) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Icon(
                         imageVector = Icons.AutoMirrored.Outlined.ArrowForward,
@@ -234,10 +264,4 @@ fun OnboardingScreen(
             }
         }
     }
-}
-
-private fun slideTransition(): ContentTransform {
-    return (slideInHorizontally { width -> width } + fadeIn()).togetherWith(
-        slideOutHorizontally { width -> -width } + fadeOut(),
-    )
 }

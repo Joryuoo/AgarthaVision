@@ -734,6 +734,7 @@
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_title">Verify Queue</string>
     <!-- Onboarding (86d4amrbk) -->
+    <string name="onboarding_back">Back</string>
     <string name="onboarding_skip">Skip</string>
     <string name="onboarding_next">Next</string>
     <string name="onboarding_finish">Get Started</string>
