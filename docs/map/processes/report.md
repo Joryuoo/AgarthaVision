@@ -37,9 +37,11 @@ over.
    (`data/local/dao/SampleSpeciesFindingDao.kt`).
 5. **Compute LPF Density.** Philippine medtechs use Direct Smear, so density is reported per 
    Low Power Field (LPF) via `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`).
-   - **Range:** the min and max egg count across fields (empty fields contribute 0). **Not a
-     mean** — `LpfDensity` holds only `min` and `max`, and the qualitative descriptor is read
-     off `max`.
+   - **Range Definition:** Per species, `min(eggCount) .. max(eggCount)` across all fields recorded in the session. A field with none of that species contributes `0`, NOT absence (dropping empty fields would systematically overstate every result). Zero-egg fields exist because zero-detection inference results are persisted (`86d4a6prb`).
+   - **Denominator:** Whatever the medtech recorded — no floor, no cap. Ten fields is typical practice, not an app-enforced rule.
+   - **Descriptor & Burden Level:** The qualitative descriptor comes from the highest single field (worst field), NOT the mean: `rare` (1–2), `few` (3–5), `moderate` (6–10), `numerous` (>10). A single heavy field must not be averaged away by clean ones (`LpfDensity.kt::LpfDescriptor`). Accompanied by an estimated parasite burden level (`LpfDensity.kt::ParasiteBurdenLevel`).
+   - **No EPG / Infectivity Tiers:** There is no WHO or DOH intensity table for Direct Smear, and WHO Kato-Katz EPG thresholds (Ascaris 5k/50k; Trichuris 1k/10k; Hookworm 2k/4k) cannot be rescaled to LPF counts (`4909f78`). Re-adding a clinical intensity tier requires an explicit cutoff table signed off clinically for Direct Smear LPF by name and date.
+   - **Wholly negative session:** A session with 0 eggs across all fields is a valid result (`0–0 LPF`) and generates a report stating no parasites found.
 6. **Normalise species** to canonical names.
 7. **Build the document** in the format the medtech picked (`ReportFormat`): a PDF from
    `ReportPdfBuilder` drawn by `AndroidReportPdfRenderer`, or a CSV from `ReportCsvBuilder`, with

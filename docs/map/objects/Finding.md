@@ -88,7 +88,8 @@ index is a backstop, not the mechanism.
   empty), findings and no detections (a manual capture), or both.
 - **Aggregated into** [`Report`](Report.md) — findings across all live samples in a session are
   aggregated by `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`) into
-  `lpf_per_species` (a min–max density range per species).
+  `lpf_per_species` (a min–max density range per species across all recorded fields, where
+  clean fields contribute a 0 count to preserve true session density).
 - **Looks like but is not** an aggregate of `detections`. The two agree by construction — a
   species' detection rows are its kept model boxes plus one row per unboxed egg up to the total
   (`VerificationMapper.kt::toDetectionEntities`) — but the finding is where the total is stated,
