@@ -25,11 +25,6 @@ interface SessionRepository {
     suspend fun getSessionById(sessionId: String): Session?
 
     /**
-     * Observes sessions with sample and egg counts.
-     */
-    fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>>
-
-    /**
      * Updates the label for a session.
      */
     suspend fun updateSessionLabel(sessionId: String, label: String)
