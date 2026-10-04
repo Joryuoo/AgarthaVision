@@ -114,29 +114,29 @@ class SessionRemoteDataSource @Inject constructor(
         val label: String?,
     )
 
-    // ── Select DTO (read path) ────────────────────────────────────────────────
-
-    @Serializable
-    private data class SessionRow(
-        @SerialName("id") val id: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("patient_id") val patientId: String,
-        @SerialName("device_id") val deviceId: String,
-        @SerialName("started_at") val startedAt: String,
-        @SerialName("label") val label: String? = null,
-    )
-
-    private fun SessionRow.toEntity(): SessionEntity = SessionEntity(
-        sessionId = id,
-        userId = userId,
-        patientId = patientId,
-        deviceId = deviceId,
-        startedAt = parseSupabaseInstant(startedAt).toEpochMilli(),
-        label = label,
-        supabaseStatus = SessionSyncStatus.SYNCED.value,
-    )
-
     private companion object {
         private const val SESSIONS_TABLE = "sessions"
     }
 }
+
+// ── Select DTO (read path) ────────────────────────────────────────────────
+
+@Serializable
+internal data class SessionRow(
+    @SerialName("id") val id: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("patient_id") val patientId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("label") val label: String? = null,
+)
+
+internal fun SessionRow.toEntity(): SessionEntity = SessionEntity(
+    sessionId = id,
+    userId = userId,
+    patientId = patientId,
+    deviceId = deviceId,
+    startedAt = parseSupabaseInstant(startedAt).toEpochMilli(),
+    label = label,
+    supabaseStatus = SessionSyncStatus.SYNCED.value,
+)

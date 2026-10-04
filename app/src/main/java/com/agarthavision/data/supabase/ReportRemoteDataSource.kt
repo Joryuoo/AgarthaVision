@@ -179,54 +179,6 @@ open class ReportRemoteDataSource @Inject constructor(
         val pdfFilePath: String?,
     )
 
-    // ── Select DTO (read path) ────────────────────────────────────────────────
-
-    @Serializable
-    private data class ReportRow(
-        @SerialName("id") val id: String,
-        @SerialName("session_id") val sessionId: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("report_type") val reportType: String,
-        @SerialName("generated_at") val generatedAt: String,
-        @SerialName("total_samples") val totalSamples: Int,
-        @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
-        @SerialName("positive_species") val positiveSpecies: List<String>,
-        @SerialName("lpf_per_species") val lpfPerSpecies: JsonObject,
-        @SerialName("csv_file_path") val csvFilePath: String? = null,
-        @SerialName("pdf_file_path") val pdfFilePath: String? = null,
-    )
-
-    private fun ReportRow.toEntity(): ReportEntity {
-        val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
-        val positiveSpeciesJson = gson.toJson(positiveSpecies)
-        val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
-            val obj = v as JsonObject
-            // `mean` is not read even when an older row still carries it: PB-17 made the
-            // range the figure, and reviving a superseded number from storage is how the wrong
-            // definition comes back.
-            LpfDensity(
-                min = (obj["min"] as JsonPrimitive).content.toInt(),
-                max = (obj["max"] as JsonPrimitive).content.toInt(),
-            )
-        }
-        val lpfPerSpeciesJson = gson.toJson(lpfMap)
-        return ReportEntity(
-            reportId = id,
-            sessionId = sessionId,
-            userId = userId,
-            reportType = reportType,
-            generatedAt = generatedAtMs,
-            totalSamples = totalSamples,
-            totalEggsConfirmed = totalEggsConfirmed,
-            positiveSpeciesJson = positiveSpeciesJson,
-            lpfPerSpeciesJson = lpfPerSpeciesJson,
-            csvFilePath = csvFilePath,
-            pdfFilePath = pdfFilePath,
-            supabaseStatus = ReportSyncStatus.SYNCED.value,
-            createdAt = generatedAtMs,
-        )
-    }
-
     companion object {
         /** Storage bucket holding generated report files. Mirrors `samples` in layout. */
         const val REPORTS_BUCKET = "reports"
@@ -252,4 +204,49 @@ open class ReportRemoteDataSource @Inject constructor(
         private val stringListType = object : TypeToken<List<String>>() {}.type
         private val stringLpfDensityMapType = object : TypeToken<Map<String, LpfDensity>>() {}.type
     }
+}
+
+// ── Select DTO (read path) ────────────────────────────────────────────────
+
+@Serializable
+internal data class ReportRow(
+    @SerialName("id") val id: String,
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("report_type") val reportType: String,
+    @SerialName("generated_at") val generatedAt: String,
+    @SerialName("total_samples") val totalSamples: Int,
+    @SerialName("total_eggs_confirmed") val totalEggsConfirmed: Int,
+    @SerialName("positive_species") val positiveSpecies: List<String>,
+    @SerialName("lpf_per_species") val lpfPerSpecies: JsonObject,
+    @SerialName("csv_file_path") val csvFilePath: String? = null,
+    @SerialName("pdf_file_path") val pdfFilePath: String? = null,
+)
+
+internal fun ReportRow.toEntity(): ReportEntity {
+    val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
+    val gson = Gson()
+    val positiveSpeciesJson = gson.toJson(positiveSpecies)
+    val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
+        val obj = v as? JsonObject
+        val min = (obj?.get("min") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+        val max = (obj?.get("max") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+        LpfDensity(min = min, max = max)
+    }
+    val lpfPerSpeciesJson = gson.toJson(lpfMap)
+    return ReportEntity(
+        reportId = id,
+        sessionId = sessionId,
+        userId = userId,
+        reportType = reportType,
+        generatedAt = generatedAtMs,
+        totalSamples = totalSamples,
+        totalEggsConfirmed = totalEggsConfirmed,
+        positiveSpeciesJson = positiveSpeciesJson,
+        lpfPerSpeciesJson = lpfPerSpeciesJson,
+        csvFilePath = csvFilePath,
+        pdfFilePath = pdfFilePath,
+        supabaseStatus = ReportSyncStatus.SYNCED.value,
+        createdAt = generatedAtMs,
+    )
 }
