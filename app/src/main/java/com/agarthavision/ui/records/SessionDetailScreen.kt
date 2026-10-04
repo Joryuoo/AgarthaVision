@@ -67,6 +67,7 @@ import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.records.labelRes
 import androidx.compose.ui.text.style.TextOverflow
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.HeroDensityStyle
@@ -644,40 +645,50 @@ internal fun LpfHeroCard(
                 )
             }
             session.lpfPerSpecies.forEach { (species, density) ->
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(SessionDetailTestTags.lpfRow(species)),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .testTag(SessionDetailTestTags.lpfRow(species))
+                        .padding(vertical = 4.dp),
                 ) {
-                    Text(
-                        species,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        // Binomials are italic per the design system; "Hookworm" is a common
-                        // name covering two genera, so it is not.
-                        fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
-                        color = onCard,
-                        modifier = Modifier.weight(1f),
-                    )
-                    density.descriptor?.let { descriptor ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            stringResource(descriptor.labelRes),
-                            fontSize = 12.sp,
-                            color = onCardMuted,
-                            modifier = Modifier.padding(end = 10.dp),
+                            species,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
+                            color = onCard,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            stringResource(R.string.lpf_range_value, density.min, density.max),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = onCard,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
                         )
                     }
-                    Text(
-                        stringResource(R.string.lpf_range_value, density.min, density.max),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = onCard,
-                        style = TextStyle(fontFeatureSettings = "tnum"),
-                    )
+                    density.descriptor?.let { descriptor ->
+                        val burden = density.burdenLevel
+                        val descriptorName = stringResource(descriptor.labelRes).replaceFirstChar { it.uppercase() }
+                        val labelText = if (burden != null) {
+                            "$descriptorName · ${stringResource(burden.labelRes)}"
+                        } else {
+                            descriptorName
+                        }
+                        Text(
+                            labelText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = onCardMuted,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                 }
-                Spacer(Modifier.height(4.dp))
             }
         }
     }

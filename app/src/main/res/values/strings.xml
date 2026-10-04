@@ -464,6 +464,10 @@
     <string name="lpf_descriptor_few">few</string>
     <string name="lpf_descriptor_moderate">moderate</string>
     <string name="lpf_descriptor_numerous">numerous</string>
+    <!-- Parasite Burden Level (86d4bzmah) -->
+    <string name="parasite_burden_low">Low Burden</string>
+    <string name="parasite_burden_moderate">Moderate Burden</string>
+    <string name="parasite_burden_high">High Burden</string>
     <string name="session_detail_eggs_total_label">Total eggs: %1$d</string>
     <string name="session_detail_eggs_empty">No confirmed eggs yet</string>
     <plurals name="session_detail_no_confirmed_eggs_fields">

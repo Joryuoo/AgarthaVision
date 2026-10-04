@@ -33,6 +33,33 @@ data class LpfDensity(
      * and its extra `mean` is simply ignored on read.
      */
     val descriptor: LpfDescriptor? get() = LpfDescriptor.forMax(max)
+
+    /**
+     * Estimated Parasite Burden level derived from the worst field's LPF density.
+     */
+    val burdenLevel: ParasiteBurdenLevel? get() = ParasiteBurdenLevel.forDescriptor(descriptor)
+}
+
+/**
+ * Estimated Parasite Burden level derived from worst low-power field (LPF) egg count.
+ *
+ * Avoids unqualified "WHO infectivity tier" claims (which apply only to Kato-Katz EPG),
+ * providing a defensible per-LPF Direct Smear severity estimate for clinical display.
+ */
+enum class ParasiteBurdenLevel {
+    LOW,
+    MODERATE,
+    HIGH,
+    ;
+
+    companion object {
+        fun forDescriptor(descriptor: LpfDescriptor?): ParasiteBurdenLevel? = when (descriptor) {
+            null -> null
+            LpfDescriptor.RARE, LpfDescriptor.FEW -> LOW
+            LpfDescriptor.MODERATE -> MODERATE
+            LpfDescriptor.NUMEROUS -> HIGH
+        }
+    }
 }
 
 /**
