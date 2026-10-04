@@ -20,7 +20,9 @@ best-effort.
 
 ## Movement — one sample
 
-Runs inline at the end of [`validate`](validate.md).
+Started at the end of [`validate`](validate.md), but not awaited by it
+(`data/sync/BackgroundSamplePush.kt`): the push runs in a process-lifetime scope, then asks for a
+catch-up pass, in that order — asking first would run a second push of the same sample beside it.
 
 1. **Load** the sample — *including* a tombstoned one — with its detections and findings
    (`SyncSampleUseCase::invoke`). A missing sample fails immediately; an already-`synced` one
