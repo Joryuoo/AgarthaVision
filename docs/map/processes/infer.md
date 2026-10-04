@@ -117,8 +117,8 @@ The banner is informational only: a capture still saves, and the queue falls bac
 `OnDeviceInferenceEngine` (`data/inference/ondevice/OnDeviceInferenceEngine.kt`) is the offline
 counterpart, and the queue's fallback whenever the cloud fails or the circuit breaker is open.
 
-- **Which model.** `assets/models/` bundles one build today, `yolo26n-effv2b0-v1-tflite-fp32`: a
-  `<model_version>.tflite` and a `<model_version>.json` manifest written by
+- **Which model.** `assets/models/` bundles one build today, `yolo26n-effv2s-v1-tflite-fp32`:
+  a `<model_version>.tflite` and a `<model_version>.json` manifest written by
   `inference/export/export_mobile.py`.
   `OnDeviceModels.SHIPPED` (`data/inference/ondevice/ModelStore.kt`) picks the one production
   runs; the manifest's `model_version` is what the sample records.

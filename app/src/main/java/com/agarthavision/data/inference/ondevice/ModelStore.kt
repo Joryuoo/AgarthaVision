@@ -14,15 +14,15 @@ import javax.inject.Singleton
  * `<model_version>.json` manifest beside it. [SHIPPED] is the one the app runs.
  */
 object OnDeviceModels {
-    /** YOLO26-nano on an EfficientNetV2-B0 backbone, full precision. */
-    const val EFFV2B0_FP32 = "yolo26n-effv2b0-v1-tflite-fp32"
+    /** YOLO26-nano on an EfficientNetV2-S backbone, full precision. */
+    const val EFFV2S_FP32 = "yolo26n-effv2s-v1-tflite-fp32"
 
     /**
      * The build production inference uses. fp32 first, to see whether the phone runs the
-     * EfficientNetV2-B0 model at all before trading any accuracy for size or speed with fp16
-     * or int8 (`inference/export/README.md`).
+     * EfficientNetV2-S model fast enough before trading any accuracy for size or speed with
+     * fp16 or int8 (`inference/export/README.md`).
      */
-    const val SHIPPED = EFFV2B0_FP32
+    const val SHIPPED = EFFV2S_FP32
 }
 
 /** A compiled model ready to run, and what it was compiled for. */

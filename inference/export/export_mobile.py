@@ -5,15 +5,15 @@ Run this on a machine with the pinned Ultralytics fork installed (see
 requirements-export.txt), not inside the serving container.
 
     python inference/export/export_mobile.py \
-        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
+        --weights inference/weights/yolo26n-efficientnetv2s.pt \
         --calib-images path/to/dataset/images/val
 
 Outputs land in inference/export/out/ (gitignored), each named after the build's
 inference_model_version:
 
-    yolo26n-effv2b0-v1-tflite-fp32.tflite / .json   fp32 throughout
-    yolo26n-effv2b0-v1-tflite-fp16.tflite / .json   fp16 weights, fp32 activations and I/O
-    yolo26n-effv2b0-v1-tflite-int8.tflite / .json   int8 weights and activations, fp32 I/O
+    yolo26n-effv2s-v1-tflite-fp32.tflite / .json   fp32 throughout
+    yolo26n-effv2s-v1-tflite-fp16.tflite / .json   fp16 weights, fp32 activations and I/O
+    yolo26n-effv2s-v1-tflite-int8.tflite / .json   int8 weights and activations, fp32 I/O
 
 Copy the pairs you ship into app/src/main/assets/models/.
 
@@ -54,8 +54,8 @@ DEFAULT_IMGSZ = 640
 DEFAULT_CONF = 0.25
 DEFAULT_IOU = 0.7
 DEFAULT_MAX_DET = 300
-DEFAULT_WEIGHTS = "inference/weights/yolo26n-efficientnetv2b0.pt"
-DEFAULT_VERSION_PREFIX = "yolo26n-effv2b0-v1-tflite"
+DEFAULT_WEIGHTS = "inference/weights/yolo26n-efficientnetv2s.pt"
+DEFAULT_VERSION_PREFIX = "yolo26n-effv2s-v1-tflite"
 DEFAULT_CALIB_COUNT = 200
 
 # Ultralytics letterboxes onto (114, 114, 114). The app pads with the same grey.

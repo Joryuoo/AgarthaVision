@@ -9,6 +9,24 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/effv2s-offline-model — EfficientNetV2-S everywhere · 2026-10-04
+
+`14zcqntk2nm`. Depends on `fix/one-box-per-egg`.
+
+- **On-device runs EfficientNetV2-S.** `assets/models/` now bundles only
+  `yolo26n-effv2s-v1-tflite-fp32` (81.2 MB, against ≈ 27 MB for B0), and
+  `OnDeviceModels.SHIPPED` points at it. The B0 build is removed.
+- **Fast enough on a Redmi Note 11.** `OnDeviceInferenceParityTest`, fp32 on GPU+CPU: 20/20
+  frames matched the checkpoint, mean IoU 0.9933, 100% class agreement; inference median
+  762 ms, total median 817 ms per frame.
+- **One model everywhere.** `inference/server.py`, the Kaggle notebook and the export scripts
+  default to `yolo26n-efficientnetv2s.pt` / `yolo26n-effv2s-v1-*`. The cloud container needs the
+  new weights and `MODEL_VERSION` when redeployed.
+- **Old checkpoints retired.** `yolo26n-efficientnetv2b0.pt` and
+  `yolo26n-mobilenetv4convsmall.pt` are removed from `inference/weights/`.
+
+---
+
 ## fix/one-box-per-egg — one egg, one detection · 2026-10-04
 
 `14zcqntk1vd`.
