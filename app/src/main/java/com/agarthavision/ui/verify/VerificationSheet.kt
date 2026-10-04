@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -213,7 +214,11 @@ internal fun VerificationSheetContent(
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize()
-                .then(if (state.isDrawing) Modifier.clearAndSetSemantics {} else Modifier),
+                // Saving too: TalkBack activates a node through its semantics, not a touch, so the
+                // input blocker over the sheet would not stop it.
+                .then(
+                    if (state.isDrawing || state.isSubmitting) Modifier.clearAndSetSemantics {} else Modifier,
+                ),
         ) {
             // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
             ScreenTopBar(
@@ -417,6 +422,15 @@ internal fun VerificationSheetContent(
                     )
                 }
             }
+        }
+
+        // Over the whole sheet while a save is in flight. The Submit button alone used to be
+        // locked, so anything else tapped in that window either vanished - the save had already
+        // copied the answers, and wrote that copy back over the edit when it landed - or paged
+        // to another sample the finished save then closed. Transparent, because the save is
+        // a local write and over in a blink: a scrim would only flash.
+        if (state.isSubmitting) {
+            SavingInputBlocker()
         }
 
         if (showDiscardConfirm.value) {
@@ -971,6 +985,28 @@ private fun NoteField(
             focusedTextColor = AgarthaTheme.colors.textPrimary,
             unfocusedTextColor = AgarthaTheme.colors.textPrimary,
         ),
+    )
+}
+
+/**
+ * Swallows every touch on the sheet beneath it, and takes focus off any text field so the
+ * keyboard cannot keep typing into an answer the save has already taken.
+ */
+@Composable
+private fun SavingInputBlocker() {
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(Unit) { focusManager.clearFocus() }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(VerifyTestTags.SAVING_INPUT_BLOCKER)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                }
+            },
     )
 }
 

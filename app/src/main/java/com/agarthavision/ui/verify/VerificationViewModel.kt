@@ -387,8 +387,13 @@ class VerificationViewModel @Inject constructor(
      * A verified sample stays editable, and reopening it with a blank questionnaire would make
      * every edit a full re-review - and would silently discard answers by resubmitting defaults
      * over them. Absent it, the frame seeds from its own shape instead.
+     *
+     * Refused while a save is in flight. Opening a frame clears `isSubmitting`, which used to
+     * re-arm Submit beside a save still running — and that save, finishing, then closed the
+     * sheet on whichever sample had been opened in the meantime.
      */
     fun setFrame(frame: FlaggedFrame, prior: VerificationTarget? = null) {
+        if (_state.value.isSubmitting) return
         currentFrame = frame
         val findings = prior?.findings?.takeIf { it.isNotEmpty() } ?: frame.initialFindings()
         val note = prior?.userNote.orEmpty()
@@ -869,8 +874,12 @@ class VerificationViewModel @Inject constructor(
      *
      * A cycle button at the end of the queue does nothing and asks nothing: there is nowhere to
      * go, so there is nothing to confirm.
+     *
+     * Nor does any way off the sample while it is being saved: the edits are not being lost,
+     * they are being written, and the save closes the sheet itself when it lands.
      */
     private fun requestLeave(intent: LeaveIntent) {
+        if (_state.value.isSubmitting) return
         if (intent != LeaveIntent.EXIT && neighbourFor(intent) == null) return
         if (_state.value.hasUnsavedChanges) {
             _state.update { it.copy(pendingLeave = intent) }
@@ -988,6 +997,8 @@ class VerificationViewModel @Inject constructor(
     }
 
     fun onDeleteFrame() {
+        // Discarding a sample mid-save would race the very rows the save is writing.
+        if (_state.value.isSubmitting) return
         val frames = cycleFrames()
         val current = currentFrame ?: return
         val idx = frames.indexOfSample(current)
