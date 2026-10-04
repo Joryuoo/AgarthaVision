@@ -44,9 +44,11 @@ import com.agarthavision.domain.model.HomePeriod
 import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.sessionlist.SessionListScreen
 import com.agarthavision.ui.coverage.MyCoverageScreen
+import com.agarthavision.ui.onboarding.OnboardingScreen
 import com.agarthavision.ui.verify.VerificationQueueScreen
 
 sealed class Screen(val route: String) {
+    data object Onboarding : Screen("onboarding")
     data object Login : Screen("login")
     data object Dashboard : Screen("dashboard")
     data object Patients : Screen("patients")
@@ -171,6 +173,16 @@ fun AgarthaNavHost(
         popEnterTransition = { fadeIn(tween(220)) },
         popExitTransition  = { fadeOut(tween(180)) }
     ) {
+        composable(Screen.Onboarding.route) {
+            OnboardingScreen(
+                onComplete = {
+                    navController.navigate(Screen.Dashboard.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                },
+            )
+        }
+
         // Login is the start destination on first run and cannot be dismissed: a Patient
         // must belong to a User and a Session to a Patient, so there is nothing to attach a
         // patient to until somebody has signed in. It supersedes ADR-007's pop-back

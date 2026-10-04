@@ -41,13 +41,16 @@ class MainActivity : ComponentActivity() {
         // for a frame or two behind the login screen on a fresh install — which reads as a
         // flash of someone else's data. This gate is DataStore-only: resolving it never
         // constructs the Supabase client or the session graph on this path (86d4byw6p).
-        splash.setKeepOnScreenCondition { mainViewModel.authGate.value == AuthGate.Loading }
+        splash.setKeepOnScreenCondition {
+            mainViewModel.authGate.value == AuthGate.Loading || mainViewModel.hasSeenOnboarding.value == null
+        }
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
+            val hasSeenOnboarding by mainViewModel.hasSeenOnboarding.collectAsStateWithLifecycle()
             val signedOutByServer by mainViewModel.signedOutByServer.collectAsStateWithLifecycle()
             val isDark = when (themeMode) {
                 ThemeMode.LIGHT -> false
@@ -57,15 +60,16 @@ class MainActivity : ComponentActivity() {
             AgarthaVisionTheme(darkTheme = isDark) {
                 // Loading never reaches composition: the splash is still up. Rendering the
                 // Dashboard for it would defeat the condition above.
-                if (authGate != AuthGate.Loading) {
+                if (authGate != AuthGate.Loading && hasSeenOnboarding != null) {
+                    val startRoute = when {
+                        hasSeenOnboarding == false -> Screen.Onboarding.route
+                        authGate == AuthGate.NeedsLogin -> Screen.Login.route
+                        else -> Screen.Dashboard.route
+                    }
                     AgarthaNavGraph(
                         cameraManager = cameraManager,
                         frameSampler = frameSampler,
-                        startDestination = if (authGate == AuthGate.NeedsLogin) {
-                            Screen.Login.route
-                        } else {
-                            Screen.Dashboard.route
-                        },
+                        startDestination = startRoute,
                         signedOutByServer = signedOutByServer,
                     )
                 }

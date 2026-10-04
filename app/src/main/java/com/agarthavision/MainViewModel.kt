@@ -3,6 +3,7 @@ package com.agarthavision
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import com.agarthavision.domain.usecase.auth.AuthGate
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.ResolveAuthGateUseCase
@@ -27,6 +28,7 @@ class MainViewModel @Inject constructor(
     observeThemeModeUseCase: ObserveThemeModeUseCase,
     resolveAuthGateUseCase: ResolveAuthGateUseCase,
     observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
+    onboardingPreferenceRepository: OnboardingPreferenceRepository,
 ) : ViewModel() {
 
     private val _authGate = MutableStateFlow<AuthGate>(AuthGate.Loading)
@@ -36,6 +38,13 @@ class MainViewModel @Inject constructor(
      * held on that value so the Dashboard never flashes behind the login screen.
      */
     val authGate: StateFlow<AuthGate> = _authGate.asStateFlow()
+
+    /**
+     * Whether the first-run onboarding intro has been seen. Null while loading from DataStore.
+     */
+    val hasSeenOnboarding: StateFlow<Boolean?> = onboardingPreferenceRepository.hasSeenOnboarding
+        .map<Boolean, Boolean?> { it }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     init {
         viewModelScope.launch { _authGate.value = resolveAuthGateUseCase() }
