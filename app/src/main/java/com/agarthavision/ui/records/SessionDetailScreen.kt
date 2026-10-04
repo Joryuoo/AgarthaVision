@@ -645,46 +645,50 @@ internal fun LpfHeroCard(
                 )
             }
             session.lpfPerSpecies.forEach { (species, density) ->
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag(SessionDetailTestTags.lpfRow(species)),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                        .testTag(SessionDetailTestTags.lpfRow(species))
+                        .padding(vertical = 4.dp),
                 ) {
-                    Text(
-                        species,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        // Binomials are italic per the design system; "Hookworm" is a common
-                        // name covering two genera, so it is not.
-                        fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
-                        color = onCard,
-                        modifier = Modifier.weight(1f),
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            species,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
+                            color = onCard,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            stringResource(R.string.lpf_range_value, density.min, density.max),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = onCard,
+                            style = TextStyle(fontFeatureSettings = "tnum"),
+                        )
+                    }
                     density.descriptor?.let { descriptor ->
                         val burden = density.burdenLevel
+                        val descriptorName = stringResource(descriptor.labelRes).replaceFirstChar { it.uppercase() }
                         val labelText = if (burden != null) {
-                            "${stringResource(descriptor.labelRes)} · ${stringResource(burden.labelRes)}"
+                            "$descriptorName · ${stringResource(burden.labelRes)}"
                         } else {
-                            stringResource(descriptor.labelRes)
+                            descriptorName
                         }
                         Text(
                             labelText,
                             fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
                             color = onCardMuted,
-                            modifier = Modifier.padding(end = 10.dp),
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    Text(
-                        stringResource(R.string.lpf_range_value, density.min, density.max),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = onCard,
-                        style = TextStyle(fontFeatureSettings = "tnum"),
-                    )
                 }
-                Spacer(Modifier.height(4.dp))
             }
         }
     }
