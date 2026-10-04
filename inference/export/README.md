@@ -5,9 +5,9 @@ and nowhere else. Android has no PyTorch, so running on the phone means **export
 rewriting the same trained weights into LiteRT's format, once, on a computer.
 
 ```
-yolo26n-efficientnetv2b0.pt ──[ export_mobile.py ]──▶ yolo26n-effv2b0-v1-tflite-fp32.tflite + .json
-(PyTorch, server only)                                 yolo26n-effv2b0-v1-tflite-fp16.tflite + .json
-                                                       yolo26n-effv2b0-v1-tflite-int8.tflite + .json
+yolo26n-efficientnetv2s.pt ──[ export_mobile.py ]──▶ yolo26n-effv2s-v1-tflite-fp32.tflite + .json
+(PyTorch, server only)                                 yolo26n-effv2s-v1-tflite-fp16.tflite + .json
+                                                       yolo26n-effv2s-v1-tflite-int8.tflite + .json
                                                        (run on the phone)
 ```
 
@@ -20,20 +20,19 @@ Nothing about training changes. This is a format translation.
 
 | Path | Version |
 |---|---|
-| Cloud (`server.py`, PyTorch) | `yolo26n-effv2b0-v1-cloud-fp32` |
-| On device | `yolo26n-effv2b0-v1-tflite-fp32` (shipped), `-tflite-fp16`, `-tflite-int8` |
+| Cloud (`server.py`, PyTorch) | `yolo26n-effv2s-v1-cloud-fp32` |
+| On device | `yolo26n-effv2s-v1-tflite-fp32` (shipped), `-tflite-fp16`, `-tflite-int8` |
 | No model result | `manual` |
 
-`yolo26n-effv2b0` is the architecture `yolo26n-efficientnetv2b0.pt` was trained from
-(`yolo26n-efficientnetv2b0.yaml` in the fork): timm's `tf_efficientnetv2_b0` backbone
+`yolo26n-effv2s` is the architecture `yolo26n-efficientnetv2s.pt` was trained from
+(`yolo26n-efficientnetv2s.yaml` in the fork): timm's `tf_efficientnetv2_s` backbone
 (`TimmBackbone`) under a YOLO26-nano neck and `Detect` head. **Bump `v1` whenever the weights
 change**, in `export_mobile.py`'s `DEFAULT_VERSION_PREFIX`, in `server.py` and the notebook, and in
 `OnDeviceModels`, so the same `v1` always means the same weights.
 
 A different backbone is a different architecture, so it gets its own prefix and its own `v1`.
-The MobileNetV4-Conv-Small candidate, `yolo26n-mobilenetv4convsmall.pt`, is
-`yolo26n-mnv4cs-v1-…`: export it with `--weights inference/weights/yolo26n-mobilenetv4convsmall.pt
---version-prefix yolo26n-mnv4cs-v1-tflite`.
+A MobileNetV4-Conv-Small checkpoint, for example, would be `yolo26n-mnv4cs-v1-…`: export it with
+`--weights <checkpoint> --version-prefix yolo26n-mnv4cs-v1-tflite`.
 
 ---
 
@@ -56,7 +55,7 @@ The TensorFlow stack this pulls in is large. It is deliberately kept out of
 
 ```bash
 python inference/export/export_mobile.py \
-    --weights inference/weights/yolo26n-efficientnetv2b0.pt \
+    --weights inference/weights/yolo26n-efficientnetv2s.pt \
     --calib-images path/to/dataset/images/val
 ```
 
@@ -77,8 +76,8 @@ normalised box geometry.
 
 ```bash
 python inference/export/parity_check.py \
-    --weights inference/weights/yolo26n-efficientnetv2b0.pt \
-    --model inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
+    --weights inference/weights/yolo26n-efficientnetv2s.pt \
+    --model inference/export/out/yolo26n-effv2s-v1-tflite-fp32.tflite \
     --images path/to/dataset/images/val
 ```
 
@@ -87,9 +86,9 @@ python inference/export/parity_check.py \
 ```bash
 python inference/export/accuracy_report.py \
     --data path/to/data.yaml \
-    --manifest inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.json \
-    --models inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
-             inference/export/out/yolo26n-effv2b0-v1-tflite-int8.tflite
+    --manifest inference/export/out/yolo26n-effv2s-v1-tflite-fp32.json \
+    --models inference/export/out/yolo26n-effv2s-v1-tflite-fp32.tflite \
+             inference/export/out/yolo26n-effv2s-v1-tflite-int8.tflite
 ```
 
 Point `--data` at a **held-out** split. Absolute mAP measured on training images is
@@ -143,7 +142,7 @@ were trained with it off (the checkpoint's `Detect.end2end` is false), so the ou
 same `[1, 7, 8400]` as before and the app runs NMS itself, with the container's defaults: conf 0.25, IoU 0.7, class-aware, at
 most 300 boxes.
 
-**`dynamic=False` is load-bearing.** timm's `tf_efficientnetv2_b0` uses `Conv2dSame`, which
+**`dynamic=False` is load-bearing.** timm's `tf_efficientnetv2_s` uses `Conv2dSame`, which
 emulates TensorFlow SAME padding with a runtime `F.pad` computed from the input's dims. Traced
 at a fixed size those fold into constant `Pad` nodes; with dynamic axes they become
 shape-dependent ops that onnx2tf mangles. The app feeds a fixed 640x640 anyway.
@@ -160,9 +159,10 @@ textbook int8 accuracy sink. If int8 disappoints, look there before assuming the
 costs speed. The first attempt's GPU delegate rejected its graph outright over a dynamic-sized
 tensor; the per-frame log says which accelerators actually loaded.
 
-Sizes as exported, `yolo26n-effv2b0-v1`: fp32 ≈ 27 MB, fp16 ≈ 13.5 MB. The previous
-EfficientNetV2-S model was ≈ 79 MB and ≈ 39 MB.
+Sizes as exported, `yolo26n-effv2s-v1`: fp32 ≈ 81.2 MB, fp16 ≈ 40.8 MB (int8 not built). The model
+is 21.3M parameters, 49.5 GFLOPs at 640. The earlier EfficientNetV2-B0 build was ≈ 27 MB and
+≈ 13.5 MB. On a Redmi Note 11 (Android 11), fp32 runs on GPU+CPU at about 800 ms inference, about
+830 ms total per frame.
 
-**Parity, 2026-09-28**, against the PyTorch checkpoint on the 20 parity fixtures: fp32 matched
-22 of 22 detections with IoU 1.0000 and no confidence change; fp16 matched 22 of 22 with IoU
-0.9972 and a mean confidence change of 0.0003.
+**Parity, 2026-10-04**, against the PyTorch checkpoint on the 20 parity fixtures: fp32 matched
+20 of 20 frames with mean IoU 1.0000, no confidence change and 100% class agreement.

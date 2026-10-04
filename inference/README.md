@@ -1,6 +1,6 @@
 # Agartha Inference Container
 
-FastAPI server wrapping the custom Ultralytics fork (YOLO26-nano on an EfficientNetV2-B0
+FastAPI server wrapping the custom Ultralytics fork (YOLO26-nano on an EfficientNetV2-S
 backbone) for egg detection. Runs on a DigitalOcean MI300X AMD GPU droplet,
 or on a free Kaggle T4 x2 ([`KAGGLE.md`](KAGGLE.md)).
 
@@ -13,8 +13,8 @@ or on a free Kaggle T4 x2 ([`KAGGLE.md`](KAGGLE.md)).
 
 - Docker (DMKuZu only — teammates do not need this)
 - GHCR write access: `docker login ghcr.io -u <github-username> -p <PAT>`
-- `git lfs install` run once on your machine (for `weights/yolo26n-efficientnetv2b0.pt`)
-- The trained weights from Tabada at `inference/weights/yolo26n-efficientnetv2b0.pt`
+- `git lfs install` run once on your machine (for `weights/yolo26n-efficientnetv2s.pt`)
+- The trained weights from Tabada at `inference/weights/yolo26n-efficientnetv2s.pt`
 
 ---
 
@@ -51,7 +51,7 @@ ssh root@<droplet-ip> "pip install -e /app/ultralytics"
 
 ```bash
 # From your local machine (repo root):
-scp inference/weights/yolo26n-efficientnetv2b0.pt root@<droplet-ip>:/root/app/weights/
+scp inference/weights/yolo26n-efficientnetv2s.pt root@<droplet-ip>:/root/app/weights/
 scp inference/server.py root@<droplet-ip>:/root/app/
 ```
 
@@ -132,7 +132,7 @@ docker run \
   --group-add video \
   -p 8000:8000 -d \
   -e INFERENCE_API_KEY="<your-secret>" \
-  -e MODEL_VERSION="yolo26n-effv2b0-v1-cloud-fp32" \
+  -e MODEL_VERSION="yolo26n-effv2s-v1-cloud-fp32" \
   ghcr.io/dmkuzu/agartha-inference:v1
 ```
 
@@ -143,8 +143,8 @@ docker run \
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `INFERENCE_API_KEY` | Yes | — | Bearer token checked on every `POST /infer` |
-| `WEIGHTS_PATH` | No | `weights/yolo26n-efficientnetv2b0.pt` | Path to the model weights file |
-| `MODEL_VERSION` | No | `yolo26n-effv2b0-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
+| `WEIGHTS_PATH` | No | `weights/yolo26n-efficientnetv2s.pt` | Path to the model weights file |
+| `MODEL_VERSION` | No | `yolo26n-effv2s-v1-cloud-fp32` | Reported as `model_version` and stored per sample. Naming scheme: `export/README.md` |
 | `MAX_BATCH_SIZE` | No | `8` | Most frames in one forward pass |
 | `MAX_QUEUE_DELAY_MS` | No | `15` | How long a worker waits for more frames after the first of a batch |
 | `QUEUE_SIZE` | No | `32` | Frames waiting for a GPU. When full, `POST /infer` answers `503` at once |
@@ -247,7 +247,7 @@ Matches `InferenceResponseDto` in the Android app exactly:
 
 When Tabada produces new weights:
 
-1. Replace `inference/weights/yolo26n-efficientnetv2b0.pt` (tracked via Git LFS)
+1. Replace `inference/weights/yolo26n-efficientnetv2s.pt` (tracked via Git LFS)
 2. Bump the training version (`v1` → `v2`) in `MODEL_VERSION`'s default in `server.py` and the
    notebook, so cloud results from the new weights are distinguishable
 3. Re-export the on-device models under the same version and replace them in
