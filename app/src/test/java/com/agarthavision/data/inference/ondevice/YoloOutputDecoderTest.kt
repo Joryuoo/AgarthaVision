@@ -129,10 +129,26 @@ class YoloOutputDecoderTest {
     }
 
     @Test
-    fun `NMS never suppresses across classes`() {
+    fun `NMS keeps only the strongest species when boxes on one egg disagree`() {
+        // One egg read three ways, as on sample ec940c6e: near-identical boxes, one per species.
         val output = headOutput(
-            Box(320f, 320f, 100f, 100f, 0, 0.9f),
-            Box(320f, 320f, 100f, 100f, 2, 0.8f),
+            Box(278f, 130f, 197f, 173f, 2, 0.50f),
+            Box(276f, 131f, 202f, 181f, 1, 0.44f),
+            Box(278f, 129f, 203f, 184f, 0, 0.29f),
+        )
+
+        val predictions = decoder.decode(output, identity, manifest(anchors = 3))
+
+        assertEquals(listOf("Trichuris trichiura"), predictions.map { it.classLabel })
+        assertEquals(0.50f, predictions.single().confidence, TOLERANCE)
+    }
+
+    @Test
+    fun `NMS keeps separate eggs of different species`() {
+        // Two touching eggs of different species: IoU 1/3, under the threshold.
+        val output = headOutput(
+            Box(300f, 320f, 100f, 100f, 0, 0.9f),
+            Box(350f, 320f, 100f, 100f, 2, 0.8f),
         )
 
         val predictions = decoder.decode(output, identity, manifest(anchors = 2))
