@@ -1140,6 +1140,56 @@ class VerificationSheetContentTest {
         composeRule.onNodeWithTag(VerifyTestTags.LEAVE_DIALOG_CONFIRM).assertDoesNotExist()
     }
 
+    // While a save is in flight
+
+    @Test
+    fun `taps on the sheet do nothing while it saves`() {
+        // Only Submit used to be locked. A question ticked in this window was overwritten by
+        // the save's own copy of the answers, and a sample paged to was closed by the save.
+        val r = Recorder()
+        val current = mutableStateOf(state(frameIndexInQueue = 2, queueSize = 3))
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(state = current.value, actions = actionsFor(r))
+            }
+        }
+        val q1 = question(VerifyTestTags.QUESTION_Q1).getBoundsInRoot()
+        val next = composeRule.onNodeWithTag(VerifyTestTags.FRAME_NEXT).getBoundsInRoot()
+
+        current.value = current.value.copy(isSubmitting = true)
+        composeRule.waitForIdle()
+
+        with(composeRule.density) {
+            composeRule.onNodeWithTag(VerifyTestTags.SAVING_INPUT_BLOCKER).performTouchInput {
+                click(Offset(q1.left.toPx() + 24.dp.toPx(), (q1.top + q1.bottom).toPx() / 2))
+                click(Offset((next.left + next.right).toPx() / 2, (next.top + next.bottom).toPx() / 2))
+            }
+        }
+
+        assertTrue("A question must not change while the sample saves.", r.q1.isEmpty())
+        assertEquals("Paging must not start while the sample saves.", 0, r.frameNext)
+    }
+
+    @Test
+    fun `the sheet takes input again once the save is over`() {
+        // A failed save leaves the sheet open with its error, and the medtech must be able to
+        // correct and retry from there.
+        val r = Recorder()
+        val current = mutableStateOf(state().copy(isSubmitting = true))
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(state = current.value, actions = actionsFor(r))
+            }
+        }
+
+        current.value = current.value.copy(isSubmitting = false, errorMessage = "Save failed")
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(VerifyTestTags.SAVING_INPUT_BLOCKER).assertDoesNotExist()
+        question(VerifyTestTags.QUESTION_Q1).performClick()
+        assertEquals(listOf(true), r.q1)
+    }
+
     private fun noModelOutputState(findings: List<Finding> = emptyList()) = VerificationUiState(
         frame = frame(source = FrameSource.MANUAL, predictions = 0),
         frameIndexInQueue = 1,

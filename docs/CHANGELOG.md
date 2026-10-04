@@ -9,6 +9,41 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/effv2s-offline-model — EfficientNetV2-S everywhere · 2026-10-04
+
+`14zcqntk2nm`. Depends on `fix/one-box-per-egg`.
+
+- **On-device runs EfficientNetV2-S.** `assets/models/` now bundles only
+  `yolo26n-effv2s-v1-tflite-fp32` (81.2 MB, against ≈ 27 MB for B0), and
+  `OnDeviceModels.SHIPPED` points at it. The B0 build is removed.
+- **Fast enough on a Redmi Note 11.** `OnDeviceInferenceParityTest`, fp32 on GPU+CPU: 20/20
+  frames matched the checkpoint, mean IoU 0.9933, 100% class agreement; inference median
+  762 ms, total median 817 ms per frame.
+- **One model everywhere.** `inference/server.py`, the Kaggle notebook and the export scripts
+  default to `yolo26n-efficientnetv2s.pt` / `yolo26n-effv2s-v1-*`. The cloud container needs the
+  new weights and `MODEL_VERSION` when redeployed.
+- **Old checkpoints retired.** `yolo26n-efficientnetv2b0.pt` and
+  `yolo26n-mobilenetv4convsmall.pt` are removed from `inference/weights/`.
+
+---
+
+## fix/one-box-per-egg — one egg, one detection · 2026-10-04
+
+`14zcqntk1vd`.
+
+- **Duplicate removal ignores species.** Both engines removed overlapping boxes only within a
+  species, so an egg the model could not place came back once per species it considered.
+  Sample `ec940c6e`: two eggs, four detections, three of them stacked on one egg at 92–96% IoU
+  (Trichuris 0.50, Hookworm 0.44, Ascaris 0.29). Now the most confident box wins.
+- **Cloud:** `inference/server.py` passes `agnostic_nms=True`; the container must be
+  redeployed for it to reach phones. `make_parity_fixture.py` does the same.
+- **On-device:** `YoloOutputDecoder` runs one greedy NMS across all classes.
+- **Separate eggs are untouched.** Boxes under the IoU threshold (0.7) are all kept, whatever
+  their species. The 20 parity fixtures give identical results under either rule, so they
+  were not regenerated.
+
+---
+
 ## refactor/super-admins-table — super admins get their own table · 2026-10-02
 
 `14zcqntjwje`, Admin decision D22. SQL and docs; no app code changed, because nothing on the

@@ -128,9 +128,9 @@ no longer declares. `bun install` from the current `package.json` installs nothi
   image based on `rocm/pytorch:latest` (`inference/Dockerfile` `FROM`), serving on port 8000
   (`inference/Dockerfile` `EXPOSE`, `CMD`). Endpoints `GET /health` and `POST /infer`
   (`inference/server.py::health`, `::infer`). Bearer-token auth (`inference/server.py::verify_key`).
-  Weights baked in at `inference/weights/yolo26n-efficientnetv2b0.pt` (YOLO26-nano on an
-  EfficientNetV2-B0 backbone, from the fork's `feat/optimized-inference`); default model version string
-  `yolo26n-effv2b0-v1-cloud-fp32` (`inference/server.py` `MODEL_VERSION`).
+  Weights baked in at `inference/weights/yolo26n-efficientnetv2s.pt` (YOLO26-nano on an
+  EfficientNetV2-S backbone, from the fork's `feat/optimized-inference`); default model version string
+  `yolo26n-effv2s-v1-cloud-fp32` (`inference/server.py` `MODEL_VERSION`).
 
 ## Build-time configuration
 

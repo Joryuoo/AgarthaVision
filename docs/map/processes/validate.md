@@ -58,9 +58,13 @@ sync attempt.
      added egg, keyed by species and slot);
    - prunes added slots a lower total no longer writes, never touching a model box's row;
    - replaces the sample's findings wholesale (`SampleSpeciesFindingDao::replaceFindingsForSample`).
-8. **Sync.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()` enqueues
-   the background pass; offline, the inline call fails safely and the worker catches up. See
-   [`sync`](sync.md).
+8. **Sync, without waiting.** `BackgroundSamplePush.push` starts `syncSampleUseCase(sampleId)`
+   in a process-lifetime scope and then `syncScheduler.requestSync()`, and the save returns
+   without awaiting either: the sheet closes once the Room writes land, online or off
+   (14zcqntk2pb). Offline, the push fails safely and the worker catches up. See [`sync`](sync.md).
+9. **Input is held while it saves.** `isSubmitting` lays an input blocker over the sheet and clears
+   its semantics, and the view model refuses paging, back, discard and `setFrame` until it ends
+   (`VerificationSheet.kt::SavingInputBlocker`, `VerificationViewModel.kt::requestLeave`).
 
 ## A colleague's sample is read-only
 

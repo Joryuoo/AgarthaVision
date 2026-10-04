@@ -123,8 +123,8 @@ class OnDeviceInferenceParityTest {
             referenceTotal += cloud.size
             val unclaimed = device.toMutableList()
             cloud.forEach { reference ->
-                // Same species first: NMS is per class, so both engines can legitimately put two
-                // species' boxes on one spot, and those must not be cross-paired.
+                // Same species first, so a box whose species differs between the engines only
+                // pairs when nothing of its own species is left.
                 val sameClass = unclaimed.filter { it.classLabel == reference.classLabel }
                 val best = sameClass.bestMatch(reference) ?: unclaimed.bestMatch(reference)
                 val overlap = best?.let { iou(reference, it) } ?: 0f

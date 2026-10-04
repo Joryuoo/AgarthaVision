@@ -16,14 +16,13 @@ below are what that notebook automates.
 1. **Verify your phone** — Kaggle → *Settings → Phone Verification*. Internet access in
    notebooks is gated behind this, and you need it for the `pip git+` install and the tunnel.
 2. **Upload the weights as a Dataset:**
-   - Run `git lfs pull` locally first so `weights/yolo26n-efficientnetv2b0.pt` is the real ~15 MB file, not the
+   - Run `git lfs pull` locally first so `weights/yolo26n-efficientnetv2s.pt` is the real ~44 MB file, not the
      LFS pointer.
-   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-efficientnetv2b0.pt` (and
-     `yolo26n-mobilenetv4convsmall.pt` if you want to try it).
+   - Kaggle → *Datasets → New Dataset* → drag in `yolo26n-efficientnetv2s.pt`.
    - Ignore the **"Switch to Models"** banner — a `.pt` is valid dataset content; that banner
      is just a non-blocking suggestion.
    - Title it exactly **`agartha-weights`** (lowercase, hyphenated) → mounts at
-     `/kaggle/input/agartha-weights/yolo26n-efficientnetv2b0.pt`. Keep it **Private**. Click **Create**.
+     `/kaggle/input/agartha-weights/yolo26n-efficientnetv2s.pt`. Keep it **Private**. Click **Create**.
 
 ## Per-session steps
 

@@ -7,13 +7,12 @@ import com.agarthavision.data.local.mapper.detectionIdFor
 import com.agarthavision.data.local.mapper.effectiveInferenceState
 import com.agarthavision.data.local.mapper.toDetectionEntities
 import com.agarthavision.data.local.mapper.toFindingEntity
-import com.agarthavision.data.supabase.SyncSampleUseCase
+import com.agarthavision.data.sync.BackgroundSamplePush
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.domain.model.ReadOnlyRecordException
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.isColleagueRecord
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.sync.SyncScheduler
 import com.agarthavision.domain.usecase.inference.InferencePendingException
 import java.time.Instant
 import javax.inject.Inject
@@ -35,8 +34,7 @@ class SubmitVerificationUseCase @Inject constructor(
     private val sampleDao: SampleDao,
     private val detectionDao: DetectionDao,
     private val findingDao: SampleSpeciesFindingDao,
-    private val syncSampleUseCase: SyncSampleUseCase,
-    private val syncScheduler: SyncScheduler,
+    private val backgroundSamplePush: BackgroundSamplePush,
     private val authRepository: AuthRepository,
 ) {
     suspend operator fun invoke(
@@ -116,11 +114,12 @@ class SubmitVerificationUseCase @Inject constructor(
             findings = findings.toFindingRows().map { it.toFindingEntity(sampleId) },
         )
 
-        syncSampleUseCase.invoke(sampleId)
-        // Verification works offline by design, so the direct push above often cannot land.
-        // The scheduler is what gets the sample up once there is a network, with backoff,
-        // rather than it waiting for the next time someone opens Settings.
-        syncScheduler.requestSync()
+        // Started, not awaited. The save is the Room writes above; the push used to be awaited
+        // here, which held the sheet open for seconds on Wi-Fi for a result nothing read. It
+        // still pushes straight away and then asks the scheduler for a pass, which is what gets
+        // the sample up once there is a network when the direct push cannot land — verification
+        // works offline by design. See BackgroundSamplePush for why both, and in that order.
+        backgroundSamplePush.push(sampleId)
 
         sampleId
     }

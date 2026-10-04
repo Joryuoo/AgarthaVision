@@ -51,6 +51,9 @@ internal object VerifyTestTags {
     const val LEAVE_DIALOG_CONFIRM = "leave_dialog_confirm"
     const val LEAVE_DIALOG_DISMISS = "leave_dialog_dismiss"
 
+    /** The layer that swallows input over the sheet while a save is in flight. */
+    const val SAVING_INPUT_BLOCKER = "saving_input_blocker"
+
     /** Discard-changes confirmation dialog when leaving/discarding unsaved edits. */
     const val DISCARD_CHANGES_CONFIRM = "discard_changes_confirm"
     const val DISCARD_CHANGES_DISMISS = "discard_changes_dismiss"

@@ -258,8 +258,8 @@ carries on. Tell the console team before merging such a change.
 
 `server.py` (the two endpoints, a bounded queue and per-GPU micro-batching), `tests/` (pytest
 against a fake model), `Dockerfile` (ROCm PyTorch base), `requirements.txt`,
-`weights/` (the trained checkpoints, Git LFS: `yolo26n-efficientnetv2b0.pt`, which the server
-runs, and the `yolo26n-mobilenetv4convsmall.pt` candidate), plus Kaggle notebook and notes.
+`weights/` (the trained checkpoints, Git LFS: `yolo26n-efficientnetv2s.pt`, which the server
+and the on-device export both use), plus Kaggle notebook and notes.
 `export/` turns a checkpoint into the on-device TFLite models and checks them against it (`export/README.md`). Not part of the Gradle build.
 
 The exported models themselves ship in `app/src/main/assets/models/`, one `<model_version>.tflite`
