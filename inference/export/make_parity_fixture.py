@@ -87,7 +87,7 @@ def main() -> int:
 
         # Exactly server.py's path from request body to response.
         img = Image.open(io.BytesIO(jpeg)).convert("RGB")
-        result = model(img, verbose=False)[0]
+        result = model(img, verbose=False, agnostic_nms=True)[0]
         predictions = []
         for box in result.boxes:
             x, y, w, h = box.xywh[0].tolist()

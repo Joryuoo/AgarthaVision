@@ -34,15 +34,17 @@ class FakeYOLO:
 
     lock = threading.Lock()
     batches: list[tuple[str, int]] = []
+    agnostic_nms: list[bool] = []
     delay_s = 0.0
     fail = False
 
     def __init__(self, weights_path: str) -> None:
         self.weights_path = weights_path
 
-    def predict(self, images, device, verbose):
+    def predict(self, images, device, verbose, agnostic_nms=False):
         with FakeYOLO.lock:
             FakeYOLO.batches.append((device, len(images)))
+            FakeYOLO.agnostic_nms.append(agnostic_nms)
         time.sleep(FakeYOLO.delay_s)
         if FakeYOLO.fail:
             raise RuntimeError("CUDA out of memory")
