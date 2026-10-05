@@ -11,6 +11,11 @@
     <string name="login_password_placeholder">Password</string>
     <string name="login_password_error">Password is required.</string>
     <string name="login_forgot_password">Forgot?</string>
+    <string name="login_forgot_password_link">Forgot password?</string>
+    <string name="login_tagline">Smear screening, in the field.</string>
+    <string name="login_logo_description">AgarthaVision logo</string>
+    <string name="login_show_password">Show password</string>
+    <string name="login_hide_password">Hide password</string>
     <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
     <string name="login_submit">Log in</string>
     <string name="login_stage_signing_in">Logging in…</string>
