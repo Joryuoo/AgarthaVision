@@ -115,10 +115,7 @@ private val onboardingSteps = listOf(
 @Composable
 fun OnboardingScreen(onComplete: () -> Unit, viewModel: OnboardingViewModel = hiltViewModel()) {
     OnboardingContent(
-        onFinish = {
-            viewModel.onCompleteOnboarding()
-            onComplete()
-        },
+        onFinish = { viewModel.onCompleteOnboarding(onComplete) },
         reduceMotion = rememberReducedMotion(),
     )
 }

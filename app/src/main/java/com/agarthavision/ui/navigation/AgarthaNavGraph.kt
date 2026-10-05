@@ -26,6 +26,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
+import com.agarthavision.domain.usecase.auth.AuthGate
 import com.agarthavision.ui.activity.ActivityScreen
 import com.agarthavision.ui.capture.CaptureScreen
 import com.agarthavision.ui.components.AgarthaBottomBar
@@ -95,12 +96,24 @@ sealed class Screen(val route: String) {
     }
 }
 
+/** The graph's start route, fixed for its life: not seen -> Onboarding, else Login or Dashboard. */
+internal fun startRouteFor(authGate: AuthGate, hasSeenOnboarding: Boolean): String = when {
+    !hasSeenOnboarding -> Screen.Onboarding.route
+    authGate == AuthGate.NeedsLogin -> Screen.Login.route
+    else -> Screen.Dashboard.route
+}
+
+/** Where finishing onboarding goes: Login on first run, Dashboard for an already-signed-in user. */
+internal fun onboardingExitRoute(authGate: AuthGate): String =
+    if (authGate == AuthGate.NeedsLogin) Screen.Login.route else Screen.Dashboard.route
+
 @Composable
 fun AgarthaNavGraph(
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
     startDestination: String = Screen.Dashboard.route,
     signedOutByServer: Boolean = false,
+    onboardingExitRoute: String = Screen.Dashboard.route,
 ) {
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -148,6 +161,7 @@ fun AgarthaNavGraph(
             cameraManager = cameraManager,
             frameSampler = frameSampler,
             startDestination = startDestination,
+            onboardingExitRoute = onboardingExitRoute,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
@@ -155,13 +169,15 @@ fun AgarthaNavGraph(
     }
 }
 
+@Suppress("LongParameterList")
 @Composable
 fun AgarthaNavHost(
     navController: NavHostController,
     cameraManager: CameraManager,
     frameSampler: FrameSampler,
     modifier: Modifier = Modifier,
-    startDestination: String = Screen.Dashboard.route
+    startDestination: String = Screen.Dashboard.route,
+    onboardingExitRoute: String = Screen.Dashboard.route,
 ) {
     NavHost(
         navController = navController,
@@ -176,7 +192,7 @@ fun AgarthaNavHost(
         composable(Screen.Onboarding.route) {
             OnboardingScreen(
                 onComplete = {
-                    navController.navigate(Screen.Dashboard.route) {
+                    navController.navigate(onboardingExitRoute) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 },

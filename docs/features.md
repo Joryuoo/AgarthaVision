@@ -191,7 +191,8 @@ as working.
 - **First-run onboarding**: four-page pager with Skip, Back, a "Step X of Y" screen-reader label,
   illustrations chosen by the active theme, and a one-time entrance animation that is switched off when the
   system "Remove animations" setting is on (`ui/onboarding/OnboardingScreen.kt::OnboardingContent`,
-  `ui/components/ReducedMotion.kt`). Completion is saved through `OnboardingPreferenceRepository`.
+  `ui/components/ReducedMotion.kt`). Completion is saved through `OnboardingPreferenceRepository` first, then the app
+  goes to Login on first run, or to the Dashboard for an already-signed-in user.
 - **Settings**: account details, change password, sync queue status, manual sync triggers, theme
   toggle, sign-out.
 

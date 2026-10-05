@@ -1,7 +1,7 @@
 ---
 type: process
 status: verified
-verified: 2026-10-01
+verified: 2026-10-05
 commit: b64271d2
 ---
 
@@ -28,6 +28,10 @@ the same identity signing in with a new password.
    is **first-run only** — once anyone has signed in on this device, an expired token or an offline
    cold start still opens the app. That is the point: a medtech in a barangay with no signal must
    not be sent to a login screen whose submit is disabled offline.
+2. **The start route is fixed for the life of the graph.** `MainActivity` computes it once
+   (`startRouteFor`: not seen onboarding -> Onboarding, else Login or Dashboard by the gate), so
+   finishing onboarding does not rebuild the NavHost. Onboarding saves its flag, then exits to
+   `onboardingExitRoute`: Login when the gate is `NeedsLogin`, Dashboard otherwise.
 
 ## Movement — sign in
 
