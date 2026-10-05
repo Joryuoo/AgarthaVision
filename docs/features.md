@@ -188,6 +188,10 @@ as working.
 - **Bottom tab bar with four tabs**: Home, Patients, Reports, Settings
   (`ui/components/AgarthaBottomBar.kt::Tab`).
 - **Light/dark toggle** persisted in DataStore; Capture is exempt and stays dark (`ui/theme/Theme.kt`).
+- **First-run onboarding**: four-page pager with Skip, Back, a "Step X of Y" screen-reader label,
+  illustrations chosen by the active theme, and a one-time entrance animation that is switched off when the
+  system "Remove animations" setting is on (`ui/onboarding/OnboardingScreen.kt::OnboardingContent`,
+  `ui/components/ReducedMotion.kt`). Completion is saved through `OnboardingPreferenceRepository`.
 - **Settings**: account details, change password, sync queue status, manual sync triggers, theme
   toggle, sign-out.
 

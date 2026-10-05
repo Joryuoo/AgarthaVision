@@ -352,6 +352,10 @@ invisible to TalkBack.
 a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
 the stale wording is what produced a hand-drawn tab icon (C13).
 
+**Illustrations are exported art, not drawn in code.** Onboarding illustrations are PNG exports from Figma in
+`res/drawable-nodpi/ill_onboarding_{n}_{light,dark}.png`, chosen with `AgarthaTheme.colors.isDark` (the in-app
+toggle, so no `drawable-night`). Never redraw them in Kotlin or tint them; to change one, replace the file.
+
 **User-facing strings and localization:** All user-facing prose copy lives in `res/values/strings.xml` and is referenced via `stringResource` or `pluralStringResource`. Non-prose formatting glyphs (such as punctuation separators `" · "` or `"·"` and direction/trend symbols `"↑ "`) are explicitly exempt from `strings.xml` extraction as they carry no translatable prose content.
 
 **Enforcement:** review and Android Lint (`HardcodedText`). The token definitions are the single source —
