@@ -152,45 +152,6 @@ internal fun OnboardingContent(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
-        // Back Button Top Left (on step > 0)
-        if (pagerState.currentPage > 0) {
-            IconButton(
-                onClick = {
-                    coroutineScope.launch {
-                        pagerState.goTo(pagerState.currentPage - 1, reduceMotion)
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 12.dp, top = 8.dp)
-                    .testTag("onboardingBack"),
-            ) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                    contentDescription = stringResource(R.string.onboarding_back),
-                    tint = colors.textSecondary,
-                )
-            }
-        }
-
-        // Skip Button Top Right (on step < last)
-        if (pagerState.currentPage < onboardingSteps.size - 1) {
-            TextButton(
-                onClick = onFinish,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(end = 16.dp, top = 8.dp)
-                    .testTag("onboardingSkip"),
-            ) {
-                Text(
-                    stringResource(R.string.onboarding_skip),
-                    color = colors.textSecondary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -321,6 +282,45 @@ internal fun OnboardingContent(
                         modifier = Modifier.size(18.dp),
                     )
                 }
+            }
+        }
+
+        // Back Button Top Left (on step > 0)
+        if (pagerState.currentPage > 0) {
+            IconButton(
+                onClick = {
+                    coroutineScope.launch {
+                        pagerState.goTo(pagerState.currentPage - 1, reduceMotion)
+                    }
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 12.dp, top = 8.dp)
+                    .testTag("onboardingBack"),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                    contentDescription = stringResource(R.string.onboarding_back),
+                    tint = colors.textSecondary,
+                )
+            }
+        }
+
+        // Skip Button Top Right (on step < last)
+        if (pagerState.currentPage < onboardingSteps.size - 1) {
+            TextButton(
+                onClick = onFinish,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(end = 16.dp, top = 8.dp)
+                    .testTag("onboardingSkip"),
+            ) {
+                Text(
+                    stringResource(R.string.onboarding_skip),
+                    color = colors.textSecondary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Medium,
+                )
             }
         }
     }
