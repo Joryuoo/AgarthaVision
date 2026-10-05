@@ -31,7 +31,7 @@ patient, and unowned data is no longer possible.
 |---|---|
 | `id` | PK, default `uuid_generate_v4()` |
 | `user_id` | **NOT NULL**, FK → `profiles(id)` |
-| `patient_id` | **NOT NULL**, FK → `patients(id)` |
+| `patient_id` | **NOT NULL**, FK → `patients(id)`. Fixed once written: a trigger refuses any update that changes it, for every role (`0016_patient_report_own_patient_sessions.sql`, 14zcqntk68x) |
 | `device_id` | NOT NULL text |
 | `started_at` | NOT NULL timestamptz, default `now()` |
 | `label` | nullable text — auto-generated e.g. `LDNJ-M21-S01` (`SessionLabelGenerator`). Unique per patient in Room (index on `patient_id, label`). In Postgres no constraint, but a trigger renames a clashing arrival `<label>-<first 4 of its id>` and never rejects (`0009_session_label_collisions.sql:49-84`) |

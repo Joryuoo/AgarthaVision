@@ -100,6 +100,15 @@ PK column is `report_id`. Differences:
 - **Patient reports are author-only.** A colleague cannot read one, row or file: the read policies
   key on the session, and a patient report has none. Its insert must also pass 0010's
   own-session rule, which `0015_patient_reports.sql` re-expresses over `session_ids`.
+- **A patient report pools only its own patient's sessions.** Since
+  `0016_patient_report_own_patient_sessions.sql` (14zcqntk68x) every session in `session_ids`
+  must be the writer's own **and** have `sessions.patient_id = reports.patient_id`, and the
+  array must name at least one session. This is the session report's own-session test, applied
+  to each pooled session, plus the patient match a session report gets for free: its patient is
+  whatever its session says, where a patient report stores `patient_id` on its own. The same
+  file fixes `sessions.patient_id` once written, so the match cannot be met by moving a session
+  in and back out. Console org admins read patient reports by `patient_id` (admin/0004), which
+  is why that key has to be trustworthy.
 - **Owned by** [`Session`](Session.md) (session reports) or [`Patient`](Patient.md) (patient
   reports, 0007) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,

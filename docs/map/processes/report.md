@@ -126,7 +126,9 @@ an explicit session-id subset; both default to "every session").
 6. **Insert and sync.** Same shape as a session report: insert with `supabase_status = pending`,
    then push row and PDF bytes to `public.reports` / the `reports` Storage bucket
    (`data/supabase/SyncReportUseCase.kt`). RLS additionally requires the inserting user to hold
-   a `patient_users` link to the patient (`supabase/migrations/0015_patient_reports.sql`).
+   a `patient_users` link to the patient (`supabase/migrations/0015_patient_reports.sql`), and
+   `session_ids` to name at least one session, every one of them the writer's own and this
+   patient's (`supabase/migrations/0016_patient_report_own_patient_sessions.sql`).
 
 Every generation mints a new row, exactly like a session report — regenerating for the same
 patient does not update or replace an earlier one.
