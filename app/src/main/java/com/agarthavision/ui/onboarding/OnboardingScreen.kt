@@ -176,7 +176,7 @@ internal fun OnboardingContent(
                     OnboardingPage(
                         step = step,
                         revealed = alreadyPlayed || reduceMotion,
-                        play = pagerState.settledPage == page && !alreadyPlayed && !reduceMotion,
+                        play = pagerState.currentPage == page && !alreadyPlayed && !reduceMotion,
                         onPlayed = { playedMask = playedMask or (1 shl page) },
                     )
 
@@ -337,7 +337,7 @@ private fun OnboardingPage(
     val progress = remember { Animatable(if (revealed) 1f else 0f) }
     LaunchedEffect(play) {
         if (play) {
-            progress.animateTo(1f, tween(durationMillis = 450, easing = FastOutSlowInEasing))
+            progress.animateTo(1f, tween(durationMillis = 180, easing = FastOutSlowInEasing))
             onPlayed()
         }
     }
