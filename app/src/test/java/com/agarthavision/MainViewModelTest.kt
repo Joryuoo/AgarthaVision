@@ -2,6 +2,7 @@ package com.agarthavision
 
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.model.SignedOutNotice
+import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import com.agarthavision.domain.usecase.auth.AuthGate
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.ResolveAuthGateUseCase
@@ -37,9 +38,17 @@ class MainViewModelTest {
     private val signedOutNotice = MutableStateFlow<SignedOutNotice?>(null)
     private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase =
         mock<ObserveSignedOutNoticeUseCase>().also { whenever(it.invoke()).thenReturn(signedOutNotice) }
+    private val hasSeenOnboardingFlow = MutableStateFlow(false)
+    private val onboardingPreferenceRepository: OnboardingPreferenceRepository =
+        mock<OnboardingPreferenceRepository>().also { whenever(it.hasSeenOnboarding).thenReturn(hasSeenOnboardingFlow) }
 
     private fun viewModel() =
-        MainViewModel(observeThemeModeUseCase, resolveAuthGateUseCase, observeSignedOutNoticeUseCase)
+        MainViewModel(
+            observeThemeModeUseCase,
+            resolveAuthGateUseCase,
+            observeSignedOutNoticeUseCase,
+            onboardingPreferenceRepository,
+        )
 
     @Test
     fun `authGate starts Loading and resolves to Authed once the use case returns`() =

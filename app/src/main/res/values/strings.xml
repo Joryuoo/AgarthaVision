@@ -733,6 +733,17 @@
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_title">Verify Queue</string>
+    <!-- Onboarding (86d4amrbk) -->
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_finish">Get Started</string>
+    <string name="onboarding_step1_title">Capture Microscopic Fields</string>
+    <string name="onboarding_step1_body">Attach your smartphone to a microscope lens and capture high-resolution fields offline without needing an internet connection.</string>
+    <string name="onboarding_step2_title">Detect &amp; Verify Eggs</string>
+    <string name="onboarding_step2_body">AI identifies parasite species automatically. Review, edit, and confirm detections in the verification queue before finalizing.</string>
+    <string name="onboarding_step3_title">Report &amp; Parasite Burden</string>
+    <string name="onboarding_step3_body">Export standardized laboratory reports with Low Power Field (LPF) density ranges and estimated parasite burden levels.</string>
     <plurals name="verify_queue_subtitle">
         <item quantity="one">%1$d awaiting review</item>
         <item quantity="other">%1$d awaiting review</item>
