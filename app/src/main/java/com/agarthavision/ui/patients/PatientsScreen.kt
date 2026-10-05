@@ -897,11 +897,14 @@ internal fun PatientsEmptyContent(
         downloading -> R.string.patients_empty_downloading_body
         else -> R.string.patients_empty_body
     }
+    val showIllustration = !narrowed && !downloading
     EmptyState(
-        icon = Icons.Outlined.Inbox,
+        icon = if (showIllustration) null else Icons.Outlined.Inbox,
         title = stringResource(titleRes),
         body = stringResource(bodyRes),
         modifier = modifier.padding(top = Spacing.xxl),
+        illustrationLight = if (showIllustration) R.drawable.ill_empty_patients_light else null,
+        illustrationDark = if (showIllustration) R.drawable.ill_empty_patients_dark else null,
         action = emptyAction,
     )
 }
