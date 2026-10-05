@@ -28,8 +28,8 @@ Verify any entry with `git log --oneline --reverse`.
   (`SessionsViewModel.onReportDateRangeSelected`). A scope with nothing left fails with
   `NO_VERIFIED_SAMPLES_MESSAGE`; an empty selection at generation time (e.g. a range with nothing
   in it) shows a distinct "No verified samples in the selected range." instead.
-- **Room 23 → 24 (`MIGRATION_23_24`)**: `reports.session_id` becomes nullable; `patient_id` and
-  `session_ids_json` are added. `supabase/migrations/0007_patient_reports.sql` mirrors this on
+- **Room 24 → 25 (`MIGRATION_24_25`)**: `reports.session_id` becomes nullable; `patient_id` and
+  `session_ids_json` are added. `supabase/migrations/0015_patient_reports.sql` mirrors this on
   Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
   a `patient_users` link on a patient-report insert. Must apply before the build reaches any
   device that can generate one — an older build decoding `session_id` as non-null crashes on
@@ -75,6 +75,221 @@ A generated report is now always a PDF, and the PDF always carries who it is abo
   more explicitly ("Eggs per LPF (range)", "Direct Fecal Smear").
 - Session Detail's generate control is a direct tap (no PDF/CSV menu); the Reports list card
   drops its CSV button and share-format menu.
+
+---
+
+## feat/effv2s-offline-model — EfficientNetV2-S everywhere · 2026-10-04
+
+`14zcqntk2nm`. Depends on `fix/one-box-per-egg`.
+
+- **On-device runs EfficientNetV2-S.** `assets/models/` now bundles only
+  `yolo26n-effv2s-v1-tflite-fp32` (81.2 MB, against ≈ 27 MB for B0), and
+  `OnDeviceModels.SHIPPED` points at it. The B0 build is removed.
+- **Fast enough on a Redmi Note 11.** `OnDeviceInferenceParityTest`, fp32 on GPU+CPU: 20/20
+  frames matched the checkpoint, mean IoU 0.9933, 100% class agreement; inference median
+  762 ms, total median 817 ms per frame.
+- **One model everywhere.** `inference/server.py`, the Kaggle notebook and the export scripts
+  default to `yolo26n-efficientnetv2s.pt` / `yolo26n-effv2s-v1-*`. The cloud container needs the
+  new weights and `MODEL_VERSION` when redeployed.
+- **Old checkpoints retired.** `yolo26n-efficientnetv2b0.pt` and
+  `yolo26n-mobilenetv4convsmall.pt` are removed from `inference/weights/`.
+
+---
+
+## fix/one-box-per-egg — one egg, one detection · 2026-10-04
+
+`14zcqntk1vd`.
+
+- **Duplicate removal ignores species.** Both engines removed overlapping boxes only within a
+  species, so an egg the model could not place came back once per species it considered.
+  Sample `ec940c6e`: two eggs, four detections, three of them stacked on one egg at 92–96% IoU
+  (Trichuris 0.50, Hookworm 0.44, Ascaris 0.29). Now the most confident box wins.
+- **Cloud:** `inference/server.py` passes `agnostic_nms=True`; the container must be
+  redeployed for it to reach phones. `make_parity_fixture.py` does the same.
+- **On-device:** `YoloOutputDecoder` runs one greedy NMS across all classes.
+- **Separate eggs are untouched.** Boxes under the IoU threshold (0.7) are all kept, whatever
+  their species. The 20 parity fixtures give identical results under either rule, so they
+  were not regenerated.
+
+---
+
+## refactor/super-admins-table — super admins get their own table · 2026-10-02
+
+`14zcqntjwje`, Admin decision D22. SQL and docs; no app code changed, because nothing on the
+phone reads `role`.
+
+- **`0014_super_admins.sql`** creates `super_admins`, one row per grant, and points
+  `is_admin()` at it with the same signature. Every `role = 'admin'` profile is copied in as one
+  active row, so `is_admin()` answers the same for everyone. Applied by hand to
+  `agarthavision` on 2026-10-02.
+- **Nobody signed in can read or write it.** RLS with no policy, and no privilege for `anon` or
+  `authenticated`. Colleagues and org admins can no longer learn who the super admins are from it.
+- **Revoking is a tombstone (C8).** A trigger allows only setting `revoked_at` on an active grant.
+- **`profiles.role` is retired, not dropped**, and `handle_new_user()` no longer names it.
+- **Docs:** `schema.ts` (`SuperAdmin`), the `Profile` card, C6, `file-tree.md` and the effects
+  index say where super admins live now.
+- **Console, not here:** its gate reads `role` until 14zcqntjwjf, so until then a super admin
+  granted by hand needs both. Its database tests make super admins through `role` and must
+  insert a `super_admins` row instead.
+
+---
+
+## fix/assigned-patients-only — an org admin's phone holds only their own patients · 2026-10-01
+
+`14zcqntjt3p`.
+
+- **The pull scopes itself.** Every fetch used to rely on RLS alone, so an org admin (console
+  `admin/0002`) who signed in on a phone downloaded their whole laboratory. An org admin may
+  use the phone, and in a small laboratory is often a medtech as well. Now the links are
+  filtered to the user, patients are fetched by the ids those links name, and sessions, samples
+  and reports are each fetched as the user's own plus those under their patients. That is
+  exactly what a medtech's policies return, so a medtech's phone holds what it did before.
+- **Super admins do not use the phone.** They belong to no organization, so a patient they
+  registered would have none. Were one to sign in, the same scoping holds: since `0013`
+  (below) `is_admin()` gives them no patient, session or sample, and the link fetch filters
+  out every patient link it still does.
+- **Colleagues' names by id.** Only the authors on the user's own patients, read off the device
+  (`ColleagueDao::getColleagueIdsOnLinkedPatients`), never a laboratory's staff list.
+- **Ids go 100 at a time**, and a row returned both as the user's own and under a parent is
+  written once.
+- **Not cleaned up:** a phone that already synced as an org admin keeps those rows, hidden,
+  until its storage is cleared.
+
+---
+
+## docs/profile-outlives-login — authorship outlives the login, written down · 2026-10-01
+
+`14zcqntjvjx`. Docs only; the schema change is `0011_profile_outlives_login.sql` from
+`feat/deactivation-sign-out` (#98).
+
+- **C8 states the rule.** Offboarding deletes the login; the profile and everything it authored
+  stay, still naming the person, and the email is free for another laboratory or a rehire. It
+  also says a rehire still gets a fresh profile, since reconnecting them is its own ticket.
+- **`Profile` card** names the ticket and notes that the cascades *from* a profile
+  (`patient_users`, and the console's `organizations`, `organization_members` and audit log)
+  never fire.
+
+---
+
+## feat/deidentified-patient-reads — super admins read patients de-identified at the database · 2026-10-01
+
+`14zcqntjvjw`, with the Admin Console's `14zcqntjvky`.
+
+- **`0012_deidentified_reads.sql`, step 1, additive.** Three views a super admin reads instead
+  of the tables: `patients_deidentified` (no name, sex or birthdate), `sessions_deidentified`
+  (no `label`, which spells the patient's initials, sex and age) and `samples_deidentified`
+  (no `user_note`). Each returns rows only to `is_admin(auth.uid())`, is `security_barrier`,
+  and is readable by `authenticated` only.
+- **Step 2 is the console.** It reads a super admin's patients, sessions and samples from the
+  views, and works with or without step 3.
+- **`0013_super_admin_reads_deidentified.sql`, step 3.** The `patients`, `sessions` and
+  `samples` read policies and `can_read_session()` lose their `is_admin()` branch, and the
+  `reports` bucket loses `reports: admin read all`, because a report prints the name. The
+  admin branch of the detections, findings and predictions policies moves outside their
+  subquery on `samples`, so super admins keep reading those. `session_label_duplicates()`
+  returns session ids without the label. Applied only after the console from step 2 was
+  deployed.
+- **All three steps are live.** The console's step 2 (its PR 11) is deployed, and `0012` and
+  `0013` are applied to `agarthavision`, checked on 2026-10-02.
+- **Unchanged:** medtechs, colleagues on a shared patient (0007), organization admins, report
+  rows, patient links, sample frames and `barangay_prevalence()`. The console's
+  `bun run test:db` covers each, against both files.
+- `patient-pii-position.md` Position 6 and C10 say what the policies now do.
+- **The console's set is live, so the entry below is out of date.** `admin/0001`–`0003`
+  merged to the console's `staging` (`cb8246c`, same SQL) and were applied to `agarthavision`
+  on 2026-10-01. `file-tree.md` says so, and that the org-admin phone download recorded below
+  is now real for any org admin who signs in on a phone.
+
+---
+
+## docs/admin-migrations-schema — the Admin Console's migrations are on the shelf · 2026-10-01
+
+`14zcqntjpha`. Docs only; no code or SQL changed.
+
+The Admin Console now adds its own migrations to the same `agarthavision` database, from its
+own repository (`supabase/migrations/admin/NNNN_*.sql`, own number sequence, additive only).
+Before this change, C6 read as if this repository held the whole schema.
+
+- **`file-tree.md`** gains one section on that set:
+  - where it lives and its additive-only rule
+  - what its three files add
+  - the one trigger on `patients` (`console_on_patient_created`, never raises)
+  - the org-admin read policies on app-owned tables
+  - the app columns it depends on, and its assumption that `profiles.id` is the login id,
+    which `0011`'s `account_id` will one day end
+- **C6** says this folder is the authority for what this repository owns, and points there.
+- **`Patient` and `Profile` cards** note the trigger, the laboratory that owns a patient, and
+  that an org admin is a membership role rather than a `profiles.role` value. Both re-verified
+  at `6590f32f`, after `0007`–`0011`.
+- **Effects:** the data-model checklist asks whether a change touches a name the console reads.
+  The RLS section says not every policy is in this repository.
+- **Recorded, not fixed:** the phone's pull has no user filter on patients, links, sessions,
+  samples, reports or colleagues' names, so an org admin who signs in on a phone downloads the
+  rows of the laboratory's whole clinical record. Has to be fixed before the console's
+  `admin/0002` is applied; none of its set was on `agarthavision` on 2026-10-01.
+
+---
+
+## feat/change-password — change password in Settings · 2026-10-01
+
+`14zcqntjph9`.
+
+- **Settings → Change password.** Current password, new, confirm, each with show/hide. Blank
+  fields (spaces only included, which sign-in would refuse), a mismatched confirmation and an
+  unchanged password are caught on the phone.
+- **Online only.** Offline the screen says it needs a connection and the button is disabled. A
+  connection lost before the server is reached says the password was not changed; one lost after
+  the new password was sent says it may already be changed.
+- **The current password is checked first**, by signing in with it again, so a wrong one is
+  refused on its field before anything changes. The provider's strength rules, and its own
+  explanation, land under the new password.
+- **This phone stays signed in.** Local data, the cached identity and unsynced work are
+  untouched. Supabase signs out the account's other sessions; they need the new password, and
+  other phones go through #98's wipe, keeping unsynced work. On this phone the change and #98's
+  account check share a lock (`AuthSessionLock`), so a renewal of the session being replaced
+  can never be refused and wipe the phone that made the change.
+
+## feat/deactivation-sign-out — a removed account's phone signs out and wipes itself · 2026-10-01
+
+`14zcqntjph8`.
+
+- **The signal is a refused login renewal.** At the start of every sync pass the phone asks the
+  server to renew its login (at most every five minutes). A 4xx answer, or the SDK having dropped
+  the session for one, means the account is gone; 408, 429, 5xx, timeouts and no network do not.
+  It does not matter whether the Admin Console deleted the login or banned it.
+- **The wipe.** Every synced row on the phone, the `colleagues` name cache from #97, its JPEGs,
+  Coil's image caches and its exported report files. Every unsynced row stays, the signed-out
+  account's included: a password changed on the web or another phone gets the same refusal as
+  a deleted login, and the phone cannot tell them apart. Then sign-out, and the login screen
+  says why and how many unuploaded items are waiting for the next sign-in.
+- **`0011_profile_outlives_login.sql`.** Deleting a login used to fail for any medtech who had
+  authored a row, because `profiles.id` cascaded from `auth.users`. The profile now outlives the
+  login: `profiles.account_id` (text, provider-neutral) names the login and is nulled when it is
+  deleted. Applied to `agarthavision` on 2026-10-01; nothing reads `account_id` yet.
+- **Sign-out order flipped**: the cached identity is cleared before the Supabase session, so a
+  medtech's own sign-out never looks like a refusal.
+
+## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
+
+`14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
+0008, 0009, 0010. Room 23 → 24.
+
+- **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
+  detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.
+  Additive SELECT policies only; writes stay author-only. Reverses 0003's "not patient-linked"
+  reports rule. The pull drops its author filter, skips rows whose parent is not on the device,
+  and removes assignments the server no longer returns.
+- **Read-only colleagues (0008, Room v24).** A colleague's session and sample cannot be resumed,
+  edited, re-verified, deleted or renamed on the phone, and say "Recorded by …". Names come from
+  a new `colleagues` cache filled from `profiles`, which colleagues can now read of each other.
+- **Distinct labels (0009).** A server trigger renames a clashing session label
+  `<label>-<first 4 of id>` instead of rejecting it; existing duplicates get a report and a
+  one-time rename. The pull settles clashes once every page is in. A rename now uploads.
+- **Writes need the writer's own session (0010).** Restrictive INSERT/UPDATE policies on
+  `samples` and `reports`: a row can only be written into a session its writer authored, now
+  that 0007 hands colleagues' session ids to the phone.
+
+---
 
 ## docs/sprint-2-alignment — the shelf matches the code again · 2026-09-29
 

@@ -3,6 +3,7 @@ package com.agarthavision.domain.usecase.records
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.EggSpecies
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.Session
@@ -528,6 +529,8 @@ private class FakeOfflineAuthRepository(private val localUserId: String?) : Auth
     override suspend fun hasActiveSession(): Boolean = false
     override suspend fun getCurrentUserId(): String? = null
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 internal class FakeAuthRepository(private val userId: String?) : AuthRepository {
@@ -539,6 +542,8 @@ internal class FakeAuthRepository(private val userId: String?) : AuthRepository 
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 internal class FakeSessionRepository(
@@ -553,9 +558,6 @@ internal class FakeSessionRepository(
 
     override suspend fun getSessionById(sessionId: String): Session? =
         rows.map { it.session }.firstOrNull { it.id == sessionId }
-
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
 
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
@@ -623,10 +625,6 @@ internal class FakeDetectionRepository(
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?) =
         emptyList<EggCount>()
 
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-
-
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         speciesMap.filterKeys { it in sessionIds }
 }
@@ -641,8 +639,6 @@ private class MultiEmitSessionRepository(
 ) : SessionRepository {
     override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(emptyList())
     override suspend fun getSessionById(sessionId: String): Session? = null
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(

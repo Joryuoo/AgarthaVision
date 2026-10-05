@@ -2,8 +2,8 @@
 """Compare an exported model against the .pt checkpoint on the same images.
 
     python inference/export/parity_check.py \
-        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
-        --model inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite \
+        --weights inference/weights/yolo26n-efficientnetv2s.pt \
+        --model inference/export/out/yolo26n-effv2s-v1-tflite-fp32.tflite \
         --images path/to/test/images
 
 Answers one question: did conversion change what the model finds? Runs both through the
@@ -58,7 +58,7 @@ def collect_images(root: Path, limit: int) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2b0.pt")
+    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2s.pt")
     parser.add_argument("--model", required=True, help="Exported .tflite or .onnx")
     parser.add_argument("--images", required=True, help="Image file or directory")
     parser.add_argument("--imgsz", type=int, default=640)

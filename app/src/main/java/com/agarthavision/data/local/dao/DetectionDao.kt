@@ -51,7 +51,9 @@ interface DetectionDao {
         JOIN samples s ON s.sample_id = d.sample_id
         WHERE s.deleted_at is null
           AND s.session_id = :sessionId
-          AND (s.user_id = :userId OR s.user_id IS NULL)
+          AND (s.user_id = :userId OR s.user_id IS NULL
+               OR EXISTS (SELECT 1 FROM sessions se JOIN patient_users pu ON pu.patient_id = se.patient_id
+                           WHERE se.session_id = :sessionId AND pu.user_id = :userId))
           AND s.status != 'flagged'
           AND d.verdict != 'false_positive'
         GROUP BY species
@@ -63,28 +65,6 @@ interface DetectionDao {
         sessionId: String,
         userId: String?,
     ): List<SessionEggCountRow>
-
-    /**
-     * Aggregates confirmed detections per species over a time window.
-     */
-    @Query(
-        """
-         SELECT COALESCE(d.expert_class, d.class_label) AS species,
-             COUNT(*) AS eggCount
-        FROM detections d
-        JOIN samples s ON s.sample_id = d.sample_id
-        WHERE s.deleted_at is null
-          AND s.user_id = :userId
-          AND s.timestamp >= :sinceTimestamp
-          AND d.verdict = 'confirmed'
-        GROUP BY species
-        ORDER BY eggCount DESC
-        """,
-    )
-    fun observeConfirmedEggCountsSince(
-        userId: String,
-        sinceTimestamp: Long,
-    ): Flow<List<SessionEggCountRow>>
 
     // observeDailyEggCountsSince went with the Home tab's sparkline (PB-23). It bucketed
     // counts per sample into daily totals for that chart and nothing else ever read it.

@@ -18,9 +18,11 @@ import com.agarthavision.domain.usecase.verify.SubmitVerificationUseCase
 import com.agarthavision.domain.usecase.verify.VerificationAnswers
 import com.agarthavision.domain.usecase.verify.VerificationTarget
 import com.agarthavision.util.MainDispatcherRule
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,6 +35,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -363,6 +366,48 @@ class VerificationViewModelTest {
             advanceUntilIdle()
 
             assertEquals(frameB, vm.state.value.frame)
+        }
+
+    @Test
+    fun `a sample cannot be left while it saves, and the save closes the sample it saved`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            // Paging used to go through mid-save: opening the next frame cleared isSubmitting,
+            // re-arming Submit, and the first save then closed the sheet on the frame just
+            // opened. Every way off the sample - paging, back, discard - is held instead.
+            val frameA = makeFrameWithId(1)
+            val frameB = makeFrameWithId(2)
+            storeState.value = listOf(frameA, frameB)
+            val save = CompletableDeferred<Result<String>>()
+            whenever(submitVerificationUseCase.invoke(any(), any(), anyOrNull(), anyOrNull()))
+                .doSuspendableAnswer { save.await() }
+            val vm = viewModel()
+            vm.setFrame(frameA)
+            vm.onQ1Selected(false)
+            advanceUntilIdle()
+
+            vm.events.test {
+                vm.onSubmit()
+                runCurrent()
+                assertTrue(vm.state.value.isSubmitting)
+
+                vm.onFrameNext()
+                vm.onCancel()
+                vm.onDeleteFrame()
+                vm.setFrame(frameB)
+                runCurrent()
+
+                assertEquals(frameA, vm.state.value.frame)
+                assertTrue("The save is still running.", vm.state.value.isSubmitting)
+                assertNull("Nothing is being lost, so nothing is asked.", vm.state.value.pendingLeave)
+                verify(flaggedFrameStore, never()).remove(any())
+
+                save.complete(Result.success(frameA.sampleId))
+                advanceUntilIdle()
+
+                assertEquals(VerificationEvent.Dismiss, awaitItem())
+                expectNoEvents()
+            }
+            verify(submitVerificationUseCase, times(1)).invoke(any(), any(), anyOrNull(), anyOrNull())
         }
 
     @Test

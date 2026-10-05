@@ -8,6 +8,7 @@ import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.DetectionVerdict
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.model.RecordsTotals
@@ -364,6 +365,8 @@ private class ReportAuthRepository(
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 private class ReportSessionRepository(private val session: Session?) : SessionRepository {
@@ -371,9 +374,6 @@ private class ReportSessionRepository(private val session: Session?) : SessionRe
         session?.let(::listOf).orEmpty().filter { isVisible(it.userId, userId) },
     )
     override suspend fun getSessionById(sessionId: String): Session? = session?.takeIf { it.id == sessionId }
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
-
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override suspend fun isSessionLabelTaken(
@@ -452,10 +452,6 @@ private class ReportDetectionRepository(
 
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCounts
-
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
-
 
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
@@ -536,6 +532,8 @@ private class FakeReportFileStore : ReportFileStore {
         "/Documents/AgarthaVision/patient-report.pdf" -> lastPdfBytes
         else -> null
     }
+
+    override suspend fun delete(path: String): Boolean = false
 }
 
 private class FakePatientRepository(private val patient: Patient?) : PatientRepository {

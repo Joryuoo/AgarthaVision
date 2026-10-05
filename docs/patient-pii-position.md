@@ -104,11 +104,13 @@ A factual audit of the codebase confirms five operational realities:
   4. Institutional Ethics Committee (IEC) review and approval must be secured.
 
 ### Position 6: Web Admin Scope & Privilege Inheritance
-* **Architectural Surface:** Under `supabase/migrations/legacy-dev/0009_storage_admin_read.sql:22-30` and `supabase/migrations/0001_init.sql:366`, accounts with `profiles.role = 'admin'` inherit global read access across all patient records, sessions, samples, detections, and storage objects.
+* **Architectural Surface:** Under `supabase/migrations/legacy-dev/0009_storage_admin_read.sql:22-30` and `supabase/migrations/0001_init.sql:366`, accounts with `profiles.role = 'admin'` inherited global read access across all patient records, sessions, samples, detections, and storage objects.
+* **Current state (2026-10-01, 14zcqntjvjw):** That access is now de-identified. `supabase/migrations/0013_super_admin_reads_deidentified.sql` removes the admin branch from the `patients`, `sessions` and `samples` read policies and the `reports` bucket, so an admin account reads no patient name, sex, birthdate, session label or sample note, and no report file. It reads the remaining columns through the `patients_deidentified`, `sessions_deidentified` and `samples_deidentified` views (`0012_deidentified_reads.sql`). Detections, findings, report rows, sample frames and aggregated prevalence stay readable. Identified access stays with each clinic's organization admin (Admin Console). A time-limited, logged support grant may be added later; it is not built.
 * **Access Safeguards:**
   1. *Role Minimization:* The `admin` role is restricted to faculty project advisers and certified institutional administrators.
   2. *Authentication Hardening:* Multi-Factor Authentication (MFA) is mandatory for administrative accounts in Supabase.
   3. *Surveillance Aggregation:* The administrative choropleth map and epidemiology analytics must read aggregated prevalence figures (`barangay_prevalence()`) rather than rendering individual patient rosters by default.
+  4. *De-identified Reads:* The database withholds patient identity from the `admin` role, as above. The role exists to run the platform, which needs no patient's identity (RA 10173 §11).
 
 ---
 

@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/SampleSpeciesFindingEntity.kt
 ---
 
@@ -64,7 +64,8 @@ Uniqueness is **two partial indexes**, not one constraint —
 per sample.
 
 RLS is scoped through the parent sample's `user_id`, the same pattern `detections` uses
-(`0001_init.sql:457-491`). There is **no `user_id` on this table**. It carries a DELETE policy,
+(`0001_init.sql:457-491`). Reads also pass for anyone assigned to the patient
+(`0007_patient_shared_history.sql:169-171`); writes and the DELETE policy stay the author's. There is **no `user_id` on this table**. It carries a DELETE policy,
 which `detections` deliberately does not — see *Does not hit*.
 
 **Room** (`SampleSpeciesFindingEntity`)
@@ -87,7 +88,8 @@ index is a backstop, not the mechanism.
   empty), findings and no detections (a manual capture), or both.
 - **Aggregated into** [`Report`](Report.md) — findings across all live samples in a session are
   aggregated by `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`) into
-  `lpf_per_species` (a min–max density range per species).
+  `lpf_per_species` (a min–max density range per species across all recorded fields, where
+  clean fields contribute a 0 count to preserve true session density).
 - **Looks like but is not** an aggregate of `detections`. The two agree by construction — a
   species' detection rows are its kept model boxes plus one row per unboxed egg up to the total
   (`VerificationMapper.kt::toDetectionEntities`) — but the finding is where the total is stated,

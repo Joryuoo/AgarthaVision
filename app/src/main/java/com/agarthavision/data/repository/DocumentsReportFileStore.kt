@@ -8,6 +8,8 @@ import android.provider.MediaStore
 import androidx.core.net.toUri
 import com.agarthavision.domain.repository.ReportFileStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import javax.inject.Inject
@@ -52,6 +54,15 @@ class DocumentsReportFileStore @Inject constructor(
         } else {
             runCatching { File(path).takeIf { it.exists() }?.readBytes() }.getOrNull()
         }
+
+    override suspend fun delete(path: String): Boolean = withContext(Dispatchers.IO) {
+        if (path.startsWith(CONTENT_URI_PREFIX)) {
+            // An entry this app inserted is its own to delete, with no permission prompt.
+            runCatching { context.contentResolver.delete(path.toUri(), null, null) > 0 }.getOrDefault(false)
+        } else {
+            runCatching { File(path).delete() }.getOrDefault(false)
+        }
+    }
 
     private fun writeBytes(fileName: String, mimeType: String, bytes: ByteArray): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {

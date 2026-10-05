@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 24,
-    "identityHash": "888b2c30f5abae335a1c004fe5e9e12d",
+    "identityHash": "784b30496fcc7fbf0d611e479d633119",
     "entities": [
       {
         "tableName": "samples",
@@ -527,7 +527,7 @@
       },
       {
         "tableName": "reports",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`report_id` TEXT NOT NULL, `session_id` TEXT, `patient_id` TEXT, `session_ids_json` TEXT, `user_id` TEXT NOT NULL, `report_type` TEXT NOT NULL DEFAULT 'session', `generated_at` INTEGER NOT NULL, `total_samples` INTEGER NOT NULL, `total_eggs_confirmed` INTEGER NOT NULL, `positive_species_json` TEXT NOT NULL, `lpf_per_species_json` TEXT NOT NULL, `csv_file_path` TEXT, `pdf_file_path` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'pending', `created_at` INTEGER NOT NULL, PRIMARY KEY(`report_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`patient_id`) REFERENCES `patients`(`patient_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`report_id` TEXT NOT NULL, `session_id` TEXT NOT NULL, `user_id` TEXT NOT NULL, `report_type` TEXT NOT NULL DEFAULT 'session', `generated_at` INTEGER NOT NULL, `total_samples` INTEGER NOT NULL, `total_eggs_confirmed` INTEGER NOT NULL, `positive_species_json` TEXT NOT NULL, `lpf_per_species_json` TEXT NOT NULL, `csv_file_path` TEXT, `pdf_file_path` TEXT, `supabase_status` TEXT NOT NULL DEFAULT 'pending', `created_at` INTEGER NOT NULL, PRIMARY KEY(`report_id`), FOREIGN KEY(`session_id`) REFERENCES `sessions`(`session_id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
         "fields": [
           {
             "fieldPath": "reportId",
@@ -538,17 +538,8 @@
           {
             "fieldPath": "sessionId",
             "columnName": "session_id",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "patientId",
-            "columnName": "patient_id",
-            "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "sessionIdsJson",
-            "columnName": "session_ids_json",
-            "affinity": "TEXT"
+            "affinity": "TEXT",
+            "notNull": true
           },
           {
             "fieldPath": "userId",
@@ -634,15 +625,6 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_reports_session_id` ON `${TABLE_NAME}` (`session_id`)"
           },
           {
-            "name": "index_reports_patient_id",
-            "unique": false,
-            "columnNames": [
-              "patient_id"
-            ],
-            "orders": [],
-            "createSql": "CREATE INDEX IF NOT EXISTS `index_reports_patient_id` ON `${TABLE_NAME}` (`patient_id`)"
-          },
-          {
             "name": "index_reports_user_id",
             "unique": false,
             "columnNames": [
@@ -671,17 +653,6 @@
             ],
             "referencedColumns": [
               "session_id"
-            ]
-          },
-          {
-            "table": "patients",
-            "onDelete": "CASCADE",
-            "onUpdate": "NO ACTION",
-            "columns": [
-              "patient_id"
-            ],
-            "referencedColumns": [
-              "patient_id"
             ]
           }
         ]
@@ -869,11 +840,34 @@
             "createSql": "CREATE INDEX IF NOT EXISTS `index_species_suggestions_lookup` ON `${TABLE_NAME}` (`lookup`)"
           }
         ]
+      },
+      {
+        "tableName": "colleagues",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`user_id` TEXT NOT NULL, `full_name` TEXT, PRIMARY KEY(`user_id`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "user_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullName",
+            "columnName": "full_name",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "user_id"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '888b2c30f5abae335a1c004fe5e9e12d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '784b30496fcc7fbf0d611e479d633119')"
     ]
   }
 }

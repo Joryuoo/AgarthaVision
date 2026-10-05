@@ -182,6 +182,8 @@ private class FakeStore(private val present: Set<String>) : ReportFileStore {
 
     override suspend fun readBytes(path: String): ByteArray? =
         if (path in present) "local-bytes".toByteArray() else null
+
+    override suspend fun delete(path: String): Boolean = false
 }
 
 private class FakeDao(seeded: List<ReportEntity>) : ReportDao {

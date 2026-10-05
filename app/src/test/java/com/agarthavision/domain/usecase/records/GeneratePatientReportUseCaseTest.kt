@@ -6,6 +6,7 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.domain.model.ActivityItem
 import com.agarthavision.domain.model.EggCount
 import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PatientReportPdfDocument
 import com.agarthavision.domain.model.PatientReportScope
@@ -396,6 +397,8 @@ private class PrFakeAuthRepository(private val userId: String?) : AuthRepository
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
+    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        PasswordChangeResult.Failed
 }
 
 private class PrFakePatientRepository(private val patient: Patient?) : PatientRepository {
@@ -450,8 +453,6 @@ private class PrFakePsgcRepository(private val barangay: PsgcBarangay?) : PsgcRe
 private class PrFakeSessionRepository(private val sessions: List<Session>) : SessionRepository {
     override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(sessions)
     override suspend fun getSessionById(sessionId: String): Session? = sessions.firstOrNull { it.id == sessionId }
-    override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-        flowOf(emptyList())
     override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
     override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
     override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(sessions)
@@ -522,8 +523,6 @@ private class PrFakeDetectionRepository(
         flowOf(emptyList<com.agarthavision.domain.model.Detection>())
     override suspend fun getConfirmedEggCountsForSession(sessionId: String, userId: String?): List<EggCount> =
         eggCountsBySession[sessionId].orEmpty()
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        flowOf(emptyList())
     override suspend fun getSpeciesLabelsForSessions(sessionIds: List<String>): Map<String, List<String>> =
         emptyMap()
 }
@@ -585,6 +584,8 @@ private class PrFakeReportFileStore : ReportFileStore {
     }
 
     override suspend fun readBytes(path: String): ByteArray? = lastPdfBytes
+
+    override suspend fun delete(path: String): Boolean = false
 }
 
 private class PrFakePdfRenderer : PatientReportPdfRenderer {

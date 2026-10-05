@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # validate
@@ -58,9 +58,24 @@ sync attempt.
      added egg, keyed by species and slot);
    - prunes added slots a lower total no longer writes, never touching a model box's row;
    - replaces the sample's findings wholesale (`SampleSpeciesFindingDao::replaceFindingsForSample`).
-8. **Sync.** `syncSampleUseCase(sampleId)` runs inline and `syncScheduler.requestSync()` enqueues
-   the background pass; offline, the inline call fails safely and the worker catches up. See
-   [`sync`](sync.md).
+8. **Sync, without waiting.** `BackgroundSamplePush.push` starts `syncSampleUseCase(sampleId)`
+   in a process-lifetime scope and then `syncScheduler.requestSync()`, and the save returns
+   without awaiting either: the sheet closes once the Room writes land, online or off
+   (14zcqntk2pb). Offline, the push fails safely and the worker catches up. See [`sync`](sync.md).
+9. **Input is held while it saves.** `isSubmitting` lays an input blocker over the sheet and clears
+   its semantics, and the view model refuses paging, back, discard and `setFrame` until it ends
+   (`VerificationSheet.kt::SavingInputBlocker`, `VerificationViewModel.kt::requestLeave`).
+
+## A colleague's sample is read-only
+
+A sample another medtech wrote — on a patient both are assigned to (14zcqntjph5) — opens in
+Sample Detail with no Edit and no View detection, and a "Recorded by …" note in their place
+(`SampleDetailScreen.kt::SampleDetailContent`, `ui/components/ReadOnlyAuthorNote.kt`). Every
+editing action lives behind those two — re-verify, add species, redraw, remarks — so none is
+reachable. `OpenVerificationTargetUseCase` and `SubmitVerificationUseCase` both refuse the sample
+with `ReadOnlyRecordException` as the backstop: the server lets only the author update it, so an
+edit would otherwise be written here and refused on push without an error (14zcqntjph6). The rule
+is one function, `domain/model/RecordAuthorship.kt::isColleagueRecord`.
 
 ## Manual captures take the same path
 
@@ -106,13 +121,12 @@ Every text-entry field reachable from verification and the records screens.
   `ExposedDropdownMenu`s; a value comes only from a menu tap. The field total is a number.
 - **No editable fields** on `SampleDetailScreen` or `SessionDetailScreen`.
 
-## The inconsistency worth knowing
+## Unified egg counting rule
 
-Queries disagree about what "confirmed" means. `getConfirmedEggCountsForSession` — the one
-behind the report egg count — counts everything with `verdict != 'false_positive'`, so
-`WRONG_CLASS` and `BOX_INCORRECT` eggs count. `SessionDao::observeSessionsPage`, which gives the
-patient's Sessions list its `totalEggs`, joins only `verdict = 'confirmed'`, so the same smear
-can show fewer eggs on its session card than in its report. Clinically the first is
-defensible — a misclassified egg is still an egg — but the two should not silently differ.
-`DetectionDao::observeConfirmedEggCountsSince` and `SessionDao::observeSessionsWithStats` use the
-confirmed-only rule too, but nothing calls them (ghosts).
+All queries counting eggs across sessions, reports, and patients use the single rule
+`d.verdict != 'false_positive'`. Clinically, a misclassified egg (`WRONG_CLASS`) or misplaced
+box (`BOX_INCORRECT`) is still a confirmed egg — only rejected boxes (`FALSE_POSITIVE`) are
+excluded. This ensures that the patient's Sessions list cards, Session Detail, and generated
+reports always agree on the exact same total egg count.
+
+`SessionDao::observeSessionsPage` filters `d.verdict != 'false_positive'`.

@@ -36,7 +36,24 @@ val MIGRATION_22_23: Migration = object : Migration(22, 23) {
 }
 
 /**
- * Version 23 → 24: patient-scoped reports (14zcqntj2uz, `0007_patient_reports.sql`).
+ * Version 23 → 24: the `colleagues` name cache (14zcqntjph6).
+ *
+ * One new table and nothing else, so no existing row is touched (C8). It starts empty and the
+ * next pull fills it; until then a colleague's record reads "another medtech". The definition
+ * must match `ColleagueEntity` exactly or Room refuses to open the migrated file, which
+ * `Migration23To24Test` checks by opening one.
+ */
+val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `colleagues` " +
+                "(`user_id` TEXT NOT NULL, `full_name` TEXT, PRIMARY KEY(`user_id`))",
+        )
+    }
+}
+
+/**
+ * Version 24 → 25: patient-scoped reports (14zcqntj2uz, `0015_patient_reports.sql`).
  *
  * `reports.session_id` goes from NOT NULL to nullable, and `patient_id` / `session_ids_json`
  * are added, so a report row now describes either one session or one patient pooling several
@@ -44,10 +61,10 @@ val MIGRATION_22_23: Migration = object : Migration(22, 23) {
  * table: create `reports_new` with the new shape, copy every existing row across (all existing
  * rows keep `session_id` and get `patient_id`/`session_ids_json` = NULL), drop the old table,
  * rename, then recreate every index. The CREATE TABLE statement is copied verbatim from the
- * generated `24.json` schema export — it must match `ReportEntity` exactly or Room refuses to
- * open the migrated database. `Migration23To24Test` opens one to prove existing rows survive.
+ * generated `25.json` schema export — it must match `ReportEntity` exactly or Room refuses to
+ * open the migrated database. `Migration24To25Test` opens one to prove existing rows survive.
  */
-val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+val MIGRATION_24_25: Migration = object : Migration(24, 25) {
     override fun migrate(db: SupportSQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE IF NOT EXISTS `reports_new` (" +
@@ -91,4 +108,4 @@ val MIGRATION_23_24: Migration = object : Migration(23, 24) {
 }
 
 /** Every hand-written migration, for `DatabaseModule` and the migration test to share. */
-val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_22_23, MIGRATION_23_24)
+val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25)

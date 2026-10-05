@@ -7,18 +7,21 @@ import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.inference.encodePredictions
 import com.agarthavision.data.local.SampleImageStore
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
+import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.data.local.entity.SampleEntity
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.data.local.mapper.toFramePredictionsOrNull
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
 import com.agarthavision.data.supabase.PatientRemoteDataSource
+import com.agarthavision.data.supabase.ProfileRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -83,6 +86,24 @@ enum class FetchType {
  * medtech. Run in FK-safe order (patients → sessions → samples+detections+findings →
  * reports).
  *
+ * **What "all" means is decided here, not by RLS** (14zcqntjt3p). The device holds the patients
+ * linked to the signed-in user in `patient_users`, and for those patients their full history:
+ * colleagues' sessions, samples and reports included (14zcqntjph5). It also holds the user's own
+ * rows. That is exactly what a medtech's policies return (0001's author policies plus 0007's
+ * `*_select_via_patient`), and every fetch below asks for it explicitly, as "own" plus "under
+ * these parents", because the same tables give an org admin their whole laboratory (console
+ * `admin/0002`). An org admin may use the phone, often as a laboratory's medtech too, and gets
+ * only their own patients here. A super admin does not use the phone. The parents come from
+ * the device, read after the step before has written them, so a failed step still leaves the
+ * next one a scope.
+ * A colleague's row lands `synced` and is never edited here (14zcqntjph6), so the E4 guard lets
+ * every later pull refresh it.
+ *
+ * **A row whose parent is not on the device is skipped, not written.** The server keeps an
+ * author's read access to their own sessions after they are unassigned from the patient, so it
+ * can return a session whose patient it no longer returns. Room enforces `sessions.patient_id`
+ * and `samples.session_id`, and one such row used to fail the whole entity type on every pass.
+ *
  * Patients come first because `sessions.patient_id` is a foreign key onto `patients`: a
  * session row arriving before the patient it belongs to violates it locally, and Room does
  * enforce this one.
@@ -98,10 +119,8 @@ enum class FetchType {
  * device does not have is the failure this guards: the medtech finds out in a barangay
  * with no signal.
  */
-// TooManyFunctions: one function per pulled entity type (patients/sessions/samples/reports) plus
-// their per-row helpers — splitting the class would scatter one pull pass across several files
-// for no functional benefit, the same call `SessionDao` and this file's own `pullSamples`
-// already make.
+// One pull per entity type plus the per-row reconcilers each one needs; splitting them across
+// classes would scatter a single FK-ordered pass that has to be read top to bottom.
 @Suppress("LongParameterList", "TooManyFunctions")
 class FetchRemoteDataUseCase @Inject constructor(
     private val authRepository: AuthRepository,
@@ -122,6 +141,8 @@ class FetchRemoteDataUseCase @Inject constructor(
     private val cacheSampleImages: CacheSampleImagesUseCase,
     private val sampleImageStore: SampleImageStore,
     private val gson: Gson,
+    private val profileRemoteDataSource: ProfileRemoteDataSource,
+    private val colleagueDao: ColleagueDao,
 ) {
     /**
      * Runs one fetch pass.
@@ -148,7 +169,7 @@ class FetchRemoteDataUseCase @Inject constructor(
         var samplesFetched = 0
         var reportsFetched = 0
 
-        runCatching { patientsFetched = pullPatients(); patientsOk = true }
+        runCatching { patientsFetched = pullPatients(userId); patientsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch patients failed", error) }
 
         runCatching { sessionsFetched = pullSessions(userId); sessionsOk = true }
@@ -159,6 +180,12 @@ class FetchRemoteDataUseCase @Inject constructor(
 
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
             .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
+
+        // Colleagues' names, so a read-only record can say whose it is offline (14zcqntjph6).
+        // Best-effort and outside the completeness sets below: a missing name costs a label,
+        // not a record, and must not hold the badge at NOT_YET_SYNCED.
+        runCatching { pullColleagues(userId) }
+            .onFailure { error -> Log.w(TAG, "Fetch colleague names failed", error) }
 
         // Frames last: every one of them hangs off a sample row, so there is nothing to cache
         // until the rows are down. It never throws — an unreachable object is counted, not
@@ -222,33 +249,59 @@ class FetchRemoteDataUseCase @Inject constructor(
      * E4 guard: only insert when the local row is absent or already SYNCED. A local
      * PENDING or SYNC_FAILED patient is unsynced work the medtech typed in offline, and
      * overwriting it with the server's copy loses a patient by hand.
+     *
+     * Once every page of links has arrived, [removeRevokedLinks] drops the ones the server no
+     * longer holds, so a patient an admin reassigned away from this medtech leaves their list.
      */
-    private suspend fun pullPatients(): Int {
+    private suspend fun pullPatients(userId: String): Int {
+        // The user's own links decide which patients come down at all (14zcqntjt3p).
+        val links = mutableListOf<PatientUserEntity>()
+        forEachPage({ offset, limit -> patientRemoteDataSource.fetchPatientLinks(userId, offset, limit) }) { page ->
+            links += page
+        }
+        val serverLinkedPatientIds = links.mapTo(mutableSetOf()) { it.patientId }
+
         var fetched = 0
-        var offset = 0L
-        while (true) {
-            val page = patientRemoteDataSource.fetchPatients(offset, PAGE_SIZE.toLong())
-            for (remote in page) {
+        serverLinkedPatientIds.chunked(CHILD_BATCH_SIZE).forEach { chunk ->
+            for (remote in patientRemoteDataSource.fetchPatients(chunk)) {
                 val local = patientDao.getPatientById(remote.patientId)
                 if (local == null || local.supabaseStatus == PatientSyncStatus.SYNCED.value) {
                     patientDao.upsertPatient(remote)
                     fetched++
                 }
             }
-            if (page.size < PAGE_SIZE) break
-            offset += PAGE_SIZE.toLong()
         }
 
-        var linkOffset = 0L
-        while (true) {
-            val linksPage = patientRemoteDataSource.fetchPatientLinks(linkOffset, PAGE_SIZE.toLong())
-            if (linksPage.isNotEmpty()) {
-                patientDao.linkPatientsToUsers(linksPage)
-            }
-            if (linksPage.size < PAGE_SIZE) break
-            linkOffset += PAGE_SIZE.toLong()
+        if (links.isNotEmpty()) {
+            patientDao.linkPatientsToUsers(links)
         }
+        removeRevokedLinks(userId, serverLinkedPatientIds)
         return fetched
+    }
+
+    /**
+     * Drops this medtech's local assignments that the server no longer returns.
+     *
+     * Reached only after every link page arrived — a page that throws aborts [pullPatients]
+     * before this — so an absent link means an admin removed it, not that a page was lost.
+     *
+     * A patient still waiting to push keeps its link. Its creator link is written locally at
+     * creation and reaches the server only with the patient's own insert (the
+     * `on_patient_created` trigger), so the server has not heard of it yet; removing it would
+     * hide an offline patient from the medtech who typed it in.
+     *
+     * The patient and everything recorded against it stay on the device (C8). Only the access
+     * row goes, which is the same thing the admin's reassignment did on the server.
+     */
+    private suspend fun removeRevokedLinks(userId: String, serverLinkedPatientIds: Set<String>) {
+        patientDao.getLinksForUser(userId)
+            .filter { it.patientId !in serverLinkedPatientIds }
+            .forEach { link ->
+                val patient = patientDao.getPatientById(link.patientId)
+                if (patient == null || patient.supabaseStatus == PatientSyncStatus.SYNCED.value) {
+                    patientDao.unlinkPatientFromUser(link.patientId, userId)
+                }
+            }
     }
 
     /**
@@ -262,26 +315,65 @@ class FetchRemoteDataUseCase @Inject constructor(
      * which requires a data-cleanup pass on the production table that cannot be done safely from
      * here — we reconcile at pull time instead via [upsertSessionReconcilingLabel].
      *
-     * Adding the matching Supabase-side unique constraint is a deliberate follow-up that requires
-     * a separate migration with a pre-flight data-deduplication step against the production table.
+     * **The server now settles new collisions itself** (14zcqntjph7).
+     * `0009_session_label_collisions.sql` renames a label that another session of the same
+     * patient already holds, on insert and on rename, with this same suffix scheme, and the
+     * pull brings the new label back as an ordinary change to a `synced` row. Two phones minting
+     * `S03` offline therefore end with one `S03` and one `S03-XXXX` once both have synced. What is
+     * left for this function is the rows written before that migration, and the window before
+     * this device's own push lands.
+     *
+     * **Collisions are settled once every page is in, not inside one.** Pages arrive oldest first, so
+     * a colleague's earlier `S03` can be read before this device's own row is updated with the
+     * suffixed label the server gave it. Writing it immediately would suffix the colleague's
+     * row, which the server left alone, and only the next pass would put it back. Deferring the
+     * colliding rows until everything else is written lets the renamed own row move first.
      */
     private suspend fun pullSessions(userId: String): Int {
         var fetched = 0
-        var offset = 0L
-        while (true) {
-            val page = sessionRemoteDataSource.fetchSessions(userId, offset, PAGE_SIZE.toLong())
+        val collisions = mutableListOf<SessionEntity>()
+        val seen = mutableSetOf<String>()
+        forEachScopedPage(
+            own = { offset, limit -> sessionRemoteDataSource.fetchOwnSessions(userId, offset, limit) },
+            parentIds = linkedPatientIds(userId),
+            underParents = { patientIds, offset, limit ->
+                sessionRemoteDataSource.fetchSessionsForPatients(patientIds, offset, limit)
+            },
+        ) { page ->
             for (remote in page) {
-                val local = sessionDao.getSessionById(remote.sessionId)
-                // E4 guard: only write when absent or already synced; skip pending/sync_failed
-                if (local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value) {
-                    upsertSessionReconcilingLabel(remote)
-                    fetched++
-                }
+                if (seen.add(remote.sessionId) && pullSession(remote, collisions)) fetched++
             }
-            if (page.size < PAGE_SIZE) break
-            offset += PAGE_SIZE.toLong()
         }
+        collisions.forEach { remote -> upsertSessionReconcilingLabel(remote) }
         return fetched
+    }
+
+    /**
+     * Writes one pulled session, or defers it to [collisions] when its label clashes locally.
+     * Returns whether the row counts as fetched.
+     */
+    private suspend fun pullSession(remote: SessionEntity, collisions: MutableList<SessionEntity>): Boolean {
+        if (!patientDao.patientExists(remote.patientId)) {
+            Log.w(TAG, "pullSessions: patient ${remote.patientId} not on device; skipping ${remote.sessionId}")
+            return false
+        }
+        val local = sessionDao.getSessionById(remote.sessionId)
+        // E4 guard: only write when absent or already synced; skip pending/sync_failed
+        val writable = local == null || local.supabaseStatus == SessionSyncStatus.SYNCED.value
+        if (writable) {
+            if (collidesLocally(remote)) {
+                collisions += remote
+            } else {
+                upsertSessionReconcilingLabel(remote)
+            }
+        }
+        return writable
+    }
+
+    private suspend fun collidesLocally(remote: SessionEntity): Boolean {
+        val label = remote.label
+        return !label.isNullOrBlank() &&
+            sessionDao.countLabelCollisions(remote.patientId, label, remote.sessionId) > 0
     }
 
     /**
@@ -304,9 +396,7 @@ class FetchRemoteDataUseCase @Inject constructor(
      */
     private suspend fun upsertSessionReconcilingLabel(remote: SessionEntity) {
         val rawLabel = remote.label
-        val toWrite = if (!rawLabel.isNullOrBlank() &&
-            sessionDao.countLabelCollisions(remote.patientId, rawLabel, remote.sessionId) > 0
-        ) {
+        val toWrite = if (!rawLabel.isNullOrBlank() && collidesLocally(remote)) {
             val disambiguated =
                 "${rawLabel.trim()}-${remote.sessionId.take(DISAMBIGUATION_SUFFIX_LENGTH)}".uppercase()
             Log.w(
@@ -334,10 +424,14 @@ class FetchRemoteDataUseCase @Inject constructor(
     /** Paginated pull of samples plus their detections and findings. Returns samples inserted. */
     private suspend fun pullSamples(userId: String): Int {
         var fetched = 0
-        var offset = 0L
-        while (true) {
-            val page = sampleRemoteDataSource.fetchSamples(userId, offset, PAGE_SIZE.toLong())
-
+        val seen = mutableSetOf<String>()
+        forEachScopedPage(
+            own = { offset, limit -> sampleRemoteDataSource.fetchOwnSamples(userId, offset, limit) },
+            parentIds = sessionDao.getSessionIdsOnLinkedPatients(userId),
+            underParents = { sessionIds, offset, limit ->
+                sampleRemoteDataSource.fetchSamplesForSessions(sessionIds, offset, limit)
+            },
+        ) { page ->
             // Collect only the IDs whose parent row was actually written (E4 guard).
             // VERIFIED / SYNC_FAILED samples are skipped here AND their child rows must
             // not be overwritten — fetching detections/findings for them would silently
@@ -350,7 +444,12 @@ class FetchRemoteDataUseCase @Inject constructor(
             // place and touches no child row, which is the point of 86d4bx196 — so what the
             // children end up as is decided below, deliberately, per table.
             val writtenSampleIds = mutableListOf<String>()
-            for (remote in page) {
+            // A sample can come back twice, once as the user's own and once under its session.
+            for (remote in page.filter { seen.add(it.sampleId) }) {
+                if (!sessionDao.sessionExists(remote.sessionId)) {
+                    Log.w(TAG, "pullSamples: session ${remote.sessionId} not on device; skipping ${remote.sampleId}")
+                    continue
+                }
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
                 val local = sampleDao.getSampleByIdIncludingDeleted(remote.sampleId)
                 if (local == null || local.status == SampleStatus.SYNCED.value) {
@@ -361,9 +460,6 @@ class FetchRemoteDataUseCase @Inject constructor(
             }
 
             pullChildRowsFor(writtenSampleIds)
-
-            if (page.size < PAGE_SIZE) break
-            offset += PAGE_SIZE.toLong()
         }
         return fetched
     }
@@ -474,16 +570,69 @@ class FetchRemoteDataUseCase @Inject constructor(
     /** Reports are FK children of sessions — pull them last. Returns rows inserted. */
     private suspend fun pullReports(userId: String): Int {
         var fetched = 0
-        var offset = 0L
-        while (true) {
-            val page = reportRemoteDataSource.fetchReports(userId, offset, PAGE_SIZE.toLong())
-            for (remote in page) {
+        val seen = mutableSetOf<String>()
+        forEachScopedPage(
+            own = { offset, limit -> reportRemoteDataSource.fetchOwnReports(userId, offset, limit) },
+            parentIds = sessionDao.getSessionIdsOnLinkedPatients(userId),
+            underParents = { sessionIds, offset, limit ->
+                reportRemoteDataSource.fetchReportsForSessions(sessionIds, offset, limit)
+            },
+        ) { page ->
+            for (remote in page.filter { seen.add(it.reportId) }) {
                 if (upsertReportIfEligible(remote)) fetched++
             }
+        }
+        return fetched
+    }
+
+    /**
+     * Colleagues' names, so a read-only record can say whose it is offline (14zcqntjph6).
+     *
+     * Asked for by id: the authors of the sessions and reports this device holds for the user's
+     * own patients, which is the set `0008_colleague_names.sql` lets a medtech read. Unscoped,
+     * the same table names everyone in an org admin's laboratory (14zcqntjt3p).
+     */
+    private suspend fun pullColleagues(userId: String) {
+        val colleagueIds = colleagueDao.getColleagueIdsOnLinkedPatients(userId)
+        if (colleagueIds.isEmpty()) return
+        val colleagues = colleagueIds.chunked(CHILD_BATCH_SIZE)
+            .flatMap { chunk -> profileRemoteDataSource.fetchColleagues(chunk) }
+        colleagueDao.upsertColleagues(colleagues)
+    }
+
+    /** The patients the user is linked to on this device: the parents sessions are pulled under. */
+    private suspend fun linkedPatientIds(userId: String): List<String> =
+        patientDao.getLinksForUser(userId).map { it.patientId }
+
+    /** Hands every page of a paged fetch to [onPage], stopping after the first short page. */
+    private suspend fun <T> forEachPage(
+        fetch: suspend (offset: Long, limit: Long) -> List<T>,
+        onPage: suspend (List<T>) -> Unit,
+    ) {
+        var offset = 0L
+        while (true) {
+            val page = fetch(offset, PAGE_SIZE.toLong())
+            onPage(page)
             if (page.size < PAGE_SIZE) break
             offset += PAGE_SIZE.toLong()
         }
-        return fetched
+    }
+
+    /**
+     * The pages of the user's [own] rows, then of the rows [underParents] each chunk of
+     * [parentIds]: the two halves of what a medtech may read (14zcqntjt3p). A row in both
+     * halves arrives twice, so callers skip ids they have already handled.
+     */
+    private suspend fun <T> forEachScopedPage(
+        own: suspend (offset: Long, limit: Long) -> List<T>,
+        parentIds: List<String>,
+        underParents: suspend (parentIds: List<String>, offset: Long, limit: Long) -> List<T>,
+        onPage: suspend (List<T>) -> Unit,
+    ) {
+        forEachPage(own, onPage)
+        parentIds.chunked(CHILD_BATCH_SIZE).forEach { chunk ->
+            forEachPage({ offset, limit -> underParents(chunk, offset, limit) }, onPage)
+        }
     }
 
     /**
@@ -497,16 +646,21 @@ class FetchRemoteDataUseCase @Inject constructor(
      * patient has landed.
      */
     private suspend fun upsertReportIfEligible(remote: ReportEntity): Boolean {
+        // A session report on a session this device does not hold (14zcqntjph5) is skipped: the
+        // pull brings colleagues' reports down, but not necessarily their sessions.
+        val sessionMissing = remote.sessionId != null && !sessionDao.sessionExists(remote.sessionId)
+        if (sessionMissing) {
+            Log.w(TAG, "pullReports: session ${remote.sessionId} not on device; skipping ${remote.reportId}")
+        }
         // E4 guard: skip if local row is pending or sync_failed
         val local = reportDao.getReportById(remote.reportId)
         // An unrecognised report_type is a server-side type this build doesn't know how to
         // render yet — skip it rather than store and later crash decoding it, or silently
         // mislabel it as a session report.
-        val eligible = ReportType.fromValueOrNull(remote.reportType) != null &&
+        val eligible = !sessionMissing && ReportType.fromValueOrNull(remote.reportType) != null &&
             (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value)
-        if (!eligible) return false
 
-        return try {
+        return eligible && try {
             reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
             true
         } catch (e: SQLiteConstraintException) {
@@ -539,7 +693,7 @@ class FetchRemoteDataUseCase @Inject constructor(
         const val PAGE_SIZE = 500
 
         /**
-         * Maximum number of sample UUIDs per `isIn` request for detections/findings.
+         * Maximum number of UUIDs per `isIn` request: patients, sessions, samples, colleagues.
          * Keeps the GET query string well under server/proxy URL-length limits.
          */
         const val CHILD_BATCH_SIZE = 100

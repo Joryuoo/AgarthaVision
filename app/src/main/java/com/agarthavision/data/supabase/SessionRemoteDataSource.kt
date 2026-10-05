@@ -49,13 +49,35 @@ class SessionRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // The phone holds the signed-in user's own sessions plus every session of a patient they are
+    // assigned to: a patient's full history, colleagues' smears included (14zcqntjph5). That is
+    // exactly what 0001's author policy and 0007's `sessions_select_via_patient` give a medtech,
+    // and it is asked for in those two halves rather than left to RLS, because RLS gives an org
+    // admin (console `admin/0002`) their whole laboratory (14zcqntjt3p).
+
     /**
-     * Fetches a page of sessions owned by [userId], ordered by start time ascending.
+     * Fetches a page of the sessions [userId] authored, ordered by start time ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchSessions(userId: String, offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
+    suspend fun fetchOwnSessions(userId: String, offset: Long = 0L, limit: Long = 500L): List<SessionEntity> =
         supabase.postgrest[SESSIONS_TABLE].select {
             filter { eq("user_id", userId) }
+            order("started_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<SessionRow>().map { it.toEntity() }
+
+    /**
+     * Fetches a page of the sessions of the given [patientIds], whoever authored them, ordered by
+     * start time ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the ids
+     * and must guard against an empty list.
+     */
+    suspend fun fetchSessionsForPatients(
+        patientIds: List<String>,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<SessionEntity> =
+        supabase.postgrest[SESSIONS_TABLE].select {
+            filter { isIn("patient_id", patientIds) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<SessionRow>().map { it.toEntity() }
@@ -92,29 +114,29 @@ class SessionRemoteDataSource @Inject constructor(
         val label: String?,
     )
 
-    // ── Select DTO (read path) ────────────────────────────────────────────────
-
-    @Serializable
-    private data class SessionRow(
-        @SerialName("id") val id: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("patient_id") val patientId: String,
-        @SerialName("device_id") val deviceId: String,
-        @SerialName("started_at") val startedAt: String,
-        @SerialName("label") val label: String? = null,
-    )
-
-    private fun SessionRow.toEntity(): SessionEntity = SessionEntity(
-        sessionId = id,
-        userId = userId,
-        patientId = patientId,
-        deviceId = deviceId,
-        startedAt = parseSupabaseInstant(startedAt).toEpochMilli(),
-        label = label,
-        supabaseStatus = SessionSyncStatus.SYNCED.value,
-    )
-
     private companion object {
         private const val SESSIONS_TABLE = "sessions"
     }
 }
+
+// ── Select DTO (read path) ────────────────────────────────────────────────
+
+@Serializable
+internal data class SessionRow(
+    @SerialName("id") val id: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("patient_id") val patientId: String,
+    @SerialName("device_id") val deviceId: String,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("label") val label: String? = null,
+)
+
+internal fun SessionRow.toEntity(): SessionEntity = SessionEntity(
+    sessionId = id,
+    userId = userId,
+    patientId = patientId,
+    deviceId = deviceId,
+    startedAt = parseSupabaseInstant(startedAt).toEpochMilli(),
+    label = label,
+    supabaseStatus = SessionSyncStatus.SYNCED.value,
+)

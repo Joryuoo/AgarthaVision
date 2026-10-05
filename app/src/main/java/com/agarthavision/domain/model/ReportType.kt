@@ -1,7 +1,7 @@
 package com.agarthavision.domain.model
 
 /**
- * Report variants. `SESSION` describes one smear; `PATIENT` (14zcqntj2uz, `0007_patient_reports.sql`)
+ * Report variants. `SESSION` describes one smear; `PATIENT` (14zcqntj2uz, `0015_patient_reports.sql`)
  * pools every included session's findings into one document for a patient. `ADMINISTRATIVE`
  * (cross-patient aggregation) is deferred to Phase 2.
  */

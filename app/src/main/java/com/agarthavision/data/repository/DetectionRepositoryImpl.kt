@@ -29,11 +29,6 @@ class DetectionRepositoryImpl @Inject constructor(
             EggCount(species = row.species, count = row.eggCount)
         }
 
-    override fun observeConfirmedEggCountsSince(userId: String, sinceTimestamp: Long): Flow<List<EggCount>> =
-        detectionDao.observeConfirmedEggCountsSince(userId, sinceTimestamp).map { rows ->
-            rows.map { EggCount(species = it.species, count = it.eggCount) }
-        }
-
     override suspend fun getSpeciesLabelsForSessions(
         sessionIds: List<String>,
     ): Map<String, List<String>> =

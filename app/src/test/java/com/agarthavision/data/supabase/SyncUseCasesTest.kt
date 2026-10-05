@@ -16,6 +16,7 @@ import com.agarthavision.domain.repository.ReportFileStore
 import com.google.gson.Gson
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -133,6 +134,52 @@ class SyncUseCasesTest {
         order.verify(patientRemoteDataSource).upsertPatient(patient)
         order.verify(sessionRemoteDataSource).upsertSession(session)
         order.verify(sampleRemoteDataSource).syncSample(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `SyncSampleUseCase carries deletedAt when syncing a tombstoned sample`() = runTest {
+        val imageFile = java.io.File.createTempFile("test_tombstone", ".jpg").apply {
+            writeBytes(ByteArray(10))
+            deleteOnExit()
+        }
+        val tombstonedSample = SampleEntity(
+            sampleId = "smp-tombstone",
+            sessionId = "sess-1",
+            userId = "user-1",
+            deviceId = "dev-1",
+            timestamp = 1000L,
+            verifiedAt = 1000L,
+            imagePath = imageFile.absolutePath,
+            status = SampleStatus.VERIFIED.value,
+            deletedAt = 2000L,
+        )
+
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-tombstone")).thenReturn(tombstonedSample)
+        whenever(sessionDao.getSessionById("sess-1")).thenReturn(
+            SessionEntity(
+                sessionId = "sess-1",
+                userId = "user-1",
+                patientId = "pat-1",
+                deviceId = "dev-1",
+                startedAt = 1000L,
+                supabaseStatus = SessionSyncStatus.SYNCED.value,
+            ),
+        )
+        whenever(sampleRemoteDataSource.syncSample(any(), any(), any(), any(), any()))
+            .thenReturn("user-1/smp-tombstone.jpg")
+
+        val result = syncSampleUseCase("smp-tombstone")
+
+        assertTrue(result.isSuccess)
+        val captor = org.mockito.kotlin.argumentCaptor<SampleEntity>()
+        verify(sampleRemoteDataSource).syncSample(
+            sample = captor.capture(),
+            detections = any(),
+            findings = any(),
+            predictions = any(),
+            imageBytes = any(),
+        )
+        assertEquals(2000L, captor.firstValue.deletedAt)
     }
 
     @Test

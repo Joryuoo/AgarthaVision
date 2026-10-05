@@ -1,5 +1,7 @@
 package com.agarthavision.domain.usecase.records
 
+import com.agarthavision.domain.model.LocalIdentity
+import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.model.RecordsTotals
 import com.agarthavision.domain.model.Sample
 import com.agarthavision.domain.model.SampleStatus
@@ -7,7 +9,6 @@ import com.agarthavision.domain.model.Session
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.SessionsCounts
 import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.repository.SampleRepository
 import com.agarthavision.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.Flow
@@ -83,13 +84,13 @@ class GetPatientReportCandidatesUseCaseTest {
         override suspend fun hasActiveSession(): Boolean = userId != null
         override suspend fun getCurrentUserId(): String? = userId
         override suspend fun signOut() = Unit
+        override suspend fun changePassword(currentPassword: String, newPassword: String) =
+            PasswordChangeResult.Failed
     }
 
     private class FakeSessions(private val sessions: List<Session>) : SessionRepository {
         override fun observeAllSessions(userId: String?): Flow<List<Session>> = flowOf(sessions)
         override suspend fun getSessionById(sessionId: String): Session? = sessions.firstOrNull { it.id == sessionId }
-        override fun observeSessionsWithStats(userId: String, sinceMillis: Long): Flow<List<SessionWithStats>> =
-            flowOf(emptyList())
         override suspend fun updateSessionLabel(sessionId: String, label: String) = Unit
         override suspend fun getSessionLabelsForPatient(patientId: String): List<String> = emptyList()
         override fun observeVisibleSessions(userId: String?): Flow<List<Session>> = flowOf(sessions)

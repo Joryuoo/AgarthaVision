@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -106,10 +107,10 @@ fun VerificationSheet(
     val toastState = rememberAgarthaToastState()
     val finishFirst = stringResource(R.string.verify_add_species_blocked)
 
-    // Keyed on the id, not the frame: FlaggedFrame equality covers mutable fields
+    // Keyed on the id and prior target: FlaggedFrame equality covers mutable fields
     // such as the answers already given, so keying on the frame would re-seed it — and wipe
     // the in-progress answers — every time the store re-emits.
-    LaunchedEffect(frame.sampleId) {
+    LaunchedEffect(frame.sampleId, prior) {
         viewModel.setFrame(frame, prior)
     }
 
@@ -213,7 +214,11 @@ internal fun VerificationSheetContent(
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier.fillMaxSize()
-                .then(if (state.isDrawing) Modifier.clearAndSetSemantics {} else Modifier),
+                // Saving too: TalkBack activates a node through its semantics, not a touch, so the
+                // input blocker over the sheet would not stop it.
+                .then(
+                    if (state.isDrawing || state.isSubmitting) Modifier.clearAndSetSemantics {} else Modifier,
+                ),
         ) {
             // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
             ScreenTopBar(
@@ -221,6 +226,61 @@ internal fun VerificationSheetContent(
                 metaText = if (isEditing) capturedAtLabel else "",
                 onBack = actions.onCancel,
             )
+
+            // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                val imageModel = rememberFrameImageModel(frame, state.imageSource)
+                val frameModifier = Modifier
+                    .heightIn(max = 220.dp)
+                    .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(AgarthaTheme.colors.surfaceVariant)
+                    .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+
+                if (imageModel == null) {
+                    FrameUnavailable(
+                        reason = state.imageSource,
+                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
+                    )
+                } else {
+                    FrameWithBoxes(
+                        imageModel = imageModel,
+                        boxes = state.findings.frameBoxes(
+                            active = DrawTarget(state.currentDetectionIndex),
+                        ),
+                        showBoxes = state.showBoundingBoxes,
+                        inferenceImageWidth = frame.imageWidth,
+                        inferenceImageHeight = frame.imageHeight,
+                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+                    )
+                }
+
+                CycleRow(
+                    indicator = if (state.frameIndexInQueue > 0) {
+                        stringResource(
+                            R.string.verify_sample_indicator,
+                            state.frameIndexInQueue,
+                            state.queueSize,
+                        )
+                    } else {
+                        stringResource(R.string.verify_sample_out_of_queue)
+                    },
+                    prevDescription = stringResource(R.string.verify_prev_frame),
+                    nextDescription = stringResource(R.string.verify_next_frame),
+                    prevTag = VerifyTestTags.FRAME_PREV,
+                    nextTag = VerifyTestTags.FRAME_NEXT,
+                    canGoPrev = state.canGoPrev,
+                    canGoNext = state.canGoNext,
+                    onPrev = actions.onFramePrev,
+                    onNext = actions.onFrameNext,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+                )
+            }
 
             Column(
                 modifier = Modifier
@@ -236,67 +296,8 @@ internal fun VerificationSheetContent(
                     .verticalScroll(scrollState),
             ) {
                 Column(modifier = Modifier.padding(horizontal = 22.dp)) {
-                    // 2. Frame section: the image, then one row carrying where you are and how to move.
-                    val imageModel = rememberFrameImageModel(frame, state.imageSource)
-                    if (imageModel == null) {
-                        // Honest about it, rather than opening a blank canvas the medtech might
-                        // annotate into the void. A missing image and an empty one used to be
-                        // indistinguishable here: File("").readBytes() threw, getOrDefault swallowed it,
-                        // and every sample synced from another device opened silently empty.
-                        FrameUnavailable(
-                            reason = state.imageSource,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(frame.previewAspectRatio())
-                                .testTag(VerifyTestTags.FRAME_UNAVAILABLE)
-                                .clip(RoundedCornerShape(18.dp))
-                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-                        )
-                    } else {
-                        FrameWithBoxes(
-                            imageModel = imageModel,
-                            // The model's boxes AND the medtech's own, which is the whole of 86d4by5n4:
-                            // `frame.predictions` alone never held a hand-drawn box, so every one of them
-                            // was invisible and a replaced box left the model's wrong rectangle on screen.
-                            boxes = state.findings.frameBoxes(
-                                active = DrawTarget(state.currentDetectionIndex),
-                            ),
-                            showBoxes = state.showBoundingBoxes,
-                            inferenceImageWidth = frame.imageWidth,
-                            inferenceImageHeight = frame.imageHeight,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(frame.previewAspectRatio())
-                                .testTag(VerifyTestTags.FRAME_PREVIEW)
-                                .clip(RoundedCornerShape(18.dp))
-                                .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(18.dp)),
-                        )
-                    }
-
-                    CycleRow(
-                        indicator = if (state.frameIndexInQueue > 0) {
-                            stringResource(
-                                R.string.verify_sample_indicator,
-                                state.frameIndexInQueue,
-                                state.queueSize,
-                            )
-                        } else {
-                            stringResource(R.string.verify_sample_out_of_queue)
-                        },
-                        prevDescription = stringResource(R.string.verify_prev_frame),
-                        nextDescription = stringResource(R.string.verify_next_frame),
-                        prevTag = VerifyTestTags.FRAME_PREV,
-                        nextTag = VerifyTestTags.FRAME_NEXT,
-                        canGoPrev = state.canGoPrev,
-                        canGoNext = state.canGoNext,
-                        onPrev = actions.onFramePrev,
-                        onNext = actions.onFrameNext,
-                        modifier = Modifier.padding(top = 12.dp, bottom = 16.dp),
-                    )
-
                     // 3. Model output: what the container said, or that it said nothing, or that it has
-                    //    not answered yet. Always present, never collapsed to two states. A frame still
-                    //    in the inference queue offers the way out of waiting for it (14zcqntj6p1).
+                    //    not answered yet. Always present, never collapsed to two states.
                     ModelOutputSection(
                         output = frame.modelOutput(),
                         onCancelInference = actions.onCancelInferenceRequested
@@ -421,6 +422,15 @@ internal fun VerificationSheetContent(
                     )
                 }
             }
+        }
+
+        // Over the whole sheet while a save is in flight. The Submit button alone used to be
+        // locked, so anything else tapped in that window either vanished - the save had already
+        // copied the answers, and wrote that copy back over the edit when it landed - or paged
+        // to another sample the finished save then closed. Transparent, because the save is
+        // a local write and over in a blink: a scrim would only flash.
+        if (state.isSubmitting) {
+            SavingInputBlocker()
         }
 
         if (showDiscardConfirm.value) {
@@ -975,6 +985,28 @@ private fun NoteField(
             focusedTextColor = AgarthaTheme.colors.textPrimary,
             unfocusedTextColor = AgarthaTheme.colors.textPrimary,
         ),
+    )
+}
+
+/**
+ * Swallows every touch on the sheet beneath it, and takes focus off any text field so the
+ * keyboard cannot keep typing into an answer the save has already taken.
+ */
+@Composable
+private fun SavingInputBlocker() {
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(Unit) { focusManager.clearFocus() }
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag(VerifyTestTags.SAVING_INPUT_BLOCKER)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                    }
+                }
+            },
     )
 }
 

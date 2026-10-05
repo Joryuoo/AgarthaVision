@@ -114,6 +114,27 @@ dashboard SQL editor — never applied programmatically (`supabase/migrations/00
 Room is a separate mirror: a Room-shape change means bumping `AgarthaDatabase.version`
 (`core/database/AgarthaDatabase.kt`).
 
+**This folder is the authority for what this repository owns, not for the whole database.** The
+Admin Console runs a second migration set against the same `agarthavision` database. It lives in
+its own repository at `supabase/migrations/admin/NNNN_*.sql`, with its own number sequence, and
+covers organizations, memberships, patient ownership and the audit log. That set is **additive
+only**: it adds tables, functions, triggers and permissive policies, and never alters or drops
+a table, column, function or policy this repository owns. Anything that changes an app-owned
+table's shape or policies is written here. It does reach app-owned tables in two ways: one
+`AFTER INSERT` trigger on `patients` that never raises, and org-admin `SELECT` policies. It also
+depends on app columns that a migration here must not rename without telling the console team.
+What it adds, and those columns:
+[`file-tree.md`](file-tree.md#the-admin-consoles-migrations--same-database-other-repository).
+Never copy admin SQL into this repository.
+
+**Super admins live in `super_admins`, not on the profile** (`0014_super_admins.sql`, D22). A
+user is a super admin while they hold a row there with `revoked_at` null, and `is_admin()` is the
+one way to ask. `profiles.role` is retired and grants nothing. No signed-in caller reads or
+writes `super_admins`, and a revoke sets `revoked_at` rather than deleting the row (C8). Do not
+put authority back on `profiles`, and do not add a policy that lets a client touch
+`super_admins`. Details:
+[`Profile`](map/objects/Profile.md#super-admins).
+
 **From Room version 23, every bump ships a hand-written `Migration`.** Earlier bumps fell back
 to a destructive rebuild, which was acceptable while the local database held nothing Supabase
 did not. Version 23 added the inference queue: frames that are captured, waiting on a model
@@ -122,8 +143,8 @@ is the first. Add the next one to `ALL_MIGRATIONS` and export its schema JSON be
 Destructive fallback remains only for installs older than 22.
 
 **Enforcement:** partly mechanical on the Room side. `AgarthaDatabaseSchemaTest` pins the Room
-version and the columns each branch added, and `Migration22To23Test` builds a v22 database from
-`app/schemas/.../22.json` and migrates it. The Postgres side has no migration runner and no
+version and the columns each branch added, and `Migration22To23Test` and `Migration23To24Test`
+each build the previous version from its committed `app/schemas/.../<n>.json` and migrate it. The Postgres side has no migration runner and no
 schema-diff test. `schema.ts` is documentation and is never compiled (its header comment).
 
 **Known drift, code wins:** `schema.ts` previously named Room entity names (`samples.timestamp`,
@@ -181,6 +202,19 @@ its own ticket.
 **Findings rows are replaced wholesale on edit**, so a species logged in error disappears. A
 count is a current statement, like `samples.user_note`, not evidence — and the things this
 constraint exists to protect are untouched by it.
+
+**Authorship outlives the login** (`0011_profile_outlives_login.sql`, 14zcqntjph8,
+14zcqntjvjx). A medtech who leaves a laboratory is offboarded by deleting their login, which
+frees the email for the next laboratory that hires them, or for this one if it rehires them.
+Deleting the login never touches their work: `profiles.id` is the person's permanent id and no
+longer references `auth.users`, so nothing cascades. Their profile, every patient, session,
+sample and report they authored, their organization membership and their audit-log entries all
+stay, still naming them. Only `profiles.account_id` changes, to null, meaning "no login now".
+Every table that names a person references `profiles`, never `auth.users`, so this one link is
+the only thing a deleted login can reach. A rehire is not yet reconnected to the profile they
+already have: their new login gets a fresh one (see [`Profile`](map/objects/Profile.md)).
+Nothing in this repository deletes a login. Sign-out and the deactivation wipe act on the phone
+only, and the wipe keeps work that has not synced (`WipeLocalAccountDataUseCase`).
 
 **Patient PII and long-term retention:** While C8 mandates indefinite retention of microscopy
 images, bounding boxes, and model evaluation labels for the retraining corpus, clinical personal
@@ -266,6 +300,20 @@ history, test artifacts, or logs. Local on-device SQLite storage (Room) and repo
 storage (`Documents/AgarthaVision/`) are unencrypted at rest; compensating controls and the
 validation mandate requiring synthetic patient profiles are documented in
 [`patient-pii-position.md`](patient-pii-position.md) (PB-26).
+
+**Super admins read patients de-identified (D19, 14zcqntjvjw).** A super admin, an active
+`super_admins` row since `0014` and `profiles.role = 'admin'` before it, is the AgarthaVision
+team, the clinics' processor, not their controller. Since
+`0013_super_admin_reads_deidentified.sql` the `patients`, `sessions` and `samples` SELECT
+policies have no `is_admin()` branch (`:38-56`), and neither has `can_read_session()` (`:60`),
+so a super admin reads no name, sex, birthdate, session label (it encodes initials, sex and
+age) or sample note, and no report file (`:113`). They read the non-identifying columns through
+`patients_deidentified`, `sessions_deidentified` and `samples_deidentified`
+(`0012_deidentified_reads.sql:50-89`), which return rows only to `is_admin(auth.uid())`.
+Detections, findings, predictions, report rows, patient links, frames and
+`barangay_prevalence()` are unchanged. **A new identifying column goes nowhere near those
+views**, and a new super admin read of clinical data goes through them. Medtechs and
+organization admins are unaffected.
 
 
 ## C11 — One design system

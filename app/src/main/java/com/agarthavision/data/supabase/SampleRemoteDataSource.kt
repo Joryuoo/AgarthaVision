@@ -110,13 +110,28 @@ class SampleRemoteDataSource @Inject constructor(
 
     // ── Pull (read from server) ────────────────────────────────────────────────
 
+    // Own samples plus those of the sessions of patients the user is assigned to, asked for in
+    // those two halves for the reason on `SessionRemoteDataSource.fetchOwnSessions` (14zcqntjt3p).
+
     /**
-     * Fetches a page of samples owned by [userId], ordered by capture time ascending.
+     * Fetches a page of the samples [userId] captured, ordered by capture time ascending.
      * Inclusive range: rows [offset, offset+limit-1].
      */
-    suspend fun fetchSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
+    suspend fun fetchOwnSamples(userId: String, offset: Long, limit: Long): List<SampleEntity> =
         supabase.postgrest[SAMPLES_TABLE].select {
             filter { eq("user_id", userId) }
+            order("captured_at", Order.ASCENDING)
+            range(offset, offset + limit - 1)
+        }.decodeList<SampleRow>().map { it.toEntity() }
+
+    /**
+     * Fetches a page of the samples of the given [sessionIds], whoever captured them, ordered by
+     * capture time ascending. Inclusive range: rows [offset, offset+limit-1]. Callers chunk the
+     * ids and must guard against an empty list.
+     */
+    suspend fun fetchSamplesForSessions(sessionIds: List<String>, offset: Long, limit: Long): List<SampleEntity> =
+        supabase.postgrest[SAMPLES_TABLE].select {
+            filter { isIn("session_id", sessionIds) }
             order("captured_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<SampleRow>().map { it.toEntity() }
@@ -186,6 +201,7 @@ class SampleRemoteDataSource @Inject constructor(
             needsReannotation = needsReannotation,
             isManual = isManual,
             userNote = userNote?.takeIf { it.isNotBlank() },
+            deletedAt = deletedAt?.takeIf { it > 0L }?.let { Instant.ofEpochMilli(it).toString() },
         )
     }
 
@@ -257,6 +273,8 @@ class SampleRemoteDataSource @Inject constructor(
         val isManual: Boolean,
         @SerialName("user_note")
         val userNote: String?,
+        @SerialName("deleted_at")
+        val deletedAt: String? = null,
     )
 
     @Serializable
@@ -364,114 +382,6 @@ class SampleRemoteDataSource @Inject constructor(
         eggCount = eggCount,
     )
 
-    // ── Select DTOs (read path) ────────────────────────────────────────────────
-
-    @Serializable
-    private data class SampleRow(
-        @SerialName("id") val id: String,
-        @SerialName("session_id") val sessionId: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("captured_at") val capturedAt: String,
-        @SerialName("verified_at") val verifiedAt: String? = null,
-        @SerialName("storage_path") val storagePath: String,
-        @SerialName("inference_model_version") val inferenceModelVersion: String,
-        @SerialName("needs_reannotation") val needsReannotation: Boolean,
-        @SerialName("is_manual") val isManual: Boolean,
-        @SerialName("user_note") val userNote: String? = null,
-        @SerialName("deleted_at") val deletedAt: String? = null,
-    )
-
-    @Serializable
-    private data class DetectionRow(
-        @SerialName("id") val id: String,
-        @SerialName("sample_id") val sampleId: String,
-        @SerialName("class_label") val classLabel: String,
-        @SerialName("confidence") val confidence: Float,
-        @SerialName("bbox_x") val bboxX: Float? = null,
-        @SerialName("bbox_y") val bboxY: Float? = null,
-        @SerialName("bbox_w") val bboxW: Float? = null,
-        @SerialName("bbox_h") val bboxH: Float? = null,
-        @SerialName("verdict") val verdict: String,
-        @SerialName("expert_class") val expertClass: String? = null,
-    )
-
-    @Serializable
-    private data class PredictionRow(
-        @SerialName("sample_id") val sampleId: String,
-        @SerialName("ordinal") val ordinal: Int,
-        @SerialName("class_label") val classLabel: String,
-        @SerialName("confidence") val confidence: Float,
-        @SerialName("bbox_x") val bboxX: Float,
-        @SerialName("bbox_y") val bboxY: Float,
-        @SerialName("bbox_w") val bboxW: Float,
-        @SerialName("bbox_h") val bboxH: Float,
-    )
-
-    @Serializable
-    private data class FindingRow(
-        @SerialName("id") val id: String,
-        @SerialName("sample_id") val sampleId: String,
-        @SerialName("species") val species: String,
-        @SerialName("stage") val stage: String? = null,
-        @SerialName("egg_count") val eggCount: Int,
-    )
-
-    // ── DTO → Entity mappers (read path) ─────────────────────────────────────
-
-    private fun SampleRow.toEntity(): SampleEntity = SampleEntity(
-        sampleId = id,
-        sessionId = sessionId,
-        userId = userId,
-        deviceId = "",   // D2: device identity not stored in remote
-        timestamp = parseSupabaseInstant(capturedAt).toEpochMilli(),
-        verifiedAt = verifiedAt?.let { parseSupabaseInstant(it).toEpochMilli() } ?: 0L,
-        imagePath = "",  // D1: image is in Storage, not local disk
-        storagePath = storagePath,
-        inferenceModelVersion = inferenceModelVersion,
-        needsReannotation = needsReannotation,
-        isManual = isManual,
-        userNote = userNote,
-        status = SampleStatus.SYNCED.value,
-        predictionsJson = null,
-        imageWidth = null,
-        imageHeight = null,
-        deletedAt = deletedAt?.let { parseSupabaseInstant(it).toEpochMilli() },
-    )
-
-    private fun DetectionRow.toEntity(): DetectionEntity = DetectionEntity(
-        detectionId = id,
-        sampleId = sampleId,
-        classLabel = classLabel,
-        confidence = confidence,
-        bboxX = bboxX,
-        bboxY = bboxY,
-        bboxW = bboxW,
-        bboxH = bboxH,
-        verdict = DetectionVerdict.fromValue(verdict).value,
-        expertClass = expertClass,
-    )
-
-    private fun PredictionRow.toSamplePrediction(): SamplePrediction = SamplePrediction(
-        sampleId = sampleId,
-        ordinal = ordinal,
-        prediction = Prediction(
-            classLabel = classLabel,
-            confidence = confidence,
-            x = bboxX,
-            y = bboxY,
-            width = bboxW,
-            height = bboxH,
-        ),
-    )
-
-    private fun FindingRow.toEntity(): SampleSpeciesFindingEntity = SampleSpeciesFindingEntity(
-        findingId = id,
-        sampleId = sampleId,
-        species = species,
-        stage = stage,
-        eggCount = eggCount,
-    )
-
     private companion object {
         private const val SAMPLES_BUCKET = "samples"
         private const val SAMPLES_TABLE = "samples"
@@ -482,3 +392,111 @@ class SampleRemoteDataSource @Inject constructor(
         private val SIGNED_URL_EXPIRY = 15.minutes
     }
 }
+
+// ── Select DTOs (read path) ────────────────────────────────────────────────
+
+@Serializable
+internal data class SampleRow(
+    @SerialName("id") val id: String,
+    @SerialName("session_id") val sessionId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("captured_at") val capturedAt: String,
+    @SerialName("verified_at") val verifiedAt: String? = null,
+    @SerialName("storage_path") val storagePath: String,
+    @SerialName("inference_model_version") val inferenceModelVersion: String,
+    @SerialName("needs_reannotation") val needsReannotation: Boolean,
+    @SerialName("is_manual") val isManual: Boolean,
+    @SerialName("user_note") val userNote: String? = null,
+    @SerialName("deleted_at") val deletedAt: String? = null,
+)
+
+@Serializable
+internal data class DetectionRow(
+    @SerialName("id") val id: String,
+    @SerialName("sample_id") val sampleId: String,
+    @SerialName("class_label") val classLabel: String,
+    @SerialName("confidence") val confidence: Float,
+    @SerialName("bbox_x") val bboxX: Float? = null,
+    @SerialName("bbox_y") val bboxY: Float? = null,
+    @SerialName("bbox_w") val bboxW: Float? = null,
+    @SerialName("bbox_h") val bboxH: Float? = null,
+    @SerialName("verdict") val verdict: String,
+    @SerialName("expert_class") val expertClass: String? = null,
+)
+
+@Serializable
+internal data class PredictionRow(
+    @SerialName("sample_id") val sampleId: String,
+    @SerialName("ordinal") val ordinal: Int,
+    @SerialName("class_label") val classLabel: String,
+    @SerialName("confidence") val confidence: Float,
+    @SerialName("bbox_x") val bboxX: Float,
+    @SerialName("bbox_y") val bboxY: Float,
+    @SerialName("bbox_w") val bboxW: Float,
+    @SerialName("bbox_h") val bboxH: Float,
+)
+
+@Serializable
+internal data class FindingRow(
+    @SerialName("id") val id: String,
+    @SerialName("sample_id") val sampleId: String,
+    @SerialName("species") val species: String,
+    @SerialName("stage") val stage: String? = null,
+    @SerialName("egg_count") val eggCount: Int,
+)
+
+// ── DTO → Entity mappers (read path) ─────────────────────────────────────
+
+internal fun SampleRow.toEntity(): SampleEntity = SampleEntity(
+    sampleId = id,
+    sessionId = sessionId,
+    userId = userId,
+    deviceId = "",   // D2: device identity not stored in remote
+    timestamp = parseSupabaseInstant(capturedAt).toEpochMilli(),
+    verifiedAt = verifiedAt?.let { parseSupabaseInstant(it).toEpochMilli() } ?: 0L,
+    imagePath = "",  // D1: image is in Storage, not local disk
+    storagePath = storagePath,
+    inferenceModelVersion = inferenceModelVersion,
+    needsReannotation = needsReannotation,
+    isManual = isManual,
+    userNote = userNote,
+    status = SampleStatus.SYNCED.value,
+    predictionsJson = null,
+    imageWidth = null,
+    imageHeight = null,
+    deletedAt = deletedAt?.let { parseSupabaseInstant(it).toEpochMilli() },
+)
+
+internal fun DetectionRow.toEntity(): DetectionEntity = DetectionEntity(
+    detectionId = id,
+    sampleId = sampleId,
+    classLabel = classLabel,
+    confidence = confidence,
+    bboxX = bboxX,
+    bboxY = bboxY,
+    bboxW = bboxW,
+    bboxH = bboxH,
+    verdict = DetectionVerdict.fromValue(verdict).value,
+    expertClass = expertClass,
+)
+
+internal fun PredictionRow.toSamplePrediction(): SamplePrediction = SamplePrediction(
+    sampleId = sampleId,
+    ordinal = ordinal,
+    prediction = Prediction(
+        classLabel = classLabel,
+        confidence = confidence,
+        x = bboxX,
+        y = bboxY,
+        width = bboxW,
+        height = bboxH,
+    ),
+)
+
+internal fun FindingRow.toEntity(): SampleSpeciesFindingEntity = SampleSpeciesFindingEntity(
+    findingId = id,
+    sampleId = sampleId,
+    species = species,
+    stage = stage,
+    eggCount = eggCount,
+)

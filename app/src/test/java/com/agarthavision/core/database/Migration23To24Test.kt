@@ -3,8 +3,8 @@ package com.agarthavision.core.database
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import androidx.room.Room
+import com.agarthavision.data.local.entity.ColleagueEntity
 import com.google.gson.JsonParser
-import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -16,16 +16,15 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.io.File
 
 /**
- * `MIGRATION_23_24` (14zcqntj2uz, `0007_patient_reports.sql`): `reports.session_id` becomes
- * nullable and `patient_id`/`session_ids_json` are added, rebuilding the table since SQLite
- * cannot drop a NOT NULL constraint with `ALTER TABLE`.
+ * Room 23 → 24, the `colleagues` name cache (14zcqntjph6), run on a real file.
  *
- * Mirrors [Migration22To23Test]'s approach: build a version 23 database from the committed
- * `23.json`, seed it the way a medtech's phone would have, then let Room open it at version 24.
- * Room validates the migrated schema against the entities on open, so a clean open is itself
- * the schema check; the assertions after it check the data survived.
+ * Built the same way as [Migration22To23Test]: a version 23 database from the committed
+ * `23.json`, a phone's worth of rows in it, then Room opens it at version 24. **Room validates
+ * the migrated schema against the entities on open**, so a clean open proves the new table
+ * matches `ColleagueEntity`. The assertions after it check that nothing already there moved.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -51,7 +50,7 @@ class Migration23To24Test {
     }
 
     @Test
-    fun `migrating keeps an existing session report with null patient_id and session_ids_json`() = runTest {
+    fun `migrating adds an empty colleagues table and keeps every sample`() = runTest {
         createVersion23 { db ->
             db.execSQL(
                 "INSERT INTO patients (patient_id, lastname, firstname, sex, birthdate, " +
@@ -62,12 +61,11 @@ class Migration23To24Test {
                 "INSERT INTO sessions (session_id, user_id, patient_id, device_id, started_at) " +
                     "VALUES ('s1', 'u1', 'p1', 'd1', 1)",
             )
+            // A queued frame: the kind of row that exists nowhere but this phone.
             db.execSQL(
-                "INSERT INTO reports (report_id, session_id, user_id, report_type, generated_at, " +
-                    "total_samples, total_eggs_confirmed, positive_species_json, lpf_per_species_json, " +
-                    "csv_file_path, pdf_file_path, supabase_status, created_at) " +
-                    "VALUES ('r1', 's1', 'u1', 'session', 1, 3, 1, '[]', '{}', NULL, '/tmp/r1.pdf', " +
-                    "'pending', 1)",
+                "INSERT INTO samples (sample_id, session_id, user_id, device_id, timestamp, " +
+                    "image_path, status, inference_state) " +
+                    "VALUES ('queued', 's1', 'u1', 'd1', 1, '/tmp/queued.jpg', 'flagged', 'queued')",
             )
         }
 
@@ -76,67 +74,22 @@ class Migration23To24Test {
             .allowMainThreadQueries()
             .build()
         try {
-            val report = room.reportDao().getReportById("r1")!!
+            val queued = room.sampleDao().getSampleById("queued")
+            assertEquals("queued", queued?.inferenceState)
 
-            assertEquals("s1", report.sessionId)
-            assertNull(report.patientId)
-            assertNull(report.sessionIdsJson)
-            assertEquals("/tmp/r1.pdf", report.pdfFilePath)
-            assertEquals(3, report.totalSamples)
+            val colleagues = room.colleagueDao()
+            assertNull(colleagues.getFullName("u2"))
+            colleagues.upsertColleagues(listOf(ColleagueEntity(userId = "u2", fullName = null)))
+            // A profile with no name set is legal on the server, so it is legal here.
+            assertNull(colleagues.getFullName("u2"))
+            colleagues.upsertColleagues(listOf(ColleagueEntity(userId = "u2", fullName = "Maria Santos")))
+            assertEquals("Maria Santos", colleagues.getFullName("u2"))
         } finally {
             room.close()
         }
     }
 
-    @Test
-    fun `migrating drops the NOT NULL constraint on session_id, allowing a patient-scoped report`() = runTest {
-        createVersion23 { db ->
-            db.execSQL(
-                "INSERT INTO patients (patient_id, lastname, firstname, sex, birthdate, " +
-                    "psgc_barangay_code, created_by, created_at, updated_at) " +
-                    "VALUES ('p1', 'Cruz', 'Gerald', 'M', 0, '0102801001', 'u1', 1, 1)",
-            )
-        }
-
-        val room = Room.databaseBuilder(context, AgarthaDatabase::class.java, dbName)
-            .addMigrations(*ALL_MIGRATIONS)
-            .allowMainThreadQueries()
-            .build()
-        try {
-            room.reportDao().insertReport(
-                com.agarthavision.data.local.entity.ReportEntity(
-                    reportId = "r2",
-                    sessionId = null,
-                    patientId = "p1",
-                    sessionIdsJson = """["s1","s2"]""",
-                    userId = "u1",
-                    reportType = "patient",
-                    generatedAt = 2,
-                    totalSamples = 5,
-                    totalEggsConfirmed = 2,
-                    positiveSpeciesJson = "[]",
-                    lpfPerSpeciesJson = "{}",
-                    csvFilePath = null,
-                    pdfFilePath = "/tmp/r2.pdf",
-                    supabaseStatus = "pending",
-                    createdAt = 2,
-                ),
-            )
-
-            val report = room.reportDao().getReportById("r2")!!
-
-            assertNull(report.sessionId)
-            assertEquals("p1", report.patientId)
-            assertEquals("""["s1","s2"]""", report.sessionIdsJson)
-        } finally {
-            room.close()
-        }
-    }
-
-    /**
-     * Creates the database file exactly as version 23 of the app would have left it: every
-     * table and index from the committed `23.json`, Room's identity row, and `user_version` 23.
-     */
+    /** The database file exactly as version 23 of the app would have left it. */
     private fun createVersion23(seed: (SQLiteDatabase) -> Unit) {
         val schema = JsonParser.parseString(schemaFile(23).readText()).asJsonObject
             .getAsJsonObject("database")

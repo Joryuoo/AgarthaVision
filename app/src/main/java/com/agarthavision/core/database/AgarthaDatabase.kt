@@ -2,6 +2,8 @@ package com.agarthavision.core.database
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.agarthavision.data.local.dao.AccountWipeDao
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.CoverageDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
@@ -11,6 +13,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
+import com.agarthavision.data.local.entity.ColleagueEntity
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
@@ -120,14 +123,18 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * frames that exist nowhere else: captured, queued for a model output, and not yet verified, so
  * not yet synced. Wiping them on an app update would lose a medtech's work.
  *
+ * Version 24 adds `colleagues`, a Room-only cache of colleagues' names, so a colleague's
+ * record — read-only on this phone — can say whose it is offline (14zcqntjph6). Reached by
+ * [MIGRATION_23_24].
+ *
  * **Every bump from 22 onward ships a `Migration`, added to [ALL_MIGRATIONS].** The destructive
  * fallback in `DatabaseModule` stays only for installs older than 22, which no migration
  * covers and which predate the queue. Local schema history is exported under `app/schemas/`.
  *
- * Version 24 adds patient-scoped reports (14zcqntj2uz, `0007_patient_reports.sql`):
+ * Version 25 adds patient-scoped reports (14zcqntj2uz, `0015_patient_reports.sql`):
  * `reports.session_id` becomes nullable, and `reports.patient_id` /
  * `reports.session_ids_json` are added so one report can pool several sessions' findings for
- * a patient rather than describing exactly one session. `MIGRATION_23_24` rebuilds the table.
+ * a patient rather than describing exactly one session. `MIGRATION_24_25` rebuilds the table.
  */
 @Database(
     entities = [
@@ -140,10 +147,13 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         SampleSpeciesFindingEntity::class,
         PsgcBarangayEntity::class,
         SpeciesSuggestionEntity::class,
+        ColleagueEntity::class,
     ],
-    version = 24,
+    version = 25,
     exportSchema = true,
 )
+// One accessor per DAO is how Room exposes them; splitting the class is not an option.
+@Suppress("TooManyFunctions")
 abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleDao(): SampleDao
     abstract fun sessionDao(): SessionDao
@@ -156,4 +166,7 @@ abstract class AgarthaDatabase : RoomDatabase() {
     abstract fun sampleSpeciesFindingDao(): SampleSpeciesFindingDao
 
     abstract fun coverageDao(): CoverageDao
+
+    abstract fun accountWipeDao(): AccountWipeDao
+    abstract fun colleagueDao(): ColleagueDao
 }

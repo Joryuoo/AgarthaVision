@@ -21,6 +21,21 @@ as working.
 - **Sign-out** revokes the Supabase token *and* clears the cached identity, returning the
   device to the signed-out state. `domain/usecase/auth/SignOutUseCase.kt`,
   `data/repository/SupabaseAuthRepository.kt::signOut`.
+- **Change password** from Settings (14zcqntjph9): current password, new, confirm. Online only;
+  offline the screen says so and the button is disabled. The current password is checked first,
+  and a wrong one is refused on its field. This phone stays signed in and local data is
+  untouched; other devices need the new password. `ui/settings/ChangePasswordScreen.kt`,
+  `domain/usecase/auth/ChangePasswordUseCase.kt`,
+  `data/repository/SupabaseAuthRepository.kt::changePassword`.
+- **Signed out and wiped when the account is removed** (14zcqntjph8). The first sync pass after
+  the server refuses to renew the login (the login was deleted or banned, or its password was
+  changed elsewhere) removes everything synced from the phone: patients, sessions, samples,
+  reports, JPEGs and exported report files. Unsynced work stays and uploads after the medtech
+  signs back in. The login screen says why and how many unuploaded items are waiting. Offline, a
+  timeout, a 5xx or an ordinary expired token change nothing.
+  `domain/usecase/auth/EnforceAccountAccessUseCase.kt`,
+  `domain/usecase/auth/WipeLocalAccountDataUseCase.kt`,
+  `data/repository/SupabaseAccountAccessRepository.kt`.
 
 ### Patients
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
@@ -40,6 +55,16 @@ as working.
 - **Visibility via `patient_users`.** Access resolves through the `patient_users` join table rather
   than `created_by` (`PatientUserEntity.kt`, `0001_init.sql:117-122`). The `on_patient_created`
   trigger auto-links the creator server-side so they can read back the row immediately.
+- **Shared patient history.** A medtech assigned to a patient downloads and reads the patient's
+  whole history — colleagues' sessions, samples, frames and reports included — while authorship
+  stays with whoever recorded it (`0007_patient_shared_history.sql`,
+  `domain/repository/PatientAccessRepository.kt`). An assignment the server removes leaves the
+  patient list at the next pull (`FetchRemoteDataUseCase.kt::removeRevokedLinks`).
+- **Colleagues' records are read-only.** A colleague's session opens in Session Detail rather than
+  Capture, and a colleague's sample offers no edit, re-verify, add-species, redraw or delete; both
+  say "Recorded by …" (`ui/components/ReadOnlyAuthorNote.kt`,
+  `domain/model/RecordAuthorship.kt::isColleagueRecord`). Names come from the `colleagues` cache
+  (`0008_colleague_names.sql`, Room v24).
 - **No client delete.** Patient deletion is restricted to server administrators; no client path
   or DAO method allows deleting a patient.
 - **Non-cascading edits.** Editing a patient's details does not cascade to existing session
@@ -121,10 +146,7 @@ as working.
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
   `domain/usecase/records/GetRecordsUseCase.kt`).
 - **Session detail** with per-species counts and LPF density ranges (`ui/records/SessionDetailViewModel.kt`).
-- **LPF Density ranges (Direct Smear).** Replaces EPG. Reported per species as a `min..max` range
-  across all fields examined in a session (clean fields contribute 0), paired with a qualitative
-  descriptor (*rare / few / moderate / numerous*). Aggregated via `aggregateLpfPerSpecies`
-  (`domain/usecase/reports/LpfAggregation.kt`, `domain/usecase/reports/SessionEggCountUseCase.kt`).
+- **LPF Density ranges & Parasite Burden (Direct Smear).** Replaces WHO Kato-Katz EPG infectivity tiers (PB-16 / `4909f78`). WHO/DOH light/moderate/heavy intensity tables are defined strictly for Kato-Katz EPG and cannot be rescaled to Direct Smear LPF. The app reports LPF density as a `min..max` range across all fields examined in a session (clean fields contribute 0), paired with the conventional wet-mount descriptor (*rare / few / moderate / numerous*) and defensible estimated parasite burden levels (*Low / Moderate / High Burden*). Re-adding a clinical intensity tier requires an explicit cutoff table signed off clinically for Direct Smear LPF by name and date. Aggregated via `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`, `domain/model/LpfDensity.kt`).
 - **Detection count rule:** Counts non-false-positive detections
   (`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`: `d.verdict != 'false_positive'`).
 - **Sample detail with image fallback** — local file first, then 15-minute signed Supabase Storage URL.
@@ -162,11 +184,12 @@ as working.
 ### Shell and appearance
 - **Screens**: the `Screen` routes in `ui/navigation/AgarthaNavGraph.kt` — Login, Dashboard,
   Patients, PatientSessions, PatientForm, Capture, Reports, VerificationQueue, SessionDetail,
-  SampleDetail, SessionList, MyCoverage, Activity, Settings.
+  SampleDetail, SessionList, MyCoverage, Activity, Settings, ChangePassword.
 - **Bottom tab bar with four tabs**: Home, Patients, Reports, Settings
   (`ui/components/AgarthaBottomBar.kt::Tab`).
 - **Light/dark toggle** persisted in DataStore; Capture is exempt and stays dark (`ui/theme/Theme.kt`).
-- **Settings**: account details, sync queue status, manual sync triggers, theme toggle, sign-out.
+- **Settings**: account details, change password, sync queue status, manual sync triggers, theme
+  toggle, sign-out.
 
 ### Backend and inference service
 - **Postgres schema**: see [`file-tree.md`](file-tree.md#supabasemigrations) for the migration
@@ -186,7 +209,6 @@ as working.
 | `reports.supabase_status` in Postgres | `schema.ts` `Report.supabase_status` | Room-only column |
 | Admin dashboard / cross-session reporting | Product docs | `is_admin()` exists in SQL; no admin UI in the mobile client |
 | Roboflow hosted inference | `local.properties.example`, DTO comments | Dead path; self-hosted container is the single inference backend |
-| `observeConfirmedEggCountsSince`, `observeSessionsWithStats` | `DetectionDao`, `SessionDao` and their repositories | Declared and implemented, called by nothing. Both use the confirmed-only counting rule the live report does not |
 | `commitlint` / `lint-staged` | `commitlint.config.js`, `lint-staged.config.js` | Config files committed; `.husky/commit-msg` enforces format directly |
 
 ## Phase 2 — deferred by decision, not oversight

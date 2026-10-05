@@ -12,8 +12,8 @@ from PIL import Image
 from ultralytics import YOLO
 
 API_KEY = os.environ["INFERENCE_API_KEY"]
-WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/yolo26n-efficientnetv2b0.pt")
-MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolo26n-effv2b0-v1-cloud-fp32")
+WEIGHTS_PATH = os.environ.get("WEIGHTS_PATH", "weights/yolo26n-efficientnetv2s.pt")
+MODEL_VERSION = os.environ.get("MODEL_VERSION", "yolo26n-effv2s-v1-cloud-fp32")
 
 # Queue and micro-batching. See README.md, "Queue and batching", before changing these.
 # Most frames per forward pass.
@@ -51,7 +51,9 @@ def pick_devices() -> list[str]:
 
 def run_batch(model: YOLO, device: str, images: list[Image.Image]) -> list:
     # One forward pass for the whole batch. Ultralytics letterboxes each image itself.
-    return model.predict(images, device=device, verbose=False)
+    # agnostic_nms: an egg the model can't place would otherwise get one box per species it
+    # considered (14zcqntk1vd). The app's on-device decoder applies the same rule.
+    return model.predict(images, device=device, verbose=False, agnostic_nms=True)
 
 
 async def worker(device: str, model: YOLO, queue: asyncio.Queue) -> None:

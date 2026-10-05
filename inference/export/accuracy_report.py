@@ -3,8 +3,8 @@
 
     python inference/export/accuracy_report.py \
         --data ~/datasets/agarthavision/data.yaml \
-        --weights inference/weights/yolo26n-efficientnetv2b0.pt \
-        --models inference/export/out/yolo26n-effv2b0-v1-tflite-fp32.tflite inference/export/out/yolo26n-effv2b0-v1-tflite-int8.tflite
+        --weights inference/weights/yolo26n-efficientnetv2s.pt \
+        --models inference/export/out/yolo26n-effv2s-v1-tflite-fp32.tflite inference/export/out/yolo26n-effv2s-v1-tflite-int8.tflite
 
 This is the number that answers "is the mobile model good enough?" — parity_check.py only
 says how far the export drifted from the .pt checkpoint, which is not the same as being correct.
@@ -91,7 +91,7 @@ def evaluate(model_path: str, data_yaml: str, imgsz: int, split: str) -> dict | 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data", required=True, help="Path to data.yaml")
-    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2b0.pt")
+    parser.add_argument("--weights", default="inference/weights/yolo26n-efficientnetv2s.pt")
     parser.add_argument("--models", nargs="*", default=[], help="Exported models to compare")
     parser.add_argument("--manifest", help="A build's <model_version>.json manifest, for the class-order check")
     parser.add_argument("--imgsz", type=int, default=640)

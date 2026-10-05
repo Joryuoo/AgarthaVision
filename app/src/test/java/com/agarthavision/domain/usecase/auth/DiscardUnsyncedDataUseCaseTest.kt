@@ -27,7 +27,7 @@ import org.robolectric.annotation.Config
 /**
  * [DiscardUnsyncedDataUseCase] against a real in-memory [AgarthaDatabase], covering the
  * FK-safe deletion order now that a report can be patient-scoped (`patient_id` set,
- * `session_id` null) as well as session-scoped, per 14zcqntj2uz / `0007_patient_reports.sql`.
+ * `session_id` null) as well as session-scoped, per 14zcqntj2uz / `0015_patient_reports.sql`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -92,7 +92,7 @@ class DiscardUnsyncedDataUseCaseTest {
     /**
      * [DiscardUnsyncedDataUseCase] decides whether a patient is still "in use" via both
      * `sessionDao.countSessionsForPatient` and `reportDao.countReportsForPatient`. A patient
-     * report's only FK is to `patient_id` directly (`0007_patient_reports.sql`), so a patient
+     * report's only FK is to `patient_id` directly (`0015_patient_reports.sql`), so a patient
      * with zero sessions but an already-SYNCED patient report must still be treated as in use -
      * otherwise `ReportEntity`'s `patient_id` foreign key (`onDelete = CASCADE`) would silently
      * delete that already-synced report along with the patient.

@@ -9,12 +9,14 @@ import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.Patient
 import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.SessionWithStats
+import com.agarthavision.domain.model.isColleagueRecord
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
 import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
+import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
@@ -35,6 +37,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -76,6 +79,12 @@ data class SessionsState(
      * from [Patient.psgcBarangayCode], or null when the code is unknown.
      */
     val barangayAddress: String? = null,
+    /**
+     * The listed sessions a colleague recorded, by session id, with the colleague's name (null
+     * when none is known). Those rows are read-only (14zcqntjph6): they open Session Detail
+     * rather than Capture, and name their author. A session absent here is the medtech's own.
+     */
+    val colleagueAuthors: Map<String, String?> = emptyMap(),
     /** Non-null while the "generate patient report" sheet is open. */
     val reportSheet: PatientReportSheetState? = null,
 )
@@ -126,6 +135,7 @@ class SessionsViewModel @Inject constructor(
     private val getPatientReportCandidatesUseCase: GetPatientReportCandidatesUseCase,
     private val generatePatientReportUseCase: GeneratePatientReportUseCase,
     savedStateHandle: SavedStateHandle,
+    private val observeColleagueNamesUseCase: ObserveColleagueNamesUseCase,
 ) : ViewModel() {
 
     private val internalState = MutableStateFlow(SessionsState())
@@ -246,8 +256,10 @@ class SessionsViewModel @Inject constructor(
                 ),
                 internalState,
                 searchQuery,
-                syncInProgressFlow,
-            ) { sessions, counts, internal, rawSearch, syncing ->
+                combine(syncInProgressFlow, observeColleagueNamesUseCase()) { syncing, names ->
+                    syncing to names
+                },
+            ) { sessions, counts, internal, rawSearch, (syncing, colleagueNames) ->
                 // An empty, unfiltered result while a sync is running is "unknown" rather than
                 // settled-empty: the local DB may simply not have pulled the remote rows yet.
                 // A filtered/searched empty result is left alone - the medtech typed a query
@@ -265,6 +277,9 @@ class SessionsViewModel @Inject constructor(
                     unverifiedCount = counts.unverifiedCount,
                     canLoadMore = sessions.size >= inputs.limit,
                     activeSessionId = inputs.activeSessionId,
+                    colleagueAuthors = sessions
+                        .filter { isColleagueRecord(it.session.userId, inputs.userId) }
+                        .associate { row -> row.session.id to row.session.userId?.let(colleagueNames::get) },
                 )
             }
         }
@@ -435,6 +450,8 @@ class SessionsViewModel @Inject constructor(
             // there is no session to rename.
             val session = sessionRepository.getSessionById(sessionId) ?: return@launch
             if (session.patientId != patient) return@launch
+            // A colleague's label is theirs to change (14zcqntjph6); the server would refuse it.
+            if (isColleagueRecord(session.userId, userIdFlow.first())) return@launch
 
             if (sessionRepository.isSessionLabelTaken(
                     patientId = patient,

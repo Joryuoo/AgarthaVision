@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 ---
 
 # report
@@ -26,6 +26,10 @@ over.
    missing, if the session is not owned by the current user, or if the session's patient has
    never synced to this device (`GenerateSessionReportUseCase::invoke`). A session with no
    verified samples is refused too. Works offline when signed in and the patient is already local.
+   On a colleague's session Session Detail offers no generate button and names the author instead
+   (`SessionDetailContentState.readOnlyAuthor`, 14zcqntjph6); the reports that session already has
+   stay listed and open for the assigned medtech, files included (`RestoreReportFilesUseCase`
+   builds the path from the report's own `user_id`).
 2. **Gather.** Fetch the session's live verified samples (`deleted_at is null`), their detections,
    and findings (`domain/usecase/records/GenerateSessionReportUseCase.kt`).
 3. **Count.** `getConfirmedEggCountsForSession` groups by `COALESCE(expert_class, class_label)`,
@@ -35,9 +39,11 @@ over.
    (`data/local/dao/SampleSpeciesFindingDao.kt`).
 5. **Compute LPF Density.** Philippine medtechs use Direct Smear, so density is reported per 
    Low Power Field (LPF) via `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`).
-   - **Range:** the min and max egg count across fields (empty fields contribute 0). **Not a
-     mean** — `LpfDensity` holds only `min` and `max`, and the qualitative descriptor is read
-     off `max`.
+   - **Range Definition:** Per species, `min(eggCount) .. max(eggCount)` across all fields recorded in the session. A field with none of that species contributes `0`, NOT absence (dropping empty fields would systematically overstate every result). Zero-egg fields exist because zero-detection inference results are persisted (`86d4a6prb`).
+   - **Denominator:** Whatever the medtech recorded — no floor, no cap. Ten fields is typical practice, not an app-enforced rule.
+   - **Descriptor & Burden Level:** The qualitative descriptor comes from the highest single field (worst field), NOT the mean: `rare` (1–2), `few` (3–5), `moderate` (6–10), `numerous` (>10). A single heavy field must not be averaged away by clean ones (`LpfDensity.kt::LpfDescriptor`). Accompanied by an estimated parasite burden level (`LpfDensity.kt::ParasiteBurdenLevel`).
+   - **No EPG / Infectivity Tiers:** There is no WHO or DOH intensity table for Direct Smear, and WHO Kato-Katz EPG thresholds (Ascaris 5k/50k; Trichuris 1k/10k; Hookworm 2k/4k) cannot be rescaled to LPF counts (`4909f78`). Re-adding a clinical intensity tier requires an explicit cutoff table signed off clinically for Direct Smear LPF by name and date.
+   - **Wholly negative session:** A session with 0 eggs across all fields is a valid result (`0–0 LPF`) and generates a report stating no parasites found.
 6. **Normalise species** to canonical names.
 7. **Resolve the patient header.** Name, sex, age (computed at the same instant as the report's
    `generatedAt`), and the full address via `PsgcBarangay.fullAddress` (or the raw PSGC code when
@@ -120,7 +126,7 @@ an explicit session-id subset; both default to "every session").
 6. **Insert and sync.** Same shape as a session report: insert with `supabase_status = pending`,
    then push row and PDF bytes to `public.reports` / the `reports` Storage bucket
    (`data/supabase/SyncReportUseCase.kt`). RLS additionally requires the inserting user to hold
-   a `patient_users` link to the patient (`supabase/migrations/0007_patient_reports.sql`).
+   a `patient_users` link to the patient (`supabase/migrations/0015_patient_reports.sql`).
 
 Every generation mints a new row, exactly like a session report — regenerating for the same
 patient does not update or replace an earlier one.

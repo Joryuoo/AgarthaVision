@@ -3,6 +3,7 @@ package com.agarthavision.ui.records
 import com.agarthavision.R
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.LpfDescriptor
+import com.agarthavision.domain.model.ParasiteBurdenLevel
 
 /**
  * How an LPF range is written, in the one place both the screen and the PDF read it from.
@@ -17,6 +18,13 @@ val LpfDescriptor.labelRes: Int
         LpfDescriptor.FEW -> R.string.lpf_descriptor_few
         LpfDescriptor.MODERATE -> R.string.lpf_descriptor_moderate
         LpfDescriptor.NUMEROUS -> R.string.lpf_descriptor_numerous
+    }
+
+val ParasiteBurdenLevel.labelRes: Int
+    get() = when (this) {
+        ParasiteBurdenLevel.LOW -> R.string.parasite_burden_low
+        ParasiteBurdenLevel.MODERATE -> R.string.parasite_burden_moderate
+        ParasiteBurdenLevel.HIGH -> R.string.parasite_burden_high
     }
 
 /**

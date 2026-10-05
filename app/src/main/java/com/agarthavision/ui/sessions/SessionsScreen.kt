@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Checkbox
@@ -87,16 +88,22 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.MaterialTheme
 import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SheetInput
 import com.agarthavision.ui.components.SheetInputConfig
 import com.agarthavision.ui.components.SkeletonBox
+import com.agarthavision.ui.components.recordedByText
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
@@ -120,6 +127,7 @@ fun SessionsScreen(
     val coroutineScope = rememberCoroutineScope()
     val generatedSnackbarLabel = stringResource(R.string.patient_report_generated_snackbar)
     val openActionLabel = stringResource(R.string.reports_open_pdf)
+    var renamingSessionData by remember { mutableStateOf<SessionWithStats?>(null) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -199,76 +207,20 @@ fun SessionsScreen(
                 }
 
                 // Sessions List
-                when {
-                    state.isLoading -> Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        repeat(3) {
-                            SessionCardSkeleton()
-                        }
-                    }
-                    state.sessions.isEmpty() -> Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .padding(horizontal = 20.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        EmptyState(
-                            icon = Icons.Outlined.Inbox,
-                            title = stringResource(R.string.sessions_empty_title),
-                            body = stringResource(R.string.sessions_empty_body),
-                        )
-                    }
-                    else ->
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.sessions, key = { it.session.id }) { sessionData ->
-                            SessionCard(
-                                sessionData = sessionData,
-                                isActive = sessionData.session.id == state.activeSessionId,
-                                actions = SessionCardActions(
-                                    // Every row opens Capture. There is no second
-                                    // destination to branch to: a session does not end, so
-                                    // the medtech is always going back to the smear to
-                                    // capture or correct a frame. Session Detail is reached
-                                    // from Records, which is where reading a finished
-                                    // session belongs.
-                                    onClick = { viewModel.onResumeSession(sessionData.session.id) },
-                                    onVerifyClick = {
-                                        viewModel.onOpenVerificationQueue(sessionData.session.id)
-                                    },
-                                    onViewReportClick = {
-                                        val route = Screen.SessionDetail.createRoute(sessionData.session.id)
-                                        onNavigate(route)
-                                    },
-                                )
-                            )
-                        }
-                        if (state.canLoadMore) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = Spacing.md),
-                                    contentAlignment = Alignment.Center,
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = AgarthaTheme.colors.accent,
-                                        modifier = Modifier.size(24.dp),
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                SessionsScreenList(
+                    state = state,
+                    listState = listState,
+                    callbacks = SessionsListCallbacks(
+                        onNavigate = onNavigate,
+                        onResumeSession = viewModel::onResumeSession,
+                        onOpenVerificationQueue = viewModel::onOpenVerificationQueue,
+                        onRenameSession = { sessionData ->
+                            viewModel.onDismissError()
+                            renamingSessionData = sessionData
+                        },
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
 
                 // Sticky bottom CTA
                 Box(
@@ -345,6 +297,115 @@ fun SessionsScreen(
             onToggleSession = viewModel::onToggleReportSession,
             onGenerate = viewModel::onGeneratePatientReport,
         )
+    }
+    renamingSessionData?.let { target ->
+        val currentLabel = state.sessions.firstOrNull { it.session.id == target.session.id }?.session?.label
+        LaunchedEffect(currentLabel) {
+            if (currentLabel != null && currentLabel != target.session.label) {
+                viewModel.onDismissError()
+                renamingSessionData = null
+            }
+        }
+        RenameSessionSheet(
+            initialLabel = target.session.label.orEmpty(),
+            state = state,
+            onClearError = viewModel::onDismissError,
+            onDismiss = {
+                viewModel.onDismissError()
+                renamingSessionData = null
+            },
+            onSubmit = { newLabel ->
+                viewModel.onRenameSession(target.session.id, newLabel)
+            },
+        )
+    }
+}
+
+private data class SessionsListCallbacks(
+    val onNavigate: (String) -> Unit,
+    val onResumeSession: (String) -> Unit,
+    val onOpenVerificationQueue: (String) -> Unit,
+    val onRenameSession: (SessionWithStats) -> Unit,
+)
+
+@Composable
+private fun SessionsScreenList(
+    state: SessionsState,
+    listState: LazyListState,
+    callbacks: SessionsListCallbacks,
+    modifier: Modifier = Modifier,
+) {
+    when {
+        state.isLoading -> Column(
+            modifier = modifier
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            repeat(3) {
+                SessionCardSkeleton()
+            }
+        }
+        state.sessions.isEmpty() -> Box(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            EmptyState(
+                icon = Icons.Outlined.Inbox,
+                title = stringResource(R.string.sessions_empty_title),
+                body = stringResource(R.string.sessions_empty_body),
+            )
+        }
+        else -> LazyColumn(
+            state = listState,
+            modifier = modifier,
+            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp, start = 20.dp, end = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            items(state.sessions, key = { it.session.id }) { sessionData ->
+                val sessionId = sessionData.session.id
+                val isColleagueSession = sessionId in state.colleagueAuthors
+                SessionCard(
+                    sessionData = sessionData,
+                    isActive = sessionId == state.activeSessionId,
+                    colleagueAuthor = state.colleagueAuthors[sessionId],
+                    isColleagueSession = isColleagueSession,
+                    actions = SessionCardActions(
+                        onClick = sessionRowClick(
+                            isColleagueSession = isColleagueSession,
+                            openDetail = { callbacks.onNavigate(Screen.SessionDetail.createRoute(sessionId)) },
+                            resume = { callbacks.onResumeSession(sessionId) },
+                        ),
+                        onVerifyClick = {
+                            callbacks.onOpenVerificationQueue(sessionData.session.id)
+                        },
+                        onViewReportClick = {
+                            val route = Screen.SessionDetail.createRoute(sessionData.session.id)
+                            callbacks.onNavigate(route)
+                        },
+                        onRenameClick = {
+                            callbacks.onRenameSession(sessionData)
+                        },
+                    ),
+                )
+            }
+            if (state.canLoadMore) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = Spacing.md),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CircularProgressIndicator(
+                            color = AgarthaTheme.colors.accent,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -516,181 +577,6 @@ private fun PatientPreviewCard(
             )
         }
     }
-}
-
-/** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
-private data class SessionCardActions(
-    val onClick: () -> Unit,
-    val onVerifyClick: () -> Unit = {},
-    val onViewReportClick: () -> Unit = {},
-)
-
-internal enum class SessionQueueBadge { NO_ITEMS, ALL_VERIFIED, PENDING }
-
-internal fun sessionQueueBadge(totalSamples: Int, unverified: Int): SessionQueueBadge = when {
-    totalSamples == 0 -> SessionQueueBadge.NO_ITEMS
-    unverified == 0 -> SessionQueueBadge.ALL_VERIFIED
-    else -> SessionQueueBadge.PENDING
-}
-
-/** Loading placeholder for [SessionCard], modeled on RecordsScreen's `ReportCardSkeleton`. */
-@Composable
-private fun SessionCardSkeleton(modifier: Modifier = Modifier) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(12.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp))
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            SkeletonBox(modifier = Modifier.width(140.dp).height(19.dp))
-            Spacer(modifier = Modifier.height(6.dp))
-            SkeletonBox(modifier = Modifier.width(100.dp).height(13.dp))
-        }
-        SkeletonBox(modifier = Modifier.width(48.dp).height(24.dp))
-    }
-}
-
-@Composable
-private fun SessionCard(
-    sessionData: SessionWithStats,
-    isActive: Boolean,
-    actions: SessionCardActions
-) {
-    val colors = AgarthaTheme.colors
-    val session = sessionData.session
-    val date = formatDate(session.startedAt)
-    val time = formatTime(session.startedAt)
-    // Date and time only. The note that used to tail this line was an ad-hoc patient
-    // identifier; the patient is a record of its own now and the column is gone.
-    val meta = "$date · $time"
-
-    val (bgColor, borderColor) = if (isActive) {
-        colors.accentTint2 to colors.accentTint
-    } else {
-        colors.surface to colors.border
-    }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { actions.onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = session.label ?: "Session ${session.id.take(8)}",
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.accent,
-                letterSpacing = (-0.015).em
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = meta,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.accent.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (isActive) {
-                // Frames still to review, repeats excluded — the same count that blocks
-                // ending the session, so this row and that dialog always agree.
-                val unverified = sessionData.unverifiedSamples
-                val queueBadge = sessionQueueBadge(sessionData.totalSamples, unverified)
-                val hasPending = unverified > 0
-                val (badgeBg, badgeTextColor) = if (hasPending) {
-                    colors.accentTint to colors.onAccentTint
-                } else {
-                    colors.surfaceMuted to colors.textSecondary
-                }
-                Row(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(badgeBg)
-                        .then(
-                            when (queueBadge) {
-                                SessionQueueBadge.PENDING -> Modifier.clickable { actions.onVerifyClick() }
-                                SessionQueueBadge.ALL_VERIFIED -> Modifier.clickable { actions.onViewReportClick() }
-                                SessionQueueBadge.NO_ITEMS -> Modifier
-                            }
-                        )
-                        .padding(horizontal = 9.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
-                ) {
-                    if (hasPending) LiveDot()
-                    Text(
-                        text = when (queueBadge) {
-                            SessionQueueBadge.NO_ITEMS ->
-                                stringResource(R.string.session_no_items_yet)
-                            SessionQueueBadge.ALL_VERIFIED ->
-                                stringResource(R.string.session_all_verified)
-                            SessionQueueBadge.PENDING ->
-                                pluralStringResource(
-                                    R.plurals.session_unverified_count,
-                                    unverified,
-                                    unverified,
-                                )
-                        },
-                        color = badgeTextColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-
-            } else {
-                val eggs = sessionData.totalEggs
-                val badgeBg = if (eggs > 0) colors.successTint else colors.surfaceMuted
-                val badgeColor = if (eggs > 0) colors.successText else colors.textSecondary
-                Box(
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .background(badgeBg, CircleShape)
-                        .clickable { actions.onViewReportClick() }
-                        .padding(horizontal = 9.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        pluralStringResource(R.plurals.sessions_eggs_count, eggs, eggs),
-                        color = badgeColor,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun LiveDot() {
-    val infiniteTransition = rememberInfiniteTransition()
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0.4f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        )
-    )
-    Box(
-        modifier = Modifier
-            .size(6.dp)
-            .background(AgarthaTheme.colors.onAccentTint.copy(alpha = alpha), CircleShape)
-    )
 }
 
 /**
@@ -914,10 +800,3 @@ private fun NewSessionSheet(
         }
     }
 }
-
-internal fun formatDate(millis: Long): String =
-    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
-
-private fun formatTime(millis: Long): String =
-    Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
-

@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import com.agarthavision.ui.components.ReadOnlyAuthorNote
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Download
@@ -69,6 +70,10 @@ internal fun ReportsSection(
         // A report covers verified samples only, so with none there is nothing to report on
         // (86d4bzm9k). A sample verified as negative still counts: that is a result.
         val canGenerate = state.session.verifiedSamples.isNotEmpty()
+        val readOnlyAuthor = state.readOnlyAuthor
+        if (readOnlyAuthor != null) {
+            ReadOnlyAuthorNote(authorName = readOnlyAuthor.name)
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             // The subtitle can now be a full sentence; weight lets it wrap instead of pushing
@@ -85,6 +90,10 @@ internal fun ReportsSection(
                 )
                 Text(
                     text = when {
+                        readOnlyAuthor != null && state.totalReports == 0 ->
+                            stringResource(R.string.report_empty)
+                        readOnlyAuthor != null ->
+                            stringResource(R.string.report_generated_count, state.totalReports)
                         !canGenerate -> stringResource(R.string.report_needs_verified_sample)
                         state.totalReports == 0 -> stringResource(R.string.report_empty)
                         else -> stringResource(R.string.report_generated_count, state.totalReports)
@@ -96,11 +105,14 @@ internal fun ReportsSection(
             // Icon rather than a label: the text pill fought the subtitle for width and
             // lost its shape. The app bar's duplicate download button is gone, so this is
             // now the only way to generate from here.
-            GenerateReportButton(
-                isGenerating = state.isGenerating,
-                enabled = canGenerate,
-                onClick = state.onGenerate,
-            )
+            // Not on a colleague's session: its author generates its reports (14zcqntjph6).
+            if (readOnlyAuthor == null) {
+                GenerateReportButton(
+                    isGenerating = state.isGenerating,
+                    enabled = canGenerate,
+                    onClick = state.onGenerate,
+                )
+            }
         }
 
         state.reports.forEach { report ->

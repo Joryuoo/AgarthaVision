@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/SampleEntity.kt
 ---
 
@@ -62,7 +62,7 @@ property of `SampleEntity`:
 | `is_edited` | Room-only. Set when findings change after verification; drives the "edited" mark on Session Detail and Sample Detail |
 | `inference_state` | Room-only. `queued` / `in_inference` / `ready` / `manual`. **Read it through `SampleMapper.kt::effectiveInferenceState`**, never raw: `is_manual` wins, because rows from before v23 and rows pulled from Supabase carry the `ready` default. See [`infer`](../processes/infer.md) |
 | `inference_attempts` | Room-only. Failed passes of both engines; at the queue's limit the frame becomes manual. On the row so a crash loop cannot reset it |
-| `deleted_at` | Epoch millis. Null means live. Pulled from Supabase; **not pushed** — see below |
+| `deleted_at` | Epoch millis. Null means live. Pushed and pulled during sync |
 
 **The tombstone.** A verified sample is never hard-deleted — C8, and `detections` doubles as the
 retraining corpus. But a medtech who captured the same egg twice needs the duplicate gone from
@@ -72,12 +72,10 @@ bucket still has no DELETE policy (`0001_init.sql:538-540`). Unverified frames a
 they are hard-deleted on-device, which is C8's existing local exception
 (`DeleteQueueItemsUseCase` decides which of the two a delete is).
 
-**Drift, code wins: the tombstone is local-only today.** `SyncSampleUseCase::invoke` reads the
-sample *including deleted* so that "a tombstoned sample still has to push its tombstone", but
-`SampleRemoteDataSource.kt::SampleInsertRow` has no `deleted_at` field, so the upsert never
-carries it. A tombstoned sample disappears on the device that tombstoned it and stays live in
-Postgres and on every other device. A pull does honour a remote `deleted_at`
-(`SampleRemoteDataSource.kt::SampleRow`).
+**Push and pull sync the tombstone.** `SyncSampleUseCase::invoke` reads the sample *including deleted*
+and `SampleRemoteDataSource.kt::SampleInsertRow` carries `deleted_at` in the upsert payload, setting
+`deleted_at` on Supabase Postgres. Other devices pulling the account receive the `deleted_at`
+timestamp and soft-delete the row locally.
 
 **The rule this creates.** *Every* query that lists or counts samples must filter
 `deleted_at is null`. Miss one and a deleted duplicate reappears in a report. This is enforced
@@ -97,6 +95,13 @@ from it.
 ## Connected to
 
 - **Owned by** [`Session`](Session.md) and, remotely, [`Profile`](Profile.md).
+- **Read by** the author and — since `0007_patient_shared_history.sql:161-163` —
+  every medtech assigned to the patient. A super admin reads `samples_deidentified` instead,
+  without `user_note` (`0012_deidentified_reads.sql:74`,
+  `0013_super_admin_reads_deidentified.sql:53`); detections, findings and predictions stay
+  readable to them (`:80-108`). Locally, Session Detail's list and the report read a colleague's samples on
+  an assigned patient (`SampleDao::observeSamplesForSession`, `GetSessionSamplesUseCase`,
+  `GetSampleDetailUseCase`); the push queue and the flagged queue stay author-only.
 - **Owns** [`Prediction`](Prediction.md), 1 → many, CASCADE
   (`supabase/migrations/0004_predictions.sql:43`). Only a model frame has any.
 - **Owns** [`Detection`](Detection.md), 1 → many, CASCADE

@@ -31,4 +31,14 @@ interface ReportFileStore {
      *   report whose file is gone is exactly the case the storage round-trip exists for.
      */
     suspend fun readBytes(path: String): ByteArray?
+
+    /**
+     * Deletes a file previously written by [writeCsv] or [writePdf], either shape.
+     *
+     * Only for an account the server no longer accepts (14zcqntjph8): a report names its
+     * patient, and these files sit in shared storage where any file manager can open them.
+     *
+     * @return true when a file was removed; false when it was already gone or could not be.
+     */
+    suspend fun delete(path: String): Boolean
 }

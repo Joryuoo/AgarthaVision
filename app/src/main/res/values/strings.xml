@@ -16,6 +16,12 @@
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>
+    <string name="login_signed_out_by_server_title">You were signed out</string>
+    <string name="login_signed_out_by_server_body">The server ended this phone\'s sign-in, so uploaded records were removed from it. They come back when you sign in. If your password was changed, sign in with the new one. If you can\'t sign in, ask your laboratory\'s admin.</string>
+    <plurals name="login_signed_out_unsynced_kept">
+        <item quantity="one">%d item that hadn\'t uploaded is still on this phone. It uploads after you sign back in.</item>
+        <item quantity="other">%d items that hadn\'t uploaded are still on this phone. They upload after you sign back in.</item>
+    </plurals>
 
     <!-- Dashboard account / sync banner (ADR-007 offline access) -->
     <string name="dashboard_signed_out">Not signed in</string>
@@ -209,7 +215,7 @@
     <string name="verify_discard_changes_title">Discard changes?</string>
     <string name="verify_discard_changes_body">You have unsaved changes that will be lost if you leave without saving.</string>
     <string name="verify_discard_changes_confirm">Discard</string>
-    <string name="verify_discard_changes_keep">Keep</string>
+    <string name="verify_discard_changes_keep">Keep editing</string>
     <string name="verify_submit">Submit</string>
     <string name="verify_cancel">Cancel</string>
     <string name="verify_submitting">Submitting…</string>
@@ -492,6 +498,10 @@
     <string name="lpf_descriptor_few">few</string>
     <string name="lpf_descriptor_moderate">moderate</string>
     <string name="lpf_descriptor_numerous">numerous</string>
+    <!-- Parasite Burden Level (86d4bzmah) -->
+    <string name="parasite_burden_low">Low Burden</string>
+    <string name="parasite_burden_moderate">Moderate Burden</string>
+    <string name="parasite_burden_high">High Burden</string>
     <string name="session_detail_eggs_total_label">Total eggs: %1$d</string>
     <string name="session_detail_eggs_empty">No confirmed eggs yet</string>
     <plurals name="session_detail_no_confirmed_eggs_fields">
@@ -709,6 +719,29 @@
     <string name="settings_sign_out_warning_items">%1$d items haven\’t uploaded yet. Signing out now would discard them, so sync first.</string>
     <string name="settings_sign_out_warning_one">1 item hasn\’t uploaded yet. Signing out now would discard it, so sync first.</string>
     <string name="settings_sign_out_warning_none">All items are synced. Signing out is safe.</string>
+    <!-- Change password (14zcqntjph9) -->
+    <string name="settings_change_password">Change password</string>
+    <string name="settings_change_password_offline">Needs an internet connection</string>
+    <string name="change_password_title">Change password</string>
+    <string name="change_password_intro">Enter your current password, then the new one twice. You stay signed in on this phone. Other phones and the Admin Console will ask for the new password.</string>
+    <string name="change_password_offline_notice">You\'re offline. Changing your password needs an internet connection.</string>
+    <string name="change_password_current_label">Current password</string>
+    <string name="change_password_new_label">New password</string>
+    <string name="change_password_confirm_label">Confirm new password</string>
+    <string name="change_password_show">Show password</string>
+    <string name="change_password_hide">Hide password</string>
+    <string name="change_password_submit">Change password</string>
+    <string name="change_password_error_required">Required.</string>
+    <string name="change_password_error_wrong_current">That isn\'t your current password.</string>
+    <string name="change_password_error_mismatch">The new passwords don\'t match.</string>
+    <string name="change_password_error_same">Choose a password different from your current one.</string>
+    <string name="change_password_error_weak">Choose a stronger password.</string>
+    <string name="change_password_failed_offline">Couldn\'t reach the server, so your password was not changed. Check your connection and try again.</string>
+    <string name="change_password_failed_unconfirmed">The connection dropped before the server answered, so your password may already be changed. Once you\'re back online, try again with your new password as the current one if your old one is refused.</string>
+    <string name="change_password_failed">Your password was not changed. Try again in a moment.</string>
+    <string name="change_password_done_title">Password changed</string>
+    <string name="change_password_done_body">Use your new password the next time you sign in, on this phone, another phone or the Admin Console. Your unsynced work is untouched.</string>
+    <string name="change_password_done">Done</string>
     <string name="settings_about_version">Version</string>
     <string name="settings_about_environment">Environment</string>
     <string name="settings_about_environment_dev">Development</string>
@@ -726,6 +759,10 @@
     <string name="session_label_placeholder">GARCIAM-S01</string>
     <string name="session_label_helper">Generated from the patient\'s last name, first initial, and smear count (e.g. GARCIAM-S01). Edit it if your lab labels smears differently — but each label must be unique for this patient.</string>
     <string name="session_duplicate_label">A smear with this label already exists for this patient.</string>
+    <string name="sessions_rename_action">Rename</string>
+    <string name="session_rename_sheet_title">Rename session</string>
+    <string name="session_rename_sheet_subtitle">Edit the label for this smear</string>
+    <string name="session_rename_save">Save</string>
     <string name="sessions_empty_title">No sessions yet</string>
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Patient report sheet (14zcqntj2uz) -->
@@ -740,6 +777,17 @@
     <string name="patient_report_generated_snackbar">Patient report saved to Documents/AgarthaVision</string>
     <!-- Verify Queue empty / completion states (86d4apzf5 / 86d4ayefd) -->
     <string name="verify_queue_title">Verify Queue</string>
+    <!-- Onboarding (86d4amrbk) -->
+    <string name="onboarding_back">Back</string>
+    <string name="onboarding_skip">Skip</string>
+    <string name="onboarding_next">Next</string>
+    <string name="onboarding_finish">Get Started</string>
+    <string name="onboarding_step1_title">Capture Microscopic Fields</string>
+    <string name="onboarding_step1_body">Attach your smartphone to a microscope lens and capture high-resolution fields offline without needing an internet connection.</string>
+    <string name="onboarding_step2_title">Detect &amp; Verify Eggs</string>
+    <string name="onboarding_step2_body">AI identifies parasite species automatically. Review, edit, and confirm detections in the verification queue before finalizing.</string>
+    <string name="onboarding_step3_title">Report &amp; Parasite Burden</string>
+    <string name="onboarding_step3_body">Export standardized laboratory reports with Low Power Field (LPF) density ranges and estimated parasite burden levels.</string>
     <plurals name="verify_queue_subtitle">
         <item quantity="one">%1$d awaiting review</item>
         <item quantity="other">%1$d awaiting review</item>
@@ -768,4 +816,8 @@
         <item quantity="other">%1$d years old</item>
     </plurals>
     <string name="patient_preview_age_sex">%1$s | %2$s</string>
+    <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
+    <string name="record_recorded_by">Recorded by %1$s</string>
+    <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
+    <string name="record_read_only_body">Only the medtech who recorded it can change it.</string>
 </resources>

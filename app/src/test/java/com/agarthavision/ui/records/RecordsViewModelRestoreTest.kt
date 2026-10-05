@@ -88,6 +88,7 @@ class RecordsViewModelRestoreTest {
                 override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String =
                     WRITTEN_PDF
                 override suspend fun readBytes(path: String): ByteArray? = null
+                override suspend fun delete(path: String): Boolean = false
             }
             val restoreUseCase = RestoreReportFilesUseCase(reportDao, remote, fileStore)
             val vm = viewModelWith(restoreUseCase)

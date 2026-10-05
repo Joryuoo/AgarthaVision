@@ -21,10 +21,11 @@ import kotlinx.serialization.Serializable
  * this data source is the translation boundary between those shapes, as
  * [SessionRemoteDataSource] is for sessions.
  *
- * **Reads carry no `user_id` filter.** `patients_select_linked` and
- * `patient_users_select_own` in `0001_init.sql` already scope every row to the
- * authenticated caller. Re-applying the rule here would give the client a second
- * definition of visibility that could drift from the policy.
+ * **Reads are scoped by the caller, not left to RLS** (14zcqntjt3p). The phone holds the
+ * patients linked to the signed-in user and nothing else, whatever their role lets them read
+ * on the server: an org admin's policies (console `admin/0002`) return a whole laboratory, and
+ * a super admin's `is_admin()` every patient link. So the links are filtered to the user, and
+ * patients are fetched by the ids those links name. RLS stays the server's second line.
  */
 class PatientRemoteDataSource @Inject constructor(
     private val supabaseProvider: dagger.Lazy<SupabaseClient>,
@@ -86,25 +87,38 @@ class PatientRemoteDataSource @Inject constructor(
     // ── Pull (read from server) ───────────────────────────────────────────────
 
     /**
-     * Fetches a page of patients the authenticated caller can see, ordered by creation time ascending.
-     * Inclusive range: rows [offset, offset+limit-1].
+     * Fetches the patients with the given [patientIds], the ones the caller's own links name.
+     * Callers chunk the ids and must guard against an empty list — isIn with no values is
+     * undefined. One row per id at most, so a chunk needs no paging.
      */
-    suspend fun fetchPatients(offset: Long = 0L, limit: Long = 500L): List<PatientEntity> =
+    suspend fun fetchPatients(patientIds: List<String>): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
-            order("created_at", Order.ASCENDING)
-            range(offset, offset + limit - 1)
+            filter { isIn("id", patientIds) }
         }.decodeList<PatientRow>().map { it.toEntity() }
 
     /**
-     * The caller's own `patient_users` rows.
+     * The `patient_users` rows of [userId], the signed-in user.
+     *
+     * Filtered here rather than by `patient_users_select_own`, which also hands an admin every
+     * link in the project and an org admin every link in their laboratory (14zcqntjt3p).
      *
      * Pulled alongside the patients themselves because `PatientDao` resolves visibility
      * through this join: a patient row with no matching link is present on the device and
      * invisible to every query that reads it.
      * Inclusive range: rows [offset, offset+limit-1].
+     *
+     * Ordered by patient id so the pages are stable. The pull now reads the complete set to
+     * remove assignments the server no longer holds, and an unordered range can repeat one row
+     * and skip another between pages, which would read a live assignment as a removed one.
      */
-    suspend fun fetchPatientLinks(offset: Long = 0L, limit: Long = 500L): List<PatientUserEntity> =
+    suspend fun fetchPatientLinks(
+        userId: String,
+        offset: Long = 0L,
+        limit: Long = 500L,
+    ): List<PatientUserEntity> =
         supabase.postgrest[PATIENT_USERS_TABLE].select {
+            filter { eq("user_id", userId) }
+            order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
         }.decodeList<PatientUserRow>()
             .map { it.toEntity() }
@@ -130,52 +144,6 @@ class PatientRemoteDataSource @Inject constructor(
         updatedAt = Instant.ofEpochMilli(updatedAt).toString(),
     )
 
-    @Serializable
-    private data class PatientRow(
-        @SerialName("id") val id: String,
-        @SerialName("lastname") val lastname: String,
-        @SerialName("firstname") val firstname: String,
-        @SerialName("middle_name") val middleName: String? = null,
-        @SerialName("sex") val sex: String,
-        @SerialName("birthdate") val birthdate: String,
-        @SerialName("psgc_barangay_code") val psgcBarangayCode: String,
-        @SerialName("created_by") val createdBy: String,
-        @SerialName("created_at") val createdAt: String,
-        @SerialName("updated_at") val updatedAt: String,
-    )
-
-    /**
-     * A row pulled from the server is by definition already there, so it lands as
-     * `synced`. The E4 guard in `FetchRemoteDataUseCase` is what stops this overwriting a
-     * local row still carrying unsynced work.
-     */
-    private fun PatientRow.toEntity(): PatientEntity = PatientEntity(
-        patientId = id,
-        lastname = lastname,
-        firstname = firstname,
-        middleName = middleName,
-        sex = sex,
-        birthdate = LocalDate.parse(birthdate).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
-        psgcBarangayCode = psgcBarangayCode,
-        createdBy = createdBy,
-        createdAt = parseSupabaseInstant(createdAt).toEpochMilli(),
-        updatedAt = parseSupabaseInstant(updatedAt).toEpochMilli(),
-        supabaseStatus = PatientSyncStatus.SYNCED.value,
-    )
-
-    @Serializable
-    private data class PatientUserRow(
-        @SerialName("patient_id") val patientId: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("linked_at") val linkedAt: String,
-    )
-
-    private fun PatientUserRow.toEntity(): PatientUserEntity = PatientUserEntity(
-        patientId = patientId,
-        userId = userId,
-        linkedAt = parseSupabaseInstant(linkedAt).toEpochMilli(),
-    )
-
     private companion object {
         const val PATIENTS_TABLE = "patients"
         const val PATIENT_USERS_TABLE = "patient_users"
@@ -184,3 +152,49 @@ class PatientRemoteDataSource @Inject constructor(
         const val UNIQUE_VIOLATION = "23505"
     }
 }
+
+@Serializable
+internal data class PatientRow(
+    @SerialName("id") val id: String,
+    @SerialName("lastname") val lastname: String,
+    @SerialName("firstname") val firstname: String,
+    @SerialName("middle_name") val middleName: String? = null,
+    @SerialName("sex") val sex: String,
+    @SerialName("birthdate") val birthdate: String,
+    @SerialName("psgc_barangay_code") val psgcBarangayCode: String,
+    @SerialName("created_by") val createdBy: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/**
+ * A row pulled from the server is by definition already there, so it lands as
+ * `synced`. The E4 guard in `FetchRemoteDataUseCase` is what stops this overwriting a
+ * local row still carrying unsynced work.
+ */
+internal fun PatientRow.toEntity(): PatientEntity = PatientEntity(
+    patientId = id,
+    lastname = lastname,
+    firstname = firstname,
+    middleName = middleName,
+    sex = sex,
+    birthdate = LocalDate.parse(birthdate).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
+    psgcBarangayCode = psgcBarangayCode,
+    createdBy = createdBy,
+    createdAt = parseSupabaseInstant(createdAt).toEpochMilli(),
+    updatedAt = parseSupabaseInstant(updatedAt).toEpochMilli(),
+    supabaseStatus = PatientSyncStatus.SYNCED.value,
+)
+
+@Serializable
+internal data class PatientUserRow(
+    @SerialName("patient_id") val patientId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("linked_at") val linkedAt: String,
+)
+
+internal fun PatientUserRow.toEntity(): PatientUserEntity = PatientUserEntity(
+    patientId = patientId,
+    userId = userId,
+    linkedAt = parseSupabaseInstant(linkedAt).toEpochMilli(),
+)

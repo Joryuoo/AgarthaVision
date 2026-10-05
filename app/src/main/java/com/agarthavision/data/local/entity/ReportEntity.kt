@@ -10,8 +10,8 @@ import androidx.room.PrimaryKey
  * Room entity for a persisted report, scoped to either one session or one patient.
  *
  * Mirrors the Supabase `reports` table from migration `0001_init.sql` (consolidated), with
- * `patient_id` and `session_ids_json` added by `0007_patient_reports.sql` for patient-scoped
- * reports (Room version 24). A session report has `sessionId` set and `patientId`/
+ * `patient_id` and `session_ids_json` added by `0015_patient_reports.sql` for patient-scoped
+ * reports (Room version 25). A session report has `sessionId` set and `patientId`/
  * `sessionIdsJson` null; a patient report has `patientId` set and `sessionId` null, with
  * `sessionIdsJson` recording the sessions pooled into it.
  *

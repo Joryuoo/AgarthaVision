@@ -1,8 +1,8 @@
 ---
 type: object
 status: verified
-verified: 2026-09-29
-commit: feaa4803
+verified: 2026-09-30
+commit: b64271d2
 entity: app/src/main/java/com/agarthavision/data/local/entity/ReportEntity.kt
 ---
 
@@ -17,7 +17,7 @@ report ever writes one.
 **Two scopes, one table.** A row is either a **session report** (`session_id` set, `patient_id`
 null) or a **patient report** (`patient_id` set, `session_id` null, `session_ids` naming every
 session pooled into it) — `reports_scope_check` enforces exactly one shape, never both or
-neither (`supabase/migrations/0007_patient_reports.sql`). A patient report's aggregates are
+neither (`supabase/migrations/0015_patient_reports.sql`). A patient report's aggregates are
 computed by pooling every included session's findings into one `aggregateLpfPerSpecies` call,
 not by summing each session's own range; see [report](../processes/report.md#patient-report).
 
@@ -50,7 +50,7 @@ bytes must not cost the metadata too.
 
 ## Shape
 
-**Postgres** (`supabase/migrations/0001_init.sql:309-322`, widened by `0007_patient_reports.sql`)
+**Postgres** (`supabase/migrations/0001_init.sql:309-322`, widened by `0015_patient_reports.sql`)
 
 | Field | Constraint |
 |---|---|
@@ -74,7 +74,7 @@ bytes must not cost the metadata too.
 Indexes on `(session_id, generated_at desc)`, `(user_id, generated_at desc)`, and
 `(patient_id, generated_at desc) where patient_id is not null`.
 
-**Room** (`ReportEntity`, version 24 — `MIGRATION_23_24`)
+**Room** (`ReportEntity`, version 25 — `MIGRATION_24_25`)
 
 PK column is `report_id`. Differences:
 
@@ -91,6 +91,12 @@ PK column is `report_id`. Differences:
 
 ## Connected to
 
+- **Read by** the author, an admin, and — since `0007_patient_shared_history.sql:177-179` —
+  every medtech assigned to the patient. An admin reads the row but not the file, which prints
+  the patient's name (`0013_super_admin_reads_deidentified.sql:113`). This reverses `0003_reports_bucket.sql`'s "not
+  patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
+  (`ReportRemoteDataSource.kt::fetchReportsForSessions`, beside `::fetchOwnReports`) and
+  Session Detail lists them (`ReportDao::observeReportsForSession`).
 - **Owned by** [`Session`](Session.md) (session reports) or [`Patient`](Patient.md) (patient
   reports, 0007) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,

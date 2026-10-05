@@ -13,6 +13,7 @@ import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.util.MainDispatcherRule
@@ -59,8 +60,6 @@ class SessionPickerViewModelTest {
             ),
         )
             .thenReturn(countsFlow)
-        // Keep the old stub so any residual call doesn't NPE (defensive).
-        whenever(it.observeSessionsWithStats(any(), any())).thenReturn(sessionsFlow)
         // Unstubbed, this suspend fun returns null through Mockito's default answer, which
         // NPEs when unboxed to Boolean and silently kills onCreateSession's coroutine.
         it.stub {
@@ -105,6 +104,7 @@ class SessionPickerViewModelTest {
         observeSyncInProgressUseCase = observeSyncInProgressUseCase,
         getPatientReportCandidatesUseCase = mock(),
         generatePatientReportUseCase = mock(),
+        observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),
         ),
@@ -241,3 +241,6 @@ class SessionPickerViewModelTest {
         label = "Smear 1",
     )
 }
+
+private fun stubColleagueNamesUseCase(names: Map<String, String?> = emptyMap()): ObserveColleagueNamesUseCase =
+    mock { on { invoke() } doReturn flowOf(names) }

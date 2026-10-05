@@ -4,6 +4,7 @@ import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
 import com.agarthavision.data.local.SampleImageStore
+import com.agarthavision.data.local.dao.ColleagueDao
 import com.agarthavision.data.local.dao.DetectionDao
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.data.local.dao.ReportDao
@@ -11,6 +12,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.species.SpeciesSuggestionSeeder
+import com.agarthavision.data.local.entity.ColleagueEntity
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
@@ -22,6 +24,7 @@ import com.agarthavision.data.local.mapper.SamplePrediction
 import com.agarthavision.data.inference.decodePredictions
 import com.agarthavision.domain.inference.Prediction
 import com.agarthavision.data.supabase.PatientRemoteDataSource
+import com.agarthavision.data.supabase.ProfileRemoteDataSource
 import com.agarthavision.data.supabase.ReportRemoteDataSource
 import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
@@ -68,16 +71,35 @@ class FetchRemoteDataUseCaseTest {
 
     private val authRepository: AuthRepository = mock()
     private val connectivityObserver: ConnectivityObserver = mock()
-    private val patientRemoteDataSource: PatientRemoteDataSource = mock()
+    // The rows "under these parents" (a linked patient, a session of one) answer with nothing by
+    // default, so the suites that predate 14zcqntjt3p keep asserting against the user's own
+    // rows, which is what they always stubbed. The scope has its own tests.
+    private val patientRemoteDataSource: PatientRemoteDataSource = mock {
+        onBlocking { fetchPatients(any()) } doReturn emptyList()
+    }
     // Answers "the server holds no model output" by default, so the suites that predate the
     // predictions table keep asserting what they were written to assert.
     private val sampleRemoteDataSource: SampleRemoteDataSource = mock {
         onBlocking { fetchPredictions(any()) } doReturn emptyList()
+        onBlocking { fetchSamplesForSessions(any(), any(), any()) } doReturn emptyList()
     }
-    private val sessionRemoteDataSource: SessionRemoteDataSource = mock()
-    private val reportRemoteDataSource: ReportRemoteDataSource = mock()
-    private val patientDao: PatientDao = mock()
-    private val sessionDao: SessionDao = mock()
+    private val sessionRemoteDataSource: SessionRemoteDataSource = mock {
+        onBlocking { fetchSessionsForPatients(any(), any(), any()) } doReturn emptyList()
+    }
+    private val reportRemoteDataSource: ReportRemoteDataSource = mock {
+        onBlocking { fetchReportsForSessions(any(), any(), any()) } doReturn emptyList()
+    }
+    // Parents are on the device by default, so the suites that predate the parent check (a
+    // colleague's row arriving for a patient or session this device does not hold) keep
+    // asserting what they were written to assert. That check has its own tests.
+    private val patientDao: PatientDao = mock {
+        onBlocking { patientExists(any()) } doReturn true
+        onBlocking { getLinksForUser(any()) } doReturn emptyList()
+    }
+    private val sessionDao: SessionDao = mock {
+        onBlocking { sessionExists(any()) } doReturn true
+        onBlocking { getSessionIdsOnLinkedPatients(any()) } doReturn emptyList()
+    }
     private val sampleDao: SampleDao = mock()
     private val detectionDao: DetectionDao = mock()
     private val sampleSpeciesFindingDao: SampleSpeciesFindingDao = mock()
@@ -92,6 +114,12 @@ class FetchRemoteDataUseCaseTest {
         onBlocking { invoke(any()) } doReturn ImageCacheSummary()
     }
     private val sampleImageStore: SampleImageStore = mock()
+    private val profileRemoteDataSource: ProfileRemoteDataSource = mock {
+        onBlocking { fetchColleagues(any()) } doReturn emptyList()
+    }
+    private val colleagueDao: ColleagueDao = mock {
+        onBlocking { getColleagueIdsOnLinkedPatients(any()) } doReturn emptyList()
+    }
 
     private val useCase = FetchRemoteDataUseCase(
         authRepository = authRepository,
@@ -112,6 +140,8 @@ class FetchRemoteDataUseCaseTest {
         cacheSampleImages = cacheSampleImages,
         sampleImageStore = sampleImageStore,
         gson = Gson(),
+        profileRemoteDataSource = profileRemoteDataSource,
+        colleagueDao = colleagueDao,
     )
 
     // ── Skip conditions ──────────────────────────────────────────────────────
@@ -126,8 +156,8 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
-        verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
+        verify(patientRemoteDataSource, never()).fetchPatientLinks(any(), any(), any())
+        verify(sessionRemoteDataSource, never()).fetchOwnSessions(any(), any(), any())
     }
 
     @Test
@@ -140,8 +170,8 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
-        verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
+        verify(patientRemoteDataSource, never()).fetchPatientLinks(any(), any(), any())
+        verify(sessionRemoteDataSource, never()).fetchOwnSessions(any(), any(), any())
     }
 
     @Test
@@ -154,8 +184,8 @@ class FetchRemoteDataUseCaseTest {
 
         assertTrue(result.isSuccess)
         assertEquals(FetchSummary.Skipped, result.getOrThrow())
-        verify(patientRemoteDataSource, never()).fetchPatients()
-        verify(sessionRemoteDataSource, never()).fetchSessions(any(), any(), any())
+        verify(patientRemoteDataSource, never()).fetchPatientLinks(any(), any(), any())
+        verify(sessionRemoteDataSource, never()).fetchOwnSessions(any(), any(), any())
     }
 
     // ── Happy path ───────────────────────────────────────────────────────────
@@ -166,13 +196,13 @@ class FetchRemoteDataUseCaseTest {
         val session = fakeSession("sess-1")
         val sample = fakeSample("smp-1", "sess-1")
         val report = fakeReport("rep-1", "sess-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
         whenever(sessionDao.getSessionById("sess-1")).thenReturn(null)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(listOf(sample))
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(listOf(sample))
         whenever(sampleRemoteDataSource.fetchDetections(listOf("smp-1"))).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(listOf("smp-1"))).thenReturn(emptyList())
         whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(report))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(report))
         whenever(reportDao.getReportById("rep-1")).thenReturn(null)
 
         val result = useCase.invoke()
@@ -191,12 +221,12 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a local PENDING patient is not overwritten by a remote pull of the same id`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        serverAssigns(fakePatient("pat-1"))
         whenever(patientDao.getPatientById("pat-1"))
             .thenReturn(fakePatient("pat-1", PatientSyncStatus.PENDING.value))
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -208,12 +238,12 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a local SYNC_FAILED patient is not overwritten either`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        serverAssigns(fakePatient("pat-1"))
         whenever(patientDao.getPatientById("pat-1"))
             .thenReturn(fakePatient("pat-1", PatientSyncStatus.SYNC_FAILED.value))
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -223,13 +253,11 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `an absent patient is inserted along with its link rows`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(listOf(fakePatient("pat-1")))
+        serverAssigns(fakePatient("pat-1"))
         whenever(patientDao.getPatientById("pat-1")).thenReturn(null)
-        whenever(patientRemoteDataSource.fetchPatientLinks())
-            .thenReturn(listOf(PatientUserEntity("pat-1", "user-1", 1_700_000_000_000)))
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -239,13 +267,277 @@ class FetchRemoteDataUseCaseTest {
         assertEquals(1, (result.getOrThrow() as FetchSummary.Ran).patientsFetched)
     }
 
+    // ── Assignments (14zcqntjph5) ────────────────────────────────────────────
+
+    @Test
+    fun `an assignment the server no longer returns is removed and the patient stays`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(patientDao.getLinksForUser("user-1"))
+            .thenReturn(listOf(PatientUserEntity("pat-gone", "user-1", 1_700_000_000_000)))
+        whenever(patientDao.getPatientById("pat-gone")).thenReturn(fakePatient("pat-gone"))
+
+        val result = useCase.invoke()
+
+        // An admin reassigned the patient away. The access row goes; the patient and its
+        // records are untouched (C8), so nothing is deleted but the link.
+        verify(patientDao).unlinkPatientFromUser("pat-gone", "user-1")
+        verify(patientDao, never()).deletePatient(any())
+        assertTrue((result.getOrThrow() as FetchSummary.Ran).isComplete)
+    }
+
+    @Test
+    fun `a patient still waiting to push keeps its link`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(patientDao.getLinksForUser("user-1"))
+            .thenReturn(listOf(PatientUserEntity("pat-new", "user-1", 1_700_000_000_000)))
+        whenever(patientDao.getPatientById("pat-new"))
+            .thenReturn(fakePatient("pat-new", PatientSyncStatus.PENDING.value))
+
+        useCase.invoke()
+
+        // Created offline: the server has not heard of it, so its absence there proves nothing.
+        verify(patientDao, never()).unlinkPatientFromUser(any(), any())
+    }
+
+    @Test
+    fun `a link that is still on the server is kept`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val link = PatientUserEntity("pat-1", "user-1", 1_700_000_000_000)
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenReturn(listOf(link))
+        whenever(patientDao.getLinksForUser("user-1")).thenReturn(listOf(link))
+
+        useCase.invoke()
+
+        verify(patientDao, never()).unlinkPatientFromUser(any(), any())
+    }
+
+    // ── Colleagues' names (14zcqntjph6) ──────────────────────────────────────
+
+    @Test
+    fun `colleagues' names are cached for read-only records`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val names = listOf(ColleagueEntity(userId = "user-2", fullName = "Maria Santos"))
+        whenever(colleagueDao.getColleagueIdsOnLinkedPatients("user-1")).thenReturn(listOf("user-2"))
+        whenever(profileRemoteDataSource.fetchColleagues(listOf("user-2"))).thenReturn(names)
+
+        useCase.invoke()
+
+        verify(colleagueDao).upsertColleagues(names)
+    }
+
+    @Test
+    fun `a failed name fetch does not fail the pass`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(colleagueDao.getColleagueIdsOnLinkedPatients("user-1")).thenReturn(listOf("user-2"))
+        whenever(profileRemoteDataSource.fetchColleagues(listOf("user-2"))).thenThrow(RuntimeException("boom"))
+
+        val result = useCase.invoke()
+
+        // A missing name costs a label on a read-only card, not a record.
+        assertTrue((result.getOrThrow() as FetchSummary.Ran).isComplete)
+        verify(initialFetchStateStore).markCompleted("user-1")
+    }
+
+    // ── Scope: the user's own patients and nothing else (14zcqntjt3p) ────────
+    //
+    // An org admin's policies hand them their whole laboratory. These pin that the pull never
+    // asks the server for more than a medtech's policies would give: the user's own rows, plus
+    // the full history of the patients their own links name.
+
+    @Test
+    fun `only the user's own links are read, and only the patients they name are fetched`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        serverAssigns(fakePatient("pat-1"))
+        whenever(patientDao.getPatientById("pat-1")).thenReturn(null)
+
+        useCase.invoke()
+
+        verify(patientRemoteDataSource).fetchPatientLinks("user-1", 0L, 500L)
+        verify(patientRemoteDataSource).fetchPatients(listOf("pat-1"))
+        verify(patientRemoteDataSource, times(1)).fetchPatients(any())
+        val stored = argumentCaptor<PatientEntity>()
+        verify(patientDao).upsertPatient(stored.capture())
+        assertEquals(listOf("pat-1"), stored.allValues.map { it.patientId })
+    }
+
+    @Test
+    fun `no links means no patient is fetched at all`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+
+        useCase.invoke()
+
+        verify(patientRemoteDataSource, never()).fetchPatients(any())
+        verify(patientDao, never()).upsertPatient(any())
+    }
+
+    @Test
+    fun `sessions are the user's own plus those of the patients they are linked to`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(patientDao.getLinksForUser("user-1"))
+            .thenReturn(listOf(PatientUserEntity("pat-1", "user-1", 1_700_000_000_000)))
+
+        useCase.invoke()
+
+        verify(sessionRemoteDataSource).fetchOwnSessions("user-1", 0L, 500L)
+        verify(sessionRemoteDataSource).fetchSessionsForPatients(listOf("pat-1"), 0L, 500L)
+        verify(sessionRemoteDataSource, times(1)).fetchSessionsForPatients(any(), any(), any())
+    }
+
+    @Test
+    fun `samples and reports are the user's own plus those under their patients' sessions`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sessionDao.getSessionIdsOnLinkedPatients("user-1")).thenReturn(listOf("sess-1"))
+
+        useCase.invoke()
+
+        verify(sampleRemoteDataSource).fetchOwnSamples("user-1", 0L, 500L)
+        verify(sampleRemoteDataSource).fetchSamplesForSessions(listOf("sess-1"), 0L, 500L)
+        verify(reportRemoteDataSource).fetchOwnReports("user-1", 0L, 500L)
+        verify(reportRemoteDataSource).fetchReportsForSessions(listOf("sess-1"), 0L, 500L)
+    }
+
+    @Test
+    fun `a user linked to no patient asks for nothing under a parent`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+
+        useCase.invoke()
+
+        verify(sessionRemoteDataSource, never()).fetchSessionsForPatients(any(), any(), any())
+        verify(sampleRemoteDataSource, never()).fetchSamplesForSessions(any(), any(), any())
+        verify(reportRemoteDataSource, never()).fetchReportsForSessions(any(), any(), any())
+    }
+
+    @Test
+    fun `a colleague's session on a linked patient is stored`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(patientDao.getLinksForUser("user-1"))
+            .thenReturn(listOf(PatientUserEntity("patient-1", "user-1", 1_700_000_000_000)))
+        val colleagueSession = fakeSession("sess-c").copy(userId = "user-2")
+        whenever(sessionRemoteDataSource.fetchSessionsForPatients(listOf("patient-1"), 0L, 500L))
+            .thenReturn(listOf(colleagueSession))
+        whenever(sessionDao.getSessionById("sess-c")).thenReturn(null)
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        // The shared history 0007 opened (14zcqntjph5) survives the narrower fetch.
+        verify(sessionDao).upsertSession(colleagueSession)
+        assertEquals(1, summary.sessionsFetched)
+    }
+
+    @Test
+    fun `a row that is both the user's own and under a linked parent is written once`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(patientDao.getLinksForUser("user-1"))
+            .thenReturn(listOf(PatientUserEntity("patient-1", "user-1", 1_700_000_000_000)))
+        whenever(sessionDao.getSessionIdsOnLinkedPatients("user-1")).thenReturn(listOf("sess-1"))
+        val session = fakeSession("sess-1")
+        val sample = fakeSample("smp-1", "sess-1")
+        val report = fakeReport("rep-1", "sess-1")
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchSessionsForPatients(listOf("patient-1"), 0L, 500L))
+            .thenReturn(listOf(session))
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(listOf(sample))
+        whenever(sampleRemoteDataSource.fetchSamplesForSessions(listOf("sess-1"), 0L, 500L))
+            .thenReturn(listOf(sample))
+        whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(report))
+        whenever(reportRemoteDataSource.fetchReportsForSessions(listOf("sess-1"), 0L, 500L))
+            .thenReturn(listOf(report))
+        whenever(sessionDao.getSessionById("sess-1")).thenReturn(null)
+        whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
+        whenever(reportDao.getReportById("rep-1")).thenReturn(null)
+
+        val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
+
+        verify(sessionDao, times(1)).upsertSession(any())
+        verify(sampleDao, times(1)).upsertSample(any())
+        verify(reportDao, times(1)).insertReport(any())
+        verify(sampleRemoteDataSource, times(1)).fetchDetections(any())
+        assertEquals(1, summary.sessionsFetched)
+        assertEquals(1, summary.samplesFetched)
+        assertEquals(1, summary.reportsFetched)
+    }
+
+    @Test
+    fun `parent ids are sent a hundred at a time`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sessionDao.getSessionIdsOnLinkedPatients("user-1")).thenReturn((1..150).map { "sess-$it" })
+
+        useCase.invoke()
+
+        // Keeps the query string short (E5), the same bound the child rows already use.
+        verify(sampleRemoteDataSource, times(2)).fetchSamplesForSessions(any(), any(), any())
+        verify(reportRemoteDataSource, times(2)).fetchReportsForSessions(any(), any(), any())
+    }
+
+    @Test
+    fun `no colleague on the user's patients means no profile is fetched`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+
+        useCase.invoke()
+
+        verify(profileRemoteDataSource, never()).fetchColleagues(any())
+        verify(colleagueDao, never()).upsertColleagues(any())
+    }
+
+    // ── Rows whose parent is not on the device (14zcqntjph5) ─────────────────
+
+    @Test
+    fun `a session whose patient is not on the device is skipped without failing the pass`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(fakeSession("sess-1")))
+        whenever(patientDao.patientExists("patient-1")).thenReturn(false)
+
+        val result = useCase.invoke()
+
+        // The server still shows an author their own sessions of a patient they were
+        // unassigned from. Writing one would break the local patient foreign key, which used to
+        // fail every session on every pass.
+        verify(sessionDao, never()).upsertSession(any())
+        val summary = result.getOrThrow() as FetchSummary.Ran
+        assertEquals(0, summary.sessionsFetched)
+        assertTrue(summary.isComplete)
+    }
+
+    @Test
+    fun `a sample or report whose session is not on the device is skipped`() = runTest {
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
+            .thenReturn(listOf(fakeSample("smp-1", "sess-x")))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(fakeReport("rep-1", "sess-x")))
+        whenever(sessionDao.sessionExists("sess-x")).thenReturn(false)
+
+        val result = useCase.invoke()
+
+        verify(sampleDao, never()).upsertSample(any())
+        verify(reportDao, never()).insertReport(any())
+        assertTrue((result.getOrThrow() as FetchSummary.Ran).isComplete)
+    }
+
     @Test
     fun `a failed patient pull leaves markCompleted unset`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenThrow(RuntimeException("boom"))
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenThrow(RuntimeException("boom"))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -258,10 +550,10 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a failed pull names the type that failed and records the pass as incomplete`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenThrow(RuntimeException("boom"))
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenThrow(RuntimeException("boom"))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
 
@@ -275,10 +567,9 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a clean pull reports complete and clears the flag`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
 
@@ -289,17 +580,16 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `fetches patients before sessions (FK-safe order)`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
         // A session arriving before its patient violates the local FK on sessions.patient_id.
         inOrder(patientRemoteDataSource, sessionRemoteDataSource) {
-            verify(patientRemoteDataSource).fetchPatients()
-            verify(sessionRemoteDataSource).fetchSessions("user-1")
+            verify(patientRemoteDataSource).fetchPatientLinks("user-1")
+            verify(sessionRemoteDataSource).fetchOwnSessions("user-1")
         }
     }
 
@@ -308,9 +598,9 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a successful pass folds new species into the offline index`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -322,10 +612,10 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `a pass whose samples failed still refreshes the species index`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
             .thenThrow(RuntimeException("boom"))
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -352,17 +642,17 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `fetches sessions before samples (FK-safe order)`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
         // sessions must be fetched first, then samples
         val order = inOrder(sessionRemoteDataSource, sampleRemoteDataSource, reportRemoteDataSource)
-        order.verify(sessionRemoteDataSource).fetchSessions("user-1")
-        order.verify(sampleRemoteDataSource).fetchSamples(any(), any(), any())
-        order.verify(reportRemoteDataSource).fetchReports("user-1")
+        order.verify(sessionRemoteDataSource).fetchOwnSessions("user-1")
+        order.verify(sampleRemoteDataSource).fetchOwnSamples(any(), any(), any())
+        order.verify(reportRemoteDataSource).fetchOwnReports("user-1")
     }
 
     // ── markCompleted only on full success ───────────────────────────────────
@@ -371,10 +661,10 @@ class FetchRemoteDataUseCaseTest {
     fun `markCompleted NOT called when sessions fetch throws`() = runTest {
         setupOnlineSignedIn()
         // thenAnswer (not thenThrow) is required for suspend functions in mockito-kotlin
-        whenever(sessionRemoteDataSource.fetchSessions("user-1"))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1"))
             .thenAnswer { throw IllegalStateException("network") }
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -385,10 +675,10 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `markCompleted NOT called when samples fetch throws`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
             .thenAnswer { throw IllegalStateException("network") }
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -399,9 +689,9 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `markCompleted NOT called when reports fetch throws`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1"))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1"))
             .thenAnswer { throw IllegalStateException("network") }
 
         val result = useCase.invoke()
@@ -413,16 +703,16 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `other entity types still run even when one throws (partial-failure isolation)`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1"))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1"))
             .thenAnswer { throw IllegalStateException("sessions broken") }
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
         // samples and reports must still be attempted even though sessions threw
-        verify(sampleRemoteDataSource).fetchSamples(any(), any(), any())
-        verify(reportRemoteDataSource).fetchReports(any(), any(), any())
+        verify(sampleRemoteDataSource).fetchOwnSamples(any(), any(), any())
+        verify(reportRemoteDataSource).fetchOwnReports(any(), any(), any())
     }
 
     // ── E4 skip-guard ────────────────────────────────────────────────────────
@@ -560,15 +850,15 @@ class FetchRemoteDataUseCaseTest {
         setupOnlineSignedIn()
         val inserted = fakeSample("smp-inserted", "sess-1")
         val skipped = fakeSample("smp-skipped", "sess-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
             .thenReturn(listOf(inserted, skipped))
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
         whenever(sampleDao.getSampleByIdIncludingDeleted("smp-inserted")).thenReturn(null)
         whenever(sampleDao.getSampleByIdIncludingDeleted("smp-skipped"))
             .thenReturn(fakeSample("smp-skipped", "sess-1", status = SampleStatus.VERIFIED.value))
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -751,12 +1041,12 @@ class FetchRemoteDataUseCaseTest {
     fun `chunked - 150 inserted ids produce 2 fetchDetections and 2 fetchFindings calls`() = runTest {
         setupOnlineSignedIn()
         val page = (1..150).map { fakeSample("smp-$it", "sess-1") }
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(page)
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(page)
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
         page.forEach { whenever(sampleDao.getSampleByIdIncludingDeleted(it.sampleId)).thenReturn(null) }
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -769,12 +1059,12 @@ class FetchRemoteDataUseCaseTest {
     fun `chunked - exactly 100 inserted ids produce exactly 1 fetchDetections call`() = runTest {
         setupOnlineSignedIn()
         val page = (1..100).map { fakeSample("smp-$it", "sess-1") }
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(page)
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(page)
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
         page.forEach { whenever(sampleDao.getSampleByIdIncludingDeleted(it.sampleId)).thenReturn(null) }
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -786,10 +1076,10 @@ class FetchRemoteDataUseCaseTest {
     fun `E4 session guard - inserts when local session is absent`() = runTest {
         setupOnlineSignedIn()
         val session = fakeSession("sess-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
         whenever(sessionDao.getSessionById("sess-1")).thenReturn(null)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -800,11 +1090,11 @@ class FetchRemoteDataUseCaseTest {
     fun `E4 session guard - inserts when local session has SYNCED status`() = runTest {
         setupOnlineSignedIn()
         val session = fakeSession("sess-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
         val localSynced = fakeSession("sess-1", supabaseStatus = SessionSyncStatus.SYNCED.value)
         whenever(sessionDao.getSessionById("sess-1")).thenReturn(localSynced)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -815,11 +1105,11 @@ class FetchRemoteDataUseCaseTest {
     fun `E4 session guard - skips insert when local session is PENDING`() = runTest {
         setupOnlineSignedIn()
         val session = fakeSession("sess-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
         val localPending = fakeSession("sess-1", supabaseStatus = SessionSyncStatus.PENDING.value)
         whenever(sessionDao.getSessionById("sess-1")).thenReturn(localPending)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -836,7 +1126,7 @@ class FetchRemoteDataUseCaseTest {
         // that production Supabase may hold from before the unique index was added.
         val session1 = fakeSession("sess-abcd").copy(label = collidingLabel)
         val session2 = fakeSession("sess-efgh").copy(label = collidingLabel)
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session1, session2))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session1, session2))
         whenever(sessionDao.getSessionById("sess-abcd")).thenReturn(null)
         whenever(sessionDao.getSessionById("sess-efgh")).thenReturn(null)
         // sess-abcd: no collision — pre-check returns 0.
@@ -846,8 +1136,8 @@ class FetchRemoteDataUseCaseTest {
         // This is the accurate model of what countLabelCollisions returns after sess-abcd lands.
         whenever(sessionDao.countLabelCollisions("patient-1", collidingLabel, "sess-efgh"))
             .thenReturn(1)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -866,17 +1156,49 @@ class FetchRemoteDataUseCaseTest {
     }
 
     @Test
+    fun `a colleague's session that clashes only with this device's stale label keeps its label`() = runTest {
+        // 14zcqntjph7: both phones minted S03 offline. The server kept the colleague's S03 and
+        // renamed this device's to S03-SESS on push. The colleague's row arrives first (pages are
+        // oldest first) while the local row still reads S03; settling clashes after the page
+        // lets the renamed own row land first, so nothing is suffixed that the server left alone.
+        setupOnlineSignedIn()
+        stubEmptyPulls()
+        val localLabels = mutableMapOf("sess-mine" to "S03")
+        val theirs = fakeSession("sess-theirs").copy(userId = "user-2", label = "S03")
+        val mine = fakeSession("sess-mine").copy(label = "S03-SESS")
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(theirs, mine))
+        whenever(sessionDao.getSessionById("sess-theirs")).thenReturn(null)
+        whenever(sessionDao.getSessionById("sess-mine")).thenReturn(fakeSession("sess-mine").copy(label = "S03"))
+        whenever(sessionDao.countLabelCollisions(any(), any(), any())).thenAnswer { call ->
+            val label = call.getArgument<String>(1)
+            val excluding = call.getArgument<String>(2)
+            localLabels.count { (id, held) -> id != excluding && held == label }
+        }
+        whenever(sessionDao.upsertSession(any())).thenAnswer { call ->
+            val written = call.getArgument<SessionEntity>(0)
+            localLabels[written.sessionId] = written.label.orEmpty()
+            Unit
+        }
+
+        useCase.invoke()
+
+        verify(sessionDao).upsertSession(mine)
+        verify(sessionDao).upsertSession(theirs)
+        assertEquals(mapOf("sess-mine" to "S03-SESS", "sess-theirs" to "S03"), localLabels)
+    }
+
+    @Test
     fun `pullSessions - non-constraint exception from upsertSession is not swallowed`() = runTest {
         setupOnlineSignedIn()
         val session = fakeSession("sess-1").copy(label = "SMEAR-1")
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(listOf(session))
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(listOf(session))
         whenever(sessionDao.getSessionById("sess-1")).thenReturn(null)
         // A non-constraint exception — database is closed, disk full, etc. — must NOT be
         // silently swallowed by the new catch block; it must surface as a sessions failure.
         whenever(sessionDao.upsertSession(session))
             .thenAnswer { throw IllegalStateException("database is closed") }
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
@@ -894,103 +1216,106 @@ class FetchRemoteDataUseCaseTest {
     @Test
     fun `paginates - full page (500 rows) triggers a second fetch`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
         // First page: exactly 500 rows → triggers another request
         val page1 = (1..500).map { fakeSample("smp-$it", "sess-1") }
         // Second page: 0 rows → stops
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(page1)
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 500L, 500L)).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(page1)
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 500L, 500L)).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
         page1.forEach { whenever(sampleDao.getSampleByIdIncludingDeleted(it.sampleId)).thenReturn(null) }
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
         val summary = result.getOrThrow() as FetchSummary.Ran
         assertEquals(500, summary.samplesFetched)
-        verify(sampleRemoteDataSource, times(2)).fetchSamples(any(), any(), any())
+        verify(sampleRemoteDataSource, times(2)).fetchOwnSamples(any(), any(), any())
     }
 
     @Test
     fun `paginates - short page stops after one request`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
         val page = (1..3).map { fakeSample("smp-$it", "sess-1") }
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(page)
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(page)
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
         page.forEach { whenever(sampleDao.getSampleByIdIncludingDeleted(it.sampleId)).thenReturn(null) }
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
-        verify(sampleRemoteDataSource, times(1)).fetchSamples(any(), any(), any())
+        verify(sampleRemoteDataSource, times(1)).fetchOwnSamples(any(), any(), any())
     }
 
     @Test
-    fun `paginates patients - full page (500 rows) triggers a second fetch`() = runTest {
+    fun `paginates links and chunks patients - 500 links take two link pages and five patient fetches`() = runTest {
         setupOnlineSignedIn()
-        val page1 = (1..500).map { fakePatient("pat-$it") }
-        whenever(patientRemoteDataSource.fetchPatients(0L, 500L)).thenReturn(page1)
-        whenever(patientRemoteDataSource.fetchPatients(500L, 500L)).thenReturn(emptyList())
-        whenever(patientRemoteDataSource.fetchPatientLinks(0L, 500L)).thenReturn(emptyList())
-        page1.forEach { whenever(patientDao.getPatientById(it.patientId)).thenReturn(null) }
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        val patients = (1..500).map { fakePatient("pat-$it") }
+        val links = patients.map { PatientUserEntity(it.patientId, "user-1", 1_700_000_000_000) }
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1", 0L, 500L)).thenReturn(links)
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1", 500L, 500L)).thenReturn(emptyList())
+        patients.chunked(100).forEach { chunk ->
+            whenever(patientRemoteDataSource.fetchPatients(chunk.map { it.patientId })).thenReturn(chunk)
+        }
+        patients.forEach { whenever(patientDao.getPatientById(it.patientId)).thenReturn(null) }
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
         val summary = result.getOrThrow() as FetchSummary.Ran
         assertEquals(500, summary.patientsFetched)
-        verify(patientRemoteDataSource, times(2)).fetchPatients(any(), any())
+        verify(patientRemoteDataSource, times(2)).fetchPatientLinks(any(), any(), any())
+        // By id, a hundred at a time, so the query string stays short (E5).
+        verify(patientRemoteDataSource, times(5)).fetchPatients(any())
     }
 
     @Test
     fun `paginates sessions - full page (500 rows) triggers a second fetch`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenReturn(emptyList())
         val page1 = (1..500).map { fakeSession("sess-$it", "pat-1") }
-        whenever(sessionRemoteDataSource.fetchSessions("user-1", 0L, 500L)).thenReturn(page1)
-        whenever(sessionRemoteDataSource.fetchSessions("user-1", 500L, 500L)).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1", 0L, 500L)).thenReturn(page1)
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1", 500L, 500L)).thenReturn(emptyList())
         page1.forEach { whenever(sessionDao.getSessionById(it.sessionId)).thenReturn(null) }
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         val result = useCase.invoke()
 
         val summary = result.getOrThrow() as FetchSummary.Ran
         assertEquals(500, summary.sessionsFetched)
-        verify(sessionRemoteDataSource, times(2)).fetchSessions(any(), any(), any())
+        verify(sessionRemoteDataSource, times(2)).fetchOwnSessions(any(), any(), any())
     }
 
     @Test
     fun `paginates reports - full page (500 rows) triggers a second fetch`() = runTest {
         setupOnlineSignedIn()
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
         val page1 = (1..500).map { fakeReport("rep-$it", "sess-1") }
-        whenever(reportRemoteDataSource.fetchReports("user-1", 0L, 500L)).thenReturn(page1)
-        whenever(reportRemoteDataSource.fetchReports("user-1", 500L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1", 0L, 500L)).thenReturn(page1)
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1", 500L, 500L)).thenReturn(emptyList())
         page1.forEach { whenever(reportDao.getReportById(it.reportId)).thenReturn(null) }
 
         val result = useCase.invoke()
 
         val summary = result.getOrThrow() as FetchSummary.Ran
         assertEquals(500, summary.reportsFetched)
-        verify(reportRemoteDataSource, times(2)).fetchReports(any(), any(), any())
+        verify(reportRemoteDataSource, times(2)).fetchOwnReports(any(), any(), any())
     }
 
     @Test
     fun `empty sample page does not call fetchDetections or fetchFindings`() = runTest {
         setupOnlineSignedIn()
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
 
         useCase.invoke()
 
@@ -1004,12 +1329,11 @@ class FetchRemoteDataUseCaseTest {
         whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
         whenever(authRepository.isAuthenticated()).thenReturn(true)
         whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
-        // Patients default to an empty pull. Leaving them unstubbed would make
-        // pullPatients throw on a null List, which runCatching swallows into
-        // patientsOk = false — and that silently suppresses markCompleted in every
+        // Patients default to an empty pull: no links, so no patients. Leaving the links
+        // unstubbed would make pullPatients throw on a null List, which runCatching swallows
+        // into patientsOk = false — and that silently suppresses markCompleted in every
         // test below rather than failing the one that is actually wrong.
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(patientRemoteDataSource.fetchPatientLinks()).thenReturn(emptyList())
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1")).thenReturn(emptyList())
     }
 
     private fun fakePatient(
@@ -1031,11 +1355,11 @@ class FetchRemoteDataUseCaseTest {
 
     /** Configures the minimal stubs for a fetch pass with provided samples; sessions and reports are empty. */
     private suspend fun setupMinimalFetch(samples: List<SampleEntity>) {
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(samples)
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(samples)
         whenever(sampleRemoteDataSource.fetchDetections(any())).thenReturn(emptyList())
         whenever(sampleRemoteDataSource.fetchFindings(any())).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
     }
 
     private fun fakeSession(
@@ -1050,12 +1374,19 @@ class FetchRemoteDataUseCaseTest {
         supabaseStatus = supabaseStatus,
     )
 
+    /** The server assigns [patients] to user-1: their links, and the rows those links name. */
+    private suspend fun serverAssigns(vararg patients: PatientEntity) {
+        whenever(patientRemoteDataSource.fetchPatientLinks("user-1"))
+            .thenReturn(patients.map { PatientUserEntity(it.patientId, "user-1", 1_700_000_000_000) })
+        whenever(patientRemoteDataSource.fetchPatients(patients.map { it.patientId }))
+            .thenReturn(patients.toList())
+    }
+
     /** Every pull answers with nothing, so a test only stubs the one it is about. */
     private suspend fun stubEmptyPulls() {
-        whenever(patientRemoteDataSource.fetchPatients()).thenReturn(emptyList())
-        whenever(sessionRemoteDataSource.fetchSessions("user-1")).thenReturn(emptyList())
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L)).thenReturn(emptyList())
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(emptyList())
+        whenever(sessionRemoteDataSource.fetchOwnSessions("user-1")).thenReturn(emptyList())
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L)).thenReturn(emptyList())
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(emptyList())
     }
 
     private fun fakeSample(
@@ -1100,7 +1431,7 @@ class FetchRemoteDataUseCaseTest {
         val remote = fakeReport("rep-1", "sess-1").copy(
             pdfFilePath = "content://media/external_primary/file/1000929272",
         )
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(remote))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(remote))
         whenever(reportDao.getReportById("rep-1")).thenReturn(
             remote.copy(pdfFilePath = "content://media/external_primary/file/1000929275"),
         )
@@ -1120,7 +1451,7 @@ class FetchRemoteDataUseCaseTest {
         setupOnlineSignedIn()
         stubEmptyPulls()
         val unknownTyped = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(unknownTyped))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(unknownTyped))
 
         val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
 
@@ -1136,7 +1467,7 @@ class FetchRemoteDataUseCaseTest {
         stubEmptyPulls()
         val known = fakeReport("rep-known", "sess-1")
         val unknown = fakeReport("rep-unknown", "sess-1").copy(reportType = "administrative")
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(known, unknown))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(known, unknown))
         whenever(reportDao.getReportById("rep-known")).thenReturn(null)
 
         val summary = useCase.invoke().getOrThrow() as FetchSummary.Ran
@@ -1158,7 +1489,7 @@ class FetchRemoteDataUseCaseTest {
             sessionId = null,
         )
         val ok = fakeReport("rep-ok", "sess-1")
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(orphanPatientReport, ok))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(orphanPatientReport, ok))
         whenever(reportDao.getReportById("rep-orphan")).thenReturn(null)
         whenever(reportDao.getReportById("rep-ok")).thenReturn(null)
         whenever(reportDao.insertReport(orphanPatientReport)).thenAnswer {
@@ -1181,7 +1512,7 @@ class FetchRemoteDataUseCaseTest {
         val remote = fakeReport("rep-1", "sess-1").copy(
             pdfFilePath = "content://media/external_primary/file/1000929272",
         )
-        whenever(reportRemoteDataSource.fetchReports("user-1")).thenReturn(listOf(remote))
+        whenever(reportRemoteDataSource.fetchOwnReports("user-1")).thenReturn(listOf(remote))
         whenever(reportDao.getReportById("rep-1")).thenReturn(null)
 
         useCase.invoke()
@@ -1205,7 +1536,7 @@ class FetchRemoteDataUseCaseTest {
         // already in its hands.
         setupOnlineSignedIn()
         stubEmptyPulls()
-        whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+        whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
             .thenReturn(listOf(fakeSample("smp-1", "session-1")))
         whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
         whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1"))
@@ -1223,7 +1554,7 @@ class FetchRemoteDataUseCaseTest {
         runTest {
             setupOnlineSignedIn()
             stubEmptyPulls()
-            whenever(sampleRemoteDataSource.fetchSamples("user-1", 0L, 500L))
+            whenever(sampleRemoteDataSource.fetchOwnSamples("user-1", 0L, 500L))
                 .thenReturn(listOf(fakeSample("smp-1", "session-1")))
             whenever(sampleDao.getSampleByIdIncludingDeleted("smp-1")).thenReturn(null)
             whenever(sampleImageStore.cachedPathOrNull("user-1", "smp-1")).thenReturn(null)
