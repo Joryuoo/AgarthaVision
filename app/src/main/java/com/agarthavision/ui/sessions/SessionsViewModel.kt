@@ -7,13 +7,17 @@ import com.agarthavision.core.session.SessionManager
 import com.agarthavision.core.session.SessionState
 import com.agarthavision.core.util.sanitizeDateRange
 import com.agarthavision.domain.model.Patient
+import com.agarthavision.domain.model.PatientReportScope
 import com.agarthavision.domain.model.SessionWithStats
 import com.agarthavision.domain.model.isColleagueRecord
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
+import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import android.database.sqlite.SQLiteConstraintException
@@ -70,20 +74,37 @@ data class SessionsState(
     val suggestedLabel: String = "",
     /** The patient whose session list this is, or null while loading. */
     val patient: Patient? = null,
-    /** The barangay name resolved from [Patient.psgcBarangayCode], or null. */
-    val barangayName: String? = null,
+    /**
+     * The full address ([com.agarthavision.domain.model.PsgcBarangay.fullAddress]) resolved
+     * from [Patient.psgcBarangayCode], or null when the code is unknown.
+     */
+    val barangayAddress: String? = null,
     /**
      * The listed sessions a colleague recorded, by session id, with the colleague's name (null
      * when none is known). Those rows are read-only (14zcqntjph6): they open Session Detail
      * rather than Capture, and name their author. A session absent here is the medtech's own.
      */
     val colleagueAuthors: Map<String, String?> = emptyMap(),
+    /** Non-null while the "generate patient report" sheet is open. */
+    val reportSheet: PatientReportSheetState? = null,
+)
+
+/** State backing the patient-report bottom sheet reached from this screen (14zcqntj2uz). */
+data class PatientReportSheetState(
+    val candidates: List<PatientReportCandidate> = emptyList(),
+    val selectedSessionIds: Set<String> = emptySet(),
+    val startDate: LocalDate? = null,
+    val endDate: LocalDate? = null,
+    val isGenerating: Boolean = false,
+    val isLoadingCandidates: Boolean = true,
+    val error: String? = null,
 )
 
 sealed interface SessionsEvent {
     data class NavigateToCapture(val sessionId: String) : SessionsEvent
     data class NavigateToVerificationQueue(val sessionId: String) : SessionsEvent
     data class ShareExport(val content: String) : SessionsEvent
+    data class PatientReportGenerated(val pdfPath: String?) : SessionsEvent
 }
 
 /**
@@ -111,6 +132,8 @@ class SessionsViewModel @Inject constructor(
     private val patientRepository: PatientRepository,
     private val psgcRepository: PsgcRepository,
     private val observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
+    private val getPatientReportCandidatesUseCase: GetPatientReportCandidatesUseCase,
+    private val generatePatientReportUseCase: GeneratePatientReportUseCase,
     savedStateHandle: SavedStateHandle,
     private val observeColleagueNamesUseCase: ObserveColleagueNamesUseCase,
 ) : ViewModel() {
@@ -185,16 +208,16 @@ class SessionsViewModel @Inject constructor(
     ) { (uid, activeId), st, en, q, lim -> SessionsInputs(uid, activeId, st, en, q, lim) }
 
     /**
-     * Observes the patient entity and resolves their barangay name for the preview header.
+     * Observes the patient entity and resolves their barangay address for the preview header.
      */
     private val patientFlow: Flow<Pair<Patient?, String?>> = if (patientId.isNullOrBlank()) {
         flowOf(null to null)
     } else {
         patientRepository.observePatientById(patientId).map { patient ->
-            val barangayName = patient?.psgcBarangayCode?.let { code ->
-                psgcRepository.getBarangay(code)?.name
+            val barangayAddress = patient?.psgcBarangayCode?.let { code ->
+                psgcRepository.getBarangay(code)?.fullAddress
             }
-            patient to barangayName
+            patient to barangayAddress
         }
     }
 
@@ -282,10 +305,10 @@ class SessionsViewModel @Inject constructor(
     val state: StateFlow<SessionsState> = combine(
         sessionsStateFlow,
         patientFlow,
-    ) { sessionsState, (patient, barangayName) ->
+    ) { sessionsState, (patient, barangayAddress) ->
         sessionsState.copy(
             patient = patient,
-            barangayName = barangayName,
+            barangayAddress = barangayAddress,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -475,6 +498,141 @@ class SessionsViewModel @Inject constructor(
         internalState.update { it.copy(errorMessage = null) }
     }
 
+    /**
+     * Opens the "generate patient report" sheet and loads this patient's session candidates.
+     *
+     * Only sessions with at least one verified sample start selected: a session with none can
+     * never contribute a finding (D6), so pre-checking it would let a medtech generate a report
+     * they believe covers a smear it silently drops.
+     */
+    fun onOpenGenerateReport() {
+        val patient = patientId ?: return
+        internalState.update {
+            it.copy(reportSheet = PatientReportSheetState(isLoadingCandidates = true))
+        }
+        viewModelScope.launch {
+            getPatientReportCandidatesUseCase(patient)
+                .onSuccess { candidates ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = PatientReportSheetState(
+                                candidates = candidates,
+                                selectedSessionIds = eligibleSessionIds(candidates, start = null, end = null),
+                                isLoadingCandidates = false,
+                            ),
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = it.reportSheet?.copy(
+                                isLoadingCandidates = false,
+                                error = error.message ?: "Could not load sessions.",
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
+    fun onDismissReportSheet() {
+        internalState.update { it.copy(reportSheet = null) }
+    }
+
+    /**
+     * Applies a date range to the report sheet and re-derives the selection from scratch to the
+     * sessions that are both in range and eligible (verified samples > 0).
+     *
+     * The selection is recomputed rather than merely intersected with the prior one: a session
+     * the medtech had unchecked before narrowing the range would otherwise stay unchecked once
+     * back in range for no visible reason, and a checked-but-now-out-of-range session must never
+     * survive to generation (14zcqntj2uz follow-up).
+     */
+    fun onReportDateRangeSelected(start: LocalDate?, end: LocalDate?) {
+        val (safeStart, safeEnd) = sanitizeDateRange(start, end)
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            state.copy(
+                reportSheet = sheet.copy(
+                    startDate = safeStart,
+                    endDate = safeEnd,
+                    selectedSessionIds = eligibleSessionIds(sheet.candidates, safeStart, safeEnd),
+                ),
+            )
+        }
+    }
+
+    /**
+     * Sessions from [candidates] with at least one verified sample whose start date falls within
+     * [start]/[end] (inclusive, either bound optional) — the default selection for the report
+     * sheet's checklist.
+     */
+    private fun eligibleSessionIds(
+        candidates: List<PatientReportCandidate>,
+        start: LocalDate?,
+        end: LocalDate?,
+    ): Set<String> {
+        val zone = ZoneId.systemDefault()
+        val startMillis = start?.atStartOfDay(zone)?.toInstant()?.toEpochMilli()
+        val endMillis = end?.plusDays(1)?.atStartOfDay(zone)?.toInstant()?.minusMillis(1)?.toEpochMilli()
+        return candidates
+            .filter { candidate ->
+                candidate.verifiedSampleCount > 0 &&
+                    (startMillis == null || candidate.session.startedAt >= startMillis) &&
+                    (endMillis == null || candidate.session.startedAt <= endMillis)
+            }
+            .mapTo(mutableSetOf()) { it.session.id }
+    }
+
+    fun onToggleReportSession(sessionId: String) {
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            val selected = sheet.selectedSessionIds
+            val updated = if (sessionId in selected) selected - sessionId else selected + sessionId
+            state.copy(reportSheet = sheet.copy(selectedSessionIds = updated))
+        }
+    }
+
+    fun onGeneratePatientReport() {
+        val patient = patientId
+        val sheet = internalState.value.reportSheet
+        if (patient == null || sheet == null || sheet.isGenerating) return
+        // The selection can only ever hold eligible-in-range sessions (see
+        // onReportDateRangeSelected/onToggleReportSession), so an empty selection here means
+        // there is nothing left to report on — not that nothing was ever verified. A distinct
+        // message keeps that honest rather than reusing the use case's blanket failure string.
+        if (sheet.selectedSessionIds.isEmpty()) {
+            internalState.update {
+                it.copy(reportSheet = sheet.copy(error = NO_VERIFIED_SAMPLES_IN_RANGE))
+            }
+            return
+        }
+        internalState.update { it.copy(reportSheet = sheet.copy(isGenerating = true, error = null)) }
+        viewModelScope.launch {
+            val scope = PatientReportScope(
+                startDate = sheet.startDate,
+                endDate = sheet.endDate,
+                sessionIds = sheet.selectedSessionIds,
+            )
+            generatePatientReportUseCase(patient, scope)
+                .onSuccess { report ->
+                    internalState.update { it.copy(reportSheet = null) }
+                    eventChannel.send(SessionsEvent.PatientReportGenerated(report.pdfFilePath))
+                }
+                .onFailure { error ->
+                    internalState.update {
+                        it.copy(
+                            reportSheet = it.reportSheet?.copy(
+                                isGenerating = false,
+                                error = error.message ?: "Could not generate report.",
+                            ),
+                        )
+                    }
+                }
+        }
+    }
+
     private companion object {
         private const val RECENT_WINDOW_DAYS = 30L
         private const val INITIAL_PAGE = 5
@@ -493,5 +651,13 @@ class SessionsViewModel @Inject constructor(
 
         /** Unreachable through the UI: every route that opens this screen carries a patient. */
         private const val PATIENT_REQUIRED = "This session has no patient. Open it from a patient."
+
+        /**
+         * Shown when the report sheet's date range (or manual unticking) leaves nothing
+         * selected. Distinct from [GeneratePatientReportUseCase.NO_VERIFIED_SAMPLES_MESSAGE]:
+         * that one means the patient has no verified samples at all, this one means the current
+         * range/selection has none, which the medtech can fix by widening it.
+         */
+        private const val NO_VERIFIED_SAMPLES_IN_RANGE = "No verified samples in the selected range."
     }
 }

@@ -150,13 +150,21 @@ as working.
 - **Detection count rule:** Counts non-false-positive detections
   (`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`: `d.verdict != 'false_positive'`).
 - **Sample detail with image fallback** — local file first, then 15-minute signed Supabase Storage URL.
-- **Session reports, PDF or CSV.** The medtech picks the format per report
-  (`domain/model/ReportFormat.kt`). PDF is built by `domain/usecase/records/ReportPdfBuilder.kt`
-  and drawn by `data/repository/AndroidReportPdfRenderer.kt`; CSV by
-  `domain/usecase/records/ReportCsvBuilder.kt`. The file is stored in `Documents/AgarthaVision/`,
-  tracked in Room and Supabase, and mirrored to the `reports` Storage bucket so another device
-  can open it (`domain/usecase/records/GenerateSessionReportUseCase.kt`,
+- **PDF-only session reports.** Generated as a PDF on-device
+  (`domain/usecase/records/ReportPdfBuilder.kt`, `data/repository/AndroidReportPdfRenderer.kt`)
+  with a patient header, stored in `Documents/AgarthaVision/`, tracked in Room and Supabase, and
+  mirrored to the `reports` Storage bucket so another device can open it
+  (`domain/usecase/records/GenerateSessionReportUseCase.kt`,
   `data/supabase/SyncReportUseCase.kt`, `data/supabase/RestoreReportFilesUseCase.kt`).
+- **Patient reports (14zcqntj2uz).** Pool every session a `PatientReportScope` resolves to
+  (defaulting to all of a patient's sessions; a date range and/or an explicit session subset
+  narrow it) into one PDF-only document, reached from the Sessions screen's "Generate report"
+  sheet (`ui/sessions/PatientReportSheet.kt`). Findings are pooled into a single
+  `aggregateLpfPerSpecies` call across every included session (not summed per-session ranges),
+  with a per-session breakdown table alongside it. Sessions with zero verified samples are
+  excluded and shown disabled in the picker
+  (`domain/usecase/records/GeneratePatientReportUseCase.kt`,
+  `domain/usecase/records/GetPatientReportCandidatesUseCase.kt`).
 
 ### Home dashboard
 - **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,

@@ -180,9 +180,13 @@ cannot tell an admin from a medtech — both hold the `authenticated` role. The 
   which is ASCII-only — 438 barangay names in this vintage carry non-ASCII characters. It was
   folded in Kotlin until 86d4brr1f moved generation off the device; the two were proved
   identical over all 42,010 rows before `PsgcCsvParser` was deleted.
-- Search matches **each whitespace-separated term** (`PsgcBarangayDao.kt::search`).
-  PSA spells the city "City of Cebu", so a contiguous match on "cebu city" — what a medtech
-  types — finds nothing.
+- Search matches **each term**, split on whitespace and commas
+  (`PsgcBarangayDao.kt::search`, `PsgcSearchQuery::parse`). PSA spells the city "City of Cebu",
+  so a contiguous match on "cebu city" — what a medtech types — finds nothing. A comma is a
+  ranking hint, not a hard field separator: with one, the segment before it alone drives name
+  ranking (so "lahug, city of cebu" ranks "Lahug" barangays by "lahug"), while every segment
+  still has to match somewhere in the row. 133 barangay names in this vintage already contain a
+  comma (e.g. "Bgy. No. 42, Apaya"), which a plain field split would have broken.
 
 **Does not hit**
 - Supabase, if you are changing this table's shape. There is no remote counterpart; only
@@ -202,7 +206,9 @@ the Application rather than a ViewModel, because nothing on screen waits for it 
 data-layer concern through a ViewModel would breach C1. Read by the barangay picker in the Patient
 Form (`ui/patients/PatientFormScreen.kt`, via `PatientFormViewModel.kt`, `BarangayPickerDelegate.kt`,
 and `SearchBarangaysUseCase`). The code it produces is stored on `Patient` and read remotely only
-by `public.barangay_prevalence()`.
+by `public.barangay_prevalence()`. The session patient card (`ui/sessions/SessionsScreen.kt`, via
+`SessionsViewModel.kt`) reads `PsgcBarangay.fullAddress` — "Lahug, City of Cebu" — rather than the
+bare name, so the full address is visible without navigating back to the patient record.
 
 ## See
 

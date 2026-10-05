@@ -89,7 +89,7 @@ private fun PagerButton(
 }
 
 
-/** Small outlined tag marking the file format a report was exported as (PDF / CSV). */
+/** Small outlined tag marking the file format a report was exported as (PDF). */
 @Composable
 internal fun FormatChip(label: String) {
     Text(

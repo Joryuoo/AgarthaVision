@@ -13,6 +13,10 @@ interface PsgcRepository {
      * Barangays matching [query] anywhere in their name, city/municipality or province,
      * prefix matches first. Capped at [limit] because there are 42,010 barangays and a
      * short query matches thousands.
+     *
+     * A comma in [query] narrows name ranking to the segment before it — "lahug, city of
+     * cebu" ranks "Lahug" barangays by "lahug" alone — while every comma-separated segment
+     * still has to match somewhere in the row.
      */
     suspend fun searchBarangays(query: String, limit: Int): List<PsgcBarangay>
 

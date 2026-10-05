@@ -9,6 +9,75 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feature/patient-report-and-address-pdf-only — patient-scoped PDF reports; session card shows the full address; barangay search takes commas · 2026-09-29
+
+### Patient reports (pooled, PDF-only) · `14zcqntj2uz`
+
+- **`GeneratePatientReportUseCase`** pools every session a `PatientReportScope` resolves to
+  (default: all of a patient's sessions; a date range and/or an explicit session-id subset
+  narrow it) into one PDF-only document. A foreign session id in the subset fails generation
+  rather than silently dropping it.
+- **Pooled, not per-session-summed.** Findings from every included session are collected and
+  passed to a single `aggregateLpfPerSpecies` call, so the headline species table is one pooled
+  range across the whole scope; a per-session breakdown table keeps each smear's own range
+  visible alongside it.
+- **Zero-sample sessions are excluded**, not reported as a zero row (`GetPatientReportCandidatesUseCase`
+  shows them disabled in the "Generate report" sheet, `ui/sessions/PatientReportSheet.kt`), and
+  never start checked. Picking a date range re-derives the selection to sessions that are both
+  eligible and inside it, so a checked box never survives being pushed out of scope
+  (`SessionsViewModel.onReportDateRangeSelected`). A scope with nothing left fails with
+  `NO_VERIFIED_SAMPLES_MESSAGE`; an empty selection at generation time (e.g. a range with nothing
+  in it) shows a distinct "No verified samples in the selected range." instead.
+- **Room 24 → 25 (`MIGRATION_24_25`)**: `reports.session_id` becomes nullable; `patient_id` and
+  `session_ids_json` are added. `supabase/migrations/0015_patient_reports.sql` mirrors this on
+  Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
+  a `patient_users` link on a patient-report insert. Must apply before the build reaches any
+  device that can generate one — an older build decoding `session_id` as non-null crashes on
+  the first patient report row it pulls.
+- **Sync mirrors session reports**: the row goes to `public.reports`, the PDF to the `reports`
+  Storage bucket, restored via `RestoreReportFilesUseCase`'s patient branch
+  (`writePatientPdf`). An unrecognised `report_type` on pull is skipped, not stored.
+- **Reports tab** shows a patient title for these cards, with no NPE on the now-nullable
+  `sessionId` (`ReportCard`, `RecordsScreen`). Its Open/Share PDF actions restore the file from
+  the `reports` Storage bucket the same way Session Detail does when it isn't on this device yet
+  (`RecordsViewModel.restoreReportFiles`, `RestoreReportFilesUseCase`'s patient branch) — a
+  patient report synced from another device now opens here, not just from Session Detail.
+- **PDF** prints the patient's full display name, age at generation, sex, and full address
+  (`PsgcBarangay.fullAddress`, falling back to the raw PSGC code); filenames are UUID-only.
+
+### Session card shows the full address; barangay search takes commas · `14zcqntj2tm`
+
+- **`PsgcBarangay.fullAddress`** ("Lahug, City of Cebu" / "Adams, Adams, Ilocos Norte") is now
+  the single display form for a patient's location. The session patient card reads it instead of
+  the bare barangay name.
+- **Barangay search accepts a comma.** "lahug, city of cebu" still matches every typed segment,
+  but ranks by the segment before the comma alone, so it is not diluted by what follows.
+  `PsgcSearchQuery.parse` returns both the full term list and the name-ranking terms;
+  `PsgcBarangayDao.search` and the repository's cache key follow.
+
+### PDF-only reports, with a patient header · `86d4be47c`
+
+A generated report is now always a PDF, and the PDF always carries who it is about.
+
+- **CSV export is retired.** `ReportCsvBuilder`, `ReportFormat`, and the export-format picker
+  (`ExportFormat`/`ExportFormatMenu`) are gone; `GenerateSessionReportUseCase` writes one PDF,
+  no format argument. `ReportFileStore.writeCsv` and the CSV share/view helpers in
+  `ReportSharing.kt` are gone with it. `csv_file_path` stays on `Report`/`ReportEntity` as a
+  legacy-only column (C8) — old CSV-only rows keep listing, but nothing restores, shares, or
+  opens them any more.
+- **The PDF gains a patient block.** Name, sex, age (computed at the same instant as
+  `generatedAt`), and address (`PsgcBarangay.fullAddress`, or the raw PSGC code if it no longer
+  resolves — the same display form the patient report and the session patient card use) print
+  above the session and summary sections. A session whose patient has not yet synced to this
+  device fails generation with a clear message rather than a crash or a blank header.
+- **The findings table's empty state is a plural sentence** ("No parasites found across N
+  field(s) examined.") instead of a fixed string, and the LPF column header and unit note read
+  more explicitly ("Eggs per LPF (range)", "Direct Fecal Smear").
+- Session Detail's generate control is a direct tap (no PDF/CSV menu); the Reports list card
+  drops its CSV button and share-format menu.
+
+---
+
 ## feat/effv2s-offline-model — EfficientNetV2-S everywhere · 2026-10-04
 
 `14zcqntk2nm`. Depends on `fix/one-box-per-egg`.

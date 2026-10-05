@@ -236,7 +236,10 @@ fun AgarthaNavHost(
                 onNavigate = { route -> navController.navigate(route) },
                 onSessionClick = { sessionId ->
                     navController.navigate(Screen.SessionDetail.createRoute(sessionId))
-                }
+                },
+                onPatientClick = { patientId ->
+                    navController.navigate(Screen.PatientSessions.createRoute(patientId))
+                },
             )
         }
 

@@ -102,6 +102,8 @@ class SessionPickerViewModelTest {
         patientRepository = patientRepository,
         psgcRepository = psgcRepository,
         observeSyncInProgressUseCase = observeSyncInProgressUseCase,
+        getPatientReportCandidatesUseCase = mock(),
+        generatePatientReportUseCase = mock(),
         observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
         savedStateHandle = SavedStateHandle(
             if (patientId == null) emptyMap() else mapOf("patientId" to patientId),

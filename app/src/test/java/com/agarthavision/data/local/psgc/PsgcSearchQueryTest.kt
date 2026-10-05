@@ -43,4 +43,84 @@ class PsgcSearchQueryTest {
         assertTrue(PsgcSearchQuery.terms("").isEmpty())
         assertTrue(PsgcSearchQuery.terms("   ").isEmpty())
     }
+
+    @Test
+    fun `comma splits terms across segments`() {
+        val parsed = PsgcSearchQuery.parse("lahug, city of cebu")
+        assertEquals(listOf("lahug", "city", "of", "cebu"), parsed.terms)
+    }
+
+    @Test
+    fun `comma narrows name ranking to the first segment`() {
+        val parsed = PsgcSearchQuery.parse("lahug, city of cebu")
+        assertEquals(listOf("lahug"), parsed.nameTerms)
+    }
+
+    @Test
+    fun `no comma leaves name terms equal to terms`() {
+        val parsed = PsgcSearchQuery.parse("lahug cebu")
+        assertEquals(listOf("lahug", "cebu"), parsed.terms)
+        assertEquals(parsed.terms, parsed.nameTerms)
+    }
+
+    @Test
+    fun `leading comma falls back to all terms for ranking`() {
+        val parsed = PsgcSearchQuery.parse(", cebu")
+        assertEquals(listOf("cebu"), parsed.terms)
+        assertEquals(parsed.terms, parsed.nameTerms)
+    }
+
+    @Test
+    fun `trailing comma drops the empty segment`() {
+        val parsed = PsgcSearchQuery.parse("lahug,")
+        assertEquals(listOf("lahug"), parsed.terms)
+        assertEquals(listOf("lahug"), parsed.nameTerms)
+    }
+
+    @Test
+    fun `only commas yields nothing`() {
+        val parsed = PsgcSearchQuery.parse(",")
+        assertTrue(parsed.terms.isEmpty())
+        assertTrue(parsed.nameTerms.isEmpty())
+    }
+
+    @Test
+    fun `escaping still applies within comma segments`() {
+        val parsed = PsgcSearchQuery.parse("100%, 50_50")
+        assertEquals(listOf("100\\%", "50\\_50"), parsed.terms)
+    }
+
+    @Test
+    fun `consecutive commas produce empty segments that contribute nothing`() {
+        val parsed = PsgcSearchQuery.parse("lahug,,cebu")
+        assertEquals(listOf("lahug", "cebu"), parsed.terms)
+        assertEquals(listOf("lahug"), parsed.nameTerms)
+    }
+
+    @Test
+    fun `whitespace-only segment before the first comma falls back for name ranking`() {
+        val parsed = PsgcSearchQuery.parse("   , cebu")
+        assertEquals(listOf("cebu"), parsed.terms)
+        assertEquals(parsed.terms, parsed.nameTerms)
+    }
+
+    @Test
+    fun `commas separated only by whitespace yield nothing`() {
+        val parsed = PsgcSearchQuery.parse(" , , ")
+        assertTrue(parsed.terms.isEmpty())
+        assertTrue(parsed.nameTerms.isEmpty())
+    }
+
+    @Test
+    fun `unicode segment before a comma narrows name ranking`() {
+        val parsed = PsgcSearchQuery.parse("SANTO NIÑO, city of cebu")
+        assertEquals(listOf("santo", "niño"), parsed.nameTerms)
+        assertEquals(listOf("santo", "niño", "city", "of", "cebu"), parsed.terms)
+    }
+
+    @Test
+    fun `like wildcards in the name segment are escaped in name terms too`() {
+        val parsed = PsgcSearchQuery.parse("100%_pure, cebu")
+        assertEquals(listOf("100\\%\\_pure"), parsed.nameTerms)
+    }
 }

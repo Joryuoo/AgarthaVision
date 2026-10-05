@@ -27,6 +27,7 @@ import com.agarthavision.data.supabase.SampleRemoteDataSource
 import com.agarthavision.data.supabase.SessionRemoteDataSource
 import com.agarthavision.domain.model.PatientSyncStatus
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.SampleStatus
 import com.agarthavision.domain.model.SessionSyncStatus
 import com.agarthavision.domain.repository.AuthRepository
@@ -578,16 +579,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             },
         ) { page ->
             for (remote in page.filter { seen.add(it.reportId) }) {
-                if (!sessionDao.sessionExists(remote.sessionId)) {
-                    Log.w(TAG, "pullReports: session ${remote.sessionId} not on device; skipping ${remote.reportId}")
-                    continue
-                }
-                // E4 guard: skip if local row is pending or sync_failed
-                val local = reportDao.getReportById(remote.reportId)
-                if (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value) {
-                    reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
-                    fetched++
-                }
+                if (upsertReportIfEligible(remote)) fetched++
             }
         }
         return fetched
@@ -640,6 +632,40 @@ class FetchRemoteDataUseCase @Inject constructor(
         forEachPage(own, onPage)
         parentIds.chunked(CHILD_BATCH_SIZE).forEach { chunk ->
             forEachPage({ offset, limit -> underParents(chunk, offset, limit) }, onPage)
+        }
+    }
+
+    /**
+     * Writes one pulled report row, applying the same-report_type and E4 guards, and returns
+     * whether it was written.
+     *
+     * A patient report whose patient row is not yet on this device (a pull that has not reached
+     * that patient, or one this account cannot see) fails its FK. That is one bad row, not a
+     * reason to drop every report after it in the page — caught here, same as
+     * [upsertSessionReconcilingLabel]'s backstop, and it is retried on the next pull once its
+     * patient has landed.
+     */
+    private suspend fun upsertReportIfEligible(remote: ReportEntity): Boolean {
+        // A session report on a session this device does not hold (14zcqntjph5) is skipped: the
+        // pull brings colleagues' reports down, but not necessarily their sessions.
+        val sessionMissing = remote.sessionId != null && !sessionDao.sessionExists(remote.sessionId)
+        if (sessionMissing) {
+            Log.w(TAG, "pullReports: session ${remote.sessionId} not on device; skipping ${remote.reportId}")
+        }
+        // E4 guard: skip if local row is pending or sync_failed
+        val local = reportDao.getReportById(remote.reportId)
+        // An unrecognised report_type is a server-side type this build doesn't know how to
+        // render yet — skip it rather than store and later crash decoding it, or silently
+        // mislabel it as a session report.
+        val eligible = !sessionMissing && ReportType.fromValueOrNull(remote.reportType) != null &&
+            (local == null || local.supabaseStatus == ReportSyncStatus.SYNCED.value)
+
+        return eligible && try {
+            reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
+            true
+        } catch (e: SQLiteConstraintException) {
+            Log.w(TAG, "pullReports: skipping report ${remote.reportId}, FK not satisfied", e)
+            false
         }
     }
 

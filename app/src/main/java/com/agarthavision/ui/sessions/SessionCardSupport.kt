@@ -303,7 +303,7 @@ internal fun SessionCard(
     }
 }
 
-private fun formatDate(millis: Long): String =
+internal fun formatDate(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
 
 private fun formatTime(millis: Long): String =

@@ -48,11 +48,8 @@ import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SearchOff
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -101,6 +98,7 @@ import com.agarthavision.core.util.startOfTodayMillis
 import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
+import com.agarthavision.domain.model.ReportType
 import com.agarthavision.domain.model.SessionLinkState
 import com.agarthavision.ui.components.DateRangeFilterBar
 import com.agarthavision.ui.components.EmptyState
@@ -116,6 +114,7 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 private const val REPORTS_SKELETON_COUNT = 6
 private const val STATS_REPORTS_WEIGHT = 0.25f
@@ -128,6 +127,7 @@ fun RecordsScreen(
     @Suppress("UNUSED_PARAMETER")
     onNavigate: (String) -> Unit = {},
     onSessionClick: (String) -> Unit,
+    onPatientClick: (String) -> Unit = {},
     @Suppress("UNUSED_PARAMETER")
     onBackClick: () -> Unit = {},
     viewModel: RecordsViewModel = hiltViewModel(),
@@ -138,6 +138,11 @@ fun RecordsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var shareError by remember { mutableStateOf<Int?>(null) }
     var showSpeciesDialog by remember { mutableStateOf(false) }
+    val restoringMessage = stringResource(R.string.report_restoring)
+    // Remembers whether a restore-in-flight was started to open or to share the PDF, so the
+    // right action runs once ReportRestored lands — the download is async and the tap that
+    // started it is long gone by then.
+    var pendingRestoreAction by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
     if (showSpeciesDialog) {
         SpeciesFilterDialog(
@@ -145,6 +150,31 @@ fun RecordsScreen(
             onSelectSpecies = viewModel::onSpeciesSelected,
             onDismiss = { showSpeciesDialog = false },
         )
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collect { event ->
+            when (event) {
+                // Launched rather than awaited: showSnackbar suspends until it goes away, and
+                // collecting the next event behind it would hold the opened file back by the
+                // length of a snackbar.
+                RecordsEvent.ReportRestoreStarted ->
+                    launch { snackbarHostState.showSnackbar(restoringMessage) }
+                is RecordsEvent.ReportRestored -> {
+                    val pdfPath = event.pdfPath
+                    if (pdfPath != null) {
+                        pendingRestoreAction?.invoke(pdfPath)
+                    } else {
+                        shareError = R.string.report_share_file_gone
+                    }
+                    pendingRestoreAction = null
+                }
+                RecordsEvent.ReportRestoreFailed -> {
+                    shareError = R.string.report_restore_failed
+                    pendingRestoreAction = null
+                }
+            }
+        }
     }
 
     LaunchedEffect(shareError) {
@@ -365,18 +395,41 @@ fun RecordsScreen(
                                 items(items, key = { it.id }) { report ->
                                     ReportCard(
                                         report = report,
-                                        onSessionClick = { onSessionClick(report.sessionId) },
-                                        onOpenPdf = {
-                                            shareError = viewReportPdf(context, report.pdfFilePath)
+                                        onSessionClick = {
+                                            val patientId = report.patientId
+                                            val sessionId = report.sessionId
+                                            if (report.reportType == ReportType.PATIENT && patientId != null) {
+                                                onPatientClick(patientId)
+                                            } else if (sessionId != null) {
+                                                onSessionClick(sessionId)
+                                            }
                                         },
-                                        onOpenCsv = {
-                                            shareError = viewReportCsv(context, report.csvFilePath)
+                                        onOpenPdf = {
+                                            val result = viewReportPdf(context, report.pdfFilePath)
+                                            if (result == R.string.report_share_file_gone ||
+                                                result == R.string.report_share_missing_path
+                                            ) {
+                                                // Synced from another device: the row is here,
+                                                // the bytes are not. Fetch them instead of
+                                                // reporting a "missing" file that Storage holds.
+                                                pendingRestoreAction =
+                                                    { path -> shareError = viewReportPdf(context, path) }
+                                                viewModel.restoreReportFiles(report.id)
+                                            } else {
+                                                shareError = result
+                                            }
                                         },
                                         onSharePdf = {
-                                            shareError = shareReportPdf(context, report.pdfFilePath)
-                                        },
-                                        onShareCsv = {
-                                            shareError = shareReportCsv(context, report.csvFilePath)
+                                            val result = shareReportPdf(context, report.pdfFilePath)
+                                            if (result == R.string.report_share_file_gone ||
+                                                result == R.string.report_share_missing_path
+                                            ) {
+                                                pendingRestoreAction =
+                                                    { path -> shareError = shareReportPdf(context, path) }
+                                                viewModel.restoreReportFiles(report.id)
+                                            } else {
+                                                shareError = result
+                                            }
                                         },
                                         modifier = Modifier.padding(horizontal = Spacing.xl, vertical = 4.dp),
                                     )
@@ -857,13 +910,19 @@ private fun ReportActionButton(
 }
 
 @Composable
+private fun reportCardTitle(report: Report): String =
+    if (report.reportType == ReportType.PATIENT) {
+        stringResource(R.string.report_card_patient_title, report.patientName ?: "")
+    } else {
+        report.sessionLabel ?: report.sessionId?.take(8).orEmpty()
+    }
+
+@Composable
 internal fun ReportCard(
     report: Report,
     onSessionClick: () -> Unit,
     onOpenPdf: () -> Unit,
-    onOpenCsv: () -> Unit,
     onSharePdf: () -> Unit,
-    onShareCsv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = AgarthaTheme.colors
@@ -882,7 +941,7 @@ internal fun ReportCard(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = report.sessionLabel ?: report.sessionId.take(8),
+                text = reportCardTitle(report),
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = colors.textPrimary,
@@ -940,8 +999,7 @@ internal fun ReportCard(
         }
 
         val hasPdf = report.pdfFilePath != null
-        val hasCsv = report.csvFilePath != null
-        if (hasPdf || hasCsv) {
+        if (hasPdf) {
             Spacer(Modifier.height(6.dp))
             HorizontalDivider(color = colors.border, thickness = 1.dp)
             Spacer(Modifier.height(6.dp))
@@ -951,99 +1009,24 @@ internal fun ReportCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                ReportActionButton(
+                    icon = Icons.Outlined.PictureAsPdf,
+                    label = stringResource(R.string.reports_format_pdf),
+                    contentDescription = stringResource(R.string.reports_open_pdf),
+                    isPrimary = true,
+                    onClick = onOpenPdf,
+                )
+
+                IconButton(
+                    onClick = onSharePdf,
+                    modifier = Modifier.size(36.dp),
                 ) {
-                    if (hasPdf) {
-                        ReportActionButton(
-                            icon = Icons.Outlined.PictureAsPdf,
-                            label = stringResource(R.string.reports_format_pdf),
-                            contentDescription = stringResource(R.string.reports_open_pdf),
-                            isPrimary = true,
-                            onClick = onOpenPdf,
-                        )
-                    }
-
-                    if (hasCsv) {
-                        ReportActionButton(
-                            icon = Icons.Outlined.TableChart,
-                            label = stringResource(R.string.reports_format_csv),
-                            contentDescription = stringResource(R.string.reports_open_csv),
-                            isPrimary = false,
-                            onClick = onOpenCsv,
-                        )
-                    }
-                }
-
-                var shareMenuExpanded by remember { mutableStateOf(false) }
-
-                Box {
-                    IconButton(
-                        onClick = {
-                            when {
-                                hasPdf && hasCsv -> shareMenuExpanded = true
-                                hasPdf -> onSharePdf()
-                                hasCsv -> onShareCsv()
-                                else -> {}
-                            }
-                        },
-                        modifier = Modifier.size(36.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.Share,
-                            contentDescription = stringResource(R.string.report_share_action),
-                            tint = colors.textSecondary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                    }
-
-                    if (hasPdf && hasCsv) {
-                        DropdownMenu(
-                            expanded = shareMenuExpanded,
-                            onDismissRequest = { shareMenuExpanded = false },
-                            modifier = Modifier.background(colors.surfaceHigh),
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = stringResource(R.string.reports_share_pdf),
-                                        color = colors.textPrimary,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.PictureAsPdf,
-                                        contentDescription = null,
-                                        tint = colors.accent,
-                                    )
-                                },
-                                onClick = {
-                                    shareMenuExpanded = false
-                                    onSharePdf()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = stringResource(R.string.reports_share_csv),
-                                        color = colors.textPrimary,
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Outlined.TableChart,
-                                        contentDescription = null,
-                                        tint = colors.textPrimary,
-                                    )
-                                },
-                                onClick = {
-                                    shareMenuExpanded = false
-                                    onShareCsv()
-                                },
-                            )
-                        }
-                    }
+                    Icon(
+                        imageVector = Icons.Outlined.Share,
+                        contentDescription = stringResource(R.string.report_share_action),
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(20.dp),
+                    )
                 }
             }
         }

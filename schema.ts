@@ -89,8 +89,8 @@ export enum EggSpecies {
  * Persisted report category.
  *
  * Supabase source of truth:
- * - Created by `0008_reports.sql`
- * - CHECK: `report_type in ('session')`
+ * - Created by `0001_init.sql` (consolidated)
+ * - CHECK widened by `0015_patient_reports.sql`: `report_type in ('session', 'patient')`
  *
  * Room/domain mirror:
  * - `domain/model/ReportType.kt`
@@ -98,6 +98,7 @@ export enum EggSpecies {
  */
 export enum ReportType {
   SESSION = "session",
+  PATIENT = "patient",
 }
 
 /**
@@ -611,10 +612,21 @@ export interface SampleSpeciesFinding {
 }
 
 /**
- * Persisted session-level report generated from verified local samples.
+ * Persisted report snapshot, scoped to either one session or one patient.
+ *
+ * A row is a session report (`session_id` set, `patient_id` null) or a patient report
+ * (`patient_id` set, `session_id` null); `reports_scope_check` enforces exactly one. A patient
+ * report pools every session named in `session_ids` into one document — that array is what
+ * keeps the report reproducible if the patient's session list changes later.
+ *
+ * Reports are PDF-only since 86d4be47c — `csv_file_path` is a legacy column read for reports
+ * generated before that change; no report of either scope writes one.
  *
  * Supabase migrations:
  * - `0001_init.sql` (consolidated): creates `reports` with `pdf_file_path` and `lpf_per_species`.
+ * - `0015_patient_reports.sql`: adds `patient_id`, `session_ids`, drops the `session_id` NOT
+ *   NULL, widens `report_type`, adds `reports_scope_check`, and requires a `patient_users` link
+ *   for a patient-report insert.
  * - Historical development migrations archived under `legacy-dev/`.
  *
  * Room mirror:
@@ -624,33 +636,41 @@ export interface Report {
   id: UUID;
   // Supabase PK. Room column: `report_id` PK.
 
-  session_id: UUID;
-  // Supabase NOT NULL FK -> sessions(id). DELETE CASCADE.
+  session_id: UUID | null;
+  // Supabase FK -> sessions(id), DELETE CASCADE. NOT NULL only for report_type='session'.
+
+  patient_id: UUID | null;
+  // Supabase FK -> patients(id). NOT NULL only for report_type='patient' (0007).
+
+  session_ids: UUID[] | null;
+  // Supabase `uuid[]`, patient reports only (0007). The sessions pooled into this snapshot.
+  // Room stores as `session_ids_json`. Null on session reports.
 
   user_id: UUID;
   // Supabase NOT NULL FK -> profiles(id). DELETE CASCADE.
 
   report_type: ReportType;
-  // NOT NULL. Default `session`. CHECK currently allows only `session`.
+  // NOT NULL. Default `session`. CHECK allows `session` or `patient` (0007).
 
   generated_at: TimestampTZ;
   // NOT NULL. Default `now()` in Supabase; epoch millis in Room.
 
   total_samples: number;
-  // NOT NULL. Count of non-deleted verified samples in the session at report time.
+  // NOT NULL. Count of non-deleted verified samples in scope at report time.
 
   total_eggs_confirmed: number;
-  // NOT NULL. Sum of confirmed detections across the smear.
+  // NOT NULL. Sum of confirmed detections across the scope.
 
   positive_species: string[];
   // Supabase `text[]` NOT NULL default `{}`. Room stores as `positive_species_json`.
 
   lpf_per_species: Record<string, { mean: number; min: number; max: number }>;
   // Supabase `jsonb` NOT NULL default `{}`. Room stores as `lpf_per_species_json`.
-  // Per-species low-power-field density range (PB-17/18), replacing Kato-Katz EPG.
+  // Per-species low-power-field density range (PB-17/18), replacing Kato-Katz EPG. On a
+  // patient report this is pooled across every included session's findings.
 
   csv_file_path: string | null;
-  // Nullable local/export path to generated CSV.
+  // Nullable. Legacy only — set on reports generated before 86d4be47c; no report writes one now.
 
   pdf_file_path: string | null;
   // Nullable local/export path to generated PDF. Device-local file or URI.
@@ -833,7 +853,13 @@ export type RelationshipMatrix = [
     from: "sessions";
     cardinality: "1 -> many";
     to: "reports";
-    description: "A session can have generated report snapshots; deleting the session cascades to reports.";
+    description: "A session can have generated session-scoped report snapshots (report_type='session'); deleting the session cascades to reports.";
+  },
+  {
+    from: "patients";
+    cardinality: "1 -> many";
+    to: "reports";
+    description: "A patient can have generated patient-scoped report snapshots (report_type='patient', 0007) pooling several sessions via `session_ids`; deleting the patient cascades to reports.";
   },
   {
     from: "profiles";
@@ -898,8 +924,10 @@ export type RelationshipMatrix = [
  *   Supabase. Its sibling `claim_exempt` is gone: login is mandatory on first
  *   run, so every row has an owner from the moment it is created and the whole
  *   deferred-claim axis it served has nothing left to do.
- * - Reports are implemented for session reports only; admin/cross-session
- *   report types require a future migration.
+ * - Reports have two scopes since `0015_patient_reports.sql`: session reports
+ *   (`session_id` set, `patient_id` null) and patient reports (`patient_id` set,
+ *   `session_id` null, `session_ids` records the pooled sessions). Admin/cross-user
+ *   report types still require a future migration.
  * - Room `psgc_barangays` has no Supabase counterpart at all. It is bundled
  *   reference data for the barangay picker; the surveillance map joins
  *   `patients.psgc_barangay_code` against PSGC boundary GeoJSON instead. The

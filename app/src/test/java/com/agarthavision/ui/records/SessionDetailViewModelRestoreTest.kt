@@ -84,7 +84,7 @@ class SessionDetailViewModelRestoreTest {
             assertEquals(1, remote.downloads)
         }
 
-    private fun restoredEvent() = SessionDetailEvent.ReportRestored(pdfPath = WRITTEN_PDF, csvPath = null)
+    private fun restoredEvent() = SessionDetailEvent.ReportRestored(pdfPath = WRITTEN_PDF)
 
     /** [rows] are what successive `getReportById` calls return. */
     private fun viewModelWith(remote: GatedRemote, rows: List<ReportEntity?>): SessionDetailViewModel {
@@ -92,10 +92,10 @@ class SessionDetailViewModelRestoreTest {
         reportDao.stub { onBlocking { getReportById(REPORT_ID) } doReturnConsecutively rows }
         // The row names a MediaStore id this device no longer holds.
         val fileStore = object : ReportFileStore {
-            override suspend fun writeCsv(reportId: String, sessionId: String, csv: String): String =
-                error("a pdf-only report never writes a csv")
-
             override suspend fun writePdf(reportId: String, sessionId: String, pdf: ByteArray): String =
+                WRITTEN_PDF
+
+            override suspend fun writePatientPdf(reportId: String, patientId: String, pdf: ByteArray): String =
                 WRITTEN_PDF
 
             override suspend fun readBytes(path: String): ByteArray? = null

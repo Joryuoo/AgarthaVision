@@ -51,6 +51,7 @@ A factual audit of the codebase confirms five operational realities:
 5. **PDF Diagnostic Reports in Public Shared Storage:**
    - Generated session reports are saved to shared public external storage in `Documents/AgarthaVision/` via `data/repository/DocumentsReportFileStore.kt::DocumentsReportFileStore` using `MediaStore` or direct filesystem access.
    - Any third-party application on the handset with storage read permissions, or any workstation connected via USB Media Transfer Protocol (MTP), can read these patient-identifying PDF reports without authenticating to AgarthaVision.
+   - Patient reports (14zcqntj2uz) exist alongside session reports and carry the same exposure: the PDF prints the patient's full name and full barangay address, pooled across every included session; filenames are UUID-only (`agarthavision-patient-{patientId}-{reportId}.pdf`) and identify nothing by filename alone, but the PDF body itself is unchanged from the session report's PII posture.
 
 ---
 

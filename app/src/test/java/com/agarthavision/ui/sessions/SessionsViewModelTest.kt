@@ -15,7 +15,10 @@ import com.agarthavision.domain.model.Sex
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.SessionRepository
 import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
+import com.agarthavision.domain.usecase.records.GeneratePatientReportUseCase
+import com.agarthavision.domain.usecase.records.GetPatientReportCandidatesUseCase
 import com.agarthavision.domain.usecase.records.ObserveColleagueNamesUseCase
+import com.agarthavision.domain.usecase.records.PatientReportCandidate
 import com.agarthavision.domain.usecase.sessions.GenerateSessionLabelUseCase
 import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.repository.PsgcRepository
@@ -1165,7 +1168,7 @@ class SessionsViewModelTest {
     // ---------------------------------------------------------------------------
 
     @Test
-    fun `state emits patient and resolved barangay name when patient exists`() =
+    fun `state emits patient and resolved barangay address when patient exists`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patient = defaultTestPatient
             val patientRepo = mock<PatientRepository> {
@@ -1191,13 +1194,43 @@ class SessionsViewModelTest {
                 val settled = expectMostRecentItem()
                 assertEquals("Dela Cruz, Juan D.", settled.patient?.displayName)
                 assertEquals(Sex.MALE, settled.patient?.sex)
-                assertEquals("Poblacion", settled.barangayName)
+                assertEquals("Poblacion, Cebu City, Cebu", settled.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }
 
     @Test
-    fun `state has null patient and null barangayName when patient is not found`() =
+    fun `state omits the province in the barangay address for a chartered city`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val patient = defaultTestPatient
+            val patientRepo = mock<PatientRepository> {
+                on { observePatientById("patient-1") } doReturn flowOf(patient)
+            }
+            val psgcRepo = mock<PsgcRepository> {
+                onBlocking { getBarangay("072217001") } doReturn PsgcBarangay(
+                    code = "072217001",
+                    name = "Poblacion",
+                    cityMuniName = "City of Cebu",
+                    provinceName = null,
+                    regionName = "Region VII",
+                )
+            }
+            val vm = buildViewModelWithIdentityFlow(
+                repo = LambdaSessionRepository({ emptyList() }),
+                identityFlow = MutableStateFlow(LocalIdentity("u1", "u1@test.com")),
+                deps = IdentityFlowDeps(patientRepo = patientRepo, psgcRepo = psgcRepo, patientId = "patient-1"),
+            )
+
+            vm.state.test {
+                advanceUntilIdle()
+                val settled = expectMostRecentItem()
+                assertEquals("Poblacion, City of Cebu", settled.barangayAddress)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `state has null patient and null barangayAddress when patient is not found`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val patientRepo = mock<PatientRepository> {
                 on { observePatientById("unknown-patient") } doReturn flowOf(null)
@@ -1212,7 +1245,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 val settled = expectMostRecentItem()
                 assertNull(settled.patient)
-                assertNull(settled.barangayName)
+                assertNull(settled.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -1249,7 +1282,7 @@ class SessionsViewModelTest {
             vm.state.test {
                 advanceUntilIdle()
                 val initial = expectMostRecentItem()
-                assertEquals("Poblacion", initial.barangayName)
+                assertEquals("Poblacion, Cebu City, Cebu", initial.barangayAddress)
 
                 patientSource.value = defaultTestPatient.copy(
                     lastname = "Santos",
@@ -1258,7 +1291,7 @@ class SessionsViewModelTest {
                 advanceUntilIdle()
                 val updated = expectMostRecentItem()
                 assertEquals("Santos, Juan D.", updated.patient?.displayName)
-                assertEquals("San Roque", updated.barangayName)
+                assertEquals("San Roque, Cebu City, Cebu", updated.barangayAddress)
                 cancelAndIgnoreRemainingEvents()
             }
         }
@@ -1357,6 +1390,8 @@ class SessionsViewModelTest {
             patientRepository = patientRepo,
             psgcRepository = psgcRepo,
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            getPatientReportCandidatesUseCase = mock(),
+            generatePatientReportUseCase = mock(),
             observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
             savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
         )
@@ -1406,12 +1441,268 @@ class SessionsViewModelTest {
             patientRepository = deps.patientRepo ?: stubPatientRepository(),
             psgcRepository = deps.psgcRepo ?: stubPsgcRepository(),
             observeSyncInProgressUseCase = stubSyncInProgressUseCase(deps.syncInProgressFlow),
+            getPatientReportCandidatesUseCase = mock(),
+            generatePatientReportUseCase = mock(),
             observeColleagueNamesUseCase = stubColleagueNamesUseCase(deps.colleagueNames),
             savedStateHandle = SavedStateHandle(
                 if (deps.patientId != null) mapOf("patientId" to deps.patientId) else emptyMap()
             ),
         )
     }
+
+    // ---------------------------------------------------------------------------
+    // Patient report sheet (14zcqntj2uz)
+    // ---------------------------------------------------------------------------
+
+    private fun viewModelForReportSheet(
+        candidatesUseCase: GetPatientReportCandidatesUseCase = mock(),
+        generateUseCase: GeneratePatientReportUseCase = mock(),
+    ): SessionsViewModel {
+        val identityFlow = MutableStateFlow<LocalIdentity?>(LocalIdentity(userId = "u1", email = "user@example.com"))
+        val observeLocalIdentityUseCase = mock<ObserveLocalIdentityUseCase>().also {
+            whenever(it.invoke()).thenReturn(identityFlow)
+        }
+        val sessionManager = mock<SessionManager> {
+            on { state } doReturn MutableStateFlow<SessionState>(SessionState.Idle)
+        }
+        return SessionsViewModel(
+            sessionRepository = RecordingSessionRepository(emptyList()),
+            sessionManager = sessionManager,
+            observeLocalIdentityUseCase = observeLocalIdentityUseCase,
+            generateSessionLabelUseCase = stubLabelUseCase(),
+            patientRepository = stubPatientRepository(),
+            psgcRepository = stubPsgcRepository(),
+            observeSyncInProgressUseCase = stubSyncInProgressUseCase(),
+            getPatientReportCandidatesUseCase = candidatesUseCase,
+            generatePatientReportUseCase = generateUseCase,
+            observeColleagueNamesUseCase = stubColleagueNamesUseCase(),
+            savedStateHandle = SavedStateHandle(mapOf("patientId" to "patient-1")),
+        )
+    }
+
+    @Test
+    fun `opening the report sheet selects only sessions with verified samples`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 0),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals(2, sheet!!.candidates.size)
+                // s2 has no verified samples — it must never start checked (D6): it can never
+                // contribute a finding, and a checked box on it would misrepresent the report.
+                assertEquals(setOf("s1"), sheet.selectedSessionIds)
+                assertFalse(sheet.isLoadingCandidates)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `picking a date range re-derives the selection to sessions inside it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val inRange = makeSession("s1", "u1", startedAt = LocalDate.of(2026, 6, 15))
+            val outOfRange = makeSession("s2", "u1", startedAt = LocalDate.of(2026, 1, 1))
+            val candidates = listOf(
+                PatientReportCandidate(inRange.session, verifiedSampleCount = 2),
+                PatientReportCandidate(outOfRange.session, verifiedSampleCount = 4),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+                // Both start selected: both have verified samples and no range is set yet.
+                assertEquals(setOf("s1", "s2"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                vm.onReportDateRangeSelected(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30))
+                advanceUntilIdle()
+
+                // s2 falls outside the picked range — it must not stay checked even though it
+                // has verified samples, so a narrowed report never silently drops a session the
+                // medtech still believes is included.
+                assertEquals(setOf("s1"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `generating with nothing selected shows a range-specific message, not the use case's`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val outOfRange = makeSession("s1", "u1", startedAt = LocalDate.of(2026, 1, 1))
+            val candidates = listOf(PatientReportCandidate(outOfRange.session, verifiedSampleCount = 2))
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke("patient-1") } doReturn Result.success(candidates)
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase>()
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onReportDateRangeSelected(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30))
+                advanceUntilIdle()
+                assertEquals(emptySet<String>(), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals("No verified samples in the selected range.", sheet!!.error)
+                assertFalse(sheet.isGenerating)
+                cancelAndIgnoreRemainingEvents()
+            }
+            // The use case is never reached — there is nothing left to hand it.
+            verify(generateUseCase, org.mockito.kotlin.never()).invoke(any(), any())
+        }
+
+    @Test
+    fun `dismissing the report sheet clears it`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(emptyList())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onDismissReportSheet()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `toggling a session flips only that session's selection`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidates = listOf(
+                PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 3),
+                PatientReportCandidate(makeSession("s2", "u1").session, verifiedSampleCount = 2),
+            )
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onToggleReportSession("s1")
+                advanceUntilIdle()
+
+                assertEquals(setOf("s2"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `generating successfully closes the sheet and emits a PatientReportGenerated event`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            val events = mutableListOf<SessionsEvent>()
+            val job = launch { vm.events.collect { events += it } }
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                assertNull(expectMostRecentItem().reportSheet)
+                cancelAndIgnoreRemainingEvents()
+            }
+            assertTrue(events.any { it is SessionsEvent.PatientReportGenerated })
+            job.cancel()
+        }
+
+    @Test
+    fun `a failed generation keeps the sheet open with an error, not generating`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.failure(IllegalStateException("boom"))
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                vm.onGeneratePatientReport()
+                advanceUntilIdle()
+
+                val sheet = expectMostRecentItem().reportSheet
+                assertNotNull(sheet)
+                assertEquals("boom", sheet!!.error)
+                assertFalse(sheet.isGenerating)
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
+    fun `a second generate call while one is in flight is ignored (double-tap guard)`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(
+                    listOf(PatientReportCandidate(makeSession("s1", "u1").session, verifiedSampleCount = 1)),
+                )
+            }
+            val generateUseCase = mock<GeneratePatientReportUseCase> {
+                onBlocking { invoke(any(), any()) } doReturn Result.success(fakePatientReport())
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase, generateUseCase = generateUseCase)
+            vm.onOpenGenerateReport()
+            advanceUntilIdle()
+
+            // isGenerating flips synchronously before the coroutine is launched, so a second
+            // call made before the first suspends past that point is already a no-op — no need
+            // to hold the mock open to prove it.
+            vm.onGeneratePatientReport()
+            vm.onGeneratePatientReport()
+            advanceUntilIdle()
+
+            verify(generateUseCase, org.mockito.kotlin.times(1)).invoke(any(), any())
+        }
 }
 
 // ---------------------------------------------------------------------------
@@ -1644,14 +1935,34 @@ private class DuplicateLabelSessionRepository(
 // Model helpers
 // ---------------------------------------------------------------------------
 
-private fun makeSession(id: String, userId: String): SessionWithStats =
+private fun fakePatientReport(): com.agarthavision.domain.model.Report =
+    com.agarthavision.domain.model.Report(
+        id = "report-1",
+        sessionId = null,
+        patientId = "patient-1",
+        sessionIds = listOf("s1"),
+        userId = "u1",
+        reportType = com.agarthavision.domain.model.ReportType.PATIENT,
+        generatedAt = Instant.EPOCH,
+        totalSamples = 1,
+        totalEggsConfirmed = 0,
+        positiveSpecies = emptyList(),
+        lpfPerSpecies = emptyMap(),
+        csvFilePath = null,
+        pdfFilePath = "/Documents/AgarthaVision/patient-report.pdf",
+        supabaseStatus = com.agarthavision.domain.model.ReportSyncStatus.PENDING,
+    )
+
+private fun makeSession(id: String, userId: String, startedAt: LocalDate? = null): SessionWithStats =
     SessionWithStats(
         session = Session(
             id = id,
             userId = userId,
             patientId = "patient-1",
             deviceId = "device-1",
-            startedAt = Instant.EPOCH.toEpochMilli(),
+            startedAt = startedAt
+                ?.atStartOfDay(ZoneId.systemDefault())?.toInstant()?.toEpochMilli()
+                ?: Instant.EPOCH.toEpochMilli(),
             label = "Smear $id",
         ),
         totalSamples = 0,

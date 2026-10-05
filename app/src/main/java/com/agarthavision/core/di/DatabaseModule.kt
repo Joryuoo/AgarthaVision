@@ -17,6 +17,7 @@ import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.dao.SampleSpeciesFindingDao
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.data.local.dao.SpeciesSuggestionDao
+import com.agarthavision.data.repository.AndroidPatientReportPdfRenderer
 import com.agarthavision.data.repository.AndroidReportPdfRenderer
 import com.agarthavision.data.repository.BoundaryRepositoryImpl
 import com.agarthavision.data.repository.ColleagueRepositoryImpl
@@ -39,6 +40,7 @@ import com.agarthavision.domain.repository.ColleagueRepository
 import com.agarthavision.domain.repository.CoverageRepository
 import com.agarthavision.domain.repository.DetectionRepository
 import com.agarthavision.domain.repository.PatientAccessRepository
+import com.agarthavision.domain.repository.PatientReportPdfRenderer
 import com.agarthavision.domain.repository.PatientRepository
 import com.agarthavision.domain.repository.PsgcRepository
 import com.agarthavision.domain.repository.ReportFileStore
@@ -215,6 +217,11 @@ abstract class RepositoryModule {
     abstract fun bindReportPdfRenderer(
         implementation: AndroidReportPdfRenderer,
     ): ReportPdfRenderer
+
+    @Binds
+    abstract fun bindPatientReportPdfRenderer(
+        implementation: AndroidPatientReportPdfRenderer,
+    ): PatientReportPdfRenderer
 
     /**
      * Provides the Supabase-backed authentication repository.

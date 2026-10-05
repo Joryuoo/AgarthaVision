@@ -130,6 +130,11 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
  * **Every bump from 22 onward ships a `Migration`, added to [ALL_MIGRATIONS].** The destructive
  * fallback in `DatabaseModule` stays only for installs older than 22, which no migration
  * covers and which predate the queue. Local schema history is exported under `app/schemas/`.
+ *
+ * Version 25 adds patient-scoped reports (14zcqntj2uz, `0015_patient_reports.sql`):
+ * `reports.session_id` becomes nullable, and `reports.patient_id` /
+ * `reports.session_ids_json` are added so one report can pool several sessions' findings for
+ * a patient rather than describing exactly one session. `MIGRATION_24_25` rebuilds the table.
  */
 @Database(
     entities = [
@@ -144,7 +149,7 @@ import com.agarthavision.data.local.entity.SpeciesSuggestionEntity
         SpeciesSuggestionEntity::class,
         ColleagueEntity::class,
     ],
-    version = 24,
+    version = 25,
     exportSchema = true,
 )
 // One accessor per DAO is how Room exposes them; splitting the class is not an option.

@@ -9,34 +9,20 @@ import androidx.core.net.toUri
 import com.agarthavision.R
 import java.io.File
 
-private const val CSV_MIME_TYPE = "text/csv"
 private const val PDF_MIME_TYPE = "application/pdf"
 private const val CONTENT_URI_PREFIX = "content://"
 
 /**
- * Opens the system share sheet for a report's CSV.
+ * Opens the system share sheet for a report's PDF — the patient-facing artifact, and the
+ * primary share target from the generation snackbar and the Reports list.
  *
- * Sharing from inside the app is the point: before this, getting a report to
- * someone meant leaving for a file manager and finding the file by hand.
- *
- * `csvFilePath` holds one of two shapes depending on where the report was written —
+ * `pdfFilePath` holds one of two shapes depending on where the report was written —
  * a MediaStore `content://` URI (API 29+) or an absolute file path (API 26-28, and
  * anything an older build left in Downloads) — so both are handled.
  *
  * @return null on success, or a string resource explaining why the share could not
  *   start. Every failure is reported: these used to be swallowed, so a report whose
  *   file had been cleared away was simply a tap that did nothing.
- */
-@StringRes
-internal fun shareReportCsv(context: Context, csvFilePath: String?): Int? =
-    shareReportFile(context, csvFilePath, CSV_MIME_TYPE)
-
-/**
- * Opens the system share sheet for a report's PDF — the patient-facing artifact, and the
- * primary share target from the generation snackbar and the Reports list. Same two path shapes
- * as [shareReportCsv]; see its doc for why both are handled.
- *
- * @return null on success, or a string resource explaining why the share could not start.
  */
 @StringRes
 internal fun shareReportPdf(context: Context, pdfFilePath: String?): Int? =
@@ -51,14 +37,6 @@ internal fun shareReportPdf(context: Context, pdfFilePath: String?): Int? =
 @StringRes
 internal fun viewReportPdf(context: Context, pdfFilePath: String?): Int? =
     viewReportFile(context, pdfFilePath, PDF_MIME_TYPE)
-
-/**
- * Opens a report's CSV in a viewer via [Intent.ACTION_VIEW] with the `text/csv` type, so the
- * "open with" chooser offers apps that read spreadsheets/CSV rather than PDF viewers.
- */
-@StringRes
-internal fun viewReportCsv(context: Context, csvFilePath: String?): Int? =
-    viewReportFile(context, csvFilePath, CSV_MIME_TYPE)
 
 @StringRes
 private fun viewReportFile(context: Context, filePath: String?, mimeType: String): Int? {
@@ -92,7 +70,7 @@ private fun shareReportFile(context: Context, filePath: String?, mimeType: Strin
 }
 
 /**
- * Resolves a stored `csvFilePath` to a shareable URI, or null if the file is gone.
+ * Resolves a stored `pdfFilePath` to a shareable URI, or null if the file is gone.
  *
  * A `content://` value came from MediaStore and is already shareable; anything else
  * is a filesystem path and has to go through [FileProvider].

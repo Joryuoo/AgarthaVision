@@ -49,9 +49,10 @@ class SyncReportUseCase @Inject constructor(
             reportDao.updateSupabaseStatus(reportId, ReportSyncStatus.SYNCED.value)
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
+            val scopeTag = report.patientId?.let { "Patient:$it" } ?: "Session:${report.sessionId}"
             Log.e(
                 TAG,
-                "[SyncFailed][Report:$reportId][Session:${report.sessionId}]" +
+                "[SyncFailed][Report:$reportId][$scopeTag]" +
                     "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
                 throwable,
             )
@@ -60,7 +61,7 @@ class SyncReportUseCase @Inject constructor(
     }
 
     /**
-     * Uploads whichever of the two files this report actually has.
+     * Uploads the report's PDF, when this device still has one.
      *
      * A file the device no longer holds is skipped rather than failed. Shared storage is the
      * medtech's to clear, and failing the row over it would park the report in `sync_failed`
@@ -73,12 +74,6 @@ class SyncReportUseCase @Inject constructor(
             report.reportId,
             report.pdfFilePath,
             ReportRemoteDataSource.PDF_EXTENSION,
-        )
-        uploadIfPresent(
-            report.userId,
-            report.reportId,
-            report.csvFilePath,
-            ReportRemoteDataSource.CSV_EXTENSION,
         )
     }
 

@@ -340,6 +340,6 @@ class AgarthaDatabaseSchemaTest {
 
     private companion object {
         /** Keep in step with `AgarthaDatabase.version` and `app/schemas/…/<n>.json`. */
-        private const val EXPECTED_VERSION = 24
+        private const val EXPECTED_VERSION = 25
     }
 }

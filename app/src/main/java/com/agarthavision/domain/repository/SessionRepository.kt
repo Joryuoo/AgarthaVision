@@ -175,4 +175,10 @@ interface SessionRepository {
         userId: String,
         limit: Int,
     ): Flow<List<ActivityItem.SessionStarted>> = emptyFlow()
+
+    /**
+     * All of [userId]'s sessions for [patientId], oldest first — the candidate pool a patient
+     * report is generated from.
+     */
+    suspend fun getSessionsForPatient(patientId: String, userId: String): List<Session> = emptyList()
 }

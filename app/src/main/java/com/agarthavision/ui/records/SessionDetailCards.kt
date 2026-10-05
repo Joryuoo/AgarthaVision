@@ -22,10 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -142,7 +138,7 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .clickable(
-                enabled = report.pdfFilePath != null || report.csvFilePath != null,
+                enabled = report.pdfFilePath != null,
                 onClick = onOpen,
             )
             .padding(vertical = 4.dp),
@@ -164,12 +160,9 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
                 color = AgarthaTheme.colors.textSecondary,
             )
             Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                if (report.pdfFilePath != null) {
+            if (report.pdfFilePath != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     FormatChip(stringResource(R.string.report_format_pdf))
-                }
-                if (report.csvFilePath != null) {
-                    FormatChip(stringResource(R.string.report_format_csv))
                 }
             }
         }
@@ -182,35 +175,27 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
 private fun GenerateReportButton(
     isGenerating: Boolean,
     enabled: Boolean,
-    onClick: (ExportFormat) -> Unit,
+    onClick: () -> Unit,
 ) {
     val colors = AgarthaTheme.colors
-    var menuExpanded by remember { mutableStateOf(false) }
     val clickable = enabled && !isGenerating
-    Box {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .background(
-                    if (clickable) colors.accent else colors.borderStrong,
-                    RoundedCornerShape(999.dp),
-                )
-                .clickable(enabled = clickable, onClick = { menuExpanded = true }),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = AgarthaIcons.Download,
-                contentDescription = stringResource(
-                    if (isGenerating) R.string.report_generating else R.string.report_export
-                ),
-                tint = colors.onAccent,
-                modifier = Modifier.size(17.dp),
+    Box(
+        modifier = Modifier
+            .size(34.dp)
+            .background(
+                if (clickable) colors.accent else colors.borderStrong,
+                RoundedCornerShape(999.dp),
             )
-        }
-        ExportFormatMenu(
-            expanded = menuExpanded,
-            onDismiss = { menuExpanded = false },
-            onSelect = onClick,
+            .clickable(enabled = clickable, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            imageVector = AgarthaIcons.Download,
+            contentDescription = stringResource(
+                if (isGenerating) R.string.report_generating else R.string.report_generate
+            ),
+            tint = colors.onAccent,
+            modifier = Modifier.size(17.dp),
         )
     }
 }
