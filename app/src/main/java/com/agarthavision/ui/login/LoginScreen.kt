@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -56,7 +57,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
@@ -196,15 +196,16 @@ private fun LoginHero(height: Dp, topInset: Dp) {
             .clipToBounds()
             .background(if (colors.isDark) AppColors.MaroonPressed else AppColors.Maroon),
     ) {
-        // Faint lung silhouette bleeding off the top-right, derived from the brand logo.
+        // Outline lung pattern from the brand artwork.
         Image(
-            painter = painterResource(id = R.drawable.ic_logo),
+            painter = painterResource(id = R.drawable.ill_login_pattern),
             contentDescription = null,
-            colorFilter = ColorFilter.tint(Color.White.copy(alpha = 0.07f)),
+            alpha = 0.10f,
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = 90.dp, y = (-50).dp)
-                .size(340.dp),
+                .align(Alignment.TopStart)
+                .offset(x = 150.dp, y = (-70).dp)
+                .wrapContentSize(Alignment.TopStart, unbounded = true)
+                .size(width = 500.dp, height = 537.dp),
         )
         Column(
             modifier = Modifier
@@ -256,7 +257,7 @@ private fun LoginSheet(
             .heightIn(min = minHeight)
             .background(colors.background, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .navigationBarsPadding()
-            .padding(start = 24.dp, end = 24.dp, top = 32.dp, bottom = 24.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -275,7 +276,7 @@ private fun LoginSheet(
                 fontWeight = FontWeight.Normal,
                 lineHeight = 20.sp,
             )
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             state.signedOutNotice?.let { notice ->
                 SignedOutNoticeCard(notice)
@@ -425,7 +426,7 @@ private fun LoginForm(
             )
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         LoginInputGroup(
             label = stringResource(R.string.login_password_label),
@@ -468,7 +469,7 @@ private fun LoginForm(
             )
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
             Text(
@@ -478,11 +479,11 @@ private fun LoginForm(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                     .clickable { /* Handle forgot password */ }
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 2.dp),
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         Button(
             onClick = actions.onSubmit,
@@ -497,7 +498,7 @@ private fun LoginForm(
             contentPadding = PaddingValues(vertical = 0.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(54.dp)
+                .height(50.dp)
         ) {
             if (state.isSubmitting) {
                 CircularProgressIndicator(
@@ -562,7 +563,7 @@ private fun LoginInputGroup(
     val errorText = config.errorText
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             text = label,
@@ -595,7 +596,7 @@ private fun LoginInputGroup(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
+                        .height(48.dp)
                         .background(if (isError) colors.dangerTint else colors.surfaceVariant, shape)
                         .border(width = 1.5.dp, color = borderColor, shape = shape)
                         .padding(start = 16.dp, end = if (config.trailing != null) 4.dp else 16.dp),
