@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.SessionSyncStatus
 import io.github.jan.supabase.SupabaseClient
@@ -8,6 +9,9 @@ import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Order
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.Instant
 import javax.inject.Inject
 
@@ -47,6 +51,8 @@ class SessionRemoteDataSource @Inject constructor(
     // Sessions do not end (86d4ab4vm) and the note was an ad-hoc patient identifier that
     // PatientEntity replaces, so there is nothing left for it to write.
 
+    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     // The phone holds the signed-in user's own sessions plus every session of a patient they are
@@ -64,7 +70,13 @@ class SessionRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<SessionRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches a page of the sessions of the given [patientIds], whoever authored them, ordered by
@@ -80,7 +92,13 @@ class SessionRemoteDataSource @Inject constructor(
             filter { isIn("patient_id", patientIds) }
             order("started_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<SessionRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * `patient_id` is not optional on either side. `0001_init.sql:152-176` declares it

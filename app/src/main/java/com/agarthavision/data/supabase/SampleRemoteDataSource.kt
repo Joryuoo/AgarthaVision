@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
@@ -14,6 +15,9 @@ import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 import java.time.Instant
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.minutes
@@ -108,6 +112,8 @@ class SampleRemoteDataSource @Inject constructor(
         return storagePath
     }
 
+    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     // Own samples plus those of the sessions of patients the user is assigned to, asked for in
@@ -122,7 +128,13 @@ class SampleRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("captured_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<SampleRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<SampleRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches a page of the samples of the given [sessionIds], whoever captured them, ordered by
@@ -134,7 +146,13 @@ class SampleRemoteDataSource @Inject constructor(
             filter { isIn("session_id", sessionIds) }
             order("captured_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<SampleRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<SampleRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches all detections for the given [sampleIds].
@@ -143,7 +161,13 @@ class SampleRemoteDataSource @Inject constructor(
     suspend fun fetchDetections(sampleIds: List<String>): List<DetectionEntity> =
         supabase.postgrest[DETECTIONS_TABLE].select {
             filter { isIn("sample_id", sampleIds) }
-        }.decodeList<DetectionRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<DetectionRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SampleRemoteDataSource", "Skipping malformed detection row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches the model's own output for the given [sampleIds].
@@ -152,7 +176,13 @@ class SampleRemoteDataSource @Inject constructor(
     suspend fun fetchPredictions(sampleIds: List<String>): List<SamplePrediction> =
         supabase.postgrest[PREDICTIONS_TABLE].select {
             filter { isIn("sample_id", sampleIds) }
-        }.decodeList<PredictionRow>().map { it.toSamplePrediction() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<PredictionRow>(element).toSamplePrediction()
+            }.onFailure { error ->
+                Log.w("SampleRemoteDataSource", "Skipping malformed prediction row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches all findings for the given [sampleIds].
@@ -161,7 +191,13 @@ class SampleRemoteDataSource @Inject constructor(
     suspend fun fetchFindings(sampleIds: List<String>): List<SampleSpeciesFindingEntity> =
         supabase.postgrest[FINDINGS_TABLE].select {
             filter { isIn("sample_id", sampleIds) }
-        }.decodeList<FindingRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<FindingRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("SampleRemoteDataSource", "Skipping malformed finding row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Downloads a private sample image from Storage, as the signed-in medtech.

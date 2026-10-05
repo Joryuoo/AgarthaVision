@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -12,11 +13,15 @@ import io.github.jan.supabase.postgrest.query.Order
 import io.github.jan.supabase.storage.storage
 import java.time.Instant
 import javax.inject.Inject
+import kotlin.math.roundToInt
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.put
 
 /**
@@ -116,6 +121,8 @@ open class ReportRemoteDataSource @Inject constructor(
         )
     }
 
+    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
     // ── Pull (read from server) ────────────────────────────────────────────────
 
     // Own reports plus every report on a session of a patient the user is assigned to (0007
@@ -131,7 +138,13 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<ReportRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * Fetches a page of the reports on the given [sessionIds], whoever generated them, ordered by
@@ -147,7 +160,13 @@ open class ReportRemoteDataSource @Inject constructor(
             filter { isIn("session_id", sessionIds) }
             order("generated_at", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<ReportRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+            }.getOrNull()
+        }
 
     private fun Map<String, LpfDensity>.toJsonObject(): JsonObject =
         buildJsonObject {
@@ -232,14 +251,19 @@ internal data class ReportRow(
     @SerialName("pdf_file_path") val pdfFilePath: String? = null,
 )
 
+internal fun JsonPrimitive?.toIntFlexible(): Int =
+    this?.content?.let {
+        it.toIntOrNull() ?: it.toDoubleOrNull()?.roundToInt()
+    } ?: 0
+
 internal fun ReportRow.toEntity(): ReportEntity {
     val generatedAtMs = parseSupabaseInstant(generatedAt).toEpochMilli()
     val gson = Gson()
     val positiveSpeciesJson = gson.toJson(positiveSpecies)
     val lpfMap = lpfPerSpecies.mapValues { (_, v) ->
         val obj = v as? JsonObject
-        val min = (obj?.get("min") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
-        val max = (obj?.get("max") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
+        val min = (obj?.get("min") as? JsonPrimitive).toIntFlexible()
+        val max = (obj?.get("max") as? JsonPrimitive).toIntFlexible()
         LpfDensity(min = min, max = max)
     }
     val lpfPerSpeciesJson = gson.toJson(lpfMap)
