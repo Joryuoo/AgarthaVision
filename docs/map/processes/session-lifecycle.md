@@ -2,7 +2,7 @@
 type: process
 status: verified
 verified: 2026-10-05
-commit: b64271d2
+commit: 33bced13
 ---
 
 # session-lifecycle

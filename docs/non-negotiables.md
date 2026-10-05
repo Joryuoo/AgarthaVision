@@ -37,7 +37,7 @@ The terse list. No explanation here — each line points at the constraint that 
 - **Never hand-draw an icon.** Bottom-bar and brand glyphs are Material Symbols exports in
   `ui/icons/`; in-screen glyphs may come from `Icons.*`. No SVG path data or `ImageVector`
   coordinates written by hand. → C11
-- **Never write a raw hex colour outside the palette definition file.** → C11
+- **Never write a raw hex colour outside the palette definition file.** (exported illustration drawables `res/drawable/ill_*` are the one exemption) → C11
 - **Never hardcode user-facing text.** It goes in `strings.xml`. → C11
 
 ## Process

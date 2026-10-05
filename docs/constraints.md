@@ -347,14 +347,18 @@ with no `contentDescription`, so a capture back button and a sheet close button 
 invisible to TalkBack.
 
 **Drift, corrected in 86d4be3na:** this paragraph described house glyphs as "hand-authored
-1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds only
-`ic_launcher_background`, `ic_launcher_foreground` and `ic_logo`; every UI glyph is, and was,
-a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
-the stale wording is what produced a hand-drawn tab icon (C13).
+1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds the launcher and logo
+vectors, the exported onboarding illustrations, and no hand-authored UI glyphs; every UI glyph is,
+and was, a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten
+(and updated again when the onboarding illustrations arrived), because the stale wording is what produced a
+hand-drawn tab icon (C13).
 
 **Illustrations are exported art, not drawn in code.** Onboarding illustrations are vector exports from Figma in
 `res/drawable/ill_onboarding_{n}_{light,dark}.xml`, chosen with `AgarthaTheme.colors.isDark` (the in-app
 toggle, so no `drawable-night`). Never redraw them in Kotlin or tint them; to change one, replace the file.
+Exported illustration drawables named `res/drawable/ill_*` are exempt from the raw-hex rule because they
+are exported from the design tool, not authored in code, and they ship as separate light and dark files.
+Icons and UI glyphs are not covered by this exemption.
 
 **User-facing strings and localization:** All user-facing prose copy lives in `res/values/strings.xml` and is referenced via `stringResource` or `pluralStringResource`. Non-prose formatting glyphs (such as punctuation separators `" · "` or `"·"` and direction/trend symbols `"↑ "`) are explicitly exempt from `strings.xml` extraction as they carry no translatable prose content.
 
