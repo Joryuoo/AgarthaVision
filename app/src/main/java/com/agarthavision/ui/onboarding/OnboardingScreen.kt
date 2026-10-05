@@ -173,7 +173,7 @@ internal fun OnboardingContent(
                     OnboardingPage(
                         step = step,
                         revealed = alreadyPlayed || reduceMotion,
-                        play = pagerState.currentPage == page && !alreadyPlayed && !reduceMotion,
+                        play = pagerState.targetPage == page && !alreadyPlayed && !reduceMotion,
                         onPlayed = { playedMask = playedMask or (1 shl page) },
                     )
 

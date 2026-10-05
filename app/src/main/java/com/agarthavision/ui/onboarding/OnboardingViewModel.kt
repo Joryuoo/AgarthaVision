@@ -7,9 +7,7 @@ import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class OnboardingViewModel @Inject constructor(
@@ -31,7 +29,7 @@ class OnboardingViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.w(TAG, "Could not save onboarding completion", e)
             }
-            withContext(Dispatchers.Main) { onSaved() }
+            onSaved()
         }
     }
 
