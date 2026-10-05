@@ -26,12 +26,12 @@ class PatientsEmptyContentTest {
     }
 
     @Test
-    fun `empty unfiltered and still downloading says so and offers no create action`() {
+    fun `empty unfiltered and still downloading says so and keeps the create action`() {
         show(narrowed = false, downloading = true)
 
         composeRule.onNodeWithText("Your patients are still downloading").assertIsDisplayed()
         composeRule.onNodeWithText("No patients yet").assertDoesNotExist()
-        composeRule.onNodeWithText("New patient", useUnmergedTree = true).assertDoesNotExist()
+        composeRule.onNodeWithText("New patient", useUnmergedTree = true).assertExists()
     }
 
     @Test

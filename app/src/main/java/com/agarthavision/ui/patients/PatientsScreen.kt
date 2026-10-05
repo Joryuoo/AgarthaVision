@@ -872,7 +872,8 @@ private fun PatientCardSkeleton(modifier: Modifier = Modifier) {
 
 /**
  * Empty-list content. While the first download is still running (and no search/filter is active)
- * it says so instead of "No patients yet", and offers no create call to action.
+ * it says so instead of "No patients yet", but keeps the create call to action so a medtech whose
+ * download never finishes (offline, blocked worker) can still add a patient.
  */
 @Composable
 internal fun PatientsEmptyContent(
@@ -881,7 +882,7 @@ internal fun PatientsEmptyContent(
     onCreatePatient: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val emptyAction: (@Composable () -> Unit)? = if (narrowed || downloading) {
+    val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
         null
     } else {
         { NewPatientButton(onClick = onCreatePatient) }

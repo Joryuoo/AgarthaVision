@@ -602,7 +602,7 @@
     <string name="patients_empty_title">No patients yet</string>
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
     <string name="patients_empty_downloading">Your patients are still downloading</string>
-    <string name="patients_empty_downloading_body">They will appear here when the download finishes.</string>
+    <string name="patients_empty_downloading_body">They will appear here once the download finishes. You can still add a new patient.</string>
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name.</string>
     <string name="patients_new">New patient</string>

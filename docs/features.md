@@ -43,8 +43,9 @@ as working.
 
 ### Patients
 - **Still-downloading empty state.** An empty, unfiltered list for a signed-in user whose first
-  download has not finished says "Your patients are still downloading" with no create-a-patient
-  action, instead of "No patients yet" (`PatientsEmptyContent` in `ui/patients/PatientsScreen.kt`,
+  download has not finished says "Your patients are still downloading" instead of "No patients yet",
+  and the create-a-patient action stays available so an offline or stalled first download never
+  blocks adding a patient (`PatientsEmptyContent` in `ui/patients/PatientsScreen.kt`,
   `domain/usecase/sync/ObserveInitialDownloadDoneUseCase.kt`).
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
   sessions (`User -> Patient -> Session -> Sample`). `ui/patients/PatientsScreen.kt`,
@@ -178,7 +179,8 @@ as working.
 - **First-download status banner.** Under the header, a signed-in user whose first full download
   has not finished sees either "Downloading your records…" (a sync pass is running, from the
   manual button or the background worker) or a warning to connect to the internet before working
-  offline (not running, or offline). Hidden once the download is done
+  offline (not running, or offline). Sync now is disabled while a background sync pass is running,
+  because the dashboard's `isSyncing` includes the worker. Hidden once the download is done
   (`ui/dashboard/InitialDownloadBanner.kt`, `DashboardUiState.initialDownload`).
 - **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,
   Positive rate, To review, AI agreement); page 2 shows **My coverage**
