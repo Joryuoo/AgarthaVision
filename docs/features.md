@@ -75,7 +75,7 @@ as working.
   (`core/session/SessionManager.kt`, `data/local/entity/SessionEntity.kt`).
 - **Smear label.** Auto-generated from the patient as surname abbreviation and first initial, sex
   and age, and the patient's smear sequence (e.g. `LDNJ-M21-S01`,
-  `domain/session/SessionLabelGenerator.kt`), editable thereafter, unique per patient.
+  `domain/session/SessionLabelGenerator.kt`), editable thereafter by long-pressing the session card, unique per patient.
 - **Notes, ended_at, and claim_exempt removed.** Notes were replaced by the Patient entity;
   `ended_at` was dropped because smears remain open; `claim_exempt` was dropped with mandatory
   login.

@@ -643,7 +643,8 @@
     <string name="session_picker_create">New session</string>
     <string name="session_picker_row_active">Active</string>
     <string name="session_picker_row_untitled">Untitled smear</string>
-    <string name="session_picker_row_kebab_desc">Session actions</string>
+    <string name="session_card_long_press_label">Show session actions</string>
+    <string name="sessions_rename_session_action">Rename session</string>
     <string name="session_picker_row_end_session">End session</string>
     <string name="session_picker_dialog_title">New session</string>
     <string name="session_picker_dialog_label">Smear label</string>
