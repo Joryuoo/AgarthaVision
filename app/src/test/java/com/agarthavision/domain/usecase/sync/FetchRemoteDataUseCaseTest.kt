@@ -216,6 +216,47 @@ class FetchRemoteDataUseCaseTest {
         verify(initialFetchStateStore).markCompleted("user-1")
     }
 
+    // ── pullPatientsOnly (sign-in path) ──────────────────────────────────────
+
+    @Test
+    fun `pullPatientsOnly skips when offline`() = runTest {
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+        whenever(authRepository.isAuthenticated()).thenReturn(true)
+        whenever(connectivityObserver.currentlyOnline()).thenReturn(false)
+
+        val result = useCase.pullPatientsOnly()
+
+        assertEquals(0, result.getOrThrow())
+        verify(patientRemoteDataSource, never()).fetchPatientLinks(any(), any(), any())
+    }
+
+    @Test
+    fun `pullPatientsOnly skips when not authenticated`() = runTest {
+        whenever(authRepository.currentLocalUserId()).thenReturn("user-1")
+        whenever(authRepository.isAuthenticated()).thenReturn(false)
+        whenever(connectivityObserver.currentlyOnline()).thenReturn(true)
+
+        val result = useCase.pullPatientsOnly()
+
+        assertEquals(0, result.getOrThrow())
+        verify(patientRemoteDataSource, never()).fetchPatientLinks(any(), any(), any())
+    }
+
+    @Test
+    fun `pullPatientsOnly writes patients and never touches the other pulls or the stores`() = runTest {
+        setupOnlineSignedIn()
+        serverAssigns(fakePatient("pat-1"))
+        whenever(patientDao.getPatientById("pat-1")).thenReturn(null)
+
+        val result = useCase.pullPatientsOnly()
+
+        assertEquals(1, result.getOrThrow())
+        verify(patientDao).upsertPatient(any())
+        verify(sessionRemoteDataSource, never()).fetchOwnSessions(any(), any(), any())
+        verify(initialFetchStateStore, never()).markCompleted(any())
+        verify(fetchOutcomeStore, never()).record(any(), any())
+    }
+
     // ── Patients (PB-05d) ────────────────────────────────────────────────────
 
     @Test

@@ -25,6 +25,16 @@ interface SyncScheduler {
     fun requestSync()
 
     /**
+     * Requests a pass that is guaranteed to run after sign-in completes.
+     *
+     * [requestSync] keeps whatever is already scheduled, so a pass the app-start request left in
+     * flight before the identity existed (it reads "no identity" and skips) would swallow the
+     * post-login request. This one chains after any in-flight pass instead of being dropped.
+     * Same guarantees as [requestSync]: fire-and-forget, never throws.
+     */
+    fun requestSyncAfterSignIn()
+
+    /**
      * Whether a pass is running right now.
      *
      * Derived from the scheduler rather than tracked by a caller, which is what makes it

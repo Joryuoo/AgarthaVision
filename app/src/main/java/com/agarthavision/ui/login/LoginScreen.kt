@@ -44,12 +44,16 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,14 +107,14 @@ fun LoginScreen(
     )
 }
 
-private data class LoginActions(
+internal data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
 )
 
 @Composable
-private fun LoginScreenContent(
+internal fun LoginScreenContent(
     state: LoginUiState,
     actions: LoginActions,
     toastState: AgarthaToastState,
@@ -371,12 +375,30 @@ private fun LoginForm(
                 )
             } else {
                 Text(
-                    text = "Sign in",
+                    text = stringResource(R.string.login_submit),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     lineHeight = 15.sp
                 )
             }
+        }
+
+        state.stage?.let { stage ->
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = stringResource(
+                    when (stage) {
+                        LoginStage.SIGNING_IN -> R.string.login_stage_signing_in
+                        LoginStage.DOWNLOADING_PATIENTS -> R.string.login_stage_downloading_patients
+                    },
+                ),
+                color = themeColors.textSecondary,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics { liveRegion = LiveRegionMode.Polite },
+                textAlign = TextAlign.Center,
+            )
         }
     }
 }

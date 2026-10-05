@@ -26,9 +26,9 @@ by the one-verification-screen merge (86d4ab4tq) and `VerificationQueueViewModel
 longer does — `ui/verify/FrameWithBoxes.kt::FrameWithBoxes` takes UI `FrameBox` values, and
 nothing under `ui/` imports from `data/remote/dto/`.
 
-Four ViewModels skip the use-case layer and inject a `domain/repository/` interface directly:
+Three ViewModels skip the use-case layer and inject a `domain/repository/` interface directly:
 `PatientFormViewModel` (`PatientRepository`, `PsgcRepository` — it inserts and updates patients
-itself), `SessionsViewModel`, `DashboardViewModel` and `LoginViewModel`
+itself), `SessionsViewModel` and `DashboardViewModel`
 (`grep -n "import com.agarthavision.domain.repository" ui/*/*ViewModel.kt` lists them). That is
 not the data layer, so the literal rule holds, but it is the shape C1 exists to prevent.
 

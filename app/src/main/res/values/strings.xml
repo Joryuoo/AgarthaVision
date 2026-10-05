@@ -13,6 +13,8 @@
     <string name="login_forgot_password">Forgot?</string>
     <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
     <string name="login_submit">Log in</string>
+    <string name="login_stage_signing_in">Signing in…</string>
+    <string name="login_stage_downloading_patients">Downloading your patients…</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
     <string name="login_offline_notice">You\'re offline. Signing in requires an internet connection.</string>

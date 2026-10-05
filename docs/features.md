@@ -10,6 +10,10 @@ as working.
 - **Email/password sign-in** through Supabase Auth. No sign-up flow — accounts are
   provisioned in the Supabase dashboard. `ui/login/LoginScreen.kt`,
   `domain/usecase/auth/SignInUseCase.kt`, `data/repository/SupabaseAuthRepository.kt::signIn`.
+- **Staged login.** After the credentials are accepted the login screen shows "Signing in…" then
+  "Downloading your patients…" (`LoginStage`), awaits only the patient pull, and opens the
+  dashboard; the rest of the sync runs in the background
+  (`domain/usecase/auth/CompleteSignInUseCase.kt`). A failed pull never traps the user on login.
 - **Mandatory login.** Sign-in is required on first launch before accessing patients, sessions,
   or capture: `MainActivity` picks the start destination from `MainViewModel.authGate`
   (`domain/usecase/auth/ResolveAuthGateUseCase.kt`). Unowned local data and deferred-claim
