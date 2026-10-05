@@ -124,6 +124,18 @@ fun DashboardScreen(
                 )
             }
 
+            // 1a. First-download status (hidden once the first download is done)
+            if (state.initialDownload != InitialDownload.DONE) {
+                item(key = "initialDownload") {
+                    Spacer(Modifier.height(Spacing.xs))
+                    InitialDownloadBanner(
+                        initialDownload = state.initialDownload,
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                }
+            }
+
             // 1b. Needs Attention strip
             if (!state.needsAttention.isEmpty) {
                 item(key = "needsAttention") {

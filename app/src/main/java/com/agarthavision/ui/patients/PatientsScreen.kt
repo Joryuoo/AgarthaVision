@@ -386,23 +386,10 @@ fun PatientsScreen(
                             },
                         )
                     } else {
-                        val emptyAction: (@Composable () -> Unit)? = if (narrowed) {
-                            null
-                        } else {
-                            { NewPatientButton(onClick = viewModel::onCreatePatient) }
-                        }
-                        EmptyState(
-                            icon = Icons.Outlined.Inbox,
-                            title = stringResource(
-                                if (narrowed) R.string.patients_empty_filtered_title
-                                else R.string.patients_empty_title,
-                            ),
-                            body = stringResource(
-                                if (narrowed) R.string.patients_empty_filtered_body
-                                else R.string.patients_empty_body,
-                            ),
-                            modifier = Modifier.padding(top = Spacing.xxl),
-                            action = emptyAction,
+                        PatientsEmptyContent(
+                            narrowed = narrowed,
+                            downloading = state.initialDownloadPending && !narrowed,
+                            onCreatePatient = viewModel::onCreatePatient,
                         )
                     }
                 }
@@ -881,6 +868,41 @@ private fun PatientCardSkeleton(modifier: Modifier = Modifier) {
         Spacer(modifier = Modifier.width(4.dp))
         SkeletonBox(modifier = Modifier.size(24.dp))
     }
+}
+
+/**
+ * Empty-list content. While the first download is still running (and no search/filter is active)
+ * it says so instead of "No patients yet", and offers no create call to action.
+ */
+@Composable
+internal fun PatientsEmptyContent(
+    narrowed: Boolean,
+    downloading: Boolean,
+    onCreatePatient: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val emptyAction: (@Composable () -> Unit)? = if (narrowed || downloading) {
+        null
+    } else {
+        { NewPatientButton(onClick = onCreatePatient) }
+    }
+    val titleRes = when {
+        narrowed -> R.string.patients_empty_filtered_title
+        downloading -> R.string.patients_empty_downloading
+        else -> R.string.patients_empty_title
+    }
+    val bodyRes = when {
+        narrowed -> R.string.patients_empty_filtered_body
+        downloading -> R.string.patients_empty_downloading_body
+        else -> R.string.patients_empty_body
+    }
+    EmptyState(
+        icon = Icons.Outlined.Inbox,
+        title = stringResource(titleRes),
+        body = stringResource(bodyRes),
+        modifier = modifier.padding(top = Spacing.xxl),
+        action = emptyAction,
+    )
 }
 
 @Composable

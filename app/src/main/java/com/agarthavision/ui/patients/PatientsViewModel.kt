@@ -10,6 +10,7 @@ import com.agarthavision.domain.usecase.patients.PatientListItem
 import com.agarthavision.domain.usecase.patients.PatientSort
 import com.agarthavision.domain.usecase.patients.PatientsQuery
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
+import com.agarthavision.domain.usecase.sync.ObserveInitialDownloadDoneUseCase
 import com.agarthavision.ui.components.BarangayPickerDelegate
 import com.agarthavision.ui.components.BarangayPickerState
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -44,6 +46,8 @@ data class PatientsState(
     val minAge: Int? = null,
     val maxAge: Int? = null,
     val canLoadMore: Boolean = false,
+    /** True while a signed-in user's first full download has not completed yet. */
+    val initialDownloadPending: Boolean = false,
     /**
      * One instant per emission, so every row in a given render computes its age against
      * the same clock reading. Reading the clock per row would let a list drawn across
@@ -99,6 +103,7 @@ class PatientsViewModel @Inject constructor(
     observePatientsUseCase: ObservePatientsUseCase,
     observeLocalIdentityUseCase: ObserveLocalIdentityUseCase,
     searchBarangaysUseCase: SearchBarangaysUseCase,
+    observeInitialDownloadDoneUseCase: ObserveInitialDownloadDoneUseCase,
     private val clock: Clock,
 ) : ViewModel() {
 
@@ -120,6 +125,15 @@ class PatientsViewModel @Inject constructor(
 
     // Identity comes from a use case, not a direct data-source read (ADR-007).
     private val userIdFlow = observeLocalIdentityUseCase().map { it?.userId }
+
+    // Signed in and the first download not finished: an empty list may just be "not here yet".
+    private val initialDownloadPendingFlow = userIdFlow.flatMapLatest { userId ->
+        if (userId == null) {
+            flowOf(false)
+        } else {
+            observeInitialDownloadDoneUseCase(userId).map { done -> !done }
+        }
+    }
 
     // Debounced so a medtech typing a surname triggers one Room query rather than one per
     // keystroke; the raw flow is combined back in below so the field stays responsive.
@@ -180,7 +194,7 @@ class PatientsViewModel @Inject constructor(
     }
 
     val state: StateFlow<PatientsState> =
-        combine(resultFlow, uiInputs) { (query, result), ui ->
+        combine(resultFlow, uiInputs, initialDownloadPendingFlow) { (query, result), ui, downloadPending ->
             PatientsState(
                 patients = result.items,
                 total = result.total,
@@ -192,6 +206,7 @@ class PatientsViewModel @Inject constructor(
                 minAge = ui.minAge,
                 maxAge = ui.maxAge,
                 canLoadMore = result.items.size < result.total,
+                initialDownloadPending = downloadPending,
                 now = clock.instant(),
             )
         }.stateIn(

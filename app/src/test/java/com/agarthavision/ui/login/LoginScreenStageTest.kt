@@ -34,7 +34,7 @@ class LoginScreenStageTest {
     fun signingInStage_showsItsText() {
         show(LoginUiState(isSubmitting = true, stage = LoginStage.SIGNING_IN))
 
-        composeRule.onNodeWithText("Signing in…").assertIsDisplayed()
+        composeRule.onNodeWithText("Logging in…").assertIsDisplayed()
     }
 
     @Test
@@ -48,7 +48,7 @@ class LoginScreenStageTest {
     fun noStage_showsNoProgressText() {
         show(LoginUiState())
 
-        composeRule.onNodeWithText("Signing in…").assertDoesNotExist()
+        composeRule.onNodeWithText("Logging in…").assertDoesNotExist()
         composeRule.onNodeWithText("Downloading your patients…").assertDoesNotExist()
     }
 }

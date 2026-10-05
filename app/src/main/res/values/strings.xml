@@ -13,7 +13,7 @@
     <string name="login_forgot_password">Forgot?</string>
     <string name="login_security_note">Access is restricted to medical technologists provisioned by your facility\'s administrator.</string>
     <string name="login_submit">Log in</string>
-    <string name="login_stage_signing_in">Signing in…</string>
+    <string name="login_stage_signing_in">Logging in…</string>
     <string name="login_stage_downloading_patients">Downloading your patients…</string>
     <string name="login_failed_title">Login failed</string>
     <string name="login_failed_generic">Unable to log in. Check the account and try again.</string>
@@ -30,6 +30,8 @@
     <string name="dashboard_sign_in">Sign in</string>
     <string name="dashboard_sync_now">Sync now</string>
     <string name="dashboard_syncing">Syncing…</string>
+    <string name="dashboard_initial_download_in_progress">Downloading your records…</string>
+    <string name="dashboard_initial_download_incomplete">Your records haven\'t finished downloading. Connect to the internet before working offline.</string>
     <plurals name="dashboard_pending_upload">
         <item quantity="one">%1$d item pending upload</item>
         <item quantity="other">%1$d items pending upload</item>
@@ -599,6 +601,8 @@
     <string name="patients_search_placeholder">Search by name…</string>
     <string name="patients_empty_title">No patients yet</string>
     <string name="patients_empty_body">Add a patient to start recording their smears.</string>
+    <string name="patients_empty_downloading">Your patients are still downloading</string>
+    <string name="patients_empty_downloading_body">They will appear here when the download finishes.</string>
     <string name="patients_empty_search_title">No matches</string>
     <string name="patients_empty_search_body">No patient matches that name.</string>
     <string name="patients_new">New patient</string>
