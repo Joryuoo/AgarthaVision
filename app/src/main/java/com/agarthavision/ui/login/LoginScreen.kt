@@ -264,9 +264,10 @@ private fun LoginSheet(
             Text(
                 text = stringResource(R.string.login_title),
                 color = colors.textPrimary,
-                fontSize = 26.sp,
+                fontSize = 32.sp,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp,
+                letterSpacing = (-0.8).sp,
+                lineHeight = 36.sp,
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
@@ -495,14 +496,13 @@ private fun LoginForm(
                 disabledContainerColor = themeColors.brandFill.copy(alpha = 0.5f),
                 disabledContentColor = themeColors.onBrandFill.copy(alpha = 0.5f)
             ),
-            contentPadding = PaddingValues(vertical = 0.dp),
+            contentPadding = PaddingValues(vertical = 16.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp)
         ) {
             if (state.isSubmitting) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
+                    modifier = Modifier.size(24.dp),
                     color = themeColors.onAccent,
                     strokeWidth = 2.dp
                 )
@@ -585,6 +585,7 @@ private fun LoginInputGroup(
             textStyle = TextStyle(
                 color = colors.textPrimary,
                 fontSize = 15.sp,
+                lineHeight = 20.sp,
                 fontWeight = FontWeight.Normal
             ),
             singleLine = true,
@@ -596,7 +597,6 @@ private fun LoginInputGroup(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp)
                         .background(if (isError) colors.dangerTint else colors.surfaceVariant, shape)
                         .border(width = 1.5.dp, color = borderColor, shape = shape)
                         .padding(start = 16.dp, end = if (config.trailing != null) 4.dp else 16.dp),
@@ -611,12 +611,16 @@ private fun LoginInputGroup(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                     }
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    Box(
+                        modifier = Modifier.weight(1f).padding(vertical = 18.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
                         if (value.isEmpty()) {
                             Text(
                                 text = placeholder,
                                 color = colors.textTertiary,
                                 fontSize = 15.sp,
+                                lineHeight = 20.sp,
                                 fontWeight = FontWeight.Normal
                             )
                         }
