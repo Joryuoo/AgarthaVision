@@ -9,6 +9,27 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
+
+### Patient report insert rule · `14zcqntk68x`
+
+- **`0016_patient_report_own_patient_sessions.sql`** recreates `reports_insert_own_session`. A
+  patient report is accepted only when `session_ids` names at least one session, and every one
+  is the writer's own **and** belongs to the report's `patient_id`. Before it, a medtech linked
+  to two patients could file a report on patient A pooling a session of patient B, and a Lab B
+  session's findings would reach Lab A's org admin through the console's `patient_id` read
+  (admin/0004). Session reports are checked exactly as before. An empty or null `session_ids`
+  is now refused; the phone never sends one.
+- **`sessions.patient_id` is fixed once written.** A trigger refuses any update that changes
+  it, for every role. Without it the new rule could be met by moving a session onto the report's
+  patient and back. The phone never moves a session; its upserts resend the same value.
+- Applied by hand (C6), independent of any build. The file's header carries a read-only count
+  of existing patient reports the old rule let in; nothing is fixed in place (C8).
+- Tested locally against `0001`–`0016` through RLS: the ticket's repro is refused with 42501,
+  a report on the patient's own sessions still inserts, and session reports are unchanged.
+
+---
+
 ## feature/patient-report-and-address-pdf-only — patient-scoped PDF reports; session card shows the full address; barangay search takes commas · 2026-09-29
 
 ### Patient reports (pooled, PDF-only) · `14zcqntj2uz`
