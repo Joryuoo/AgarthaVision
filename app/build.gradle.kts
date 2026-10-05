@@ -67,11 +67,6 @@ android {
                 "INFERENCE_URL",
                 "\"${localProperties.getProperty("INFERENCE_URL_DEV") ?: ""}\"",
             )
-            buildConfigField(
-                "String",
-                "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY_DEV") ?: ""}\"",
-            )
         }
         release {
             isMinifyEnabled = false
@@ -89,11 +84,6 @@ android {
                 "String",
                 "INFERENCE_URL",
                 "\"${localProperties.getProperty("INFERENCE_URL_PROD") ?: ""}\"",
-            )
-            buildConfigField(
-                "String",
-                "INFERENCE_API_KEY",
-                "\"${localProperties.getProperty("INFERENCE_API_KEY_PROD") ?: ""}\"",
             )
         }
     }
