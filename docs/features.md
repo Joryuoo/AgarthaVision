@@ -146,10 +146,7 @@ as working.
 - **Records browser** over verified samples (`ui/records/RecordsScreen.kt`,
   `domain/usecase/records/GetRecordsUseCase.kt`).
 - **Session detail** with per-species counts and LPF density ranges (`ui/records/SessionDetailViewModel.kt`).
-- **LPF Density ranges (Direct Smear).** Replaces EPG. Reported per species as a `min..max` range
-  across all fields examined in a session (clean fields contribute 0), paired with a qualitative
-  descriptor (*rare / few / moderate / numerous*). Aggregated via `aggregateLpfPerSpecies`
-  (`domain/usecase/reports/LpfAggregation.kt`, `domain/usecase/reports/SessionEggCountUseCase.kt`).
+- **LPF Density ranges & Parasite Burden (Direct Smear).** Replaces WHO Kato-Katz EPG infectivity tiers (PB-16 / `4909f78`). WHO/DOH light/moderate/heavy intensity tables are defined strictly for Kato-Katz EPG and cannot be rescaled to Direct Smear LPF. The app reports LPF density as a `min..max` range across all fields examined in a session (clean fields contribute 0), paired with the conventional wet-mount descriptor (*rare / few / moderate / numerous*) and defensible estimated parasite burden levels (*Low / Moderate / High Burden*). Re-adding a clinical intensity tier requires an explicit cutoff table signed off clinically for Direct Smear LPF by name and date. Aggregated via `aggregateLpfPerSpecies` (`domain/usecase/reports/LpfAggregation.kt`, `domain/model/LpfDensity.kt`).
 - **Detection count rule:** Counts non-false-positive detections
   (`data/local/dao/DetectionDao.kt::getConfirmedEggCountsForSession`: `d.verdict != 'false_positive'`).
 - **Sample detail with image fallback** — local file first, then 15-minute signed Supabase Storage URL.
