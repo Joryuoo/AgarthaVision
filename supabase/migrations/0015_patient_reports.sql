@@ -1,8 +1,9 @@
--- 0007 · Patient-scoped reports
+-- 0015 · Patient-scoped reports
 --
 -- Run via: Supabase dashboard → SQL Editor → paste → Run. By hand, once, per C6.
 -- Target: project `agarthavision` (zxojfpfarhhoxjjicphi).
--- Requires: 0001_init.sql, 0006_drop_species_touched.sql.
+-- Requires: 0001_init.sql, 0006_drop_species_touched.sql, 0007_patient_shared_history.sql,
+--           0010_writes_need_own_session.sql (this file replaces one of its policies).
 --
 -- ── Why ──────────────────────────────────────────────────────────────────────
 -- A report so far always belonged to exactly one session. A patient report pools every
@@ -57,5 +58,33 @@ with check (
         )
     )
 );
+
+-- 0010 added a RESTRICTIVE insert policy requiring the report's session to be the writer's own.
+-- Restrictive policies are ANDed with the permissive ones, and a patient report has no
+-- session_id, so that check is never true for it and every patient report insert would be
+-- refused. Recreate it: a session report still needs its own session; a patient report instead
+-- needs every session it pooled (session_ids) to be one the writer authored, which keeps 0010's
+-- guarantee that nobody reports on a colleague's session.
+drop policy "reports_insert_own_session" on public.reports;
+
+create policy "reports_insert_own_session"
+on public.reports as restrictive for insert
+with check (
+    case
+        when session_id is not null then
+            exists (select 1 from public.sessions se where se.id = session_id and se.user_id = auth.uid())
+        else
+            not exists (
+                select 1 from unnest(coalesce(session_ids, '{}'::uuid[])) as sid
+                where not exists (
+                    select 1 from public.sessions se where se.id = sid and se.user_id = auth.uid()
+                )
+            )
+    end
+);
+
+-- Read side, unchanged: colleagues cannot read a patient report (row or file) because
+-- `reports_select_via_patient` and `can_read_report_object` (0007) key on can_read_session() of
+-- session_id, which is false when it is null. Only the author sees it.
 
 commit;

@@ -97,6 +97,9 @@ PK column is `report_id`. Differences:
   patient-linked" rule, rows and bucket together; the pull brings colleagues' reports down
   (`ReportRemoteDataSource.kt::fetchReportsForSessions`, beside `::fetchOwnReports`) and
   Session Detail lists them (`ReportDao::observeReportsForSession`).
+- **Patient reports are author-only.** A colleague cannot read one, row or file: the read policies
+  key on the session, and a patient report has none. Its insert must also pass 0010's
+  own-session rule, which `0015_patient_reports.sql` re-expresses over `session_ids`.
 - **Owned by** [`Session`](Session.md) (session reports) or [`Patient`](Patient.md) (patient
   reports, 0007) and [`Profile`](Profile.md).
 - **Aggregates** [`Detection`](Detection.md) through [`Sample`](Sample.md) — it stores counts,
