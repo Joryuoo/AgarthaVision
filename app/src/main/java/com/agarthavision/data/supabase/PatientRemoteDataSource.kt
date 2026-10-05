@@ -144,52 +144,6 @@ class PatientRemoteDataSource @Inject constructor(
         updatedAt = Instant.ofEpochMilli(updatedAt).toString(),
     )
 
-    @Serializable
-    private data class PatientRow(
-        @SerialName("id") val id: String,
-        @SerialName("lastname") val lastname: String,
-        @SerialName("firstname") val firstname: String,
-        @SerialName("middle_name") val middleName: String? = null,
-        @SerialName("sex") val sex: String,
-        @SerialName("birthdate") val birthdate: String,
-        @SerialName("psgc_barangay_code") val psgcBarangayCode: String,
-        @SerialName("created_by") val createdBy: String,
-        @SerialName("created_at") val createdAt: String,
-        @SerialName("updated_at") val updatedAt: String,
-    )
-
-    /**
-     * A row pulled from the server is by definition already there, so it lands as
-     * `synced`. The E4 guard in `FetchRemoteDataUseCase` is what stops this overwriting a
-     * local row still carrying unsynced work.
-     */
-    private fun PatientRow.toEntity(): PatientEntity = PatientEntity(
-        patientId = id,
-        lastname = lastname,
-        firstname = firstname,
-        middleName = middleName,
-        sex = sex,
-        birthdate = LocalDate.parse(birthdate).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
-        psgcBarangayCode = psgcBarangayCode,
-        createdBy = createdBy,
-        createdAt = parseSupabaseInstant(createdAt).toEpochMilli(),
-        updatedAt = parseSupabaseInstant(updatedAt).toEpochMilli(),
-        supabaseStatus = PatientSyncStatus.SYNCED.value,
-    )
-
-    @Serializable
-    private data class PatientUserRow(
-        @SerialName("patient_id") val patientId: String,
-        @SerialName("user_id") val userId: String,
-        @SerialName("linked_at") val linkedAt: String,
-    )
-
-    private fun PatientUserRow.toEntity(): PatientUserEntity = PatientUserEntity(
-        patientId = patientId,
-        userId = userId,
-        linkedAt = parseSupabaseInstant(linkedAt).toEpochMilli(),
-    )
-
     private companion object {
         const val PATIENTS_TABLE = "patients"
         const val PATIENT_USERS_TABLE = "patient_users"
@@ -198,3 +152,49 @@ class PatientRemoteDataSource @Inject constructor(
         const val UNIQUE_VIOLATION = "23505"
     }
 }
+
+@Serializable
+internal data class PatientRow(
+    @SerialName("id") val id: String,
+    @SerialName("lastname") val lastname: String,
+    @SerialName("firstname") val firstname: String,
+    @SerialName("middle_name") val middleName: String? = null,
+    @SerialName("sex") val sex: String,
+    @SerialName("birthdate") val birthdate: String,
+    @SerialName("psgc_barangay_code") val psgcBarangayCode: String,
+    @SerialName("created_by") val createdBy: String,
+    @SerialName("created_at") val createdAt: String,
+    @SerialName("updated_at") val updatedAt: String,
+)
+
+/**
+ * A row pulled from the server is by definition already there, so it lands as
+ * `synced`. The E4 guard in `FetchRemoteDataUseCase` is what stops this overwriting a
+ * local row still carrying unsynced work.
+ */
+internal fun PatientRow.toEntity(): PatientEntity = PatientEntity(
+    patientId = id,
+    lastname = lastname,
+    firstname = firstname,
+    middleName = middleName,
+    sex = sex,
+    birthdate = LocalDate.parse(birthdate).atStartOfDay(CLINICAL_ZONE).toInstant().toEpochMilli(),
+    psgcBarangayCode = psgcBarangayCode,
+    createdBy = createdBy,
+    createdAt = parseSupabaseInstant(createdAt).toEpochMilli(),
+    updatedAt = parseSupabaseInstant(updatedAt).toEpochMilli(),
+    supabaseStatus = PatientSyncStatus.SYNCED.value,
+)
+
+@Serializable
+internal data class PatientUserRow(
+    @SerialName("patient_id") val patientId: String,
+    @SerialName("user_id") val userId: String,
+    @SerialName("linked_at") val linkedAt: String,
+)
+
+internal fun PatientUserRow.toEntity(): PatientUserEntity = PatientUserEntity(
+    patientId = patientId,
+    userId = userId,
+    linkedAt = parseSupabaseInstant(linkedAt).toEpochMilli(),
+)
