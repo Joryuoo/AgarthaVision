@@ -1,5 +1,7 @@
 package com.agarthavision.ui.login
 
+import android.app.Activity
+import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,6 +38,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.LocalAutofillHighlightBrush
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
@@ -56,6 +62,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
@@ -105,6 +112,16 @@ fun LoginScreen(
     val toastState = rememberAgarthaToastState()
     val loginFailedTitle = stringResource(R.string.login_failed_title)
     val loginFailedGeneric = stringResource(R.string.login_failed_generic)
+
+    // The activity defaults to adjustPan, which would pan the window up on top of imePadding() and
+    // leave a blank band above the keyboard. Resize while on Login, then restore for other screens.
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val window = (view.context as? Activity)?.window
+        val previous = window?.attributes?.softInputMode
+        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        onDispose { previous?.let { window.setSoftInputMode(it) } }
+    }
 
     LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
@@ -261,7 +278,7 @@ private fun LoginSheet(
             .background(colors.background, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             // IME inset already includes the nav-bar area, so exclude it to avoid double-counting.
             .windowInsetsPadding(WindowInsets.navigationBars.exclude(WindowInsets.ime))
-            .padding(start = 24.dp, end = 24.dp, top = 28.dp, bottom = 24.dp),
+            .padding(start = 24.dp, end = 24.dp, top = 36.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
@@ -579,13 +596,16 @@ private fun LoginInputGroup(
         var isFocused by remember { mutableStateOf(false) }
         val borderColor = if (isError) colors.danger else if (isFocused) colors.accent else colors.borderStrong
         val shape = RoundedCornerShape(14.dp)
+        val fieldShape = RoundedCornerShape(10.dp)
 
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .onFocusChanged { isFocused = it.isFocused },
+        CompositionLocalProvider(LocalAutofillHighlightBrush provides SolidColor(Color.Transparent)) {
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(fieldShape)
+                    .onFocusChanged { isFocused = it.isFocused },
             textStyle = TextStyle(
                 color = colors.textPrimary,
                 fontSize = 15.sp,
@@ -634,6 +654,7 @@ private fun LoginInputGroup(
                 }
             }
         )
+        }
         if (isError && errorText != null) {
             Text(
                 text = errorText,
