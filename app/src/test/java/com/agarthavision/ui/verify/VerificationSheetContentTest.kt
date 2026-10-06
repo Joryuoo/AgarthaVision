@@ -1784,4 +1784,110 @@ class VerificationSheetContentTest {
 
         composeRule.onNodeWithTag(VerifyTestTags.addedStageDropdown(0)).assertDoesNotExist()
     }
+
+    // ── Edit mode, pinned action bar, and added species card redesign ────────
+
+    private fun setContentWithEditMode(state: VerificationUiState, isEditing: Boolean): Recorder {
+        val recorder = Recorder()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(
+                    state = state,
+                    actions = actionsFor(recorder),
+                    isEditing = isEditing,
+                )
+            }
+        }
+        return recorder
+    }
+
+    @Test
+    fun `edit mode shows Save changes, Discard, and Editing chip`() {
+        setContentWithEditMode(state(), isEditing = true)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
+            .assertTextContains("Save changes")
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
+            .assertTextContains("Discard")
+        composeRule.onNodeWithText("Editing").assertIsDisplayed()
+    }
+
+    @Test
+    fun `submit mode shows Submit and Discard without Editing chip`() {
+        setContentWithEditMode(state(), isEditing = false)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
+            .assertTextContains("Submit")
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
+            .assertTextContains("Discard")
+        composeRule.onNodeWithText("Editing").assertDoesNotExist()
+    }
+
+    @Test
+    fun `primary and secondary action nodes are displayed without scrolling with several detections`() {
+        val predictionsCount = 5
+        val manyPredictionsState = VerificationUiState(
+            frame = frame(predictions = predictionsCount),
+            frameIndexInQueue = 1,
+            queueSize = 1,
+            findings = List(predictionsCount) {
+                Finding(
+                    prediction = Prediction("Ascaris", 0.9f, 100f, 100f, 50f, 50f),
+                    answers = answered(isEgg = true, isBoxCorrect = true, speciesConfirmed = true),
+                )
+            },
+        )
+        setContent(manyPredictionsState)
+
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION).assertIsDisplayed()
+    }
+
+    @Test
+    fun `added species card shows Added species 1 and Added by you and collapses to summary after save`() {
+        val findingsState = mutableStateOf(
+            listOf(
+                Finding(
+                    answers = VerificationAnswers(
+                        species = EggSpecies.ASCARIS,
+                        fieldTotal = 1,
+                    ),
+                ),
+            ),
+        )
+        val expandedIndex = mutableStateOf<Int?>(0)
+
+        val recorder = Recorder()
+        composeRule.setContent {
+            AgarthaVisionTheme {
+                VerificationSheetContent(
+                    state = VerificationUiState(
+                        frame = frame(source = FrameSource.MANUAL, predictions = 0),
+                        frameIndexInQueue = 1,
+                        queueSize = 1,
+                        findings = findingsState.value,
+                        expandedFindingIndex = expandedIndex.value,
+                    ),
+                    actions = VerificationSheetActions(
+                        onCollapseFinding = {
+                            recorder.collapsedFindings += it
+                            expandedIndex.value = null
+                        },
+                    ),
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Added species 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Added by you").assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).assertIsDisplayed()
+
+        sheetNode(VerifyTestTags.saveFinding(0)).performClick()
+
+        assertEquals(listOf(0), recorder.collapsedFindings)
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesSummary(0)).assertIsDisplayed()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).assertDoesNotExist()
+        composeRule.onNodeWithText("Ascaris lumbricoides").assertIsDisplayed()
+        composeRule.onNodeWithText("1 egg").assertIsDisplayed()
+    }
 }
