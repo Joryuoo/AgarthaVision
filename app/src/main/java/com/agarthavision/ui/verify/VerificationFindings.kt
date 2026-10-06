@@ -6,12 +6,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -255,7 +257,10 @@ internal fun AddedFindings(
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (addedIndices.isNotEmpty()) {
-            SectionLabel(stringResource(R.string.verify_species_you_added))
+            SectionLabel(
+                text = stringResource(R.string.verify_species_you_added),
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
         }
 
         addedIndices.forEach { index ->
@@ -264,6 +269,7 @@ internal fun AddedFindings(
             if (index == expandedIndex) {
                 AddedFindingCard(
                     index = index,
+                    ordinal = index - boxCount + 1,
                     finding = findings[index],
                     // The eggs of this species+stage the frame already accounts for: boxes the
                     // medtech kept, plus boxes they drew themselves. Shown under the field as
@@ -284,16 +290,29 @@ internal fun AddedFindings(
             }
         }
 
-        Text(
-            text = stringResource(R.string.verify_add_species),
-            color = if (enabled) AgarthaTheme.colors.accent else AgarthaTheme.colors.textTertiary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+        val colors = AgarthaTheme.colors
+        Box(
             modifier = Modifier
-                .testTag(VerifyTestTags.ADD_SPECIES)
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .heightIn(min = 48.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(
+                    1.dp,
+                    if (enabled) colors.borderStrong else colors.border,
+                    RoundedCornerShape(12.dp),
+                )
                 .clickable(enabled = enabled) { actions.onAddSpecies() }
-                .padding(vertical = 10.dp),
-        )
+                .testTag(VerifyTestTags.ADD_SPECIES),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.verify_add_species),
+                color = if (enabled) colors.accent else colors.textTertiary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
 
         LocateEggsSection(findings = findings, boxCount = boxCount, actions = actions)
     }
@@ -305,6 +324,7 @@ internal fun AddedFindings(
 @Composable
 private fun AddedFindingCard(
     index: Int,
+    ordinal: Int,
     finding: Finding,
     floor: Int,
     boxed: Int,
@@ -312,17 +332,35 @@ private fun AddedFindingCard(
     suggestions: List<String> = emptyList(),
     onExpandedCardPositioned: (LayoutCoordinates) -> Unit = {},
 ) {
+    val colors = AgarthaTheme.colors
     val total = finding.answers.fieldTotal
     val belowFloor = (total ?: 0) < floor
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(bottom = 12.dp)
-            .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(12.dp))
+            .background(colors.surface, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
             .onGloballyPositioned(onExpandedCardPositioned)
             .testTag(VerifyTestTags.addedSpeciesForm(index))
-            .padding(12.dp),
+            .padding(16.dp),
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.verify_added_species_title, ordinal),
+                color = colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            ModeChip(stringResource(R.string.verify_added_by_you_chip))
+        }
+
         SpeciesDropdown(
             selected = finding.answers.species,
             otherText = finding.answers.otherSpeciesText,
