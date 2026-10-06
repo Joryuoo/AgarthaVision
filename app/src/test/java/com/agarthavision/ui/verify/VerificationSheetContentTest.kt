@@ -1436,7 +1436,7 @@ class VerificationSheetContentTest {
             ).copy(expandedFindingIndex = 0),
         )
 
-        sheetNode(VerifyTestTags.removeFinding(0)).assertTextContains("Discard")
+        sheetNode(VerifyTestTags.removeFinding(0)).assertTextContains("Remove species")
         composeRule.onNodeWithContentDescription("Remove this species").assertDoesNotExist()
     }
 
