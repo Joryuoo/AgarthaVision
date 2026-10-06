@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.agarthavision.data.local.dao.DetectionDao
@@ -41,7 +41,7 @@ class SyncSampleUseCase @Inject constructor(
         val sample = sampleDao.getSampleByIdIncludingDeleted(sampleId)
         if (sample == null) {
             val errorMsg = "Sample $sampleId does not exist."
-            Log.e(TAG, "[SyncFailed][Sample:$sampleId][Class:MISSING_ENTITY] $errorMsg")
+            Logger.e(TAG, "[SyncFailed][Sample:$sampleId][Class:MISSING_ENTITY] $errorMsg")
             return Result.failure(IllegalArgumentException(errorMsg))
         }
 
@@ -85,7 +85,7 @@ class SyncSampleUseCase @Inject constructor(
             )
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
-            Log.e(
+            Logger.e(
                 TAG,
                 "[SyncFailed][Sample:$sampleId][Session:${sample.sessionId}]" +
                     "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",

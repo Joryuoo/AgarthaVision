@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.domain.repository.ReportFileStore
 import javax.inject.Inject
@@ -89,7 +89,7 @@ class RestoreReportFilesUseCase @Inject constructor(
 
         val objectPath = ReportRemoteDataSource.objectPathFor(userId, reportId, ReportRemoteDataSource.PDF_EXTENSION)
         val bytes = runCatching { remoteDataSource.downloadReportFile(objectPath) }
-            .onFailure { Log.w(TAG, "No stored pdf for report $reportId", it) }
+            .onFailure { Logger.w(TAG, "No stored pdf for report $reportId", it) }
             .getOrNull()
 
         return bytes?.let {
@@ -100,7 +100,7 @@ class RestoreReportFilesUseCase @Inject constructor(
                     reportFileStore.writePdf(reportId, requireNotNull(sessionId), it)
                 }
             }
-                .onFailure { e -> Log.e(TAG, "Could not write restored pdf for $reportId", e) }
+                .onFailure { e -> Logger.e(TAG, "Could not write restored pdf for $reportId", e) }
                 .getOrNull()
         }
     }

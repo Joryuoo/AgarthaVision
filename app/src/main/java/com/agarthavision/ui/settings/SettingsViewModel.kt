@@ -1,6 +1,6 @@
 package com.agarthavision.ui.settings
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
@@ -162,7 +162,7 @@ class SettingsViewModel @Inject constructor(
     fun onSelectTheme(mode: ThemeMode) {
         viewModelScope.launch {
             setThemeModeUseCase(mode).onFailure { error ->
-                Log.e(TAG, "Failed to persist theme mode $mode", error)
+                Logger.e(TAG, "Failed to persist theme mode $mode", error)
             }
         }
     }
@@ -179,10 +179,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             isSyncingFlow.value = true
             syncPendingDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (push) failed", error)
+                Logger.e(TAG, "Manual sync (push) failed", error)
             }
             fetchRemoteDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (fetch) failed", error)
+                Logger.e(TAG, "Manual sync (fetch) failed", error)
             }
             isSyncingFlow.value = false
         }

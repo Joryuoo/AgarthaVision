@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -142,7 +142,7 @@ open class ReportRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
             }.getOrNull()
         }
 
@@ -164,7 +164,7 @@ open class ReportRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<ReportRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
+                Logger.w("ReportRemoteDataSource", "Skipping malformed report row: ${error.message}")
             }.getOrNull()
         }
 

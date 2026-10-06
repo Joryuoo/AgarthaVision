@@ -1,6 +1,6 @@
 package com.agarthavision.ui.components
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.model.PsgcBarangay
 import com.agarthavision.domain.usecase.sessions.SearchBarangaysUseCase
 import kotlinx.coroutines.CoroutineScope
@@ -68,7 +68,7 @@ class BarangayPickerDelegate(
                         // Without this the picker renders its "no barangay matches" state
                         // for a broken table exactly as it does for a typo, and nothing
                         // anywhere says the dataset failed to seed.
-                        Log.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
+                        Logger.w(TAG, "Barangay search failed for query of length ${query.length}.", throwable)
                         emptyList()
                     }
                 }

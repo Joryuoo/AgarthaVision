@@ -1,6 +1,6 @@
 package com.agarthavision.ui.dashboard
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -558,7 +558,7 @@ class DashboardViewModel @Inject constructor(
         val target = if (uiState.value.isDarkMode) ThemeMode.LIGHT else ThemeMode.DARK
         viewModelScope.launch {
             setThemeModeUseCase(target).onFailure { error ->
-                Log.e(TAG, "Failed to persist theme mode $target", error)
+                Logger.e(TAG, "Failed to persist theme mode $target", error)
             }
         }
     }
@@ -568,10 +568,10 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             isSyncingFlow.value = true
             syncPendingDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (push) failed", error)
+                Logger.e(TAG, "Manual sync (push) failed", error)
             }
             fetchRemoteDataUseCase().onFailure { error ->
-                Log.e(TAG, "Manual sync (fetch) failed", error)
+                Logger.e(TAG, "Manual sync (fetch) failed", error)
             }
             isSyncingFlow.value = false
         }

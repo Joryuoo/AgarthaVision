@@ -1,6 +1,6 @@
 package com.agarthavision.domain.usecase.sync
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.SampleImageStore
 import com.agarthavision.data.local.dao.SampleDao
 import com.agarthavision.data.local.entity.SampleEntity
@@ -99,7 +99,7 @@ class CacheSampleImagesUseCase @Inject constructor(
             }
             val storagePath = sample.storagePath.orEmpty()
             val bytes = runCatching { sampleRemoteDataSource.downloadSampleImage(storagePath) }
-                .onFailure { error -> Log.w(TAG, "Image for ${sample.sampleId} unavailable", error) }
+                .onFailure { error -> Logger.w(TAG, "Image for ${sample.sampleId} unavailable", error) }
                 .getOrNull()
             if (bytes == null || bytes.isEmpty()) {
                 missing++

@@ -8,6 +8,7 @@ import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -168,7 +169,7 @@ class LoginViewModel @Inject constructor(
         authRepository.currentLocalUserId() ?: return
         syncPendingDataUseCase()
         fetchRemoteDataUseCase().onFailure { error ->
-            android.util.Log.e(TAG, "Post-login fetch failed", error)
+            Logger.e(TAG, "Post-login fetch failed", error)
         }
     }
 

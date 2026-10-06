@@ -1,6 +1,6 @@
 package com.agarthavision.data.sync
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.domain.sync.SyncScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -46,7 +46,7 @@ class BackgroundSamplePush internal constructor(
             // scope would crash the app rather than surface anywhere. A row read can throw before
             // SyncSampleUseCase's own runCatching starts.
             runCatching { syncSampleUseCase(sampleId) }
-                .onFailure { Log.e(TAG, "[SyncFailed][Sample:$sampleId] Background push threw", it) }
+                .onFailure { Logger.e(TAG, "[SyncFailed][Sample:$sampleId] Background push threw", it) }
             syncScheduler.requestSync()
         }
     }

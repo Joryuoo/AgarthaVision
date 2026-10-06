@@ -1,6 +1,6 @@
 package com.agarthavision.core.camera
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import com.agarthavision.core.util.ElapsedClock
@@ -69,7 +69,7 @@ class FrameSampler @Inject constructor(
             val jpegBytes = image.toJpegBytes()
             _latestFrame.value = CachedFrame(jpegBytes, clock.elapsedRealtimeMs())
         } catch (throwable: Throwable) {
-            Log.w(TAG, "Frame sampling failed; continuing capture.", throwable)
+            Logger.w(TAG, "Frame sampling failed; continuing capture.", throwable)
         } finally {
             image.close()
         }

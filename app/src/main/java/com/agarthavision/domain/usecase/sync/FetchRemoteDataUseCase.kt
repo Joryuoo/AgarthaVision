@@ -1,7 +1,7 @@
 package com.agarthavision.domain.usecase.sync
 
 import android.database.sqlite.SQLiteConstraintException
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.core.sync.FetchOutcomeStore
 import com.agarthavision.core.sync.InitialFetchStateStore
@@ -170,22 +170,22 @@ class FetchRemoteDataUseCase @Inject constructor(
         var reportsFetched = 0
 
         runCatching { patientsFetched = pullPatients(userId); patientsOk = true }
-            .onFailure { error -> Log.e(TAG, "Fetch patients failed", error) }
+            .onFailure { error -> Logger.e(TAG, "Fetch patients failed", error) }
 
         runCatching { sessionsFetched = pullSessions(userId); sessionsOk = true }
-            .onFailure { error -> Log.e(TAG, "Fetch sessions failed", error) }
+            .onFailure { error -> Logger.e(TAG, "Fetch sessions failed", error) }
 
         runCatching { samplesFetched = pullSamples(userId); samplesOk = true }
-            .onFailure { error -> Log.e(TAG, "Fetch samples/detections/findings failed", error) }
+            .onFailure { error -> Logger.e(TAG, "Fetch samples/detections/findings failed", error) }
 
         runCatching { reportsFetched = pullReports(userId); reportsOk = true }
-            .onFailure { error -> Log.e(TAG, "Fetch reports failed", error) }
+            .onFailure { error -> Logger.e(TAG, "Fetch reports failed", error) }
 
         // Colleagues' names, so a read-only record can say whose it is offline (14zcqntjph6).
         // Best-effort and outside the completeness sets below: a missing name costs a label,
         // not a record, and must not hold the badge at NOT_YET_SYNCED.
         runCatching { pullColleagues(userId) }
-            .onFailure { error -> Log.w(TAG, "Fetch colleague names failed", error) }
+            .onFailure { error -> Logger.w(TAG, "Fetch colleague names failed", error) }
 
         // Frames last: every one of them hangs off a sample row, so there is nothing to cache
         // until the rows are down. It never throws — an unreachable object is counted, not
@@ -354,7 +354,7 @@ class FetchRemoteDataUseCase @Inject constructor(
      */
     private suspend fun pullSession(remote: SessionEntity, collisions: MutableList<SessionEntity>): Boolean {
         if (!patientDao.patientExists(remote.patientId)) {
-            Log.w(TAG, "pullSessions: patient ${remote.patientId} not on device; skipping ${remote.sessionId}")
+            Logger.w(TAG, "pullSessions: patient ${remote.patientId} not on device; skipping ${remote.sessionId}")
             return false
         }
         val local = sessionDao.getSessionById(remote.sessionId)
@@ -399,7 +399,7 @@ class FetchRemoteDataUseCase @Inject constructor(
         val toWrite = if (!rawLabel.isNullOrBlank() && collidesLocally(remote)) {
             val disambiguated =
                 "${rawLabel.trim()}-${remote.sessionId.take(DISAMBIGUATION_SUFFIX_LENGTH)}".uppercase()
-            Log.w(
+            Logger.w(
                 TAG,
                 "pullSessions: label collision for session ${remote.sessionId} " +
                     "(patient ${remote.patientId}); writing with disambiguated " +
@@ -416,7 +416,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             // Backstop only: the pre-check above handles the expected new-row collision case.
             // If we land here it is a genuine concurrent write race — log and rethrow so
             // the per-entity runCatching in invoke() records it as a sessions failure.
-            Log.e(TAG, "pullSessions: unexpected constraint on upsert for ${remote.sessionId}", e)
+            Logger.e(TAG, "pullSessions: unexpected constraint on upsert for ${remote.sessionId}", e)
             throw e
         }
     }
@@ -447,7 +447,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             // A sample can come back twice, once as the user's own and once under its session.
             for (remote in page.filter { seen.add(it.sampleId) }) {
                 if (!sessionDao.sessionExists(remote.sessionId)) {
-                    Log.w(TAG, "pullSamples: session ${remote.sessionId} not on device; skipping ${remote.sampleId}")
+                    Logger.w(TAG, "pullSamples: session ${remote.sessionId} not on device; skipping ${remote.sampleId}")
                     continue
                 }
                 // E4 guard: skip if local row is VERIFIED or SYNC_FAILED (in-progress work)
@@ -650,7 +650,7 @@ class FetchRemoteDataUseCase @Inject constructor(
         // pull brings colleagues' reports down, but not necessarily their sessions.
         val sessionMissing = remote.sessionId != null && !sessionDao.sessionExists(remote.sessionId)
         if (sessionMissing) {
-            Log.w(TAG, "pullReports: session ${remote.sessionId} not on device; skipping ${remote.reportId}")
+            Logger.w(TAG, "pullReports: session ${remote.sessionId} not on device; skipping ${remote.reportId}")
         }
         // E4 guard: skip if local row is pending or sync_failed
         val local = reportDao.getReportById(remote.reportId)
@@ -664,7 +664,7 @@ class FetchRemoteDataUseCase @Inject constructor(
             reportDao.insertReport(local?.let { remote.withLocalFilePaths(it) } ?: remote)
             true
         } catch (e: SQLiteConstraintException) {
-            Log.w(TAG, "pullReports: skipping report ${remote.reportId}, FK not satisfied", e)
+            Logger.w(TAG, "pullReports: skipping report ${remote.reportId}, FK not satisfied", e)
             false
         }
     }
