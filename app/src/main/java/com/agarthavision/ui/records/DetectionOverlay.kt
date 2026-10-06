@@ -90,3 +90,33 @@ internal fun DetectionOverlay(
         }
     }
 }
+
+@Composable
+internal fun TileBoxesOverlay(
+    boxes: List<TileBox>,
+    modifier: Modifier = Modifier,
+) {
+    if (boxes.isEmpty()) return
+    Canvas(modifier = modifier) {
+        val transform = frameTransform(
+            canvasWidth = size.width,
+            canvasHeight = size.height,
+            sourceWidth = CAPTURE_FRAME_SIZE_PX.toFloat(),
+            sourceHeight = CAPTURE_FRAME_SIZE_PX.toFloat(),
+        ) ?: return@Canvas
+
+        val stroke = Stroke(width = 1.5f * density)
+        boxes.forEach { box ->
+            drawRect(
+                color = box.color,
+                topLeft = Offset(
+                    transform.toCanvasX(box.cx - box.w / 2f),
+                    transform.toCanvasY(box.cy - box.h / 2f),
+                ),
+                size = Size(box.w * transform.scale, box.h * transform.scale),
+                style = stroke,
+            )
+        }
+    }
+}
+

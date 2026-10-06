@@ -22,6 +22,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -66,6 +70,7 @@ import com.agarthavision.domain.model.LpfDensity
 import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.model.Report
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.EmptyState
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.records.labelRes
 import androidx.compose.ui.text.style.TextOverflow
@@ -562,39 +567,37 @@ private fun SessionDetailSamplesTab(
         Box(
             modifier = modifier
                 .fillMaxSize()
-                .padding(horizontal = Spacing.xl),
+                .padding(horizontal = 20.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.session_detail_samples_empty),
-                    color = AgarthaTheme.colors.textPrimary,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = stringResource(R.string.session_detail_samples_empty_body),
-                    color = AgarthaTheme.colors.textSecondary,
-                    fontSize = 13.sp,
-                )
-            }
+            EmptyState(
+                title = stringResource(R.string.session_detail_samples_empty),
+                body = stringResource(R.string.session_detail_samples_empty_body),
+            )
         }
     } else {
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             modifier = modifier.fillMaxSize(),
-            contentPadding = PaddingValues(
-                start = Spacing.xl,
-                end = Spacing.xl,
-                top = Spacing.sm,
-                bottom = Spacing.xxl,
-            ),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.session_detail_captured_samples,
+                        samples.size,
+                        samples.size,
+                    ),
+                    color = AgarthaTheme.colors.textSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
             items(samples, key = { it.id }) { sample ->
-                SampleRow(
+                SampleTile(
                     sample = sample,
                     onClick = { onSampleClick(sample) },
                 )
