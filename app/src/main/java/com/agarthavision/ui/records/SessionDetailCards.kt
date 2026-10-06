@@ -30,14 +30,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import com.agarthavision.ui.components.ReadOnlyAuthorNote
 import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.icons.Download
-import com.agarthavision.ui.icons.RemoveCircle
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.RectangleShape
@@ -225,23 +223,30 @@ internal fun SectionHeader(
 internal fun SampleTile(
     sample: SampleUi,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val species = sample.speciesLabel()
+    val colors = AgarthaTheme.colors
+    val eggCountText = pluralStringResource(
+        R.plurals.sessions_eggs_count,
+        sample.eggCount,
+        sample.eggCount,
+    )
+    val descriptionRes = if (sample.isManual) {
+        R.string.sample_tile_content_description_manual
+    } else {
+        R.string.sample_tile_content_description
+    }
+    val description = stringResource(descriptionRes, eggCountText)
+
     Box(
-        modifier = Modifier
+        modifier = modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(14.dp))
             .background(AppColors.MicroscopeBrush)
             .clickable(onClick = onClick)
             .semantics(mergeDescendants = true) {
-                // No confidence and not manual means the medtech rejected every box: no eggs,
-                // which the species label already says. It is not a manual capture.
-                val provenance = when {
-                    sample.confidence != null -> ", ${sample.confidence} percent confidence"
-                    sample.source == SampleSource.Manual -> ", manual capture"
-                    else -> ""
-                }
-                contentDescription = "Sample ${sample.id}, $species$provenance"
+                contentDescription = description
             },
     ) {
         SubcomposeAsyncImage(
@@ -256,185 +261,43 @@ internal fun SampleTile(
             error = {},
         )
 
-        sample.confidence?.let {
-            ConfidenceChip(
-                text = "$it%",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(6.dp),
-            )
-        }
-        SpeciesBadge(
-            text = species,
-            isManual = sample.source == SampleSource.Manual,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(6.dp),
+        TileBoxesOverlay(
+            boxes = sample.boxes,
+            modifier = Modifier.fillMaxSize(),
         )
-    }
-}
 
-@Composable
-internal fun SampleRow(
-    sample: SampleUi,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = AgarthaTheme.colors
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.surface, RoundedCornerShape(10.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(10.dp))
-            .clip(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+        if (sample.isManual) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(6.dp)
+                    .background(colors.gold, RoundedCornerShape(7.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
             ) {
                 Text(
-                    text = sample.timeLabel,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.textSecondary,
-                    style = androidx.compose.ui.text.TextStyle(fontFeatureSettings = "tnum"),
+                    text = stringResource(R.string.sample_tile_manual),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.onGold,
                 )
-                val sourceLabel = if (sample.source == SampleSource.Ai) {
-                    sample.confidence?.let { "$it%" } ?: "AI"
-                } else {
-                    "Manual"
-                }
-                Box(
-                    modifier = Modifier
-                        .background(colors.surfaceMuted, RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Text(
-                        text = sourceLabel,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = colors.textSecondary,
-                    )
-                }
-                if (sample.isEdited) {
-                    Box(
-                        modifier = Modifier
-                            .background(colors.warningTint, RoundedCornerShape(4.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.badge_edited),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colors.warningText,
-                        )
-                    }
-                }
             }
-            Spacer(Modifier.height(4.dp))
-            val species = sample.speciesLabel()
-            val fontStyle = if (species.isBinomial()) {
-                androidx.compose.ui.text.font.FontStyle.Italic
-            } else {
-                androidx.compose.ui.text.font.FontStyle.Normal
+        }
+
+        if (sample.eggCount > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(999.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(
+                    text = eggCountText,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
             }
-            Text(
-                text = species,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontStyle = fontStyle,
-                color = colors.textPrimary,
-            )
         }
-        Icon(
-            imageVector = AgarthaIcons.ChevronRight,
-            contentDescription = null,
-            modifier = Modifier.size(16.dp),
-            tint = colors.textTertiary,
-        )
     }
 }
-
-@Composable
-private fun ConfidenceChip(text: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-    ) {
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = AppColors.White)
-    }
-}
-
-@Composable
-private fun SpeciesBadge(text: String, isManual: Boolean, modifier: Modifier = Modifier) {
-    // On-image badges: fixed maroon/amber fills with white text (mode-independent).
-    val bg = if (isManual) AppColors.Amber else AppColors.Maroon
-    Box(
-        modifier = modifier
-            .background(bg, RoundedCornerShape(999.dp))
-            .padding(horizontal = 7.dp, vertical = 3.dp),
-    ) {
-        // A binomial like "Ascaris lumbricoides" is wider than a grid tile; wrapping it
-        // turned the pill into a two-line block that hid most of the image. One line,
-        // ellipsized - the full name is on the sample detail screen.
-        Text(
-            text,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AppColors.White,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-internal fun EmptyStateGraphic() {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .background(AgarthaTheme.colors.surfaceVariant, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = AgarthaIcons.RemoveCircle,
-                contentDescription = null,
-                tint = AgarthaTheme.colors.textTertiary,
-                modifier = Modifier.size(26.dp),
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "No verified samples yet",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = AgarthaTheme.colors.textSecondary
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Captured frames will appear here once verified.",
-            fontSize = 13.sp,
-            color = AgarthaTheme.colors.textSecondary,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-        )
-    }
-}
-
-/**
- * What a sample card calls the sample. A null species means the model boxed something and the
- * medtech rejected all of it, which is a negative result and says so rather than going blank.
- */
-@Composable
-private fun SampleUi.speciesLabel(): String =
-    species ?: stringResource(R.string.session_detail_sample_no_eggs)
