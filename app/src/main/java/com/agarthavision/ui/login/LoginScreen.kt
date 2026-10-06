@@ -1,7 +1,5 @@
 package com.agarthavision.ui.login
 
-import android.app.Activity
-import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,8 +38,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.LocalAutofillHighlightBrush
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mail
@@ -95,6 +91,7 @@ import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastState
 import com.agarthavision.ui.components.AgarthaToastVariant
+import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AgarthaVisionTheme
@@ -113,15 +110,7 @@ fun LoginScreen(
     val loginFailedTitle = stringResource(R.string.login_failed_title)
     val loginFailedGeneric = stringResource(R.string.login_failed_generic)
 
-    // The activity defaults to adjustPan, which would pan the window up on top of imePadding() and
-    // leave a blank band above the keyboard. Resize while on Login, then restore for other screens.
-    val view = LocalView.current
-    DisposableEffect(view) {
-        val window = (view.context as? Activity)?.window
-        val previous = window?.attributes?.softInputMode
-        window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        onDispose { previous?.let { window.setSoftInputMode(it) } }
-    }
+    ResizeForKeyboard()
 
     LaunchedEffect(viewModel, toastState) {
         viewModel.events.collect { event ->
