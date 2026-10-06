@@ -13,12 +13,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -305,12 +307,25 @@ internal fun VerificationSheetContent(
                 Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     // 3. Model output: what the container said, or that it said nothing, or that it has
                     //    not answered yet. Always present, never collapsed to two states.
+                    val showBoxesToggle = boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }
                     ModelOutputSection(
                         output = frame.modelOutput(),
                         onCancelInference = actions.onCancelInferenceRequested
                             .takeIf { state.isAwaitingInference },
                         isInferenceRunning = frame.inferenceState == InferenceState.IN_INFERENCE,
+                        footer = if (showBoxesToggle) {
+                            {
+                                BoundingBoxesToggle(
+                                    checked = state.showBoundingBoxes,
+                                    onToggle = actions.onToggleBoundingBoxes,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
 
                     // 4. Current detection. Only when there is model output with at least one box -
                     //    every question in here is a question about a box.
@@ -333,18 +348,6 @@ internal fun VerificationSheetContent(
                             onPrev = actions.onDetectionPrev,
                             onNext = actions.onDetectionNext,
                             modifier = Modifier.padding(bottom = 12.dp),
-                        )
-                    }
-
-                    // Offered whenever the frame has anything to show, which since 86d4by5n4 includes a
-                    // frame with no model output at all: a manual capture the medtech located eggs on by
-                    // hand has boxes to hide and used to have no control that could hide them, because
-                    // this sat inside the Current Detection block and that block needs a model box to
-                    // exist. Its position is unchanged for every frame that has one.
-                    if (boxCount > 0 || state.findings.any { it.answers.drawnBoxes.isNotEmpty() }) {
-                        BoundingBoxesToggle(
-                            checked = state.showBoundingBoxes,
-                            onToggle = actions.onToggleBoundingBoxes,
                         )
                     }
 
@@ -594,16 +597,14 @@ internal fun VerificationSheetContent(
 @Composable
 private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = stringResource(R.string.verify_boxes_toggle),
-            color = AgarthaTheme.colors.textSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            text = stringResource(R.string.verify_show_boxes),
+            color = AgarthaTheme.colors.textPrimary,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
         )
         Switch(

@@ -7,8 +7,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -79,90 +83,99 @@ internal fun ModelOutputSection(
     onCancelInference: (() -> Unit)? = null,
     /** Whether the pending frame is the one being run, rather than waiting its turn. */
     isInferenceRunning: Boolean = false,
+    footer: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
     val containerBg = if (output is ModelOutput.Unavailable) {
         colors.accentTint2
     } else {
-        colors.surfaceMuted
+        colors.surface
     }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(VerifyTestTags.MODEL_OUTPUT_PANEL)
-            .padding(bottom = 14.dp),
+            .background(containerBg, RoundedCornerShape(16.dp))
+            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .padding(16.dp),
     ) {
-        SectionLabel(stringResource(R.string.verify_model_output))
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(containerBg, RoundedCornerShape(12.dp))
-                .padding(12.dp),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            when (output) {
-                ModelOutput.InProgress -> InferencePending(isInferenceRunning, onCancelInference)
+            SectionLabel(
+                text = stringResource(R.string.verify_model_output),
+                modifier = Modifier.weight(1f),
+            )
+            if (output is ModelOutput.Read && output.species.isNotEmpty()) {
+                ModeChip(stringResource(R.string.verify_ai_suggested_chip))
+            }
+        }
+        Spacer(modifier = Modifier.height(12.dp))
 
-                ModelOutput.Unavailable -> Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Outlined.Info,
-                        contentDescription = null,
-                        tint = colors.accent,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.verify_model_unavailable),
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
-                        lineHeight = 16.sp,
-                    )
-                }
+        when (output) {
+            ModelOutput.InProgress -> InferencePending(isInferenceRunning, onCancelInference)
 
-                is ModelOutput.Read -> if (output.species.isEmpty()) {
-                    // A result, not a failure. The wording says what the model did, not what it
-                    // failed to do.
-                    Text(
-                        text = stringResource(R.string.verify_model_no_eggs),
-                        color = colors.textSecondary,
-                        fontSize = 13.sp,
-                    )
-                } else {
-                    output.species.forEach { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(row.label, color = colors.textPrimary, fontSize = 13.sp)
-                            Text(
-                                row.count.toString(),
-                                color = colors.textPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                    }
+            ModelOutput.Unavailable -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Info,
+                    contentDescription = null,
+                    tint = colors.accent,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = stringResource(R.string.verify_model_unavailable),
+                    color = colors.textSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                )
+            }
+
+            is ModelOutput.Read -> if (output.species.isEmpty()) {
+                // A result, not a failure. The wording says what the model did, not what it
+                // failed to do.
+                Text(
+                    text = stringResource(R.string.verify_model_no_eggs),
+                    color = colors.textSecondary,
+                    fontSize = 13.sp,
+                )
+            } else {
+                output.species.forEach { row ->
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 6.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
+                        Text(row.label, color = colors.textPrimary, fontSize = 13.sp)
                         Text(
-                            stringResource(R.string.verify_model_total),
-                            color = colors.textSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            output.total.toString(),
-                            color = colors.textSecondary,
-                            fontSize = 12.sp,
+                            row.count.toString(),
+                            color = colors.textPrimary,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                         )
                     }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(
+                        stringResource(R.string.verify_model_total),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        output.total.toString(),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
             }
         }
@@ -179,6 +192,15 @@ internal fun ModelOutputSection(
                     .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
                     .padding(top = 8.dp, start = 4.dp, end = 4.dp),
             )
+        }
+
+        if (footer != null) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 12.dp),
+                thickness = 1.dp,
+                color = colors.border,
+            )
+            footer()
         }
     }
 }
@@ -705,13 +727,17 @@ private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
 
 
 @Composable
-private fun SectionLabel(text: String) {
+private fun SectionLabel(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
     Text(
         text = text,
         color = AgarthaTheme.colors.textSecondary,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(bottom = 6.dp),
+        letterSpacing = 0.8.sp,
+        modifier = modifier,
     )
 }
 
