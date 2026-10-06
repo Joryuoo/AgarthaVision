@@ -315,13 +315,14 @@ private fun DateCard(
                 color = colors.textSecondary,
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Normal,
+                lineHeight = 13.sp,
             )
-            Spacer(Modifier.height(1.dp))
             Text(
                 text = formattedDate,
                 color = colors.textPrimary,
-                fontSize = 14.sp,
+                fontSize = 16.sp,
                 fontWeight = FontWeight.Bold,
+                lineHeight = 20.sp,
             )
         }
     }
