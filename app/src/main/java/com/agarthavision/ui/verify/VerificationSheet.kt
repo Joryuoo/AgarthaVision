@@ -330,41 +330,49 @@ internal fun VerificationSheetContent(
                     // 4. Current detection. Only when there is model output with at least one box -
                     //    every question in here is a question about a box.
                     if (boxCount > 0) {
-                        CycleRow(
-                            indicator = stringResource(
-                                R.string.verify_detection_counter,
-                                state.currentDetectionIndex + 1,
-                                boxCount,
-                            ),
-                            prevDescription = stringResource(R.string.verify_prev_egg),
-                            nextDescription = stringResource(R.string.verify_next_egg),
-                            prevTag = VerifyTestTags.DETECTION_PREV,
-                            nextTag = VerifyTestTags.DETECTION_NEXT,
-                            // Counted from frame.predictions, never from the answer list: the medtech
-                            // can append a species the model never boxed, so the answer list is the
-                            // longer of the two and paging by it would walk off the end of the boxes.
-                            canGoPrev = state.currentDetectionIndex > 0,
-                            canGoNext = state.currentDetectionIndex < boxCount - 1,
-                            onPrev = actions.onDetectionPrev,
-                            onNext = actions.onDetectionNext,
-                            modifier = Modifier.padding(bottom = 12.dp),
-                        )
-                    }
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(AgarthaTheme.colors.surface, RoundedCornerShape(16.dp))
+                                .border(1.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+                                .padding(16.dp),
+                        ) {
+                            CycleRow(
+                                indicator = stringResource(
+                                    R.string.verify_detection_counter,
+                                    state.currentDetectionIndex + 1,
+                                    boxCount,
+                                ),
+                                prevDescription = stringResource(R.string.verify_prev_egg),
+                                nextDescription = stringResource(R.string.verify_next_egg),
+                                prevTag = VerifyTestTags.DETECTION_PREV,
+                                nextTag = VerifyTestTags.DETECTION_NEXT,
+                                // Counted from frame.predictions, never from the answer list: the medtech
+                                // can append a species the model never boxed, so the answer list is the
+                                // longer of the two and paging by it would walk off the end of the boxes.
+                                canGoPrev = state.currentDetectionIndex > 0,
+                                canGoNext = state.currentDetectionIndex < boxCount - 1,
+                                onPrev = actions.onDetectionPrev,
+                                onNext = actions.onDetectionNext,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                            )
 
-                    if (boxCount > 0) {
-                        BoxQuestionChain(
-                            answers = currentAnswers,
-                            suggestedSpecies = currentPrediction
-                                ?.let { EggSpecies.fromClassLabel(it.classLabel) },
-                            detectionIndex = state.currentDetectionIndex,
-                            actions = actions,
-                            // Derived against this field's own text, so a list fetched for another row
-                            // - or for a keystroke since typed over - simply does not come back.
-                            suggestions = state.suggestionsFor(
-                                SuggestionTarget.CurrentDetection,
-                                currentAnswers?.otherSpeciesText.orEmpty(),
-                            ),
-                        )
+                            BoxQuestionChain(
+                                answers = currentAnswers,
+                                suggestedSpecies = currentPrediction
+                                    ?.let { EggSpecies.fromClassLabel(it.classLabel) },
+                                detectionIndex = state.currentDetectionIndex,
+                                actions = actions,
+                                // Derived against this field's own text, so a list fetched for another row
+                                // - or for a keystroke since typed over - simply does not come back.
+                                suggestions = state.suggestionsFor(
+                                    SuggestionTarget.CurrentDetection,
+                                    currentAnswers?.otherSpeciesText.orEmpty(),
+                                ),
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
 
                     // 5. Add Species. Always present, with or without model output - it is the only
@@ -926,9 +934,17 @@ internal fun CheckQuestion(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .padding(bottom = 8.dp)
             .testTag(tag)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (checked) colors.accentTint2 else colors.surface)
+            .border(
+                if (checked) 1.5.dp else 1.dp,
+                if (checked) colors.accent else colors.border,
+                RoundedCornerShape(12.dp),
+            )
             .clickable(enabled = enabled, onClick = onToggle)
-            .padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 12.dp),
+            .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Checkbox(
