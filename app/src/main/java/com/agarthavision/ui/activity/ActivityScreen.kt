@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -121,9 +119,10 @@ fun ActivityScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 EmptyState(
-                    icon = Icons.Outlined.History,
                     title = stringResource(R.string.activity_empty),
                     body = "Your recent actions will show up here.",
+                    illustrationLight = R.drawable.ill_empty_activity_light,
+                    illustrationDark = R.drawable.ill_empty_activity_dark,
                 )
             }
         } else {

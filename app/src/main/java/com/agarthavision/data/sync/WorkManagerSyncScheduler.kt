@@ -49,6 +49,14 @@ class WorkManagerSyncScheduler @Inject constructor(
         workManager.enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.KEEP, request())
     }
 
+    override fun requestSyncAfterSignIn() {
+        // APPEND_OR_REPLACE, not KEEP: an app-start pass that began before sign-in read "no
+        // identity" and finished as Skipped, and KEEP would drop this request behind it. Appending
+        // chains after the in-flight pass; APPEND_OR_REPLACE (unlike APPEND) also recovers if the
+        // previous pass ended failed or cancelled instead of cancelling this one with it.
+        workManager.enqueueUniqueWork(SYNC_WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request())
+    }
+
     /**
      * True while a pass is running.
      *

@@ -36,8 +36,9 @@ The terse list. No explanation here — each line points at the constraint that 
 - **Never introduce a second theme or a charting library.** → C11
 - **Never hand-draw an icon.** Bottom-bar and brand glyphs are Material Symbols exports in
   `ui/icons/`; in-screen glyphs may come from `Icons.*`. No SVG path data or `ImageVector`
-  coordinates written by hand. → C11
-- **Never write a raw hex colour outside the palette definition file.** → C11
+  coordinates written by hand. Custom vector *illustrations* (non-interactive visuals designed in Figma and converted to
+  `res/drawable/ill_*`, e.g. empty states) are not icons and are allowed; never use one for a button or clickable. → C11
+- **Never write a raw hex colour outside the palette definition file.** (exported illustration drawables `res/drawable/ill_*` are the one exemption) → C11
 - **Never hardcode user-facing text.** It goes in `strings.xml`. → C11
 
 ## Process

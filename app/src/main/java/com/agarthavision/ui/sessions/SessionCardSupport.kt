@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,15 +20,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,6 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -66,7 +69,7 @@ internal fun sessionMeta(date: String, time: String, recordedBy: String?): Strin
 internal fun sessionRowClick(isColleagueSession: Boolean, openDetail: () -> Unit, resume: () -> Unit): () -> Unit =
     if (isColleagueSession) openDetail else resume
 
-/** Callbacks [SessionCard] (and its hoisted [KebabMenu]) dispatch back to the caller. */
+/** Callbacks [SessionCard] (and its long-press Rename menu) dispatch back to the caller. */
 internal data class SessionCardActions(
     val onClick: () -> Unit,
     val onVerifyClick: () -> Unit = {},
@@ -194,48 +197,6 @@ private fun SessionCardBadge(
 }
 
 @Composable
-private fun SessionKebabMenu(
-    sessionId: String,
-    onRenameClick: () -> Unit,
-) {
-    val colors = AgarthaTheme.colors
-    var menuExpanded by remember { mutableStateOf(false) }
-    Box {
-        IconButton(
-            onClick = { menuExpanded = true },
-            modifier = Modifier
-                .size(32.dp)
-                .testTag("sessionKebab_$sessionId"),
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.MoreVert,
-                contentDescription = stringResource(R.string.session_picker_row_kebab_desc),
-                tint = colors.textSecondary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        DropdownMenu(
-            expanded = menuExpanded,
-            onDismissRequest = { menuExpanded = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.sessions_rename_action)) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Edit,
-                        contentDescription = null,
-                    )
-                },
-                onClick = {
-                    menuExpanded = false
-                    onRenameClick()
-                },
-            )
-        }
-    }
-}
-
-@Composable
 internal fun SessionCard(
     sessionData: SessionWithStats,
     isActive: Boolean,
@@ -255,49 +216,83 @@ internal fun SessionCard(
     } else {
         colors.surface to colors.border
     }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(bgColor, RoundedCornerShape(12.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(12.dp))
-            .clickable { actions.onClick() }
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = session.label ?: "Session ${session.id.take(8)}",
-                fontSize = 19.sp,
-                fontWeight = FontWeight.Bold,
-                color = colors.accent,
-                letterSpacing = (-0.015).em,
-            )
-            Spacer(modifier = Modifier.height(3.dp))
-            Text(
-                text = meta,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = colors.accent.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
+    var menuExpanded by remember { mutableStateOf(false) }
+    val renameLabel = stringResource(R.string.sessions_rename_session_action)
+    val longPressLabel = stringResource(R.string.session_card_long_press_label)
+    Box {
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(bgColor, RoundedCornerShape(12.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(12.dp))
+                .combinedClickable(
+                    onClick = actions.onClick,
+                    onLongClick = if (isColleagueSession) null else ({ menuExpanded = true }),
+                    onLongClickLabel = if (isColleagueSession) null else longPressLabel,
+                )
+                .semantics {
+                    if (!isColleagueSession) {
+                        customActions = listOf(
+                            CustomAccessibilityAction(renameLabel) {
+                                actions.onRenameClick()
+                                true
+                            },
+                        )
+                    }
+                }
+                .testTag("sessionCard_${session.id}")
+                .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = session.label ?: "Session ${session.id.take(8)}",
+                    fontSize = 19.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colors.accent,
+                    letterSpacing = (-0.015).em,
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = meta,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colors.accent.copy(alpha = 0.7f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
             SessionCardBadge(
                 sessionData = sessionData,
                 isActive = isActive,
                 actions = actions,
             )
-
-            if (!isColleagueSession) {
-                SessionKebabMenu(
-                    sessionId = session.id,
-                    onRenameClick = actions.onRenameClick,
-                )
+        }
+        if (!isColleagueSession) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .wrapContentSize(Alignment.TopEnd),
+            ) {
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.sessions_rename_action)) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Edit,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            menuExpanded = false
+                            actions.onRenameClick()
+                        },
+                    )
+                }
             }
         }
     }

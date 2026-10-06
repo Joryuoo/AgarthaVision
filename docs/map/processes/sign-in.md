@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-10-01
-commit: b64271d2
+verified: 2026-10-05
+commit: 33bced13
 ---
 
 # sign-in
@@ -28,6 +28,10 @@ the same identity signing in with a new password.
    is **first-run only** — once anyone has signed in on this device, an expired token or an offline
    cold start still opens the app. That is the point: a medtech in a barangay with no signal must
    not be sent to a login screen whose submit is disabled offline.
+2. **The start route is fixed for the life of the graph.** `MainActivity` computes it once
+   (`startRouteFor`: not seen onboarding -> Onboarding, else Login or Dashboard by the gate), so
+   finishing onboarding does not rebuild the NavHost. Onboarding saves its flag, then exits to
+   `onboardingExitRoute`: Login when the gate is `NeedsLogin`, Dashboard otherwise.
 
 ## Movement — sign in
 
@@ -36,12 +40,13 @@ the same identity signing in with a new password.
 2. **Authenticate, then cache.** `SignInUseCase` → `SupabaseAuthRepository.kt::signIn` signs in
    with email and password, then `::cacheIdentity` writes user id, email and display name
    (`full_name` from auth metadata) to DataStore.
-3. **Push, then pull, before leaving the screen.** `LoginViewModel::syncAndFetch` awaits
-   `SyncPendingDataUseCase` and then `FetchRemoteDataUseCase`, which brings the account's
-   patients, sessions, samples (with predictions, detections and findings) and reports down, then
-   starts the image cache. This is the one sync call that is awaited directly rather than
-   scheduled: the medtech needs their patients on the device before leaving the clinic. See
-   [`sync`](sync.md).
+3. **Await the patient list only, then leave the screen.** `LoginViewModel` calls
+   `CompleteSignInUseCase`, which awaits `FetchRemoteDataUseCase::pullPatientsOnly` (about a
+   second or two) and then calls `SyncScheduler::requestSyncAfterSignIn`, even if the pull failed.
+   The login screen shows staged text meanwhile (`LoginStage`: signing in, then downloading
+   patients). Everything else (push, the other pulls, image caching) is a background WorkManager
+   pass. A failed or skipped pull never blocks navigation. The medtech still has their patients
+   on the device before leaving the clinic. See [`sync`](sync.md).
 
 ## Movement — sign out
 

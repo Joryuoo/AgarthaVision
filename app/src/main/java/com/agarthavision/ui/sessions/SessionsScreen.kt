@@ -89,7 +89,6 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Visibility
@@ -352,9 +351,10 @@ private fun SessionsScreenList(
             contentAlignment = Alignment.Center,
         ) {
             EmptyState(
-                icon = Icons.Outlined.Inbox,
                 title = stringResource(R.string.sessions_empty_title),
                 body = stringResource(R.string.sessions_empty_body),
+                illustrationLight = R.drawable.ill_empty_sessions_light,
+                illustrationDark = R.drawable.ill_empty_sessions_dark,
             )
         }
         else -> LazyColumn(

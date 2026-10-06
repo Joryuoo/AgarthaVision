@@ -7,14 +7,16 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.ThemeMode
 import com.agarthavision.domain.usecase.auth.AuthGate
-import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.navigation.AgarthaNavGraph
+import com.agarthavision.ui.navigation.onboardingExitRoute
+import com.agarthavision.ui.navigation.startRouteFor
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
@@ -61,16 +63,15 @@ class MainActivity : ComponentActivity() {
                 // Loading never reaches composition: the splash is still up. Rendering the
                 // Dashboard for it would defeat the condition above.
                 if (authGate != AuthGate.Loading && hasSeenOnboarding != null) {
-                    val startRoute = when {
-                        hasSeenOnboarding == false -> Screen.Onboarding.route
-                        authGate == AuthGate.NeedsLogin -> Screen.Login.route
-                        else -> Screen.Dashboard.route
-                    }
+                    // Fixed for the life of the graph: finishing onboarding flips
+                    // hasSeenOnboarding, which must not rebuild the NavHost.
+                    val startRoute = rememberSaveable { startRouteFor(authGate, hasSeenOnboarding == true) }
                     AgarthaNavGraph(
                         cameraManager = cameraManager,
                         frameSampler = frameSampler,
                         startDestination = startRoute,
                         signedOutByServer = signedOutByServer,
+                        onboardingExitRoute = onboardingExitRoute(authGate),
                     )
                 }
             }

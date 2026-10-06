@@ -54,6 +54,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
 
@@ -76,6 +77,7 @@ fun ChangePasswordScreen(
     viewModel: ChangePasswordViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    ResizeForKeyboard()
     ChangePasswordContent(
         state = state,
         actions = ChangePasswordActions(

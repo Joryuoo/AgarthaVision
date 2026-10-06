@@ -238,10 +238,12 @@ never pruned.
 
 Push order is FK-safe and not incidental: patients → sessions → samples → reports.
 
-**The non-obvious break:** sync is scheduled, not called. Everything except login goes through
-`SyncScheduler.requestSync()` and lands in `data/sync/SyncWorker`, so a change here runs on
-WorkManager's thread with WorkManager's retry policy, not on the caller's scope. Login is the
-one direct awaited call and is deliberately so.
+**The non-obvious break:** sync is scheduled, not called. Everything goes through
+`SyncScheduler.requestSync()` (or `requestSyncAfterSignIn()` after login, which chains behind an
+in-flight pass instead of being dropped) and lands in `data/sync/SyncWorker`, so a change here
+runs on WorkManager's thread with WorkManager's retry policy, not on the caller's scope. The one
+thing login awaits directly is the patient pull (`FetchRemoteDataUseCase.pullPatientsOnly`),
+deliberately so: patients must be on the device before the user can go offline.
 
 `WorkManagerSyncScheduler.isSyncing` is a **cold** flow and must stay one. Built eagerly it
 touches `WorkManager.getInstance()` while Hilt is still field-injecting `AgarthaVisionApp`,

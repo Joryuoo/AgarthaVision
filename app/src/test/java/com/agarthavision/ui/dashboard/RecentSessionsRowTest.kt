@@ -36,6 +36,7 @@ import com.agarthavision.domain.usecase.home.SessionListResult
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import com.agarthavision.ui.theme.AgarthaVisionTheme
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -174,6 +175,9 @@ class RecentSessionsRowTest {
             sampleRepository = sampleRepository,
             patientRepository = patientRepository,
             observeThemeModeUseCase = observeThemeModeUseCase,
+            observeSyncInProgressUseCase = mock<ObserveSyncInProgressUseCase>().also {
+                whenever(it.invoke()).thenReturn(flowOf(false))
+            },
             setThemeModeUseCase = setThemeModeUseCase,
             observeNeedsAttentionUseCase = observeNeedsAttentionUseCase,
             observeHomeKpisUseCase = observeHomeKpisUseCase,
