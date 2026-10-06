@@ -9,8 +9,15 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import com.agarthavision.core.auth.BiometricPromptManager
+import com.agarthavision.core.auth.BiometricResult
+import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.ThemeMode
@@ -34,6 +41,8 @@ class MainActivity : FragmentActivity() {
     @Inject lateinit var biometricPromptManager: BiometricPromptManager
 
     private val mainViewModel: MainViewModel by viewModels()
+    private var isUnlocked = false
+    private var isPromptShowing = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate() so the system swaps the launch theme
@@ -51,6 +60,19 @@ class MainActivity : FragmentActivity() {
 
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        lifecycleScope.launch {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(
+                    mainViewModel.isBiometricLockEnabled,
+                    mainViewModel.authGate,
+                ) { enabled, gate -> enabled to gate }.collect { (enabled, gate) ->
+                    if (enabled && gate == AuthGate.Authed) {
+                        checkBiometricLockOnResume()
+                    }
+                }
+            }
+        }
         setContent {
             val themeMode by mainViewModel.themeMode.collectAsStateWithLifecycle()
             val authGate by mainViewModel.authGate.collectAsStateWithLifecycle()
@@ -78,6 +100,40 @@ class MainActivity : FragmentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkBiometricLockOnResume()
+    }
+
+    private fun checkBiometricLockOnResume() {
+        if (isUnlocked || isPromptShowing) return
+        val biometricEnabled = mainViewModel.isBiometricLockEnabled.value
+        val isAuthed = mainViewModel.authGate.value == AuthGate.Authed
+        val isReady = biometricPromptManager.getBiometricStatus() == BiometricStatus.READY
+
+        if (biometricEnabled && isAuthed && isReady) {
+            isPromptShowing = true
+            biometricPromptManager.showBiometricPrompt(
+                activity = this,
+                title = getString(R.string.biometric_prompt_title),
+                subtitle = getString(R.string.biometric_prompt_subtitle),
+                negativeButtonText = getString(R.string.biometric_prompt_cancel),
+            ) { result ->
+                isPromptShowing = false
+                if (result is BiometricResult.Success) {
+                    isUnlocked = true
+                }
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (mainViewModel.isBiometricLockEnabled.value) {
+            isUnlocked = false
         }
     }
 }
