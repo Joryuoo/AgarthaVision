@@ -1,15 +1,16 @@
 package com.agarthavision
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.model.ThemeMode
@@ -26,10 +27,11 @@ import javax.inject.Inject
  * persisted light/dark preference.
  */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     @Inject lateinit var cameraManager: CameraManager
     @Inject lateinit var frameSampler: FrameSampler
+    @Inject lateinit var biometricPromptManager: BiometricPromptManager
 
     private val mainViewModel: MainViewModel by viewModels()
 
@@ -72,6 +74,7 @@ class MainActivity : ComponentActivity() {
                         startDestination = startRoute,
                         signedOutByServer = signedOutByServer,
                         onboardingExitRoute = onboardingExitRoute(authGate),
+                        biometricPromptManager = biometricPromptManager,
                     )
                 }
             }

@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Lock
@@ -546,6 +547,57 @@ internal fun ChangePasswordRow(
 
 /** Test tag on [ChangePasswordRow]. */
 const val SETTINGS_CHANGE_PASSWORD_TAG = "settings_change_password"
+
+@Composable
+internal fun BiometricLockCard(
+    isBiometricLockEnabled: Boolean,
+    isBiometricAvailable: Boolean,
+    onToggleBiometricLock: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (!isBiometricAvailable) return
+    val colors = AgarthaTheme.colors
+    SettingsCard(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Fingerprint,
+                    contentDescription = null,
+                    tint = colors.textPrimary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column {
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_title),
+                        color = colors.textPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(R.string.settings_biometric_lock_subtitle),
+                        color = colors.textSecondary,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+            androidx.compose.material3.Switch(
+                checked = isBiometricLockEnabled,
+                onCheckedChange = onToggleBiometricLock,
+                modifier = Modifier.testTag("biometricLockSwitch"),
+            )
+        }
+    }
+}
 
 @Composable
 internal fun SignOutSection(

@@ -1,7 +1,10 @@
 package com.agarthavision.ui.login
 
 import app.cash.turbine.test
+import com.agarthavision.core.auth.BiometricPromptManager
+import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
@@ -38,7 +41,21 @@ class LoginViewModelEdgeTest {
         whenever(it.invoke()).thenReturn(MutableStateFlow(null))
     }
 
-    private fun viewModel() = LoginViewModel(signInUseCase, connectivityObserver, completeSignInUseCase, notice)
+    private val biometricPromptManager: BiometricPromptManager = mock<BiometricPromptManager>().also {
+        whenever(it.getBiometricStatus()).thenReturn(BiometricStatus.NOT_AVAILABLE)
+    }
+    private val biometricLockRepository: BiometricLockRepository = mock<BiometricLockRepository>().also {
+        whenever(it.isBiometricLockEnabled).thenReturn(MutableStateFlow(false))
+    }
+
+    private fun viewModel() = LoginViewModel(
+        signInUseCase = signInUseCase,
+        connectivityObserver = connectivityObserver,
+        completeSignInUseCase = completeSignInUseCase,
+        observeSignedOutNoticeUseCase = notice,
+        biometricPromptManager = biometricPromptManager,
+        biometricLockRepository = biometricLockRepository,
+    )
 
     @Test
     fun `a throwing completeSignIn still navigates and clears the stage`() =

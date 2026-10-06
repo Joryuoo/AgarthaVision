@@ -733,6 +733,13 @@
     <string name="settings_sign_out_warning_none">All items are synced. Signing out is safe.</string>
     <!-- Change password (14zcqntjph9) -->
     <string name="settings_change_password">Change password</string>
+    <!-- Security / Biometrics (86d4bywtk) -->
+    <string name="settings_security_section">Security</string>
+    <string name="settings_biometric_lock_title">Biometric Lock</string>
+    <string name="settings_biometric_lock_subtitle">Unlock app with fingerprint or face recognition</string>
+    <string name="biometric_prompt_title">Unlock AgarthaVision</string>
+    <string name="biometric_prompt_subtitle">Use fingerprint or face recognition to continue</string>
+    <string name="biometric_prompt_cancel">Cancel</string>
     <string name="settings_change_password_offline">Needs an internet connection</string>
     <string name="change_password_title">Change password</string>
     <string name="change_password_intro">Enter your current password, then the new one twice. You stay signed in on this phone. Other phones and the Admin Console will ask for the new password.</string>
