@@ -72,6 +72,7 @@ fun EmptyState(
                 painter = painterResource(if (isDark) illustrationDark else illustrationLight),
                 contentDescription = null, // decorative
                 contentScale = ContentScale.Fit,
+                alpha = 0.8f,
                 modifier = Modifier
                     .width(if (isDark) illustrationWidth * (212f / 200f) else illustrationWidth)
                     .aspectRatio(if (isDark) 212f / 182f else 200f / 170f),
