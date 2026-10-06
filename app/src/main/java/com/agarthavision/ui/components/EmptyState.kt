@@ -96,9 +96,9 @@ fun EmptyState(
             text = title,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            color = colors.textSecondary,
+            color = colors.textPrimary,
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(2.dp))
         Text(
             text = body,
             fontSize = 13.sp,
