@@ -291,8 +291,10 @@ fun SessionsScreen(
     state.reportSheet?.let { sheet ->
         PatientReportSheet(
             sheet = sheet,
+            patientName = state.patient?.displayName,
             onDismiss = viewModel::onDismissReportSheet,
             onDateRangeSelected = viewModel::onReportDateRangeSelected,
+            onSelectAll = viewModel::onSelectAllReportSessions,
             onToggleSession = viewModel::onToggleReportSession,
             onGenerate = viewModel::onGeneratePatientReport,
         )
