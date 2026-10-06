@@ -54,6 +54,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -232,66 +234,11 @@ internal fun VerificationSheetContent(
                 },
             )
 
-            // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 22.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                val imageModel = rememberFrameImageModel(frame, state.imageSource)
-                val frameModifier = Modifier
-                    .heightIn(max = 220.dp)
-                    .aspectRatio(frame.previewAspectRatio(), matchHeightConstraintsFirst = true)
-                    .clip(RoundedCornerShape(16.dp))
-                    .background(AgarthaTheme.colors.surfaceVariant)
-                    .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
-
-                if (imageModel == null) {
-                    FrameUnavailable(
-                        reason = state.imageSource,
-                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
-                    )
-                } else {
-                    FrameWithBoxes(
-                        imageModel = imageModel,
-                        boxes = state.findings.frameBoxes(
-                            active = DrawTarget(state.currentDetectionIndex),
-                        ),
-                        showBoxes = state.showBoundingBoxes,
-                        inferenceImageWidth = frame.imageWidth,
-                        inferenceImageHeight = frame.imageHeight,
-                        modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
-                    )
-                }
-
-                CycleRow(
-                    indicator = if (state.frameIndexInQueue > 0) {
-                        stringResource(
-                            R.string.verify_sample_indicator,
-                            state.frameIndexInQueue,
-                            state.queueSize,
-                        )
-                    } else {
-                        stringResource(R.string.verify_sample_out_of_queue)
-                    },
-                    prevDescription = stringResource(R.string.verify_prev_frame),
-                    nextDescription = stringResource(R.string.verify_next_frame),
-                    prevTag = VerifyTestTags.FRAME_PREV,
-                    nextTag = VerifyTestTags.FRAME_NEXT,
-                    canGoPrev = state.canGoPrev,
-                    canGoNext = state.canGoNext,
-                    onPrev = actions.onFramePrev,
-                    onNext = actions.onFrameNext,
-                    modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
-                )
-            }
-
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(bottom = 32.dp)
+                    .padding(bottom = 24.dp)
                     .onGloballyPositioned { anchor.sheet = it }
                     .collapseOnOutsideTap(
                         anchor = anchor,
@@ -300,7 +247,62 @@ internal fun VerificationSheetContent(
                     )
                     .verticalScroll(scrollState),
             ) {
-                Column(modifier = Modifier.padding(horizontal = 22.dp)) {
+                // Frame Section: Image preview and sample cycle row scroll with content.
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    val imageModel = rememberFrameImageModel(frame, state.imageSource)
+                    val frameModifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(AgarthaTheme.colors.surfaceVariant)
+                        .border(0.5.dp, AgarthaTheme.colors.border, RoundedCornerShape(16.dp))
+
+                    if (imageModel == null) {
+                        FrameUnavailable(
+                            reason = state.imageSource,
+                            modifier = frameModifier.testTag(VerifyTestTags.FRAME_UNAVAILABLE),
+                        )
+                    } else {
+                        FrameWithBoxes(
+                            imageModel = imageModel,
+                            boxes = state.findings.frameBoxes(
+                                active = DrawTarget(state.currentDetectionIndex),
+                            ),
+                            showBoxes = state.showBoundingBoxes,
+                            inferenceImageWidth = frame.imageWidth,
+                            inferenceImageHeight = frame.imageHeight,
+                            modifier = frameModifier.testTag(VerifyTestTags.FRAME_PREVIEW),
+                        )
+                    }
+
+                    CycleRow(
+                        indicator = if (state.frameIndexInQueue > 0) {
+                            stringResource(
+                                R.string.verify_sample_indicator,
+                                state.frameIndexInQueue,
+                                state.queueSize,
+                            )
+                        } else {
+                            stringResource(R.string.verify_sample_out_of_queue)
+                        },
+                        prevDescription = stringResource(R.string.verify_prev_frame),
+                        nextDescription = stringResource(R.string.verify_next_frame),
+                        prevTag = VerifyTestTags.FRAME_PREV,
+                        nextTag = VerifyTestTags.FRAME_NEXT,
+                        canGoPrev = state.canGoPrev,
+                        canGoNext = state.canGoNext,
+                        onPrev = actions.onFramePrev,
+                        onNext = actions.onFrameNext,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
+                    )
+                }
+
+                Column(modifier = Modifier.padding(horizontal = 16.dp)) {
                     // 3. Model output: what the container said, or that it said nothing, or that it has
                     //    not answered yet. Always present, never collapsed to two states.
                     ModelOutputSection(
@@ -387,7 +389,7 @@ internal fun VerificationSheetContent(
                     // species than the model boxed already answers it, and asking again lets the two
                     // disagree.
 
-                    // 6. Bottom bar: remarks, then Discard and Submit sharing a row.
+                    // 6. Remarks
                     SheetSectionLabel(
                         text = stringResource(R.string.verify_remarks_label),
                         modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp),
@@ -399,33 +401,52 @@ internal fun VerificationSheetContent(
                         enabled = !state.isAwaitingInference,
                         modifier = Modifier.padding(bottom = 12.dp),
                     )
+                }
+            }
 
-                    state.errorMessage?.let {
-                        Text(
-                            text = it,
-                            color = AgarthaTheme.colors.danger,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(bottom = 8.dp),
+            val colors = AgarthaTheme.colors
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colors.surface)
+                    .drawBehind {
+                        drawLine(
+                            color = colors.border,
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, 0f),
+                            strokeWidth = 1.dp.toPx(),
                         )
                     }
-
-                    SheetActionRow(
-                        SheetActionRowState(
-                            primaryLabel = if (isEditing) "Save" else "Submit",
-                            secondaryLabel = "Discard",
-                            onPrimaryClick = actions.onSubmit,
-                            onSecondaryClick = {
-                                if (isEditing) {
-                                    actions.onCancel()
-                                } else {
-                                    showDiscardConfirm.value = true
-                                }
-                            },
-                            primaryLoading = state.isSubmitting,
-                            primaryEnabled = state.canSubmit,
-                        )
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 12.dp, bottom = 16.dp),
+            ) {
+                state.errorMessage?.let {
+                    Text(
+                        text = it,
+                        color = colors.danger,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
+
+                SheetActionRow(
+                    SheetActionRowState(
+                        primaryLabel = stringResource(
+                            if (isEditing) R.string.verify_action_save_changes else R.string.verify_action_submit,
+                        ),
+                        secondaryLabel = stringResource(R.string.verify_action_discard),
+                        onPrimaryClick = actions.onSubmit,
+                        onSecondaryClick = {
+                            if (isEditing) {
+                                actions.onCancel()
+                            } else {
+                                showDiscardConfirm.value = true
+                            }
+                        },
+                        primaryLoading = state.isSubmitting,
+                        primaryEnabled = state.canSubmit,
+                    ),
+                )
             }
         }
 

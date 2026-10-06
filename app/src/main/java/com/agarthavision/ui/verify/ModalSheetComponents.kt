@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -118,51 +119,47 @@ data class SheetActionRowState(
 fun SheetActionRow(state: SheetActionRowState) {
     val colors = AgarthaTheme.colors
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Secondary Button — neutral grey chip. Discard is a confirmed action (it opens a
         // dialog), so it reads as secondary rather than as a red destructive control.
         Box(
             modifier = Modifier
                 .weight(1f)
+                .heightIn(min = 48.dp)
                 .testTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
-                .background(colors.surfaceVariant, RoundedCornerShape(14.dp))
-                .border(0.5.dp, colors.borderStrong, RoundedCornerShape(14.dp))
-                .clickable { state.onSecondaryClick() }
-                .padding(vertical = 16.dp),
+                .background(colors.surface, RoundedCornerShape(12.dp))
+                .border(1.dp, colors.borderStrong, RoundedCornerShape(12.dp))
+                .clickable { state.onSecondaryClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = state.secondaryLabel,
                 color = colors.textPrimary,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.2).sp
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
 
         // Primary Button — brand maroon, dimmed while the form is incomplete.
         Box(
             modifier = Modifier
-                .weight(2f)
+                .weight(1f)
+                .heightIn(min = 48.dp)
                 .testTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
                 .background(
                     if (state.primaryEnabled) colors.brandFill else colors.brandFill.copy(alpha = 0.4f),
-                    RoundedCornerShape(14.dp),
+                    RoundedCornerShape(12.dp),
                 )
-                .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() }
-                .padding(vertical = 16.dp),
+                .clickable(enabled = state.primaryEnabled && !state.primaryLoading) { state.onPrimaryClick() },
             contentAlignment = Alignment.Center
         ) {
             Text(
                 text = if (state.primaryLoading) "Loading..." else state.primaryLabel,
                 color = colors.onBrandFill,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                letterSpacing = (-0.2).sp
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
             )
         }
     }
