@@ -33,11 +33,17 @@ style:
   ForbiddenMethodCall:
     active: true
     methods:
+      - 'android.util.Log.v'
+      - 'android.util.Log.d'
+      - 'android.util.Log.i'
+      - 'android.util.Log.w'
+      - 'android.util.Log.e'
+      - 'android.util.Log.println'
       - 'kotlin.io.println'
       - 'kotlin.io.print'
-      - 'java.io.PrintStream.println'
-      - 'java.io.PrintStream.print'
-    excludes: ['**/test/**', '**/androidTest/**']
+      - 'kotlin.io.println(kotlin.Any?)'
+      - 'kotlin.io.print(kotlin.Any?)'
+    excludes: ['**/core/util/Logger.kt', '**/test/**', '**/androidTest/**']
   ForbiddenComment:
     active: false
   MagicNumber:
