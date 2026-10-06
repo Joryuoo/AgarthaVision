@@ -585,6 +585,15 @@ class SessionsViewModel @Inject constructor(
             .mapTo(mutableSetOf()) { it.session.id }
     }
 
+    fun onSelectAllReportSessions() {
+        internalState.update { state ->
+            val sheet = state.reportSheet ?: return@update state
+            val eligible = eligibleSessionIds(sheet.candidates, sheet.startDate, sheet.endDate)
+            val updated = if (sheet.selectedSessionIds == eligible) emptySet() else eligible
+            state.copy(reportSheet = sheet.copy(selectedSessionIds = updated))
+        }
+    }
+
     fun onToggleReportSession(sessionId: String) {
         internalState.update { state ->
             val sheet = state.reportSheet ?: return@update state

@@ -1620,6 +1620,56 @@ class SessionsViewModelTest {
         }
 
     @Test
+    fun `select-all selects only eligible in-range sessions and excludes zero-verified or out-of-range`() =
+        runTest(mainDispatcherRule.testDispatcher.scheduler) {
+            val inRangeEligible = PatientReportCandidate(
+                makeSession("s1", "u1", startedAt = LocalDate.of(2026, 6, 15)).session,
+                verifiedSampleCount = 3,
+            )
+            val zeroVerified = PatientReportCandidate(
+                makeSession("s2", "u1", startedAt = LocalDate.of(2026, 6, 16)).session,
+                verifiedSampleCount = 0,
+            )
+            val outOfRange = PatientReportCandidate(
+                makeSession("s3", "u1", startedAt = LocalDate.of(2026, 1, 10)).session,
+                verifiedSampleCount = 5,
+            )
+            val candidates = listOf(inRangeEligible, zeroVerified, outOfRange)
+            val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {
+                onBlocking { invoke(any()) } doReturn Result.success(candidates)
+            }
+            val vm = viewModelForReportSheet(candidatesUseCase = candidatesUseCase)
+
+            vm.state.test {
+                advanceUntilIdle()
+                vm.onOpenGenerateReport()
+                advanceUntilIdle()
+
+                // Filter to June 2026
+                vm.onReportDateRangeSelected(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 30))
+                advanceUntilIdle()
+                assertEquals(setOf("s1"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                // Uncheck s1 so current selection is empty
+                vm.onToggleReportSession("s1")
+                advanceUntilIdle()
+                assertEquals(emptySet<String>(), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                // Calling select-all should select only s1 (eligible and in range)
+                vm.onSelectAllReportSessions()
+                advanceUntilIdle()
+                assertEquals(setOf("s1"), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                // Calling select-all again when all eligible are selected clears selection (toggle)
+                vm.onSelectAllReportSessions()
+                advanceUntilIdle()
+                assertEquals(emptySet<String>(), expectMostRecentItem().reportSheet?.selectedSessionIds)
+
+                cancelAndIgnoreRemainingEvents()
+            }
+        }
+
+    @Test
     fun `generating successfully closes the sheet and emits a PatientReportGenerated event`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
             val candidatesUseCase = mock<GetPatientReportCandidatesUseCase> {

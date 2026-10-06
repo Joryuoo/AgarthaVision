@@ -2,7 +2,6 @@
 
 package com.agarthavision.ui.records
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,9 +40,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -58,7 +54,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
-import com.agarthavision.core.util.CAPTURE_FRAME_SIZE_PX
 import com.agarthavision.domain.model.Detection
 import com.agarthavision.domain.model.RecordAuthor
 import com.agarthavision.domain.usecase.records.SampleImageSource
@@ -72,9 +67,6 @@ import com.agarthavision.ui.theme.AppTypography
 import com.agarthavision.ui.theme.Spacing
 import com.agarthavision.ui.theme.detectionBoxColor
 import com.agarthavision.ui.verify.VerificationSheet
-import com.agarthavision.ui.verify.frameTransform
-import com.agarthavision.ui.verify.toCanvasX
-import com.agarthavision.ui.verify.toCanvasY
 import java.io.File
 import java.time.Instant
 import java.time.ZoneId
@@ -345,81 +337,6 @@ private fun SampleFrame(imageSource: SampleImageSource) {
     }
 }
 
-/**
- * The detection boxes, each in its own colour, over the frame.
- *
- * ## This was drawing every box in the wrong place
- *
- * The overlay this replaces treated `bbox_*` as **normalised 0–1 with a top-left origin**:
- *
- * ```
- * val left = bx.coerceIn(0f, 1f) * size.width
- * ```
- *
- * What is stored is **centre-based pixels in the source image's space**.
- * `VerificationMapper` copies `Prediction.x/y/width/height` straight through, and
- * `Prediction`'s own KDoc says so. For a real detection at `x = 320f`, `coerceIn(0f, 1f)`
- * clamped it to `1.0` and the box landed in the bottom-right corner of the frame. Every box.
- *
- * **The `coerceIn` is what hid it** — it turned an out-of-range number into a plausible-looking
- * rectangle instead of anything visible as wrong. It is gone, not widened: a box outside the
- * frame means the data is wrong and should look wrong.
- *
- * The arithmetic below is the same `frameTransform` the Verification Screen draws with, imported
- * rather than copied. Two screens computing the same letterbox two ways is how the boxes drift
- * apart again.
- *
- * ## Dimensions
- *
- * The domain `Sample` carries no image dimensions at all, so this defaults to
- * [CAPTURE_FRAME_SIZE_PX]. That is safe by construction rather than a guess: `toJpegBytes()`
- * centre-crops and downscales every frame to a 640 square before it is ever posted, so 640 is
- * the only value a stored dimension holds in practice.
- *
- * **One exception, and it is the reason to read this twice:** a device whose camera cannot supply
- * a 640 stream encodes at its own smaller native square rather than upscaling
- * (`ImageExtensions.kt`). A sample from such a device renders its boxes slightly off here.
- * Carrying the real dimensions down would mean adding them to the domain `Sample` and to
- * `SampleRemoteDataSource.toEntity()`, which sets `imageWidth = null` on **every** sample pulled
- * from Supabase. That is the fix; this comment is the placeholder for it. Silently assuming 640
- * for every sample is how the bug above happened the first time.
- */
-@Composable
-private fun DetectionOverlay(
-    detections: List<Detection>,
-    hiddenIndices: Set<Int>,
-    modifier: Modifier = Modifier,
-) {
-    // Capture colours at composition time — DrawScope inside Canvas is not @Composable.
-    val colors = remember(detections.size) { List(detections.size) { detectionBoxColor(it) } }
-    Canvas(modifier = modifier) {
-        val transform = frameTransform(
-            canvasWidth = size.width,
-            canvasHeight = size.height,
-            sourceWidth = CAPTURE_FRAME_SIZE_PX.toFloat(),
-            sourceHeight = CAPTURE_FRAME_SIZE_PX.toFloat(),
-        ) ?: return@Canvas
-
-        detections.forEachIndexed { index, detection ->
-            if (index in hiddenIndices) return@forEachIndexed
-            // A detection with no box is a valid finding - an egg the medtech added and did not
-            // draw - and simply has nothing to render.
-            val cx = detection.bboxX ?: return@forEachIndexed
-            val cy = detection.bboxY ?: return@forEachIndexed
-            val bw = detection.bboxW ?: return@forEachIndexed
-            val bh = detection.bboxH ?: return@forEachIndexed
-            drawRect(
-                color = colors[index],
-                topLeft = Offset(
-                    transform.toCanvasX(cx - bw / 2f),
-                    transform.toCanvasY(cy - bh / 2f),
-                ),
-                size = Size(bw * transform.scale, bh * transform.scale),
-                style = Stroke(width = 3f),
-            )
-        }
-    }
-}
 
 /**
  * One detection: its colour, what it was called, and whether its box is drawn.

@@ -503,6 +503,36 @@
     <string name="session_detail_no_parasites">No parasites found</string>
     <!-- En dash, not a hyphen: this is a numeric range. -->
     <string name="lpf_range_value">%1$d\u2013%2$d LPF</string>
+    <string name="lpf_single_value">%1$d LPF</string>
+    <plurals name="session_detail_species_count">
+        <item quantity="one">%d species</item>
+        <item quantity="other">%d species</item>
+    </plurals>
+    <plurals name="session_detail_fields_count">
+        <item quantity="one">%d field</item>
+        <item quantity="other">%d fields</item>
+    </plurals>
+    <string name="session_detail_per_field_density">PER-FIELD DENSITY (LPF)</string>
+    <string name="session_detail_total_eggs">TOTAL EGGS CONFIRMED</string>
+    <string name="report_empty_title">No reports yet</string>
+    <string name="report_empty_body">Generated PDF reports will show up here.</string>
+    <plurals name="session_detail_captured_samples">
+        <item quantity="one">%d captured sample</item>
+        <item quantity="other">%d captured samples</item>
+    </plurals>
+    <string name="sample_tile_manual">Manual</string>
+    <plurals name="sample_detail_detection_count">
+        <item quantity="one">%d detection</item>
+        <item quantity="other">%d detections</item>
+    </plurals>
+    <plurals name="sample_detail_species_count">
+        <item quantity="one">%d species</item>
+        <item quantity="other">%d species</item>
+    </plurals>
+    <string name="sample_detail_auto_detected">Auto-detected</string>
+    <string name="sample_detail_manual_capture">Manual capture</string>
+    <string name="sample_detail_confidence">%1$d%% confidence</string>
+    <string name="sample_detail_hidden_suffix">" · hidden"</string>
     <string name="lpf_descriptor_rare">rare</string>
     <string name="lpf_descriptor_few">few</string>
     <string name="lpf_descriptor_moderate">moderate</string>
@@ -787,10 +817,35 @@
     <string name="sessions_empty_body">Tap New session below to start recording a smear.</string>
     <!-- Patient report sheet (14zcqntj2uz) -->
     <string name="patient_report_generate_action">Generate report</string>
-    <string name="patient_report_sheet_title">Generate patient report</string>
-    <string name="patient_report_sheet_sessions_title">Sessions to include</string>
+    <string name="patient_report_sheet_title">Generate report</string>
+    <plurals name="patient_report_sheet_subtitle">
+        <item quantity="one">%1$s · %2$d session</item>
+        <item quantity="other">%1$s · %2$d sessions</item>
+    </plurals>
+    <string name="patient_report_sheet_date_range">DATE RANGE</string>
+    <string name="date_range_from">From</string>
+    <string name="date_range_to">To</string>
+    <string name="date_range_select_start">Select start date</string>
+    <string name="date_range_select_end">Select end date</string>
+    <string name="date_range_select_date">Select date</string>
+    <string name="sample_tile_content_description">Sample, %1$s</string>
+    <string name="sample_tile_content_description_manual">Sample, %1$s, manual capture</string>
+    <string name="patient_report_range_all_time">All time</string>
+    <string name="patient_report_range_last_30">Last 30 days</string>
+    <string name="patient_report_range_last_7">Last 7 days</string>
+    <string name="patient_report_sheet_sessions_title">SESSIONS</string>
+    <string name="patient_report_select_all">Select all</string>
     <string name="patient_report_sheet_session_no_verified">No verified samples</string>
-    <string name="patient_report_sheet_session_out_of_range">Outside selected range</string>
+    <string name="patient_report_sheet_session_out_of_range">Outside date range</string>
+    <plurals name="patient_report_sheet_summary_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="patient_report_sheet_summary_samples">
+        <item quantity="one">%d verified sample</item>
+        <item quantity="other">%d verified samples</item>
+    </plurals>
+    <string name="patient_report_sheet_summary_suffix">" will be included"</string>
     <string name="patient_report_sheet_generate_button">Generate report</string>
     <string name="patient_report_sheet_close">Close</string>
     <string name="patient_report_sheet_no_candidates">This patient has no sessions to report on yet.</string>
@@ -842,7 +897,15 @@
         <item quantity="one">%1$d year old</item>
         <item quantity="other">%1$d years old</item>
     </plurals>
-    <string name="patient_preview_age_sex">%1$s | %2$s</string>
+    <plurals name="patient_preview_sessions_chip">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="patient_preview_unverified_chip">
+        <item quantity="one">%d unverified</item>
+        <item quantity="other">%d unverified</item>
+    </plurals>
+    <string name="patient_preview_age_sex">%1$s · %2$s</string>
     <!-- A colleague's record, read-only on this phone (14zcqntjph6) -->
     <string name="record_recorded_by">Recorded by %1$s</string>
     <string name="record_recorded_by_unnamed">Recorded by another medtech</string>
