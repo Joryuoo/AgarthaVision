@@ -23,8 +23,9 @@ Verify any entry with `git log --oneline --reverse`.
 - **`sessions.patient_id` is fixed once written.** A trigger refuses any update that changes
   it, for every role. Without it the new rule could be met by moving a session onto the report's
   patient and back. The phone never moves a session; its upserts resend the same value.
-- Applied by hand (C6), independent of any build. The file's header carries a read-only count
-  of existing patient reports the old rule let in; nothing is fixed in place (C8).
+- Applied by hand (C6), independent of any build. Applied to `agarthavision`, checked on
+  2026-10-06. The file's header carries a read-only count of existing patient reports the old
+  rule let in; nothing is fixed in place (C8).
 - Tested locally against `0001`–`0016` through RLS: the ticket's repro is refused with 42501,
   a report on the patient's own sessions still inserts, and session reports are unchanged.
 
@@ -54,7 +55,7 @@ Verify any entry with `git log --oneline --reverse`.
   Postgres, widens `report_type` to allow `'patient'`, adds `reports_scope_check`, and requires
   a `patient_users` link on a patient-report insert. Must apply before the build reaches any
   device that can generate one — an older build decoding `session_id` as non-null crashes on
-  the first patient report row it pulls.
+  the first patient report row it pulls. Applied to `agarthavision`, checked on 2026-10-06.
 - **Sync mirrors session reports**: the row goes to `public.reports`, the PDF to the `reports`
   Storage bucket, restored via `RestoreReportFilesUseCase`'s patient branch
   (`writePatientPdf`). An unrecognised `report_type` on pull is skipped, not stored.
@@ -293,7 +294,7 @@ Before this change, C6 read as if this repository held the whole schema.
 ## feat/patient-shared-history — a patient's history is shared, and a colleague's is read-only · 2026-09-30
 
 `14zcqntjph5`, `14zcqntjph6`, `14zcqntjph7`. Four migrations to apply by hand, in order: 0007,
-0008, 0009, 0010. Room 23 → 24.
+0008, 0009, 0010. Room 23 → 24. All four are applied to `agarthavision`, checked on 2026-10-06.
 
 - **Shared history (0007).** A medtech assigned to a patient reads every session, sample,
   detection, finding, prediction and report on it, and both buckets' files, whoever wrote them.

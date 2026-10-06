@@ -139,12 +139,16 @@ This is the one home for which file describes which project.
 | `0004_predictions.sql` | The `predictions` table and `detections.prediction_id` |
 | `0005_verification_stage.sql` | `detections.stage`; widens the findings `stage` CHECK |
 | `0006_drop_species_touched.sql` | Drops `detections.species_touched` |
+| `0007_patient_shared_history.sql` | A medtech assigned to a patient reads every session, sample, detection, finding, prediction and report on it, and both buckets' files, whoever wrote them. Additive SELECT policies; writes stay author-only |
+| `0008_colleague_names.sql` | A medtech reads the profile name of a colleague whose records they can read (`profiles_select_colleague`) |
+| `0009_session_label_collisions.sql` | A trigger renames a session label that clashes within a patient instead of rejecting it; `session_label_duplicates()` reports the ones already there |
+| `0010_writes_need_own_session.sql` | Restrictive INSERT/UPDATE policies on `samples` and `reports`: a row is written only into a session its writer authored. 0007–0010 are applied to `agarthavision`, checked on 2026-10-06 |
 | `0011_profile_outlives_login.sql` | `profiles.id` stops referencing `auth.users`; adds `profiles.account_id`, cleared when the login is deleted, so offboarding by deleting a login keeps authorship |
 | `0012_deidentified_reads.sql` | `patients_deidentified`, `sessions_deidentified`, `samples_deidentified`: super-admin-only views without name, sex, birthdate, session label or sample note. Additive; step 1 of 3 |
 | `0013_super_admin_reads_deidentified.sql` | Removes the super admin branch from the `patients`, `sessions` and `samples` read policies and the `reports` bucket. Step 3, applied after the Admin Console started reading the views (14zcqntjvky). Both files are applied to `agarthavision`, checked on 2026-10-02 |
 | `0014_super_admins.sql` | Super admins become rows in `super_admins`, one per grant, revoked by tombstone; `is_admin()` reads it, and `profiles.role` is retired in place |
-| `0015_patient_reports.sql` | Patient-scoped reports: `reports.session_id` nullable, `patient_id` and `session_ids` added, `reports_scope_check`, and the own-session insert rule re-expressed over `session_ids` |
-| `0016_patient_report_own_patient_sessions.sql` | A patient report's `session_ids` must be non-empty and name only the writer's own sessions of that patient; `sessions.patient_id` can no longer change |
+| `0015_patient_reports.sql` | Patient-scoped reports: `reports.session_id` nullable, `patient_id` and `session_ids` added, `reports_scope_check`, and the own-session insert rule re-expressed over `session_ids`. Applied to `agarthavision`, checked on 2026-10-06 |
+| `0016_patient_report_own_patient_sessions.sql` | A patient report's `session_ids` must be non-empty and name only the writer's own sessions of that patient; `sessions.patient_id` can no longer change. Applied to `agarthavision`, checked on 2026-10-06 |
 | `legacy-dev/` | Pre-patient migrations `0001`–`0013`, unedited, still the description of `agarthavision-dev` and `agarthavision-prod`, which `staging` and `main` point at. Never applied to `agarthavision`. Its `README.md` says why. Pre-consolidation numbers 0003, 0004 and 0006 name different files here, so cite them with the `legacy-dev/` prefix |
 
 ### The Admin Console's migrations — same database, other repository
