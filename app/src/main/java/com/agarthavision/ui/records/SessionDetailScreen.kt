@@ -75,6 +75,7 @@ import androidx.compose.ui.text.withStyle
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
+import com.agarthavision.ui.theme.detectionBoxColor
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -94,6 +95,14 @@ internal data class SessionDetailUi(
     val verifiedSamples: List<SampleUi>,
 )
 
+internal data class TileBox(
+    val cx: Float,
+    val cy: Float,
+    val w: Float,
+    val h: Float,
+    val color: Color,
+)
+
 internal data class SampleUi(
     val id: String,
     val source: SampleSource,
@@ -104,6 +113,9 @@ internal data class SampleUi(
     val storagePath: String?,
     val timeLabel: String,
     val isEdited: Boolean = false,
+    val isManual: Boolean = false,
+    val eggCount: Int = 0,
+    val boxes: List<TileBox> = emptyList(),
 )
 
 internal enum class SampleSource { Ai, Manual }
@@ -269,7 +281,7 @@ fun SessionDetailScreen(
     }
 }
 
-private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
+internal fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
     val sessionData = state.session ?: return null
     val sessionRecord = sessionData.session
     val startedAt = Instant.ofEpochMilli(sessionRecord.startedAt)
@@ -280,6 +292,21 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
         val hasAi = item.detections.isNotEmpty() && !item.sample.isManual
         val sampleTime = Instant.ofEpochMilli(item.sample.timestamp)
             .atZone(ZoneId.systemDefault())
+        val isManual = item.sample.isManual
+        val eggCount = item.detections.count { it.group != DetectionGroup.REJECTED }
+        val boxes = item.detections.mapIndexedNotNull { i, d ->
+            if (d.group != DetectionGroup.REJECTED && d.hasBox) {
+                TileBox(
+                    cx = d.bboxX!!,
+                    cy = d.bboxY!!,
+                    w = d.bboxW!!,
+                    h = d.bboxH!!,
+                    color = detectionBoxColor(i),
+                )
+            } else {
+                null
+            }
+        }
         SampleUi(
             id = item.sample.id,
             source = if (hasAi) SampleSource.Ai else SampleSource.Manual,
@@ -289,6 +316,9 @@ private fun mapToUiModel(state: SessionDetailState): SessionDetailUi? {
             storagePath = item.sample.storagePath,
             timeLabel = sampleTime.format(DateTimeFormatter.ofPattern("HH:mm:ss")),
             isEdited = item.sample.isEdited,
+            isManual = isManual,
+            eggCount = eggCount,
+            boxes = boxes,
         )
     }
 
