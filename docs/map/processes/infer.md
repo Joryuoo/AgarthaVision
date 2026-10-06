@@ -66,9 +66,9 @@ returns. The model output arrives later.
    `core/di/InferenceModule.kt` hands them to the queue by type, and there is no unqualified
    `InferenceEngine` binding. See [On-device engine](#on-device-engine).
 2. **Authenticate.** An OkHttp interceptor attaches
-   `Authorization: Bearer <BuildConfig.INFERENCE_API_KEY>` to every request
-   (`core/di/InferenceModule.kt`). The server compares it literally
-   (`inference/server.py`). Timeouts are 5 s connect, 30 s read (`core/di/InferenceModule.kt`):
+   `Authorization: Bearer <accessToken>` using the signed-in user's Supabase session access token
+   (`core/di/InferenceModule.kt`). `INFERENCE_API_KEY` is held server-side, preventing secret leakage in APKs.
+   Timeouts are 5 s connect, 30 s read (`core/di/InferenceModule.kt`):
    nobody is waiting on the call, and the on-device model answers when the cloud cannot.
 3. **Run the model.** The container loads and warms up one copy of the weights per GPU at
    startup. A request does not run the model itself: it joins a bounded queue, and one worker

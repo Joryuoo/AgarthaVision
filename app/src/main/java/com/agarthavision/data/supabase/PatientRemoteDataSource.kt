@@ -1,5 +1,6 @@
 package com.agarthavision.data.supabase
 
+import android.util.Log
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.domain.model.CLINICAL_ZONE
@@ -13,6 +14,9 @@ import java.time.LocalDate
 import javax.inject.Inject
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.decodeFromJsonElement
 
 /**
  * Persists patients to Supabase Postgres and reads them back.
@@ -84,6 +88,8 @@ class PatientRemoteDataSource @Inject constructor(
     private fun RestException.isDuplicateKey(): Boolean =
         message?.contains(UNIQUE_VIOLATION) == true
 
+    private val jsonDecoder = Json { ignoreUnknownKeys = true }
+
     // ── Pull (read from server) ───────────────────────────────────────────────
 
     /**
@@ -94,7 +100,13 @@ class PatientRemoteDataSource @Inject constructor(
     suspend fun fetchPatients(patientIds: List<String>): List<PatientEntity> =
         supabase.postgrest[PATIENTS_TABLE].select {
             filter { isIn("id", patientIds) }
-        }.decodeList<PatientRow>().map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<PatientRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("PatientRemoteDataSource", "Skipping malformed patient row: ${error.message}")
+            }.getOrNull()
+        }
 
     /**
      * The `patient_users` rows of [userId], the signed-in user.
@@ -120,8 +132,13 @@ class PatientRemoteDataSource @Inject constructor(
             filter { eq("user_id", userId) }
             order("patient_id", Order.ASCENDING)
             range(offset, offset + limit - 1)
-        }.decodeList<PatientUserRow>()
-            .map { it.toEntity() }
+        }.decodeList<JsonElement>().mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement<PatientUserRow>(element).toEntity()
+            }.onFailure { error ->
+                Log.w("PatientRemoteDataSource", "Skipping malformed patient link row: ${error.message}")
+            }.getOrNull()
+        }
 
     // ── Row shapes ────────────────────────────────────────────────────────────
 

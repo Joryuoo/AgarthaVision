@@ -346,6 +346,103 @@ class SupabaseMapperContractTest {
         assertEquals("{}", entity.lpfPerSpeciesJson)
     }
 
+    @Test
+    fun `ReportRow parses float min and max without becoming 0`() {
+        val capturedJson = """
+            {
+                "id": "rep-603",
+                "session_id": "sess-202",
+                "user_id": "usr-888",
+                "report_type": "session",
+                "generated_at": "2026-03-10T11:00:00Z",
+                "total_samples": 2,
+                "total_eggs_confirmed": 5,
+                "positive_species": ["Ascaris lumbricoides"],
+                "lpf_per_species": {
+                    "Ascaris lumbricoides": { "min": 2.0, "max": 4.5 }
+                }
+            }
+        """.trimIndent()
+
+        val row = jsonDecoder.decodeFromString<ReportRow>(capturedJson)
+        val entity = row.toEntity()
+
+        assertEquals("rep-603", entity.reportId)
+        assertTrue(entity.lpfPerSpeciesJson.contains("\"min\":2"))
+        assertTrue(entity.lpfPerSpeciesJson.contains("\"max\":5"))
+    }
+
+    @Test
+    fun `ReportRow parses missing min, missing max, or non-object value gracefully`() {
+        val capturedJson = """
+            {
+                "id": "rep-604",
+                "session_id": "sess-202",
+                "user_id": "usr-888",
+                "report_type": "session",
+                "generated_at": "2026-03-10T11:00:00Z",
+                "total_samples": 2,
+                "total_eggs_confirmed": 5,
+                "positive_species": ["Ascaris lumbricoides", "Hookworm"],
+                "lpf_per_species": {
+                    "Ascaris lumbricoides": { "max": 5 },
+                    "Hookworm": "invalid_primitive"
+                }
+            }
+        """.trimIndent()
+
+        val row = jsonDecoder.decodeFromString<ReportRow>(capturedJson)
+        val entity = row.toEntity()
+
+        assertEquals("rep-604", entity.reportId)
+        assertTrue(entity.lpfPerSpeciesJson.contains("\"min\":0"))
+        assertTrue(entity.lpfPerSpeciesJson.contains("\"max\":5"))
+    }
+
+    @Test
+    fun `tolerant list decoding skips bad row among good ones and imports valid ones`() {
+        val capturedArrayJson = """
+            [
+                {
+                    "id": "rep-good-1",
+                    "session_id": "sess-1",
+                    "user_id": "usr-1",
+                    "report_type": "session",
+                    "generated_at": "2026-03-10T11:00:00Z",
+                    "total_samples": 1,
+                    "total_eggs_confirmed": 2,
+                    "positive_species": [],
+                    "lpf_per_species": {}
+                },
+                {
+                    "invalid_row_missing_required_fields": true
+                },
+                {
+                    "id": "rep-good-2",
+                    "session_id": "sess-1",
+                    "user_id": "usr-1",
+                    "report_type": "session",
+                    "generated_at": "2026-03-10T11:05:00Z",
+                    "total_samples": 2,
+                    "total_eggs_confirmed": 4,
+                    "positive_species": [],
+                    "lpf_per_species": {}
+                }
+            ]
+        """.trimIndent()
+
+        val elements = jsonDecoder.decodeFromString<List<kotlinx.serialization.json.JsonElement>>(capturedArrayJson)
+        val validEntities = elements.mapNotNull { element ->
+            runCatching {
+                jsonDecoder.decodeFromJsonElement(ReportRow.serializer(), element).toEntity()
+            }.getOrNull()
+        }
+
+        assertEquals(2, validEntities.size)
+        assertEquals("rep-good-1", validEntities[0].reportId)
+        assertEquals("rep-good-2", validEntities[1].reportId)
+    }
+
     private fun assertTrue(condition: Boolean) {
         org.junit.Assert.assertTrue(condition)
     }

@@ -20,19 +20,22 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.auth.auth
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Provider
 import javax.inject.Singleton
 
 /**
  * Provides the [InferenceApi] backed by Retrofit + OkHttp.
  *
- * The base URL and bearer key come from [BuildConfig], which is populated from
- * `local.properties` at build time. When the container is not live, requests fail at runtime
- * and the inference queue falls back to the on-device model. See ADR-003.
+ * Cloud inference calls send the user's Supabase session JWT (`currentAccessTokenOrNull()`)
+ * as the Bearer token. `INFERENCE_API_KEY` is held server-side, preventing secret leakage in APKs.
+ * When the container/proxy is not live, requests fail and the queue falls back to the on-device model.
  */
 @Module
 @InstallIn(SingletonComponent::class)
@@ -62,13 +65,19 @@ object InferenceModule {
      */
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient =
+    fun provideOkHttpClient(
+        supabaseProvider: Provider<SupabaseClient>,
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
-                    .header("Authorization", "Bearer ${BuildConfig.INFERENCE_API_KEY}")
-                    .build()
-                chain.proceed(request)
+                val accessToken = runCatching {
+                    supabaseProvider.get().auth.currentAccessTokenOrNull()
+                }.getOrNull()
+                val requestBuilder = chain.request().newBuilder()
+                if (!accessToken.isNullOrBlank()) {
+                    requestBuilder.header("Authorization", "Bearer $accessToken")
+                }
+                chain.proceed(requestBuilder.build())
             }
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
