@@ -69,8 +69,11 @@ import com.agarthavision.ui.components.BackArrow
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.records.labelRes
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import com.agarthavision.ui.theme.AgarthaTheme
-import com.agarthavision.ui.theme.HeroDensityStyle
+import com.agarthavision.ui.theme.AppColors
 import com.agarthavision.ui.theme.Spacing
 import java.time.Instant
 import java.time.ZoneId
@@ -579,13 +582,19 @@ internal fun LpfHeroCard(
     val speciesCount = session.speciesCount
     val samplesTotal = session.samplesTotal
     val themeColors = AgarthaTheme.colors
-    val onCard = themeColors.onBrandFill
-    val onCardMuted = onCard.copy(alpha = 0.72f)
+    val onCard = Color.White
+    val onCardMuted = Color.White.copy(alpha = 0.80f)
+
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(themeColors.brandFill, RoundedCornerShape(12.dp))
-            .clip(RoundedCornerShape(12.dp)),
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(themeColors.brandFill, AppColors.MaroonPressed),
+                ),
+                shape = RoundedCornerShape(24.dp),
+            )
+            .clip(RoundedCornerShape(24.dp)),
     ) {
         Box(
             modifier = Modifier
@@ -600,30 +609,53 @@ internal fun LpfHeroCard(
                     )
                 },
         )
-        Column(modifier = Modifier.padding(20.dp)) {
+        Column(modifier = Modifier.padding(22.dp)) {
             Text(
-                "TOTAL EGGS CONFIRMED",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = stringResource(R.string.session_detail_total_eggs),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 color = onCardMuted,
-                letterSpacing = 1.sp,
+                letterSpacing = 1.2.sp,
             )
             Spacer(Modifier.height(8.dp))
-            Text(
-                confirmedEggs.toString(),
-                color = onCard,
-                style = HeroDensityStyle,
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Bottom,
+            ) {
+                Text(
+                    text = confirmedEggs.toString(),
+                    fontSize = 68.sp,
+                    lineHeight = 68.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = onCard,
+                    style = TextStyle(fontFeatureSettings = "tnum"),
+                    modifier = Modifier.alignByBaseline(),
+                )
+                Spacer(Modifier.width(12.dp))
+                LpfMeta(
+                    confirmedEggs = confirmedEggs,
+                    speciesCount = speciesCount,
+                    samplesTotal = samplesTotal,
+                    contentColor = onCard,
+                    modifier = Modifier.alignByBaseline(),
+                )
+            }
+
+            Spacer(Modifier.height(18.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.20f)),
             )
-            Spacer(Modifier.height(12.dp))
-            LpfMeta(confirmedEggs, speciesCount, samplesTotal, onCard)
-            
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(18.dp))
+
             Text(
-                stringResource(R.string.session_detail_lpf_title).uppercase(),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.SemiBold,
+                text = stringResource(R.string.session_detail_per_field_density),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
                 color = onCardMuted,
-                letterSpacing = 1.sp,
+                letterSpacing = 1.2.sp,
             )
             Spacer(Modifier.height(8.dp))
 
@@ -634,57 +666,79 @@ internal fun LpfHeroCard(
             // the same way: PB-18 asks for one of the two, consistently.
             if (session.lpfPerSpecies.isEmpty()) {
                 Text(
-                    stringResource(R.string.session_detail_no_parasites),
-                    fontSize = 13.sp,
+                    text = stringResource(R.string.session_detail_no_parasites),
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     color = onCard,
                     modifier = Modifier.testTag(SessionDetailTestTags.NO_PARASITES),
                 )
             }
             session.lpfPerSpecies.forEach { (species, density) ->
-                Column(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag(SessionDetailTestTags.lpfRow(species))
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 12.dp),
                     ) {
                         Text(
-                            species,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = species,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
                             fontStyle = if (species.isBinomial()) FontStyle.Italic else FontStyle.Normal,
                             color = onCard,
-                            modifier = Modifier.weight(1f),
                         )
-                        Text(
-                            stringResource(R.string.lpf_range_value, density.min, density.max),
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = onCard,
-                            style = TextStyle(fontFeatureSettings = "tnum"),
-                        )
-                    }
-                    density.descriptor?.let { descriptor ->
-                        val burden = density.burdenLevel
-                        val descriptorName = stringResource(descriptor.labelRes).replaceFirstChar { it.uppercase() }
-                        val labelText = if (burden != null) {
-                            "$descriptorName · ${stringResource(burden.labelRes)}"
-                        } else {
-                            descriptorName
+                        density.descriptor?.let { descriptor ->
+                            val burden = density.burdenLevel
+                            val descriptorName = stringResource(descriptor.labelRes).replaceFirstChar { it.uppercase() }
+                            val labelText = if (burden != null) {
+                                "$descriptorName · ${stringResource(burden.labelRes)}"
+                            } else {
+                                descriptorName
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color.White.copy(alpha = 0.18f))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                            ) {
+                                Text(
+                                    text = labelText,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = onCard,
+                                )
+                            }
                         }
-                        Text(
-                            labelText,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = onCardMuted,
-                            modifier = Modifier.padding(top = 2.dp),
-                        )
                     }
+                    val displayStr = density.displayText()
+                    val lpfIndex = displayStr.indexOf("LPF")
+                    val annotated = buildAnnotatedString {
+                        if (lpfIndex != -1) {
+                            withStyle(SpanStyle(fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)) {
+                                append(displayStr.substring(0, lpfIndex))
+                            }
+                            withStyle(SpanStyle(fontSize = 11.sp, fontWeight = FontWeight.Bold)) {
+                                append(displayStr.substring(lpfIndex))
+                            }
+                        } else {
+                            withStyle(SpanStyle(fontSize = 26.sp, fontWeight = FontWeight.ExtraBold)) {
+                                append(displayStr)
+                            }
+                        }
+                    }
+                    Text(
+                        text = annotated,
+                        color = onCard,
+                        style = TextStyle(fontFeatureSettings = "tnum"),
+                    )
                 }
             }
         }
@@ -697,27 +751,38 @@ private fun LpfMeta(
     speciesCount: Int,
     samplesTotal: Int,
     contentColor: Color,
+    modifier: Modifier = Modifier,
 ) {
-    val labelColor = contentColor.copy(alpha = 0.72f)
+    val labelColor = contentColor.copy(alpha = 0.80f)
     if (confirmedEggs == 0) {
         Text(
-            pluralStringResource(
+            text = pluralStringResource(
                 R.plurals.session_detail_no_confirmed_eggs_fields,
                 samplesTotal,
                 samplesTotal,
             ),
             fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
             color = labelColor,
+            modifier = modifier,
         )
     } else {
-        StatRun(
-            listOf(
-                Stat(speciesCount.toString(), "species"),
-                Stat(samplesTotal.toString(), "fields"),
-            ),
-            valueColor = contentColor,
-            labelColor = labelColor,
-            separatorColor = contentColor.copy(alpha = 0.6f),
+        val species = pluralStringResource(
+            R.plurals.session_detail_species_count,
+            speciesCount,
+            speciesCount,
+        )
+        val fields = pluralStringResource(
+            R.plurals.session_detail_fields_count,
+            samplesTotal,
+            samplesTotal,
+        )
+        Text(
+            text = "$species · $fields",
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = labelColor,
+            modifier = modifier,
         )
     }
 }
