@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -39,8 +40,6 @@ import com.agarthavision.domain.model.SessionListFilter
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.AgarthaButtonVariant
 import com.agarthavision.ui.components.EmptyState
-import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.Science
 import com.agarthavision.ui.navigation.Screen
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
@@ -122,6 +121,18 @@ fun DashboardScreen(
                         }
                     }
                 )
+            }
+
+            // 1a. First-download status (hidden once the first download is done)
+            if (state.initialDownload != InitialDownload.DONE) {
+                item(key = "initialDownload") {
+                    Spacer(Modifier.height(Spacing.xs))
+                    InitialDownloadBanner(
+                        initialDownload = state.initialDownload,
+                        modifier = Modifier.padding(horizontal = Spacing.xl),
+                    )
+                    Spacer(Modifier.height(Spacing.xs))
+                }
             }
 
             // 1b. Needs Attention strip
@@ -290,10 +301,12 @@ private fun LazyListScope.recentSessionsSection(
     if (!state.hasAnySession && state.activeSession == null) {
         item {
             EmptyState(
-                icon = AgarthaIcons.Science,
                 title = "No sessions yet",
                 body = "Start a session from a patient's page",
                 modifier = Modifier.padding(horizontal = Spacing.xl, vertical = Spacing.sm),
+                illustrationLight = R.drawable.ill_empty_sessions_light,
+                illustrationDark = R.drawable.ill_empty_sessions_dark,
+                illustrationWidth = 120.dp,
                 action = {
                     AgarthaButton(
                         onClick = { onNavigateToTab("patients") },

@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-09-30
-commit: b64271d2
+verified: 2026-10-05
+commit: 33bced13
 ---
 
 # session-lifecycle
@@ -37,8 +37,10 @@ Opening a smear, working in it, coming back to it, and letting go of it. It neve
    Supabase call, just activation. **A colleague's session is never resumed** (14zcqntjph6):
    `resumeSession` throws `ReadOnlyRecordException`, and the Sessions list opens that row in
    Session Detail instead, captioned with its author (`SessionsState.colleagueAuthors`,
-   `ui/sessions/SessionsScreen.kt::SessionCard`). An active session is one capture adds frames
-   to, and the server lets only the author write to it.
+   `ui/sessions/SessionCardSupport.kt::SessionCard`). An active session is one capture adds frames
+   to, and the server lets only the author write to it. Renaming is a long press on the medtech's
+   own card (a menu with Rename), also exposed as an accessibility action; colleague cards have
+   neither.
 6. **Restore at launch.** `AgarthaVisionApp.onCreate` calls `restoreActiveSession`, which
    re-activates the stored id only if the state is still `Idle`, with a compare-and-set so a
    user action that raced it wins. A stored id that no longer resolves clears itself.

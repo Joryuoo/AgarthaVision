@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CloudDone
-import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material3.Icon
 import com.agarthavision.ui.icons.AgarthaIcons
@@ -92,10 +91,12 @@ internal fun RecentActivityCard(
         ) {
             if (items.isEmpty()) {
                 EmptyState(
-                    icon = Icons.Outlined.History,
                     title = stringResource(R.string.activity_empty),
                     body = "Your recent actions will show up here.",
                     modifier = Modifier.padding(vertical = 20.dp),
+                    illustrationLight = R.drawable.ill_empty_activity_light,
+                    illustrationDark = R.drawable.ill_empty_activity_dark,
+                    illustrationWidth = 120.dp,
                 )
             } else {
                 Column(modifier = Modifier.fillMaxWidth()) {

@@ -10,6 +10,10 @@ as working.
 - **Email/password sign-in** through Supabase Auth. No sign-up flow — accounts are
   provisioned in the Supabase dashboard. `ui/login/LoginScreen.kt`,
   `domain/usecase/auth/SignInUseCase.kt`, `data/repository/SupabaseAuthRepository.kt::signIn`.
+- **Staged login.** After the credentials are accepted the login screen shows "Logging in…" then
+  "Downloading your patients…" (`LoginStage`), awaits only the patient pull, and opens the
+  dashboard; the rest of the sync runs in the background
+  (`domain/usecase/auth/CompleteSignInUseCase.kt`). A failed pull never traps the user on login.
 - **Mandatory login.** Sign-in is required on first launch before accessing patients, sessions,
   or capture: `MainActivity` picks the start destination from `MainViewModel.authGate`
   (`domain/usecase/auth/ResolveAuthGateUseCase.kt`). Unowned local data and deferred-claim
@@ -38,6 +42,11 @@ as working.
   `data/repository/SupabaseAccountAccessRepository.kt`.
 
 ### Patients
+- **Still-downloading empty state.** An empty, unfiltered list for a signed-in user whose first
+  download has not finished says "Your patients are still downloading" instead of "No patients yet",
+  and the create-a-patient action stays available so an offline or stalled first download never
+  blocks adding a patient (`PatientsEmptyContent` in `ui/patients/PatientsScreen.kt`,
+  `domain/usecase/sync/ObserveInitialDownloadDoneUseCase.kt`).
 - **Patient = primary clinical unit.** Medtechs organize work around patients; a patient owns
   sessions (`User -> Patient -> Session -> Sample`). `ui/patients/PatientsScreen.kt`,
   `ui/patients/PatientFormScreen.kt`, `domain/model/Patient.kt`.
@@ -75,7 +84,7 @@ as working.
   (`core/session/SessionManager.kt`, `data/local/entity/SessionEntity.kt`).
 - **Smear label.** Auto-generated from the patient as surname abbreviation and first initial, sex
   and age, and the patient's smear sequence (e.g. `LDNJ-M21-S01`,
-  `domain/session/SessionLabelGenerator.kt`), editable thereafter, unique per patient.
+  `domain/session/SessionLabelGenerator.kt`), editable thereafter by long-pressing the session card, unique per patient.
 - **Notes, ended_at, and claim_exempt removed.** Notes were replaced by the Patient entity;
   `ended_at` was dropped because smears remain open; `claim_exempt` was dropped with mandatory
   login.
@@ -167,6 +176,12 @@ as working.
   `domain/usecase/records/GetPatientReportCandidatesUseCase.kt`).
 
 ### Home dashboard
+- **First-download status banner.** Under the header, a signed-in user whose first full download
+  has not finished sees either "Downloading your records…" (a sync pass is running, from the
+  manual button or the background worker) or a warning to connect to the internet before working
+  offline (not running, or offline). Sync now is disabled while a background sync pass is running,
+  because the dashboard's `isSyncing` includes the worker. Hidden once the download is done
+  (`ui/dashboard/InitialDownloadBanner.kt`, `DashboardUiState.initialDownload`).
 - **KPI tile pager.** Page 1 of the Home pager shows the four activity tiles (Sessions,
   Positive rate, To review, AI agreement); page 2 shows **My coverage**
   (`ui/dashboard/KpiPager.kt`, `ui/dashboard/coverage/MyCoverageCard.kt`).
@@ -188,6 +203,11 @@ as working.
 - **Bottom tab bar with four tabs**: Home, Patients, Reports, Settings
   (`ui/components/AgarthaBottomBar.kt::Tab`).
 - **Light/dark toggle** persisted in DataStore; Capture is exempt and stays dark (`ui/theme/Theme.kt`).
+- **First-run onboarding**: four-page pager with Skip, Back, a "Step X of Y" screen-reader label,
+  illustrations chosen by the active theme, and a one-time entrance animation that is switched off when the
+  system "Remove animations" setting is on (`ui/onboarding/OnboardingScreen.kt::OnboardingContent`,
+  `ui/components/ReducedMotion.kt`). Completion is saved through `OnboardingPreferenceRepository` first, then the app
+  goes to Login on first run, or to the Dashboard for an already-signed-in user.
 - **Settings**: account details, change password, sync queue status, manual sync triggers, theme
   toggle, sign-out.
 

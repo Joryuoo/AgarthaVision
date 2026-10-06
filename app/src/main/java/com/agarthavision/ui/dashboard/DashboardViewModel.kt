@@ -33,6 +33,7 @@ import com.agarthavision.domain.usecase.auth.ObserveLocalIdentityUseCase
 import com.agarthavision.domain.usecase.settings.ObserveThemeModeUseCase
 import com.agarthavision.domain.usecase.settings.SetThemeModeUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
+import com.agarthavision.domain.usecase.sync.ObserveSyncInProgressUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -55,6 +56,9 @@ import com.agarthavision.domain.model.SessionSummary
 import com.agarthavision.domain.usecase.home.ObserveSessionListUseCase
 import javax.inject.Inject
 
+/** State of the first full download of a signed-in user's records. */
+enum class InitialDownload { DONE, IN_PROGRESS, INCOMPLETE }
+
 data class DashboardUiState(
     val isLoading: Boolean = true,
     val activeSession: ActiveSessionState? = null,
@@ -74,6 +78,7 @@ data class DashboardUiState(
     val isOffline: Boolean = false,
     val pendingUploadCount: Int = 0,
     val isSyncing: Boolean = false,
+    val initialFetchDone: Boolean = true,
     val period: HomePeriod = HomePeriod.TODAY,
     val needsAttention: NeedsAttention = NeedsAttention(0, 0, 0),
     val recentSessions: List<SessionSummary> = emptyList(),
@@ -83,6 +88,17 @@ data class DashboardUiState(
     /** Sync-now is available only to a signed-in medtech with an online connection. */
     val canSyncNow: Boolean
         get() = isSignedIn && !isOffline && !isSyncing
+
+    /**
+     * IN_PROGRESS while the first download is running; INCOMPLETE when it has not finished and
+     * nothing is running (offline, or the pass ended early); DONE otherwise, incl. signed out.
+     */
+    val initialDownload: InitialDownload
+        get() = when {
+            !isSignedIn || initialFetchDone -> InitialDownload.DONE
+            isSyncing && !isOffline -> InitialDownload.IN_PROGRESS
+            else -> InitialDownload.INCOMPLETE
+        }
 }
 
 data class ActiveSessionState(
@@ -152,6 +168,7 @@ class DashboardViewModel @Inject constructor(
     private val sampleRepository: SampleRepository,
     private val patientRepository: PatientRepository,
     observeThemeModeUseCase: ObserveThemeModeUseCase,
+    observeSyncInProgressUseCase: ObserveSyncInProgressUseCase,
     private val setThemeModeUseCase: SetThemeModeUseCase,
     observeNeedsAttentionUseCase: ObserveNeedsAttentionUseCase,
     private val observeHomeKpisUseCase: ObserveHomeKpisUseCase,
@@ -333,8 +350,9 @@ class DashboardViewModel @Inject constructor(
         localIdentityFlow,
         connectivityObserver.isOnline,
         isSyncingFlow,
-    ) { identity, online, syncing ->
-        Triple(identity != null, !online, syncing)
+        observeSyncInProgressUseCase(),
+    ) { identity, online, manualSyncing, workerSyncing ->
+        Triple(identity != null, !online, manualSyncing || workerSyncing)
     }
 
     private val homeKpisFlow = combine(
@@ -542,6 +560,7 @@ class DashboardViewModel @Inject constructor(
             isOffline = isOffline,
             pendingUploadCount = pendingSync.pendingCount,
             isSyncing = isSyncing,
+            initialFetchDone = pendingSync.initialFetchDone,
             period = content.selectedPeriod,
             needsAttention = needsAttention,
             recentSessions = sessionAndSync.recentSessions,

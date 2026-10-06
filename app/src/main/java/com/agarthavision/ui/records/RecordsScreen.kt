@@ -534,9 +534,10 @@ private fun ReportsEmptyState(narrowed: Boolean) {
             )
         } else {
             EmptyState(
-                icon = Icons.Outlined.Inbox,
                 title = stringResource(R.string.reports_empty_title),
                 body = stringResource(R.string.reports_empty_body),
+                illustrationLight = R.drawable.ill_empty_reports_light,
+                illustrationDark = R.drawable.ill_empty_reports_dark,
             )
         }
     }

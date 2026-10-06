@@ -238,6 +238,29 @@ class FetchRemoteDataUseCase @Inject constructor(
     }
 
     /**
+     * Pulls only the patient list (links, patients, revoked-link removal), for the sign-in path
+     * that waits on nothing else.
+     *
+     * Same preconditions as [invoke]; when one fails it returns `Result.success(0)`, as [invoke]
+     * reports a skip as a success. Deliberately does **not** call
+     * [InitialFetchStateStore.markCompleted] or [FetchOutcomeStore.record]: a patients-only pull
+     * says nothing about whether the whole account has arrived, and the background pass that
+     * follows sign-in owns those answers.
+     *
+     * Safe ahead of the push: [pullPatients] writes only absent or SYNCED rows and
+     * [removeRevokedLinks] keeps the link of any patient not yet SYNCED (E4).
+     *
+     * @return rows written locally.
+     */
+    suspend fun pullPatientsOnly(): Result<Int> = runCatching {
+        val userId = authRepository.currentLocalUserId()
+        if (userId == null || !authRepository.isAuthenticated() || !connectivityObserver.currentlyOnline()) {
+            return@runCatching 0
+        }
+        pullPatients(userId)
+    }
+
+    /**
      * Patients are the FK root — pull them before sessions. Returns rows inserted.
      *
      * The `patient_users` link rows come down in the same pass and are **not** optional:

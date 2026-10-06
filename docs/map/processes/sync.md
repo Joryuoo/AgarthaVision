@@ -1,8 +1,8 @@
 ---
 type: process
 status: verified
-verified: 2026-10-01
-commit: b64271d2
+verified: 2026-10-05
+commit: 33bced13
 ---
 
 # sync
@@ -56,14 +56,14 @@ it. See [`Sample`](../objects/Sample.md).
 
 ## Movement — the catch-up pass
 
-`SyncPendingDataUseCase` is the trigger-based sweep. It runs on login success, on app start,
+`SyncPendingDataUseCase` is the trigger-based sweep. It runs as a background pass after login success (see Triggers), on app start,
 and after every local write.
 
 0. **Check the account first** (14zcqntjph8). `SyncWorker::doWork` runs
    `EnforceAccountAccessUseCase` before the push. If the server refuses the account, the phone's
    synced data is removed, it is signed out, and the pass ends there; otherwise nothing changes. See
-   [`sign-in`](sign-in.md), "the server refuses the account". The direct call from
-   `LoginViewModel::syncAndFetch` skips this: the medtech has just signed in.
+   [`sign-in`](sign-in.md), "the server refuses the account". The post-login pass runs
+   this like any other, which is harmless: the medtech has just signed in.
 1. **Skip cleanly** when there is no cached identity, no live auth session, or no network —
    returning `SyncSummary.Skipped`, not a failure
    (`SyncPendingDataUseCase::invoke`).
@@ -207,11 +207,16 @@ and is repaired from the disk rather than trusted.
   delay the pass that matters after login.
 
   **Triggers:** app start, login, both "Sync now" buttons, and every local write — patient
-  insert and update, session start, verification submit, report generate. All but login go
+  insert and update, session start, verification submit, report generate. Most go
   through `SyncScheduler.requestSync()`, which is idempotent: one unique work name with
   `ExistingWorkPolicy.KEEP`, so several writes in a minute collapse into one pass. Login is
-  the exception and stays a direct awaited call, because PB-08a depends on the medtech having
-  their patients on the device before they leave the clinic.
+  no longer a direct awaited full pass. `CompleteSignInUseCase` awaits only
+  `FetchRemoteDataUseCase::pullPatientsOnly` (PB-08a: patients on the device before leaving the
+  clinic) and then calls `SyncScheduler.requestSyncAfterSignIn()`, which enqueues under the same
+  unique name with `ExistingWorkPolicy.APPEND_OR_REPLACE`. KEEP would be wrong here: on first
+  install the app-start pass can still be running or queued during sign-in, having read "no
+  identity" and finished as `Skipped`, and KEEP would drop the post-login request behind it so no
+  pass would run after login. APPEND_OR_REPLACE chains after the in-flight pass instead.
 
   **On the target fleet this will not always run.** MIUI gates background work behind a
   per-app "Background autostart" permission that is off by default, and Xiaomi handsets are

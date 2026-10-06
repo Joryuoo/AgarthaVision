@@ -26,9 +26,9 @@ by the one-verification-screen merge (86d4ab4tq) and `VerificationQueueViewModel
 longer does — `ui/verify/FrameWithBoxes.kt::FrameWithBoxes` takes UI `FrameBox` values, and
 nothing under `ui/` imports from `data/remote/dto/`.
 
-Four ViewModels skip the use-case layer and inject a `domain/repository/` interface directly:
+Three ViewModels skip the use-case layer and inject a `domain/repository/` interface directly:
 `PatientFormViewModel` (`PatientRepository`, `PsgcRepository` — it inserts and updates patients
-itself), `SessionsViewModel`, `DashboardViewModel` and `LoginViewModel`
+itself), `SessionsViewModel` and `DashboardViewModel`
 (`grep -n "import com.agarthavision.domain.repository" ui/*/*ViewModel.kt` lists them). That is
 not the data layer, so the literal rule holds, but it is the shape C1 exists to prevent.
 
@@ -347,10 +347,25 @@ with no `contentDescription`, so a capture back button and a sheet close button 
 invisible to TalkBack.
 
 **Drift, corrected in 86d4be3na:** this paragraph described house glyphs as "hand-authored
-1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds only
-`ic_launcher_background`, `ic_launcher_foreground` and `ic_logo`; every UI glyph is, and was,
-a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten, because
-the stale wording is what produced a hand-drawn tab icon (C13).
+1.7-stroke outline drawables in `res/drawable/`". `res/drawable/` holds the launcher and logo
+vectors, the exported onboarding illustrations, and no hand-authored UI glyphs; every UI glyph is,
+and was, a Material Symbols export in `ui/icons/`. Recorded rather than silently rewritten
+(and updated again when the onboarding illustrations arrived), because the stale wording is what produced a
+hand-drawn tab icon (C13).
+
+**Illustrations are exported art, not drawn in code.** Non-interactive visuals - the onboarding illustrations, the
+empty-state illustrations (`res/drawable/ill_empty_{name}_{light,dark}.xml`) and the login hero pattern
+(`ill_login_pattern.xml`) - are custom vector artwork designed in Figma and shipped as vector drawables in
+`res/drawable/ill_*`. Their SVG source is given or planned (a Figma design or an SVG export), and converting it into a
+drawable is expected, including a scripted conversion (Android vectors cannot dash a stroke, so dashed or dotted
+strokes become real shapes). The rule above against hand-authored geometry is about icons, UI glyphs, buttons and
+anything clickable; it does not forbid a custom SVG/vector visual that is purely decorative. Two limits: never invent
+or redraw illustration geometry in Kotlin (`ImageVector`, `Canvas`), and never tint it; to change one, change the
+design and replace the file. Light and dark ship as separate files chosen with `AgarthaTheme.colors.isDark` (the
+in-app toggle, so no `drawable-night`), except a theme-neutral drawable such as the login pattern. Illustrations are
+decorative, so they take `contentDescription = null`. `res/drawable/ill_*` files are exempt from the raw-hex rule
+because they come from the design tool, not authored in code. Icons, UI glyphs and anything clickable are not covered
+by this exemption and must never be an `ill_*` drawable.
 
 **User-facing strings and localization:** All user-facing prose copy lives in `res/values/strings.xml` and is referenced via `stringResource` or `pluralStringResource`. Non-prose formatting glyphs (such as punctuation separators `" · "` or `"·"` and direction/trend symbols `"↑ "`) are explicitly exempt from `strings.xml` extraction as they carry no translatable prose content.
 
