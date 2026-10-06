@@ -25,6 +25,25 @@ naming:
     active: false
 
 style:
+  ForbiddenImport:
+    active: true
+    imports:
+      - 'android.util.Log'
+    excludes: ['**/core/util/Logger.kt', '**/test/**', '**/androidTest/**']
+  ForbiddenMethodCall:
+    active: true
+    methods:
+      - 'android.util.Log.v'
+      - 'android.util.Log.d'
+      - 'android.util.Log.i'
+      - 'android.util.Log.w'
+      - 'android.util.Log.e'
+      - 'android.util.Log.println'
+      - 'kotlin.io.println'
+      - 'kotlin.io.print'
+      - 'kotlin.io.println(kotlin.Any?)'
+      - 'kotlin.io.print(kotlin.Any?)'
+    excludes: ['**/core/util/Logger.kt', '**/test/**', '**/androidTest/**']
   ForbiddenComment:
     active: false
   MagicNumber:

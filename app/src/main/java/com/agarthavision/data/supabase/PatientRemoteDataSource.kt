@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.PatientEntity
 import com.agarthavision.data.local.entity.PatientUserEntity
 import com.agarthavision.domain.model.CLINICAL_ZONE
@@ -104,7 +104,7 @@ class PatientRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<PatientRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("PatientRemoteDataSource", "Skipping malformed patient row: ${error.message}")
+                Logger.w("PatientRemoteDataSource", "Skipping malformed patient row: ${error.message}")
             }.getOrNull()
         }
 
@@ -136,7 +136,7 @@ class PatientRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<PatientUserRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("PatientRemoteDataSource", "Skipping malformed patient link row: ${error.message}")
+                Logger.w("PatientRemoteDataSource", "Skipping malformed patient link row: ${error.message}")
             }.getOrNull()
         }
 

@@ -1,7 +1,7 @@
 package com.agarthavision.data.inference.ondevice
 
 import android.content.Context
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.google.ai.edge.litert.Accelerator
 import com.google.ai.edge.litert.CompiledModel
 import com.google.gson.Gson
@@ -53,7 +53,7 @@ class ModelStore @Inject constructor(
         return if (hasAsset(assetPath)) {
             compile(assetPath, manifest, GPU_WITH_CPU_FALLBACK) ?: compile(assetPath, manifest, CPU_ONLY)
         } else {
-            Log.w(TAG, "Manifest for $modelName names $assetPath, which is not bundled.")
+            Logger.w(TAG, "Manifest for $modelName names $assetPath, which is not bundled.")
             null
         }
     }
@@ -63,10 +63,10 @@ class ModelStore @Inject constructor(
         val manifest = runCatching {
             val json = context.assets.open(path).bufferedReader().use { it.readText() }
             gson.fromJson(json, ModelManifest::class.java)
-        }.onFailure { Log.w(TAG, "No readable manifest at assets/$path.", it) }.getOrNull()
+        }.onFailure { Logger.w(TAG, "No readable manifest at assets/$path.", it) }.getOrNull()
 
         if (manifest != null && !manifest.isUsable) {
-            Log.w(TAG, "Manifest at assets/$path is incomplete or inconsistent: $manifest")
+            Logger.w(TAG, "Manifest at assets/$path is incomplete or inconsistent: $manifest")
         }
         return manifest?.takeIf { it.isUsable }
     }
@@ -80,7 +80,7 @@ class ModelStore @Inject constructor(
         return runCatching {
             CompiledModel.create(context.assets, assetPath, CompiledModel.Options(accelerators))
         }.onFailure {
-            Log.w(TAG, "Compiling ${manifest.modelVersion} for $accelerators failed.", it)
+            Logger.w(TAG, "Compiling ${manifest.modelVersion} for $accelerators failed.", it)
         }.getOrNull()?.let { model ->
             LoadedModel(
                 model = model,

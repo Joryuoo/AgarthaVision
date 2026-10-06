@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.DetectionEntity
 import com.agarthavision.data.local.entity.SampleSpeciesFindingEntity
 import com.agarthavision.data.local.entity.SampleEntity
@@ -132,7 +132,7 @@ class SampleRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<SampleRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
+                Logger.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
             }.getOrNull()
         }
 
@@ -150,7 +150,7 @@ class SampleRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<SampleRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
+                Logger.w("SampleRemoteDataSource", "Skipping malformed sample row: ${error.message}")
             }.getOrNull()
         }
 
@@ -165,7 +165,7 @@ class SampleRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<DetectionRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SampleRemoteDataSource", "Skipping malformed detection row: ${error.message}")
+                Logger.w("SampleRemoteDataSource", "Skipping malformed detection row: ${error.message}")
             }.getOrNull()
         }
 
@@ -180,7 +180,7 @@ class SampleRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<PredictionRow>(element).toSamplePrediction()
             }.onFailure { error ->
-                Log.w("SampleRemoteDataSource", "Skipping malformed prediction row: ${error.message}")
+                Logger.w("SampleRemoteDataSource", "Skipping malformed prediction row: ${error.message}")
             }.getOrNull()
         }
 
@@ -195,7 +195,7 @@ class SampleRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<FindingRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SampleRemoteDataSource", "Skipping malformed finding row: ${error.message}")
+                Logger.w("SampleRemoteDataSource", "Skipping malformed finding row: ${error.message}")
             }.getOrNull()
         }
 

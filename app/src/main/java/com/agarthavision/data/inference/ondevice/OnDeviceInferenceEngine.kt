@@ -1,6 +1,6 @@
 package com.agarthavision.data.inference.ondevice
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.inference.InferenceEngine
 import com.agarthavision.domain.inference.InferenceEngineId
 import com.agarthavision.domain.inference.InferenceResult
@@ -64,16 +64,16 @@ class OnDeviceInferenceEngine(
         val session = loaded?.let { model ->
             runCatching {
                 Session(model, model.model.createInputBuffers(), model.model.createOutputBuffers())
-            }.onFailure { Log.w(TAG, "Allocating buffers for $modelName failed.", it) }.getOrNull()
+            }.onFailure { Logger.w(TAG, "Allocating buffers for $modelName failed.", it) }.getOrNull()
         }
 
         if (session == null) {
             loaded?.model?.close()
             state = State.Failed
-            Log.w(TAG, "On-device inference unavailable: $modelName could not be loaded.")
+            Logger.w(TAG, "On-device inference unavailable: $modelName could not be loaded.")
         } else {
             state = State.Loaded(session)
-            Log.i(
+            Logger.i(
                 TAG,
                 "Loaded ${session.manifest.modelVersion} on ${session.loaded.accelerators} " +
                     "in ${session.loaded.loadMs} ms",
@@ -104,7 +104,7 @@ class OnDeviceInferenceEngine(
         val totalMs = elapsedMsSince(startedAt)
 
         // The per-frame latency record the precision decision is made from.
-        Log.i(
+        Logger.i(
             TAG,
             "${manifest.modelVersion} on ${session.loaded.accelerators}: " +
                 "pre=$preprocessMs infer=$inferMs post=$postprocessMs total=$totalMs ms, " +

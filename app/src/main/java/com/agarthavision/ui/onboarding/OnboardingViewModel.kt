@@ -1,8 +1,8 @@
 package com.agarthavision.ui.onboarding
 
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.agarthavision.core.util.Logger
 import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -27,7 +27,7 @@ class OnboardingViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Could not save onboarding completion", e)
+                Logger.w(TAG, "Could not save onboarding completion", e)
             }
             onSaved()
         }

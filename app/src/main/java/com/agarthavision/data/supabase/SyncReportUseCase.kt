@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.ReportDao
 import com.agarthavision.data.local.entity.ReportEntity
 import com.agarthavision.domain.model.ReportSyncStatus
@@ -35,7 +35,7 @@ class SyncReportUseCase @Inject constructor(
         val report = reportDao.getReportById(reportId)
         if (report == null) {
             val errorMsg = "Report $reportId does not exist."
-            Log.e(TAG, "[SyncFailed][Report:$reportId][Class:MISSING_ENTITY] $errorMsg")
+            Logger.e(TAG, "[SyncFailed][Report:$reportId][Class:MISSING_ENTITY] $errorMsg")
             return Result.failure(IllegalArgumentException(errorMsg))
         }
 
@@ -50,7 +50,7 @@ class SyncReportUseCase @Inject constructor(
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
             val scopeTag = report.patientId?.let { "Patient:$it" } ?: "Session:${report.sessionId}"
-            Log.e(
+            Logger.e(
                 TAG,
                 "[SyncFailed][Report:$reportId][$scopeTag]" +
                     "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",
@@ -86,7 +86,7 @@ class SyncReportUseCase @Inject constructor(
         val bytes = localPath?.let { reportFileStore.readBytes(it) }
         if (bytes == null) {
             if (localPath != null) {
-                Log.w(TAG, "Report $reportId has no readable .$extension at $localPath")
+                Logger.w(TAG, "Report $reportId has no readable .$extension at $localPath")
             }
             return
         }

@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.SessionDao
 import com.agarthavision.domain.model.SessionSyncStatus
 import javax.inject.Inject
@@ -30,12 +30,12 @@ class SyncSessionUseCase @Inject constructor(
         val session = sessionDao.getSessionById(sessionId)
         if (session == null) {
             val errorMsg = "Session $sessionId does not exist."
-            Log.e(TAG, "[SyncFailed][Session:$sessionId][Class:MISSING_ENTITY] $errorMsg")
+            Logger.e(TAG, "[SyncFailed][Session:$sessionId][Class:MISSING_ENTITY] $errorMsg")
             return Result.failure(IllegalArgumentException(errorMsg))
         }
         if (session.userId == null) {
             val errorMsg = "Session $sessionId is unowned; claim it before syncing."
-            Log.e(TAG, "[SyncFailed][Session:$sessionId][Class:UNOWNED_SESSION] $errorMsg")
+            Logger.e(TAG, "[SyncFailed][Session:$sessionId][Class:UNOWNED_SESSION] $errorMsg")
             return Result.failure(IllegalStateException(errorMsg))
         }
 
@@ -58,7 +58,7 @@ class SyncSessionUseCase @Inject constructor(
             sessionDao.updateSupabaseStatus(sessionId, SessionSyncStatus.SYNCED.value)
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
-            Log.e(
+            Logger.e(
                 TAG,
                 "[SyncFailed][Session:$sessionId][Patient:${session.patientId}]" +
                     "[Class:$failureClass] Marking status SYNC_FAILED. Error: ${throwable.message}",

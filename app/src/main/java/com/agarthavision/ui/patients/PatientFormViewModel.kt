@@ -1,6 +1,6 @@
 package com.agarthavision.ui.patients
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -408,7 +408,7 @@ class PatientFormViewModel @Inject constructor(
                         excludingId = patientId ?: "",
                     )
                 }.getOrElse { throwable ->
-                    Log.e(TAG, "Duplicate check failed — proceeding without it", throwable)
+                    Logger.e(TAG, "Duplicate check failed — proceeding without it", throwable)
                     emptyList()
                 }
 
@@ -508,7 +508,7 @@ class PatientFormViewModel @Inject constructor(
         }.onFailure { throwable ->
             // Logged, not swallowed: the screen only says "could not save", so without
             // this a failing write leaves nothing anywhere to diagnose it from.
-            Log.e(TAG, "Saving patient ${patient.id} failed", throwable)
+            Logger.e(TAG, "Saving patient ${patient.id} failed", throwable)
             fields.update {
                 it.copy(isSaving = false, showErrors = true, errors = setOf(PatientFormError.SAVE_FAILED))
             }

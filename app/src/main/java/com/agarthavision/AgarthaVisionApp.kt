@@ -3,7 +3,7 @@ package com.agarthavision
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
@@ -104,7 +104,7 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // Supabase warm-up below.
         applicationScope.launch {
             runCatching { sessionManager.get().restoreActiveSession() }
-                .onFailure { Log.w(TAG, "Failed to restore active session", it) }
+                .onFailure { Logger.w(TAG, "Failed to restore active session", it) }
         }
 
         // App start resumes the inference queue. Frames the last process queued, or was running
@@ -112,7 +112,7 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // up in the background; if not, this queues a pass rather than waiting for a capture.
         applicationScope.launch {
             runCatching { inferenceQueue.get().start() }
-                .onFailure { Log.w(TAG, "Failed to start the inference queue", it) }
+                .onFailure { Logger.w(TAG, "Failed to start the inference queue", it) }
         }
 
         // Pre-creates the Supabase client off the main thread so the first real network call
@@ -121,7 +121,7 @@ class AgarthaVisionApp : Application(), ImageLoaderFactory, Configuration.Provid
         // never breaks tests that instantiate the real Application.
         applicationScope.launch {
             runCatching { supabaseClient.get() }
-                .onFailure { Log.w(TAG, "Failed to warm up Supabase client", it) }
+                .onFailure { Logger.w(TAG, "Failed to warm up Supabase client", it) }
         }
     }
 

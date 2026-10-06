@@ -1,7 +1,7 @@
 package com.agarthavision.data.inference.queue
 
 import android.content.Context
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -32,7 +32,7 @@ class InferenceQueueWorker @AssistedInject constructor(
         if (failure != null) {
             // Only reached when the queue itself could not be read; a single frame's failure is
             // handled inside the pass. Backs off and tries again.
-            Log.e(TAG, "Inference queue pass failed", failure)
+            Logger.e(TAG, "Inference queue pass failed", failure)
             return Result.retry()
         }
         processor.nextRetryIn()?.let(queue::scheduleRetry)

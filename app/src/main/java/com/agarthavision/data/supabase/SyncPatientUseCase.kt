@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.dao.PatientDao
 import com.agarthavision.domain.model.PatientSyncStatus
 import javax.inject.Inject
@@ -31,7 +31,7 @@ class SyncPatientUseCase @Inject constructor(
         val patient = patientDao.getPatientById(patientId)
         if (patient == null) {
             val errorMsg = "Patient $patientId does not exist."
-            Log.e(TAG, "[SyncFailed][Patient:$patientId][Class:MISSING_ENTITY] $errorMsg")
+            Logger.e(TAG, "[SyncFailed][Patient:$patientId][Class:MISSING_ENTITY] $errorMsg")
             return Result.failure(IllegalArgumentException(errorMsg))
         }
 
@@ -44,7 +44,7 @@ class SyncPatientUseCase @Inject constructor(
             patientDao.updateSyncStatus(patientId, PatientSyncStatus.SYNCED.value)
         }.onFailure { throwable ->
             val failureClass = classifyFailure(throwable)
-            Log.e(
+            Logger.e(
                 TAG,
                 "[SyncFailed][Patient:$patientId][Class:$failureClass] " +
                     "Marking status SYNC_FAILED. Error: ${throwable.message}",

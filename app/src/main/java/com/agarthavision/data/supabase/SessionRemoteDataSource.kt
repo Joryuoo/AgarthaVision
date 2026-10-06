@@ -1,6 +1,6 @@
 package com.agarthavision.data.supabase
 
-import android.util.Log
+import com.agarthavision.core.util.Logger
 import com.agarthavision.data.local.entity.SessionEntity
 import com.agarthavision.domain.model.SessionSyncStatus
 import io.github.jan.supabase.SupabaseClient
@@ -74,7 +74,7 @@ class SessionRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
+                Logger.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
             }.getOrNull()
         }
 
@@ -96,7 +96,7 @@ class SessionRemoteDataSource @Inject constructor(
             runCatching {
                 jsonDecoder.decodeFromJsonElement<SessionRow>(element).toEntity()
             }.onFailure { error ->
-                Log.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
+                Logger.w("SessionRemoteDataSource", "Skipping malformed session row: ${error.message}")
             }.getOrNull()
         }
 
