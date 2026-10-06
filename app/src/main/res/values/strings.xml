@@ -737,6 +737,7 @@
     <string name="settings_security_section">Security</string>
     <string name="settings_biometric_lock_title">Biometric Lock</string>
     <string name="settings_biometric_lock_subtitle">Unlock app with fingerprint or face recognition</string>
+    <string name="login_biometric_button">Sign in with Biometrics</string>
     <string name="biometric_prompt_title">Unlock AgarthaVision</string>
     <string name="biometric_prompt_subtitle">Use fingerprint or face recognition to continue</string>
     <string name="biometric_prompt_cancel">Cancel</string>

@@ -593,6 +593,14 @@ internal fun BiometricLockCard(
             androidx.compose.material3.Switch(
                 checked = isBiometricLockEnabled,
                 onCheckedChange = onToggleBiometricLock,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = colors.onBrandFill,
+                    checkedTrackColor = colors.brandFill,
+                    checkedBorderColor = colors.brandFill,
+                    uncheckedThumbColor = colors.textSecondary,
+                    uncheckedTrackColor = colors.surfaceVariant,
+                    uncheckedBorderColor = colors.borderStrong,
+                ),
                 modifier = Modifier.testTag("biometricLockSwitch"),
             )
         }

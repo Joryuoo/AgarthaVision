@@ -6,6 +6,7 @@ import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.SignedOutNotice
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -79,6 +80,7 @@ sealed interface LoginEvent {
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val signInUseCase: SignInUseCase,
+    private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,
     private val completeSignInUseCase: CompleteSignInUseCase,
     private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
@@ -120,7 +122,15 @@ class LoginViewModel @Inject constructor(
 
     fun onBiometricSignInSuccess() {
         viewModelScope.launch {
-            _events.emit(LoginEvent.NavigateBack)
+            val localUserId = authRepository.currentLocalUserId()
+            if (localUserId != null) {
+                _state.update { it.copy(isSubmitting = true, stage = LoginStage.DOWNLOADING_PATIENTS) }
+                completeSignInUseCase()
+                _state.update { it.copy(isSubmitting = false, stage = null) }
+                _events.emit(LoginEvent.NavigateBack)
+            } else {
+                _events.emit(LoginEvent.ShowLoginError("Please sign in with email and password first."))
+            }
         }
     }
 

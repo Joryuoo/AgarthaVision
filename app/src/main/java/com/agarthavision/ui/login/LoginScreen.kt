@@ -574,7 +574,7 @@ private fun LoginForm(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = stringResource(R.string.biometric_prompt_title),
+                    text = stringResource(R.string.login_biometric_button),
                     color = themeColors.textPrimary,
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,

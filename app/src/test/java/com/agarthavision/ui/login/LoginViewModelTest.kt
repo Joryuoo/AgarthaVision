@@ -5,6 +5,7 @@ import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.SignedOutNotice
+import com.agarthavision.domain.repository.AuthRepository
 import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -41,6 +42,7 @@ class LoginViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val signInUseCase: SignInUseCase = mock()
+    private val authRepository: AuthRepository = mock()
     private val connectivityObserver: ConnectivityObserver = mock<ConnectivityObserver>().also {
         whenever(it.currentlyOnline()).thenReturn(true)
         whenever(it.isOnline).thenReturn(MutableStateFlow(true))
@@ -62,6 +64,7 @@ class LoginViewModelTest {
 
     private fun viewModel() = LoginViewModel(
         signInUseCase = signInUseCase,
+        authRepository = authRepository,
         connectivityObserver = connectivityObserver,
         completeSignInUseCase = completeSignInUseCase,
         observeSignedOutNoticeUseCase = observeSignedOutNoticeUseCase,
