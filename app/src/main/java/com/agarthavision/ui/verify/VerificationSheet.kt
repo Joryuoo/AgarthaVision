@@ -223,8 +223,13 @@ internal fun VerificationSheetContent(
             // 1. Top bar: back, and the sample's label. Pinned at top, not scrollable.
             ScreenTopBar(
                 title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
-                metaText = if (isEditing) capturedAtLabel else "",
+                metaText = if (isEditing) stringResource(R.string.verify_captured_at, capturedAtLabel) else "",
                 onBack = actions.onCancel,
+                actions = {
+                    if (isEditing) {
+                        ModeChip(stringResource(R.string.verify_editing_chip))
+                    }
+                },
             )
 
             // Pinned Frame Section: Image preview and sample cycle row stay in view while scrolling.

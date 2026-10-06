@@ -33,7 +33,6 @@ import com.agarthavision.ui.icons.ArrowBackIosNew
 import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
-import com.agarthavision.ui.theme.MonoSmallStyle
 
 /**
  * Back arrow, a title, and an optional line of meta beneath it.
@@ -67,26 +66,38 @@ fun ScreenTopBar(
             Icon(AgarthaIcons.ArrowBackIosNew, contentDescription = "Back", tint = colors.textPrimary)
         }
         Spacer(modifier = Modifier.width(8.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
                 style = AppTypography.headlineSmall,
                 color = colors.textPrimary,
             )
-            // MonoSmallStyle is the app-wide face for timestamps and counters (Inter + tnum);
-            // the platform monospace face this used to force is what made the sheets look
-            // different from every other screen.
             if (metaText.isNotBlank()) {
                 Text(
-                    metaText.uppercase(),
+                    metaText,
+                    fontSize = 12.sp,
                     color = colors.textSecondary,
-                    letterSpacing = 0.5.sp,
-                    style = MonoSmallStyle,
                 )
             }
         }
-        Spacer(modifier = Modifier.weight(1f))
         actions()
+    }
+}
+
+@Composable
+internal fun ModeChip(text: String, modifier: Modifier = Modifier) {
+    val colors = AgarthaTheme.colors
+    Box(
+        modifier = modifier
+            .background(colors.accentTint2, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp),
+    ) {
+        Text(
+            text = text,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.accent,
+        )
     }
 }
 
