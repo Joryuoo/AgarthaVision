@@ -244,13 +244,13 @@ private fun PatientReportDateCards(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         DateCard(
-            prefix = "From",
+            prefix = stringResource(R.string.date_range_from),
             date = startDate,
             onClick = { editing = RangeField.START },
             modifier = Modifier.weight(1f),
         )
         DateCard(
-            prefix = "To",
+            prefix = stringResource(R.string.date_range_to),
             date = endDate,
             onClick = { editing = RangeField.END },
             modifier = Modifier.weight(1f),
@@ -259,7 +259,9 @@ private fun PatientReportDateCards(
 
     editing?.let { field ->
         val initial = if (field == RangeField.START) startDate ?: endDate else endDate ?: startDate
-        val dialogTitle = if (field == RangeField.START) "Select start date" else "Select end date"
+        val dialogTitle = stringResource(
+            if (field == RangeField.START) R.string.date_range_select_start else R.string.date_range_select_end,
+        )
         SingleDatePickerDialog(
             title = dialogTitle,
             initialDate = initial,
@@ -291,7 +293,7 @@ private fun DateCard(
 ) {
     val colors = AgarthaTheme.colors
     val shape = RoundedCornerShape(16.dp)
-    val formattedDate = date?.format(ReportDateCardFormat) ?: "Select date"
+    val formattedDate = date?.format(ReportDateCardFormat) ?: stringResource(R.string.date_range_select_date)
 
     Row(
         modifier = modifier

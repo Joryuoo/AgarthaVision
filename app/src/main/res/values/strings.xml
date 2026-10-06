@@ -815,6 +815,13 @@
         <item quantity="other">%1$s · %2$d sessions</item>
     </plurals>
     <string name="patient_report_sheet_date_range">DATE RANGE</string>
+    <string name="date_range_from">From</string>
+    <string name="date_range_to">To</string>
+    <string name="date_range_select_start">Select start date</string>
+    <string name="date_range_select_end">Select end date</string>
+    <string name="date_range_select_date">Select date</string>
+    <string name="sample_tile_content_description">Sample, %1$s</string>
+    <string name="sample_tile_content_description_manual">Sample, %1$s, manual capture</string>
     <string name="patient_report_range_all_time">All time</string>
     <string name="patient_report_range_last_30">Last 30 days</string>
     <string name="patient_report_range_last_7">Last 7 days</string>

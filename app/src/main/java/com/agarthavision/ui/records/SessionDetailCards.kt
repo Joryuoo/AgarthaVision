@@ -231,8 +231,12 @@ internal fun SampleTile(
         sample.eggCount,
         sample.eggCount,
     )
-    val manualSuffix = if (sample.isManual) ", manual capture" else ""
-    val description = "Sample, $eggCountText$manualSuffix"
+    val descriptionRes = if (sample.isManual) {
+        R.string.sample_tile_content_description_manual
+    } else {
+        R.string.sample_tile_content_description
+    }
+    val description = stringResource(descriptionRes, eggCountText)
 
     Box(
         modifier = modifier
