@@ -1017,7 +1017,7 @@ private fun NoteField(
             .fillMaxWidth()
             .testTag(VerifyTestTags.NOTE_FIELD),
         placeholder = { Text(placeholder, color = AgarthaTheme.colors.textTertiary, fontSize = 13.sp) },
-        minLines = 1,
+        minLines = 2,
         maxLines = 3,
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(

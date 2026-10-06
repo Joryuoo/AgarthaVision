@@ -184,10 +184,10 @@ internal fun FlaggedFrame.previewAspectRatio(): Float {
 internal fun SheetSectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
         color = AgarthaTheme.colors.textSecondary,
-        letterSpacing = 0.5.sp,
+        letterSpacing = 0.8.sp,
         modifier = modifier,
     )
 }
