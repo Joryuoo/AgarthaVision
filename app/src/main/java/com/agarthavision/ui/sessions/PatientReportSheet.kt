@@ -40,17 +40,22 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.agarthavision.R
 import com.agarthavision.domain.usecase.records.PatientReportCandidate
-import com.agarthavision.ui.components.DateRangeFilterBar
+import com.agarthavision.ui.components.SingleDatePickerDialog
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.Check
 import com.agarthavision.ui.icons.Close
+import com.agarthavision.ui.icons.DateRange
 import com.agarthavision.ui.icons.Description
 import com.agarthavision.ui.theme.AgarthaTheme
+import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -113,7 +118,7 @@ internal fun PatientReportSheet(
             )
 
             Spacer(Modifier.height(8.dp))
-            DateRangeFilterBar(
+            PatientReportDateCards(
                 startDate = sheet.startDate,
                 endDate = sheet.endDate,
                 onRangeSelected = onDateRangeSelected,
@@ -223,6 +228,106 @@ private fun PatientReportSheetHeader(
         }
     }
 }
+
+private enum class RangeField { START, END }
+
+@Composable
+private fun PatientReportDateCards(
+    startDate: LocalDate?,
+    endDate: LocalDate?,
+    onRangeSelected: (LocalDate?, LocalDate?) -> Unit,
+) {
+    var editing by remember { mutableStateOf<RangeField?>(null) }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        DateCard(
+            prefix = "From",
+            date = startDate,
+            onClick = { editing = RangeField.START },
+            modifier = Modifier.weight(1f),
+        )
+        DateCard(
+            prefix = "To",
+            date = endDate,
+            onClick = { editing = RangeField.END },
+            modifier = Modifier.weight(1f),
+        )
+    }
+
+    editing?.let { field ->
+        val initial = if (field == RangeField.START) startDate ?: endDate else endDate ?: startDate
+        val dialogTitle = if (field == RangeField.START) "Select start date" else "Select end date"
+        SingleDatePickerDialog(
+            title = dialogTitle,
+            initialDate = initial,
+            onDismiss = { editing = null },
+            onConfirm = { picked ->
+                when (field) {
+                    RangeField.START -> {
+                        val newEnd = endDate?.takeIf { it >= picked } ?: picked
+                        onRangeSelected(picked, newEnd)
+                        editing = RangeField.END
+                    }
+                    RangeField.END -> {
+                        val newStart = startDate?.takeIf { it <= picked } ?: picked
+                        onRangeSelected(newStart, picked)
+                        editing = null
+                    }
+                }
+            },
+        )
+    }
+}
+
+@Composable
+private fun DateCard(
+    prefix: String,
+    date: LocalDate?,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = AgarthaTheme.colors
+    val shape = RoundedCornerShape(16.dp)
+    val formattedDate = date?.format(ReportDateCardFormat) ?: "Select date"
+
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(colors.surface)
+            .border(1.dp, colors.border, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = AgarthaIcons.DateRange,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column {
+            Text(
+                text = prefix,
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Normal,
+            )
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = formattedDate,
+                color = colors.textPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
+}
+
+private val ReportDateCardFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
 
 @Composable
 private fun PatientReportQuickRanges(
