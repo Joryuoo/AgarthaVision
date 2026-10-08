@@ -771,6 +771,8 @@
     <string name="biometric_prompt_title">Unlock AgarthaVision</string>
     <string name="biometric_prompt_subtitle">Use fingerprint or face recognition to continue</string>
     <string name="biometric_prompt_cancel">Cancel</string>
+    <string name="biometric_lock_overlay_title">AgarthaVision is Locked</string>
+    <string name="biometric_lock_overlay_subtitle">Biometric authentication is required to access your clinical records.</string>
     <string name="settings_change_password_offline">Needs an internet connection</string>
     <string name="change_password_title">Change password</string>
     <string name="change_password_intro">Enter your current password, then the new one twice. You stay signed in on this phone. Other phones and the Admin Console will ask for the new password.</string>

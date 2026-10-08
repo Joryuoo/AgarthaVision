@@ -1,12 +1,8 @@
 package com.agarthavision.ui.login
 
 import app.cash.turbine.test
-import com.agarthavision.core.auth.BiometricPromptManager
-import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.SignedOutNotice
-import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
@@ -42,7 +38,6 @@ class LoginViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val signInUseCase: SignInUseCase = mock()
-    private val authRepository: AuthRepository = mock()
     private val connectivityObserver: ConnectivityObserver = mock<ConnectivityObserver>().also {
         whenever(it.currentlyOnline()).thenReturn(true)
         whenever(it.isOnline).thenReturn(MutableStateFlow(true))
@@ -55,21 +50,11 @@ class LoginViewModelTest {
     private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase =
         mock<ObserveSignedOutNoticeUseCase>().also { whenever(it.invoke()).thenReturn(signedOutNotice) }
 
-    private val biometricPromptManager: BiometricPromptManager = mock<BiometricPromptManager>().also {
-        whenever(it.getBiometricStatus()).thenReturn(BiometricStatus.NOT_AVAILABLE)
-    }
-    private val biometricLockRepository: BiometricLockRepository = mock<BiometricLockRepository>().also {
-        whenever(it.isBiometricLockEnabled).thenReturn(MutableStateFlow(false))
-    }
-
     private fun viewModel() = LoginViewModel(
         signInUseCase = signInUseCase,
-        authRepository = authRepository,
         connectivityObserver = connectivityObserver,
         completeSignInUseCase = completeSignInUseCase,
         observeSignedOutNoticeUseCase = observeSignedOutNoticeUseCase,
-        biometricPromptManager = biometricPromptManager,
-        biometricLockRepository = biometricLockRepository,
     )
 
     @Test

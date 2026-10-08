@@ -36,6 +36,17 @@ class MainViewModel @Inject constructor(
     val isBiometricLockEnabled: StateFlow<Boolean> = biometricLockRepository.isBiometricLockEnabled
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    private val _isLocked = MutableStateFlow(true)
+    val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
+
+    fun lockApp() {
+        _isLocked.value = true
+    }
+
+    fun unlockApp() {
+        _isLocked.value = false
+    }
+
     private val _authGate = MutableStateFlow<AuthGate>(AuthGate.Loading)
 
     /**

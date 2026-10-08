@@ -112,17 +112,11 @@ import com.agarthavision.ui.theme.AppColors
 fun LoginScreen(
     onLoggedIn: () -> Unit,
     viewModel: LoginViewModel = hiltViewModel(),
-    biometricPromptManager: BiometricPromptManager? = null,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val toastState = rememberAgarthaToastState()
     val loginFailedTitle = stringResource(R.string.login_failed_title)
     val loginFailedGeneric = stringResource(R.string.login_failed_generic)
-    val promptTitle = stringResource(R.string.biometric_prompt_title)
-    val promptSubtitle = stringResource(R.string.biometric_prompt_subtitle)
-    val promptCancel = stringResource(R.string.biometric_prompt_cancel)
-
-    val context = LocalContext.current
 
     ResizeForKeyboard()
 
@@ -146,21 +140,6 @@ fun LoginScreen(
             onEmailChanged = viewModel::onEmailChanged,
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
-            onBiometricSignInClick = {
-                val activity = context as? FragmentActivity
-                if (activity != null && biometricPromptManager != null) {
-                    biometricPromptManager.showBiometricPrompt(
-                        activity = activity,
-                        title = promptTitle,
-                        subtitle = promptSubtitle,
-                        negativeButtonText = promptCancel,
-                    ) { result ->
-                        if (result is BiometricResult.Success) {
-                            viewModel.onBiometricSignInSuccess()
-                        }
-                    }
-                }
-            },
         ),
         toastState = toastState,
     )
@@ -170,7 +149,6 @@ internal data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
-    val onBiometricSignInClick: () -> Unit = {},
 )
 
 private val HERO_HEIGHT = 300.dp
@@ -550,33 +528,6 @@ private fun LoginForm(
                 Text(
                     text = stringResource(R.string.login_submit),
                     fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-            }
-        }
-
-        if (state.isBiometricAvailable && state.isBiometricLockEnabled) {
-            Spacer(modifier = Modifier.height(12.dp))
-            OutlinedButton(
-                onClick = actions.onBiometricSignInClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("biometricSignInButton"),
-                shape = CircleShape,
-                border = BorderStroke(1.dp, themeColors.border),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Fingerprint,
-                    contentDescription = null,
-                    tint = themeColors.textPrimary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.login_biometric_button),
-                    color = themeColors.textPrimary,
-                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                 )
             }

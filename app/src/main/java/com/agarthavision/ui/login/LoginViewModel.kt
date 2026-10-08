@@ -2,12 +2,8 @@ package com.agarthavision.ui.login
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.agarthavision.core.auth.BiometricPromptManager
-import com.agarthavision.core.auth.BiometricStatus
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.SignedOutNotice
-import com.agarthavision.domain.repository.AuthRepository
-import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
@@ -35,8 +31,6 @@ data class LoginUiState(
     val isSubmitting: Boolean = false,
     val emailError: Boolean = false,
     val passwordError: Boolean = false,
-    val isBiometricAvailable: Boolean = false,
-    val isBiometricLockEnabled: Boolean = false,
     /** Set when the server signed this phone out (14zcqntjph8); the screen says why. */
     val signedOutNotice: SignedOutNotice? = null,
     /** What the submit is doing right now, for the progress text under the button. */
@@ -76,23 +70,14 @@ sealed interface LoginEvent {
  * an explicit action gated on connectivity. On success it waits only for the patient list
  * ([CompleteSignInUseCase]); the rest of the sync runs in the background.
  */
-@Suppress("LongParameterList")
 @HiltViewModel
 class LoginViewModel @Inject constructor(
     private val signInUseCase: SignInUseCase,
-    private val authRepository: AuthRepository,
     private val connectivityObserver: ConnectivityObserver,
     private val completeSignInUseCase: CompleteSignInUseCase,
     private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
-    private val biometricPromptManager: BiometricPromptManager,
-    private val biometricLockRepository: BiometricLockRepository,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(
-        LoginUiState(
-            isOffline = !connectivityObserver.currentlyOnline(),
-            isBiometricAvailable = biometricPromptManager.getBiometricStatus() == BiometricStatus.READY,
-        )
-    )
+    private val _state = MutableStateFlow(LoginUiState(isOffline = !connectivityObserver.currentlyOnline()))
 
     /**
      * Single source of UI state for [LoginScreen].
@@ -109,29 +94,6 @@ class LoginViewModel @Inject constructor(
     init {
         observeConnectivity()
         observeSignedOutNotice()
-        observeBiometricPreference()
-    }
-
-    private fun observeBiometricPreference() {
-        viewModelScope.launch {
-            biometricLockRepository.isBiometricLockEnabled.collect { enabled ->
-                _state.update { it.copy(isBiometricLockEnabled = enabled) }
-            }
-        }
-    }
-
-    fun onBiometricSignInSuccess() {
-        viewModelScope.launch {
-            val localUserId = authRepository.currentLocalUserId()
-            if (localUserId != null) {
-                _state.update { it.copy(isSubmitting = true, stage = LoginStage.DOWNLOADING_PATIENTS) }
-                completeSignInUseCase()
-                _state.update { it.copy(isSubmitting = false, stage = null) }
-                _events.emit(LoginEvent.NavigateBack)
-            } else {
-                _events.emit(LoginEvent.ShowLoginError("Please sign in with email and password first."))
-            }
-        }
     }
 
     /**

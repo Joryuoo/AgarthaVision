@@ -222,7 +222,6 @@ fun AgarthaNavHost(
                         popUpTo(Screen.Login.route) { inclusive = true }
                     }
                 },
-                biometricPromptManager = biometricPromptManager,
             )
         }
 
