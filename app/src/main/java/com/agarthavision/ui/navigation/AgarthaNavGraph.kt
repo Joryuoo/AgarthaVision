@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.agarthavision.core.auth.BiometricPromptManager
 import com.agarthavision.core.camera.CameraManager
 import com.agarthavision.core.camera.FrameSampler
 import com.agarthavision.domain.usecase.auth.AuthGate
@@ -107,6 +108,7 @@ internal fun startRouteFor(authGate: AuthGate, hasSeenOnboarding: Boolean): Stri
 internal fun onboardingExitRoute(authGate: AuthGate): String =
     if (authGate == AuthGate.NeedsLogin) Screen.Login.route else Screen.Dashboard.route
 
+@Suppress("LongParameterList")
 @Composable
 fun AgarthaNavGraph(
     cameraManager: CameraManager,
@@ -114,6 +116,7 @@ fun AgarthaNavGraph(
     startDestination: String = Screen.Dashboard.route,
     signedOutByServer: Boolean = false,
     onboardingExitRoute: String = Screen.Dashboard.route,
+    biometricPromptManager: BiometricPromptManager? = null,
 ) {
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -162,6 +165,7 @@ fun AgarthaNavGraph(
             frameSampler = frameSampler,
             startDestination = startDestination,
             onboardingExitRoute = onboardingExitRoute,
+            biometricPromptManager = biometricPromptManager,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(inner)
@@ -178,6 +182,7 @@ fun AgarthaNavHost(
     modifier: Modifier = Modifier,
     startDestination: String = Screen.Dashboard.route,
     onboardingExitRoute: String = Screen.Dashboard.route,
+    biometricPromptManager: BiometricPromptManager? = null,
 ) {
     NavHost(
         navController = navController,

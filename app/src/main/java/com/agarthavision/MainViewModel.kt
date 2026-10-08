@@ -3,6 +3,7 @@ package com.agarthavision
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.domain.model.ThemeMode
+import com.agarthavision.domain.repository.BiometricLockRepository
 import com.agarthavision.domain.repository.OnboardingPreferenceRepository
 import com.agarthavision.domain.usecase.auth.AuthGate
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
@@ -29,7 +30,22 @@ class MainViewModel @Inject constructor(
     resolveAuthGateUseCase: ResolveAuthGateUseCase,
     observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
     onboardingPreferenceRepository: OnboardingPreferenceRepository,
+    biometricLockRepository: BiometricLockRepository,
 ) : ViewModel() {
+
+    val isBiometricLockEnabled: StateFlow<Boolean> = biometricLockRepository.isBiometricLockEnabled
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private val _isLocked = MutableStateFlow(true)
+    val isLocked: StateFlow<Boolean> = _isLocked.asStateFlow()
+
+    fun lockApp() {
+        _isLocked.value = true
+    }
+
+    fun unlockApp() {
+        _isLocked.value = false
+    }
 
     private val _authGate = MutableStateFlow<AuthGate>(AuthGate.Loading)
 

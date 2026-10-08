@@ -38,7 +38,12 @@ class LoginViewModelEdgeTest {
         whenever(it.invoke()).thenReturn(MutableStateFlow(null))
     }
 
-    private fun viewModel() = LoginViewModel(signInUseCase, connectivityObserver, completeSignInUseCase, notice)
+    private fun viewModel() = LoginViewModel(
+        signInUseCase = signInUseCase,
+        connectivityObserver = connectivityObserver,
+        completeSignInUseCase = completeSignInUseCase,
+        observeSignedOutNoticeUseCase = notice,
+    )
 
     @Test
     fun `a throwing completeSignIn still navigates and clears the stage`() =
