@@ -129,6 +129,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.core.splashscreen)
     implementation(libs.exifinterface)
+    implementation(libs.biometric)
 
     // Activity
     implementation(libs.activity.compose)
