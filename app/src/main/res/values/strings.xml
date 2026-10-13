@@ -501,6 +501,10 @@
     <string name="session_detail_open_sample">Open sample</string>
     <string name="session_detail_lpf_title">LPF Range</string>
     <string name="session_detail_no_parasites">No parasites found</string>
+    <!-- A session with no verified field: no result yet, never a negative one (14zcqntk7bg). -->
+    <string name="session_detail_not_read">No fields have been verified yet, so there is no result.</string>
+    <string name="session_detail_no_fields_verified">No fields verified yet</string>
+    <string name="session_detail_hero_not_read_description">No fields verified yet. No result.</string>
     <!-- En dash, not a hyphen: this is a numeric range. -->
     <string name="lpf_range_value">%1$d\u2013%2$d LPF</string>
     <string name="lpf_single_value">%1$d LPF</string>

@@ -44,6 +44,7 @@ over.
    - **Descriptor & Burden Level:** The qualitative descriptor comes from the highest single field (worst field), NOT the mean: `rare` (1–2), `few` (3–5), `moderate` (6–10), `numerous` (>10). A single heavy field must not be averaged away by clean ones (`LpfDensity.kt::LpfDescriptor`). Accompanied by an estimated parasite burden level (`LpfDensity.kt::ParasiteBurdenLevel`).
    - **No EPG / Infectivity Tiers:** There is no WHO or DOH intensity table for Direct Smear, and WHO Kato-Katz EPG thresholds (Ascaris 5k/50k; Trichuris 1k/10k; Hookworm 2k/4k) cannot be rescaled to LPF counts (`4909f78`). Re-adding a clinical intensity tier requires an explicit cutoff table signed off clinically for Direct Smear LPF by name and date.
    - **Wholly negative session:** A session with 0 eggs across all fields is a valid result (`0–0 LPF`) and generates a report stating no parasites found.
+   - **No verified field yet:** Not a negative result. No report can be generated, and Session Detail's LPF card says no field has been verified instead of "No parasites found" (`SessionDetailScreen.kt::LpfHeroCard`, `14zcqntk7bg`).
 6. **Normalise species** to canonical names.
 7. **Resolve the patient header.** Name, sex, age (computed at the same instant as the report's
    `generatedAt`), and the full address via `PsgcBarangay.fullAddress` (or the raw PSGC code when

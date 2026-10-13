@@ -537,6 +537,13 @@ private fun SessionDetailReportTab(
     modifier: Modifier = Modifier,
 ) {
     val session = state.session
+    val heroDescription = if (session.samplesTotal == 0) {
+        stringResource(R.string.session_detail_hero_not_read_description)
+    } else {
+        "Total confirmed: ${session.confirmedEggs}, " +
+            "${session.speciesCount} species, " +
+            "${session.samplesTotal} fields"
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -547,9 +554,7 @@ private fun SessionDetailReportTab(
         LpfHeroCard(
             session = session,
             modifier = Modifier.semantics(mergeDescendants = true) {
-                contentDescription = "Total confirmed: ${session.confirmedEggs}, " +
-                    "${session.speciesCount} species, " +
-                    "${session.samplesTotal} fields"
+                contentDescription = heroDescription
             },
         )
         ReportsSection(state = state)
@@ -692,12 +697,25 @@ internal fun LpfHeroCard(
             )
             Spacer(Modifier.height(8.dp))
 
-            // A wholly negative session is a real result - and in surveillance it is the most
-            // common one, and the one a report is most often needed for. It gets a sentence
-            // saying so, not an absent section the medtech has to interpret. Stated once here
-            // rather than as a row of `0-0 LPF` per species, and the PDF says the same thing
-            // the same way: PB-18 asks for one of the two, consistently.
-            if (session.lpfPerSpecies.isEmpty()) {
+            // A session with no verified field has no result yet, and must not read like one:
+            // it exists from the moment it is named, so frames can be waiting in the queue while
+            // this card is open. "No parasites found" is a finding, and nobody has looked yet.
+            // The PDFs never reach this case: both refuse or drop a session with no verified
+            // field (14zcqntk7bg).
+            if (samplesTotal == 0) {
+                Text(
+                    text = stringResource(R.string.session_detail_not_read),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = onCard,
+                    modifier = Modifier.testTag(SessionDetailTestTags.NOT_READ),
+                )
+            } else if (session.lpfPerSpecies.isEmpty()) {
+                // A wholly negative session is a real result - and in surveillance it is the most
+                // common one, and the one a report is most often needed for. It gets a sentence
+                // saying so, not an absent section the medtech has to interpret. Stated once here
+                // rather than as a row of `0-0 LPF` per species, and the PDF says the same thing
+                // the same way: PB-18 asks for one of the two, consistently.
                 Text(
                     text = stringResource(R.string.session_detail_no_parasites),
                     fontSize = 14.sp,
@@ -787,7 +805,15 @@ private fun LpfMeta(
     modifier: Modifier = Modifier,
 ) {
     val labelColor = contentColor.copy(alpha = 0.80f)
-    if (confirmedEggs == 0) {
+    if (samplesTotal == 0) {
+        Text(
+            text = stringResource(R.string.session_detail_no_fields_verified),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium,
+            color = labelColor,
+            modifier = modifier,
+        )
+    } else if (confirmedEggs == 0) {
         Text(
             text = pluralStringResource(
                 R.plurals.session_detail_no_confirmed_eggs_fields,
