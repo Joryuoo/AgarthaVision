@@ -9,6 +9,29 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/advisor-hardening — signed-out visitors reach no app table or function · 2026-10-16
+
+### Supabase security advisor findings · `14zcqntnqxe`
+
+- **`0017_advisor_hardening.sql`** clears the app's findings from the advisor run of 2026-10-15.
+  `sessions_patient_is_fixed()` gets a fixed search_path. The trigger functions
+  (`handle_new_user`, `handle_deleted_user`, `link_patient_creator`, `dedupe_session_label`,
+  `sessions_patient_is_fixed`) lose EXECUTE for every client role; a trigger still fires
+  without it. The policy helpers and the two admin RPCs lose EXECUTE for `anon` and PUBLIC and
+  keep it for `authenticated`.
+- **`anon` loses every right on the nine app tables.** A signed-out read is now refused (42501)
+  instead of returning `[]`, so turning RLS off on a table by mistake no longer opens it.
+- **`is_admin(uuid)` answers a client only about themselves.** The check moved to
+  `app_private.is_admin(uuid)`; `public.is_admin` is security invoker and returns false when a
+  signed-in caller names someone else. Security-definer callers (the console's RPCs) still ask
+  about anyone. Signature unchanged, so no policy or view changed.
+- Applied by hand (C6), independent of any build. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0017` and the console's migrations:
+  the new `app_0017_advisor_hardening.test.sql` there checks each grant, a signed-out read and
+  RPC call, `is_admin()` from each side, and the phone's write flow as a medtech.
+
+---
+
 ## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
 
 ### Patient report insert rule · `14zcqntk68x`
