@@ -9,6 +9,21 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## chore/publishable-key — the app is built with Supabase's publishable key · 2026-10-16
+
+### Key in every APK · `14zcqntnqxg`
+
+- **`SUPABASE_ANON_KEY_DEV/_PROD` take the publishable key** (`sb_publishable_…`, Project
+  Settings → API Keys), not the legacy anon JWT. The property names stay; only the value changes.
+  `local.properties.example`, the README and `docs/stack.md` say so.
+- **No code change.** supabase-kt 3.0.3 sends the key as `apikey`, and as the bearer token only
+  before sign-in, which Supabase accepts for a publishable key; every signed-in call carries the
+  user's own token. Nothing in the app or `inference/` reads the key as a JWT.
+- **Order matters.** A release built with the publishable key has to be installed by medtechs
+  before the legacy keys are disabled: disabling them breaks every APK built with the old key.
+
+---
+
 ## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
 
 ### Patient report insert rule · `14zcqntk68x`
