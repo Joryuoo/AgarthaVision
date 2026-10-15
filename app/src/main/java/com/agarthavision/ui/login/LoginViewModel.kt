@@ -3,12 +3,15 @@ package com.agarthavision.ui.login
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.domain.model.HumanCheckConfig
+import com.agarthavision.domain.model.HumanCheckRejectedException
 import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.domain.usecase.auth.CompleteSignInUseCase
 import com.agarthavision.domain.usecase.auth.ObserveSignedOutNoticeUseCase
 import com.agarthavision.domain.usecase.auth.SignInUseCase
 import com.agarthavision.domain.usecase.sync.FetchRemoteDataUseCase
 import com.agarthavision.domain.usecase.sync.SyncPendingDataUseCase
+import com.agarthavision.ui.components.HumanCheckUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -35,13 +38,15 @@ data class LoginUiState(
     val signedOutNotice: SignedOutNotice? = null,
     /** What the submit is doing right now, for the progress text under the button. */
     val stage: LoginStage? = null,
+    /** The human check every sign-in passes (14zcqntnqxf). */
+    val humanCheck: HumanCheckUiState = HumanCheckUiState(),
 ) {
     /**
-     * Whether the form can accept a submit tap: not mid-submit and online (login always
-     * requires connectivity, per ADR-007).
+     * Whether the form can accept a submit tap: not mid-submit, online (login always requires
+     * connectivity, per ADR-007), and the human check passed when the build has one.
      */
     val canSubmit: Boolean
-        get() = !isSubmitting && !isOffline
+        get() = !isSubmitting && !isOffline && humanCheck.isSatisfied
 }
 
 /**
@@ -76,8 +81,14 @@ class LoginViewModel @Inject constructor(
     private val connectivityObserver: ConnectivityObserver,
     private val completeSignInUseCase: CompleteSignInUseCase,
     private val observeSignedOutNoticeUseCase: ObserveSignedOutNoticeUseCase,
+    humanCheckConfig: HumanCheckConfig,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(LoginUiState(isOffline = !connectivityObserver.currentlyOnline()))
+    private val _state = MutableStateFlow(
+        LoginUiState(
+            isOffline = !connectivityObserver.currentlyOnline(),
+            humanCheck = HumanCheckUiState(config = humanCheckConfig),
+        ),
+    )
 
     /**
      * Single source of UI state for [LoginScreen].
@@ -108,6 +119,26 @@ class LoginViewModel @Inject constructor(
      */
     fun onPasswordChanged(password: String) {
         _state.update { it.copy(password = password, passwordError = false) }
+    }
+
+    /** The human check passed; its token goes with the next sign-in. */
+    fun onHumanCheckToken(token: String) {
+        _state.update { it.copy(humanCheck = it.humanCheck.withToken(token)) }
+    }
+
+    /** The token expired unused; the widget fetches a new one by itself. */
+    fun onHumanCheckExpired() {
+        _state.update { it.copy(humanCheck = it.humanCheck.expired()) }
+    }
+
+    /** The widget could not load or the check failed. */
+    fun onHumanCheckError() {
+        _state.update { it.copy(humanCheck = it.humanCheck.failed()) }
+    }
+
+    /** The medtech asked to run the check again. */
+    fun onHumanCheckRetry() {
+        _state.update { it.copy(humanCheck = it.humanCheck.renewed()) }
     }
 
     /**
@@ -153,7 +184,7 @@ class LoginViewModel @Inject constructor(
                     stage = LoginStage.SIGNING_IN,
                 )
             }
-            signInUseCase(email, password)
+            signInUseCase(email, password, snapshot.humanCheck.token)
                 .onSuccess {
                     _state.update { it.copy(stage = LoginStage.DOWNLOADING_PATIENTS) }
                     // Never trap the user on Login: a failed or skipped pull still navigates, and
@@ -172,8 +203,12 @@ class LoginViewModel @Inject constructor(
                     _events.emit(LoginEvent.NavigateBack)
                 }
                 .onFailure { error ->
-                    _state.update { it.copy(isSubmitting = false, stage = null) }
-                    _events.emit(LoginEvent.ShowLoginError(error.message))
+                    // A token is spent by any attempt, so the next one needs a fresh check.
+                    _state.update {
+                        it.copy(isSubmitting = false, stage = null, humanCheck = it.humanCheck.renewed())
+                    }
+                    val message = if (error is HumanCheckRejectedException) HUMAN_CHECK_REJECTED else error.message
+                    _events.emit(LoginEvent.ShowLoginError(message))
                 }
         }
     }
@@ -196,6 +231,8 @@ class LoginViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "LoginViewModel"
+        const val HUMAN_CHECK_REJECTED =
+            "The security check expired or did not pass. Wait for it to finish, then sign in again."
         val EMAIL_PATTERN = Regex("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$")
     }
 }

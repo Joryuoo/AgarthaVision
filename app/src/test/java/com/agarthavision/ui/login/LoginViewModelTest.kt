@@ -1,5 +1,6 @@
 package com.agarthavision.ui.login
 
+import com.agarthavision.domain.model.HumanCheckConfig
 import app.cash.turbine.test
 import com.agarthavision.core.connectivity.ConnectivityObserver
 import com.agarthavision.domain.model.SignedOutNotice
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -52,6 +54,7 @@ class LoginViewModelTest {
 
     private fun viewModel() = LoginViewModel(
         signInUseCase = signInUseCase,
+        humanCheckConfig = HumanCheckConfig(siteKey = "", hostname = ""),
         connectivityObserver = connectivityObserver,
         completeSignInUseCase = completeSignInUseCase,
         observeSignedOutNoticeUseCase = observeSignedOutNoticeUseCase,
@@ -91,7 +94,7 @@ class LoginViewModelTest {
 
             assertTrue(viewModel.state.value.emailError)
             assertFalse(viewModel.state.value.passwordError)
-            verify(signInUseCase, never()).invoke(any(), any())
+            verify(signInUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
@@ -109,13 +112,13 @@ class LoginViewModelTest {
             }
 
             assertTrue(viewModel.state.value.passwordError)
-            verify(signInUseCase, never()).invoke(any(), any())
+            verify(signInUseCase, never()).invoke(any(), any(), anyOrNull())
         }
 
     @Test
     fun `submit with valid credentials emits NavigateBack`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "secret123"))
+            whenever(signInUseCase.invoke("user@example.com", "secret123", null))
                 .thenReturn(Result.success(Unit))
             val viewModel = viewModel()
 
@@ -132,7 +135,7 @@ class LoginViewModelTest {
     @Test
     fun `submit failure emits ShowLoginError with exception message`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "wrong"))
+            whenever(signInUseCase.invoke("user@example.com", "wrong", null))
                 .thenReturn(Result.failure(IllegalStateException("Invalid credentials")))
             val viewModel = viewModel()
 
@@ -149,7 +152,7 @@ class LoginViewModelTest {
     @Test
     fun `submit success completes sign-in then emits NavigateBack`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "secret123"))
+            whenever(signInUseCase.invoke("user@example.com", "secret123", null))
                 .thenReturn(Result.success(Unit))
             val viewModel = viewModel()
 
@@ -167,7 +170,7 @@ class LoginViewModelTest {
     @Test
     fun `a failed completeSignIn still navigates`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "secret123"))
+            whenever(signInUseCase.invoke("user@example.com", "secret123", null))
                 .thenReturn(Result.success(Unit))
             whenever(completeSignInUseCase.invoke())
                 .thenReturn(Result.failure(IllegalStateException("pull failed")))
@@ -186,7 +189,7 @@ class LoginViewModelTest {
     @Test
     fun `completeSignIn is not called when sign-in fails`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "wrong"))
+            whenever(signInUseCase.invoke("user@example.com", "wrong", null))
                 .thenReturn(Result.failure(IllegalStateException("Invalid credentials")))
             val viewModel = viewModel()
 
@@ -205,7 +208,7 @@ class LoginViewModelTest {
     @Test
     fun `stage goes SIGNING_IN then DOWNLOADING_PATIENTS then null`() =
         runTest(mainDispatcherRule.testDispatcher.scheduler) {
-            whenever(signInUseCase.invoke("user@example.com", "secret123"))
+            whenever(signInUseCase.invoke("user@example.com", "secret123", null))
                 .thenReturn(Result.success(Unit))
             val viewModel = viewModel()
             // Unconfined, so every state update is seen and StateFlow conflation hides nothing.

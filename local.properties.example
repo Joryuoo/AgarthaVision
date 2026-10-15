@@ -22,6 +22,18 @@ SUPABASE_ANON_KEY_DEV=sb_publishable_<dev-anon-key>
 SUPABASE_URL_PROD=https://<prod-project-ref>.supabase.co
 SUPABASE_ANON_KEY_PROD=sb_publishable_<prod-anon-key>
 
+# ── Sign-in human check (Cloudflare Turnstile, 14zcqntnqxf) ─────────────────
+# The widget's site key and the hostname it is registered for, from Cloudflare →
+# Turnstile → the widget. Public by design, but kept here like every other per-build value.
+# Leave blank to build without the check: sign-in then sends no token, which only works while
+# Supabase's CAPTCHA protection is off. A release for medtechs needs both set BEFORE that
+# protection is switched on. The widget's secret key never goes in the app; it belongs in
+# Supabase → Authentication → Attack Protection.
+TURNSTILE_SITE_KEY_DEV=<turnstile-site-key>
+TURNSTILE_HOSTNAME_DEV=<widget-hostname>
+TURNSTILE_SITE_KEY_PROD=<turnstile-site-key>
+TURNSTILE_HOSTNAME_PROD=<widget-hostname>
+
 # ── Inference (self-hosted FastAPI container on a rented GPU droplet) ────────
 # DMKuZu spins up the droplet, runs the inference container, and shares the
 # IP + bearer key over the team chat. See ADR-003.

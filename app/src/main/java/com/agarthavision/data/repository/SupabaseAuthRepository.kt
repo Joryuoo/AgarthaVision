@@ -4,6 +4,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.agarthavision.domain.model.HumanCheckRejectedException
 import com.agarthavision.domain.model.LocalIdentity
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.repository.AuthRepository
@@ -60,10 +61,16 @@ class SupabaseAuthRepository @Inject constructor(
         return supabase.auth.currentSessionOrNull() != null
     }
 
-    override suspend fun signIn(email: String, password: String) {
-        supabase.auth.signInWith(Email) {
-            this.email = email
-            this.password = password
+    override suspend fun signIn(email: String, password: String, humanCheckToken: String?) {
+        try {
+            supabase.auth.signInWith(Email) {
+                this.email = email
+                this.password = password
+                captchaToken = humanCheckToken
+            }
+        } catch (error: RestException) {
+            if (error.isHumanCheckRefusal()) throw HumanCheckRejectedException(error)
+            throw error
         }
         cacheIdentity(email)
     }
@@ -80,13 +87,18 @@ class SupabaseAuthRepository @Inject constructor(
      * Console need the new password: their next login renewal is refused. This phone's old
      * session is one of those, so the account check waits on [AuthSessionLock] meanwhile.
      */
-    override suspend fun changePassword(currentPassword: String, newPassword: String): PasswordChangeResult =
+    override suspend fun changePassword(
+        currentPassword: String,
+        newPassword: String,
+        humanCheckToken: String?,
+    ): PasswordChangeResult =
         sessionLock.withLock {
             val email = signedInEmail() ?: return@withLock PasswordChangeResult.Failed
             runCatching {
                 supabase.auth.signInWith(Email) {
                     this.email = email
                     this.password = currentPassword
+                    captchaToken = humanCheckToken
                 }
             }.fold(
                 onSuccess = {
@@ -148,6 +160,7 @@ internal fun passwordCheckFailure(error: Throwable): PasswordChangeResult = when
     error is CancellationException -> throw error
     error.isNoConnection() -> PasswordChangeResult.NoConnection
     error is RestException && error.error == INVALID_CREDENTIALS -> PasswordChangeResult.WrongCurrentPassword
+    error is RestException && error.isHumanCheckRefusal() -> PasswordChangeResult.HumanCheckRejected
     else -> PasswordChangeResult.Failed
 }
 
@@ -168,5 +181,12 @@ internal fun passwordUpdateFailure(error: Throwable): PasswordChangeResult = whe
 // Ktor's HttpRequestTimeoutException, an IOException.
 private fun Throwable.isNoConnection(): Boolean = this is HttpRequestException || this is IOException
 
+/**
+ * Whether the provider refused the sign-in's human check (14zcqntnqxf): missing, expired, already
+ * used or failed. Supabase answers every one of those with `captcha_failed`.
+ */
+internal fun RestException.isHumanCheckRefusal(): Boolean = error == CAPTCHA_FAILED
+
 private const val INVALID_CREDENTIALS = "invalid_credentials"
+private const val CAPTCHA_FAILED = "captcha_failed"
 private const val SAME_PASSWORD = "same_password"

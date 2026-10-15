@@ -3,8 +3,10 @@ package com.agarthavision.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.agarthavision.core.connectivity.ConnectivityObserver
+import com.agarthavision.domain.model.HumanCheckConfig
 import com.agarthavision.domain.model.PasswordChangeResult
 import com.agarthavision.domain.usecase.auth.ChangePasswordUseCase
+import com.agarthavision.ui.components.HumanCheckUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +19,7 @@ import javax.inject.Inject
 enum class PasswordFieldError { REQUIRED, WRONG_CURRENT, MISMATCH, SAME_AS_CURRENT, WEAK }
 
 /** Why the whole change failed when no field is at fault. */
-enum class ChangePasswordFailure { NO_CONNECTION, UNCONFIRMED, FAILED }
+enum class ChangePasswordFailure { NO_CONNECTION, UNCONFIRMED, HUMAN_CHECK_REJECTED, FAILED }
 
 data class ChangePasswordUiState(
     val currentPassword: String = "",
@@ -32,10 +34,12 @@ data class ChangePasswordUiState(
     val weakPasswordDetail: String? = null,
     val failure: ChangePasswordFailure? = null,
     val isChanged: Boolean = false,
+    /** Checking the current password is a sign-in, so it passes the human check (14zcqntnqxf). */
+    val humanCheck: HumanCheckUiState = HumanCheckUiState(),
 ) {
     /** Online only (14zcqntjph9): the button stays disabled offline and the screen says why. */
     val canSubmit: Boolean
-        get() = !isSubmitting && !isOffline && !isChanged
+        get() = !isSubmitting && !isOffline && !isChanged && humanCheck.isSatisfied
 }
 
 /**
@@ -50,10 +54,14 @@ data class ChangePasswordUiState(
 class ChangePasswordViewModel @Inject constructor(
     private val changePasswordUseCase: ChangePasswordUseCase,
     private val connectivityObserver: ConnectivityObserver,
+    humanCheckConfig: HumanCheckConfig,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(
-        ChangePasswordUiState(isOffline = !connectivityObserver.currentlyOnline()),
+        ChangePasswordUiState(
+            isOffline = !connectivityObserver.currentlyOnline(),
+            humanCheck = HumanCheckUiState(config = humanCheckConfig),
+        ),
     )
     val state: StateFlow<ChangePasswordUiState> = _state.asStateFlow()
 
@@ -86,6 +94,22 @@ class ChangePasswordViewModel @Inject constructor(
         _state.update { it.copy(confirmPassword = value, confirmError = null, failure = null) }
     }
 
+    fun onHumanCheckToken(token: String) {
+        _state.update { it.copy(humanCheck = it.humanCheck.withToken(token)) }
+    }
+
+    fun onHumanCheckExpired() {
+        _state.update { it.copy(humanCheck = it.humanCheck.expired()) }
+    }
+
+    fun onHumanCheckError() {
+        _state.update { it.copy(humanCheck = it.humanCheck.failed()) }
+    }
+
+    fun onHumanCheckRetry() {
+        _state.update { it.copy(humanCheck = it.humanCheck.renewed()) }
+    }
+
     fun onSubmit() {
         val form = state.value
         if (!form.canSubmit) return
@@ -98,8 +122,11 @@ class ChangePasswordViewModel @Inject constructor(
 
         viewModelScope.launch {
             _state.update { it.copy(isSubmitting = true, failure = null) }
-            val result = changePasswordUseCase(form.currentPassword, form.newPassword)
-            _state.update { it.copy(isSubmitting = false).withResult(result) }
+            val result = changePasswordUseCase(form.currentPassword, form.newPassword, form.humanCheck.token)
+            // A token is spent by any attempt, so the next one needs a fresh check.
+            _state.update {
+                it.copy(isSubmitting = false, humanCheck = it.humanCheck.renewed()).withResult(result)
+            }
         }
     }
 
@@ -122,13 +149,15 @@ class ChangePasswordViewModel @Inject constructor(
     private fun ChangePasswordUiState.withResult(result: PasswordChangeResult): ChangePasswordUiState =
         when (result) {
             // The passwords are dropped from memory the moment they are no longer needed.
-            PasswordChangeResult.Changed -> ChangePasswordUiState(isOffline = isOffline, isChanged = true)
+            PasswordChangeResult.Changed ->
+                ChangePasswordUiState(isOffline = isOffline, isChanged = true, humanCheck = humanCheck)
             PasswordChangeResult.WrongCurrentPassword -> copy(currentError = PasswordFieldError.WRONG_CURRENT)
             is PasswordChangeResult.WeakPassword ->
                 copy(newError = PasswordFieldError.WEAK, weakPasswordDetail = result.detail)
             PasswordChangeResult.SamePassword -> copy(newError = PasswordFieldError.SAME_AS_CURRENT)
             PasswordChangeResult.NoConnection -> copy(failure = ChangePasswordFailure.NO_CONNECTION)
             PasswordChangeResult.Unconfirmed -> copy(failure = ChangePasswordFailure.UNCONFIRMED)
+            PasswordChangeResult.HumanCheckRejected -> copy(failure = ChangePasswordFailure.HUMAN_CHECK_REJECTED)
             PasswordChangeResult.Failed -> copy(failure = ChangePasswordFailure.FAILED)
         }
 }

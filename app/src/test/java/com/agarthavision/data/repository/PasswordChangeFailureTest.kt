@@ -5,6 +5,8 @@ import io.github.jan.supabase.auth.exception.AuthRestException
 import io.github.jan.supabase.auth.exception.AuthWeakPasswordException
 import kotlinx.coroutines.CancellationException
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
 
@@ -19,6 +21,18 @@ class PasswordChangeFailureTest {
     fun `invalid credentials on the check mean the current password was wrong`() {
         val error = AuthRestException("invalid_credentials", "Invalid login credentials", 400)
         assertEquals(PasswordChangeResult.WrongCurrentPassword, passwordCheckFailure(error))
+    }
+
+    @Test
+    fun `a refused human check on the check is neither a wrong password nor a plain failure`() {
+        val error = AuthRestException("captcha_failed", "captcha protection: request disallowed", 400)
+        assertEquals(PasswordChangeResult.HumanCheckRejected, passwordCheckFailure(error))
+    }
+
+    @Test
+    fun `captcha_failed is the human check refusal and nothing else is`() {
+        assertTrue(AuthRestException("captcha_failed", "captcha protection", 400).isHumanCheckRefusal())
+        assertFalse(AuthRestException("invalid_credentials", "Invalid login credentials", 400).isHumanCheckRefusal())
     }
 
     @Test

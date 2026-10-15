@@ -99,6 +99,8 @@ import com.agarthavision.domain.model.SignedOutNotice
 import com.agarthavision.ui.components.AgarthaToastHost
 import com.agarthavision.ui.components.AgarthaToastState
 import com.agarthavision.ui.components.AgarthaToastVariant
+import com.agarthavision.ui.components.HumanCheckCallbacks
+import com.agarthavision.ui.components.HumanCheckWidget
 import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.components.rememberAgarthaToastState
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -140,6 +142,12 @@ fun LoginScreen(
             onEmailChanged = viewModel::onEmailChanged,
             onPasswordChanged = viewModel::onPasswordChanged,
             onSubmit = viewModel::onSubmit,
+            humanCheck = HumanCheckCallbacks(
+                onToken = viewModel::onHumanCheckToken,
+                onExpired = viewModel::onHumanCheckExpired,
+                onError = viewModel::onHumanCheckError,
+                onRetry = viewModel::onHumanCheckRetry,
+            ),
         ),
         toastState = toastState,
     )
@@ -149,9 +157,13 @@ internal data class LoginActions(
     val onEmailChanged: (String) -> Unit,
     val onPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
+    val humanCheck: HumanCheckCallbacks = HumanCheckCallbacks({}, {}, {}, {}),
 )
 
 private val HERO_HEIGHT = 300.dp
+
+// Turnstile's action for this surface: 1–32 letters, digits, `_` or `-`.
+private const val HUMAN_CHECK_ACTION = "app_sign_in"
 private val SHEET_OVERLAP = 28.dp
 
 @Composable
@@ -503,6 +515,15 @@ private fun LoginForm(
         }
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        if (state.humanCheck.required) {
+            HumanCheckWidget(
+                action = HUMAN_CHECK_ACTION,
+                state = state.humanCheck,
+                callbacks = actions.humanCheck,
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         Button(
             onClick = actions.onSubmit,
