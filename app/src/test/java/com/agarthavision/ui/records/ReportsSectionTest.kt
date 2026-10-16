@@ -89,6 +89,40 @@ class ReportsSectionTest {
         composeRule.onNodeWithText("No reports yet.").assertExists()
     }
 
+    @Test
+    fun `formatReportPositiveSpecies returns empty string for empty list`() {
+        assertEquals("", formatReportPositiveSpecies(emptyList()))
+    }
+
+    @Test
+    fun `formatReportPositiveSpecies formats single and multiple main species`() {
+        assertEquals("Ascaris lumbricoides", formatReportPositiveSpecies(listOf("Ascaris lumbricoides")))
+        assertEquals(
+            "Ascaris lumbricoides, Hookworm",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Hookworm")),
+        )
+        assertEquals(
+            "Ascaris lumbricoides, Trichuris trichiura, Hookworm",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Trichuris trichiura", "Hookworm")),
+        )
+    }
+
+    @Test
+    fun `formatReportPositiveSpecies appends and others when custom species are present`() {
+        assertEquals(
+            "Ascaris lumbricoides, Hookworm, and others",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Hookworm", "Custom Species")),
+        )
+        assertEquals(
+            "Ascaris lumbricoides, and others",
+            formatReportPositiveSpecies(listOf("Ascaris lumbricoides", "Custom A", "Custom B")),
+        )
+        assertEquals(
+            "and others",
+            formatReportPositiveSpecies(listOf("Custom Only")),
+        )
+    }
+
     private fun render(
         verifiedSamples: List<SampleUi>,
         isGenerating: Boolean = false,

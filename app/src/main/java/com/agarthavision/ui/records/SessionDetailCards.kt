@@ -24,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,12 +42,13 @@ import androidx.compose.ui.unit.sp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.agarthavision.R
+import com.agarthavision.domain.model.EggSpecies
 import com.agarthavision.domain.model.Report
 import com.agarthavision.domain.model.ReportSyncStatus
 import com.agarthavision.ui.components.ReadOnlyAuthorNote
 import com.agarthavision.ui.components.SkeletonBox
 import com.agarthavision.ui.icons.AgarthaIcons
-import com.agarthavision.ui.icons.Description
+import com.agarthavision.ui.icons.DescriptionFilled
 import com.agarthavision.ui.icons.Download
 import com.agarthavision.ui.image.SampleImageRef
 import com.agarthavision.ui.theme.AgarthaTheme
@@ -88,10 +90,10 @@ internal fun ReportsSection(
                 Text(
                     text = stringResource(R.string.report_section_title),
                     fontSize = 18.sp,
+                    lineHeight = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.textPrimary,
                 )
-                Spacer(Modifier.height(2.dp))
                 Text(
                     text = when {
                         readOnlyAuthor != null && state.totalReports == 0 ->
@@ -103,6 +105,7 @@ internal fun ReportsSection(
                         else -> stringResource(R.string.report_generated_count, state.totalReports)
                     },
                     fontSize = 13.sp,
+                    lineHeight = 16.sp,
                     color = colors.textSecondary,
                 )
             }
@@ -176,15 +179,15 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
                 verticalArrangement = Arrangement.Center,
             ) {
                 Icon(
-                    imageVector = AgarthaIcons.Description,
+                    imageVector = AgarthaIcons.DescriptionFilled,
                     contentDescription = null,
                     tint = colors.brandFill,
                     modifier = Modifier.size(20.dp),
                 )
-                Spacer(Modifier.height(2.dp))
                 Text(
                     text = stringResource(R.string.report_format_pdf),
                     fontSize = 9.sp,
+                    lineHeight = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = colors.textSecondary,
                 )
@@ -201,8 +204,12 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
                 color = colors.textPrimary,
             )
             Spacer(Modifier.height(2.dp))
+            val andOthersLabel = stringResource(R.string.report_and_others)
+            val positiveSpeciesText = remember(report.positiveSpecies, andOthersLabel) {
+                formatReportPositiveSpecies(report.positiveSpecies, andOthersLabel)
+            }
             Text(
-                text = report.positiveSpecies.joinToString(", ").ifBlank {
+                text = positiveSpeciesText.ifBlank {
                     stringResource(R.string.report_no_positive_species)
                 },
                 fontSize = 13.sp,
@@ -215,6 +222,33 @@ private fun ReportRow(report: Report, onOpen: () -> Unit) {
 
         ReportStatusPill(status = report.supabaseStatus)
     }
+}
+
+internal fun formatReportPositiveSpecies(
+    species: List<String>,
+    andOthersLabel: String = "and others",
+): String {
+    val mainPresent = mutableListOf<String>()
+    var hasOther = false
+
+    for (name in species) {
+        val eggSpecies = EggSpecies.fromClassLabel(name)
+        if (eggSpecies != null && eggSpecies != EggSpecies.OTHER) {
+            val canonical = eggSpecies.canonicalClass ?: name
+            if (canonical !in mainPresent) {
+                mainPresent.add(canonical)
+            }
+        } else if (name.isNotBlank()) {
+            hasOther = true
+        }
+    }
+
+    val displayItems = if (hasOther) {
+        mainPresent + andOthersLabel
+    } else {
+        mainPresent
+    }
+    return displayItems.joinToString(", ")
 }
 
 @Composable

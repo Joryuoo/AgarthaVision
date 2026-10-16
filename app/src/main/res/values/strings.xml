@@ -449,6 +449,7 @@
     <string name="records_status_pending_sync">Pending sync</string>
     <string name="report_status_failed">Sync failed</string>
     <string name="report_no_positive_species">No positive species</string>
+    <string name="report_and_others">and others</string>
     <string name="report_generated_toast">Report saved to Documents/AgarthaVision</string>
     <string name="report_share_action">Share</string>
     <string name="report_share_missing_path">This report has no saved file.</string>
