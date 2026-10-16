@@ -38,6 +38,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
@@ -59,6 +63,7 @@ import com.agarthavision.domain.usecase.verify.fieldTotalOf
 import com.agarthavision.domain.usecase.verify.floorFor
 import com.agarthavision.domain.usecase.verify.unboxedCountOf
 import com.agarthavision.ui.theme.AgarthaTheme
+import com.agarthavision.ui.theme.AppColors
 
 /**
  * What the model said about this frame — one of exactly three states, never collapsed to two.
@@ -89,108 +94,118 @@ internal fun ModelOutputSection(
     footer: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
-    val containerBg = when (output) {
-        is ModelOutput.Read -> colors.accentTint2
-        ModelOutput.Unavailable -> colors.accentTint2
-        ModelOutput.InProgress -> colors.surface
-    }
-    val borderColor = when (output) {
-        is ModelOutput.Read -> colors.accent
-        ModelOutput.Unavailable -> colors.border
-        ModelOutput.InProgress -> colors.border
-    }
-    val dividerColor = when (output) {
-        is ModelOutput.Read -> colors.accent.copy(alpha = 0.2f)
-        else -> colors.border
-    }
-    Column(
+    val onCard = Color.White
+    val onCardMuted = Color.White.copy(alpha = 0.80f)
+
+    Box(
         modifier = modifier
             .fillMaxWidth()
             .testTag(VerifyTestTags.MODEL_OUTPUT_PANEL)
-            .background(containerBg, RoundedCornerShape(16.dp))
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
-            .padding(16.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            SectionLabel(
-                text = stringResource(R.string.verify_model_output),
-                modifier = Modifier.weight(1f),
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(colors.brandFill, AppColors.MaroonPressed),
+                ),
+                shape = RoundedCornerShape(16.dp),
             )
-            if (output is ModelOutput.Read && output.species.isNotEmpty()) {
-                ModeChip(
-                    text = stringResource(R.string.verify_ai_suggested_chip),
-                    icon = Icons.Filled.AutoAwesome,
-                    containerColor = colors.accentTint,
-                )
-            }
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-
-        when (output) {
-            ModelOutput.InProgress -> InferencePending(isInferenceRunning, onCancelInference)
-
-            ModelOutput.Unavailable -> Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription = null,
-                    tint = colors.accent,
-                    modifier = Modifier.size(16.dp),
-                )
-                Text(
-                    text = stringResource(R.string.verify_model_unavailable),
-                    color = colors.textSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 16.sp,
-                )
-            }
-
-            is ModelOutput.Read -> if (output.species.isEmpty()) {
-                // A result, not a failure. The wording says what the model did, not what it
-                // failed to do.
-                Text(
-                    text = stringResource(R.string.verify_model_no_eggs),
-                    color = colors.textSecondary,
-                    fontSize = 13.sp,
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.verify_model_eggs_detected,
-                            output.total,
-                            output.total,
+            .clip(RoundedCornerShape(16.dp)),
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .drawBehind {
+                    drawRect(
+                        brush = Brush.radialGradient(
+                            colors = listOf(onCard.copy(alpha = 0.10f), Color.Transparent),
+                            center = Offset(size.width, 0f),
+                            radius = 220.dp.toPx(),
                         ),
-                        color = colors.textPrimary,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold,
                     )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (output.species.size == 1) {
-                            output.species.first().label
-                        } else {
-                            output.species.joinToString(" · ") { "${it.label} (${it.count})" }
-                        },
-                        color = colors.textSecondary,
-                        fontSize = 13.sp,
+                },
+        )
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SectionLabel(
+                    text = stringResource(R.string.verify_model_output),
+                    color = onCardMuted,
+                    modifier = Modifier.weight(1f),
+                )
+                if (output is ModelOutput.Read && output.species.isNotEmpty()) {
+                    ModeChip(
+                        text = stringResource(R.string.verify_ai_suggested_chip),
+                        icon = Icons.Filled.AutoAwesome,
+                        containerColor = Color.White.copy(alpha = 0.18f),
+                        contentColor = onCard,
                     )
                 }
             }
-        }
-        if (footer != null) {
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 12.dp),
-                thickness = 1.dp,
-                color = dividerColor,
-            )
-            footer()
+            Spacer(modifier = Modifier.height(12.dp))
+
+            when (output) {
+                ModelOutput.InProgress -> InferencePending(isInferenceRunning, onCancelInference)
+
+                ModelOutput.Unavailable -> Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = onCard,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.verify_model_unavailable),
+                        color = onCardMuted,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp,
+                    )
+                }
+
+                is ModelOutput.Read -> if (output.species.isEmpty()) {
+                    // A result, not a failure. The wording says what the model did, not what it
+                    // failed to do.
+                    Text(
+                        text = stringResource(R.string.verify_model_no_eggs),
+                        color = onCardMuted,
+                        fontSize = 13.sp,
+                    )
+                } else {
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            text = pluralStringResource(
+                                R.plurals.verify_model_eggs_detected,
+                                output.total,
+                                output.total,
+                            ),
+                            color = onCard,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (output.species.size == 1) {
+                                output.species.first().label
+                            } else {
+                                output.species.joinToString(" · ") { "${it.label} (${it.count})" }
+                            },
+                            color = onCardMuted,
+                            fontSize = 13.sp,
+                        )
+                    }
+                }
+            }
+            if (footer != null) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(vertical = 12.dp),
+                    thickness = 1.dp,
+                    color = Color.White.copy(alpha = 0.20f),
+                )
+                footer()
+            }
         }
     }
 
@@ -885,10 +900,11 @@ private fun List<Finding>.locatableSlots(boxCount: Int): List<LocatableSlot> =
 private fun SectionLabel(
     text: String,
     modifier: Modifier = Modifier,
+    color: Color = AgarthaTheme.colors.textSecondary,
 ) {
     Text(
         text = text,
-        color = AgarthaTheme.colors.textSecondary,
+        color = color,
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,

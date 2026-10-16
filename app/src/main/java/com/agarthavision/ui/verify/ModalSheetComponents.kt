@@ -93,8 +93,10 @@ internal fun ModeChip(
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
     containerColor: Color? = null,
+    contentColor: Color? = null,
 ) {
     val colors = AgarthaTheme.colors
+    val fgColor = contentColor ?: colors.accent
     Row(
         modifier = modifier
             .background(containerColor ?: colors.accentTint2, RoundedCornerShape(999.dp))
@@ -106,7 +108,7 @@ internal fun ModeChip(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = colors.accent,
+                tint = fgColor,
                 modifier = Modifier.size(13.dp),
             )
         }
@@ -114,7 +116,7 @@ internal fun ModeChip(
             text = text,
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            color = colors.accent,
+            color = fgColor,
         )
     }
 }

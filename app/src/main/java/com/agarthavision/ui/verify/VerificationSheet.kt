@@ -611,7 +611,7 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
     ) {
         Text(
             text = stringResource(R.string.verify_show_boxes),
-            color = AgarthaTheme.colors.textPrimary,
+            color = Color.White,
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
             modifier = Modifier.weight(1f),
@@ -621,11 +621,11 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
             checked = checked,
             onCheckedChange = { onToggle() },
             colors = SwitchDefaults.colors(
-                checkedThumbColor = AppColors.White,
-                checkedTrackColor = AgarthaTheme.colors.accent,
-                checkedIconColor = AgarthaTheme.colors.accent,
-                uncheckedThumbColor = AgarthaTheme.colors.textSecondary,
-                uncheckedTrackColor = AgarthaTheme.colors.borderStrong,
+                checkedThumbColor = AppColors.Maroon,
+                checkedTrackColor = AppColors.White,
+                uncheckedThumbColor = AppColors.White.copy(alpha = 0.7f),
+                uncheckedTrackColor = Color.White.copy(alpha = 0.25f),
+                uncheckedBorderColor = Color.Transparent,
             ),
         )
     }
