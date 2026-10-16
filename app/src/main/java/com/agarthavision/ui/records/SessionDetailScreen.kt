@@ -46,6 +46,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -568,7 +569,7 @@ private fun SessionDetailSamplesTab(
             modifier = modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp),
-            contentAlignment = Alignment.Center,
+            contentAlignment = BiasAlignment(horizontalBias = 0f, verticalBias = -0.25f),
         ) {
             EmptyState(
                 title = stringResource(R.string.session_detail_samples_empty),
