@@ -231,9 +231,9 @@ private class SamplesAuthRepository(
     override suspend fun getCurrentUserId(): String? = liveUserId
     override suspend fun isAuthenticated(): Boolean = liveUserId != null
     override suspend fun hasActiveSession(): Boolean = liveUserId != null
-    override suspend fun signIn(email: String, password: String) = Unit
+    override suspend fun signIn(email: String, password: String, humanCheckToken: String?) = Unit
     override suspend fun signOut() = Unit
-    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+    override suspend fun changePassword(currentPassword: String, newPassword: String, humanCheckToken: String?) =
         PasswordChangeResult.Failed
 }
 

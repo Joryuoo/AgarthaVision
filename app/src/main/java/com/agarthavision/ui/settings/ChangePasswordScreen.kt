@@ -54,9 +54,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.agarthavision.R
 import com.agarthavision.ui.components.AgarthaButton
 import com.agarthavision.ui.components.BackArrow
+import com.agarthavision.ui.components.HumanCheckCallbacks
+import com.agarthavision.ui.components.HumanCheckWidget
 import com.agarthavision.ui.components.ResizeForKeyboard
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.Spacing
+
+// Turnstile's action for this surface: 1–32 letters, digits, `_` or `-`.
+private const val HUMAN_CHECK_ACTION = "app_change_password"
 
 /** Actions [ChangePasswordContent] dispatches back to the [ChangePasswordViewModel]. */
 data class ChangePasswordActions(
@@ -65,6 +70,7 @@ data class ChangePasswordActions(
     val onConfirmPasswordChanged: (String) -> Unit,
     val onSubmit: () -> Unit,
     val onBack: () -> Unit,
+    val humanCheck: HumanCheckCallbacks = HumanCheckCallbacks({}, {}, {}, {}),
 )
 
 /**
@@ -86,6 +92,12 @@ fun ChangePasswordScreen(
             onConfirmPasswordChanged = viewModel::onConfirmPasswordChanged,
             onSubmit = viewModel::onSubmit,
             onBack = onBack,
+            humanCheck = HumanCheckCallbacks(
+                onToken = viewModel::onHumanCheckToken,
+                onExpired = viewModel::onHumanCheckExpired,
+                onError = viewModel::onHumanCheckError,
+                onRetry = viewModel::onHumanCheckRetry,
+            ),
         ),
     )
 }
@@ -188,10 +200,20 @@ private fun ChangePasswordForm(state: ChangePasswordUiState, actions: ChangePass
                 when (failure) {
                     ChangePasswordFailure.NO_CONNECTION -> R.string.change_password_failed_offline
                     ChangePasswordFailure.UNCONFIRMED -> R.string.change_password_failed_unconfirmed
+                    ChangePasswordFailure.HUMAN_CHECK_REJECTED -> R.string.change_password_failed_human_check
                     ChangePasswordFailure.FAILED -> R.string.change_password_failed
                 },
             ),
             danger = true,
+        )
+    }
+
+    if (state.humanCheck.required && !state.isChanged) {
+        Spacer(Modifier.height(16.dp))
+        HumanCheckWidget(
+            action = HUMAN_CHECK_ACTION,
+            state = state.humanCheck,
+            callbacks = actions.humanCheck,
         )
     }
 

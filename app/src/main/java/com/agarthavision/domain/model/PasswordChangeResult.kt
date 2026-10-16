@@ -26,6 +26,12 @@ sealed interface PasswordChangeResult {
     /** The new password is the one already in use. */
     data object SamePassword : PasswordChangeResult
 
+    /**
+     * The provider refused the human check that came with the current password (14zcqntnqxf).
+     * Nothing changed; a fresh check and another try is all it takes.
+     */
+    data object HumanCheckRejected : PasswordChangeResult
+
     /** No connection reached the server. Nothing changed. */
     data object NoConnection : PasswordChangeResult
 

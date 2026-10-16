@@ -287,6 +287,9 @@ gitignored (`/local.properties` and `local.properties` in `.gitignore`). They re
 `app/build.gradle.kts`). A missing property
 resolves to an empty string rather than failing the build. CI passes them as Gradle `-P`
 properties. `local.properties.example` is the committed template and holds placeholders only.
+The Turnstile site key and hostname (`TURNSTILE_SITE_KEY_*`, `TURNSTILE_HOSTNAME_*`) take the same
+path although a site key is public; the widget's secret key is never in the app or the repo, only
+in Supabase's CAPTCHA setting.
 
 **Enforcement:** `.gitignore` plus review. CI runs in `.github/workflows/build-and-test.yml`
 (verifying compile and Roborazzi screenshot tests without requiring secrets).

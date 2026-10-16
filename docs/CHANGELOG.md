@@ -9,6 +9,29 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## feat/captcha-sign-in — sign-in passes a Cloudflare Turnstile check · 2026-10-16
+
+### Human check on sign-in · `14zcqntnqxf`
+
+- **Sign-in and the password change send a Turnstile token.** `HumanCheckWidget` renders the
+  widget in a WebView with `https://<hostname>/` as its base URL, the way Cloudflare documents
+  Turnstile for native apps, and hands the token to `SupabaseAuthRepository`, which passes it to
+  Supabase as `captchaToken`. Supabase checks it with Cloudflare; the app never holds the
+  widget's secret.
+- **Submit waits for the check**, and every failed attempt runs it again: a token is single-use.
+  An expired token is replaced by the widget on its own. A widget that cannot load says so and
+  offers a retry.
+- **A refused check says so.** Supabase's `captcha_failed` becomes `HumanCheckRejectedException`
+  (sign-in) or `PasswordChangeResult.HumanCheckRejected` (password change), with their own
+  messages, never "invalid credentials".
+- **Configured per build** from `local.properties`: `TURNSTILE_SITE_KEY_DEV/_PROD` and
+  `TURNSTILE_HOSTNAME_DEV/_PROD`. Blank turns the check off, which only works while Supabase's
+  CAPTCHA protection is off.
+- **Order matters.** Supabase's CAPTCHA setting applies to every client. This release has to be
+  out and installed by medtechs, and the console's part live, before it is switched on.
+
+---
+
 ## chore/publishable-key — the app is built with Supabase's publishable key · 2026-10-16
 
 ### Key in every APK · `14zcqntnqxg`

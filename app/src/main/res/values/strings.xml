@@ -792,6 +792,9 @@
     <string name="change_password_failed_offline">Couldn\'t reach the server, so your password was not changed. Check your connection and try again.</string>
     <string name="change_password_failed_unconfirmed">The connection dropped before the server answered, so your password may already be changed. Once you\'re back online, try again with your new password as the current one if your old one is refused.</string>
     <string name="change_password_failed">Your password was not changed. Try again in a moment.</string>
+    <string name="change_password_failed_human_check">The security check expired or did not pass, so your password was not changed. Wait for the check to finish, then try again.</string>
+    <string name="human_check_failed">The security check could not load. Check your connection.</string>
+    <string name="human_check_retry">Try the security check again</string>
     <string name="change_password_done_title">Password changed</string>
     <string name="change_password_done_body">Use your new password the next time you sign in, on this phone, another phone or the Admin Console. Your unsynced work is untouched.</string>
     <string name="change_password_done">Done</string>

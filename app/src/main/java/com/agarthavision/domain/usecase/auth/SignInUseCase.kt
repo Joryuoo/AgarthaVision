@@ -15,9 +15,9 @@ class SignInUseCase @Inject constructor(
      * Attempts email/password sign-in and returns the failure for UI handling. A success
      * retires any "signed out by the server" notice (14zcqntjph8): whoever signed in has read it.
      */
-    suspend operator fun invoke(email: String, password: String): Result<Unit> =
+    suspend operator fun invoke(email: String, password: String, humanCheckToken: String?): Result<Unit> =
         runCatching {
-            authRepository.signIn(email, password)
+            authRepository.signIn(email, password, humanCheckToken)
             signedOutNoticeStore.clear()
         }
 }

@@ -393,11 +393,11 @@ private class PrFakeAuthRepository(private val userId: String?) : AuthRepository
         flowOf(userId?.let { LocalIdentity(userId = it, email = "medtech@example.com", displayName = "Dr. Reyes") })
     override suspend fun currentLocalUserId(): String? = userId
     override suspend fun isAuthenticated(): Boolean = userId != null
-    override suspend fun signIn(email: String, password: String) = Unit
+    override suspend fun signIn(email: String, password: String, humanCheckToken: String?) = Unit
     override suspend fun hasActiveSession(): Boolean = userId != null
     override suspend fun getCurrentUserId(): String? = userId
     override suspend fun signOut() = Unit
-    override suspend fun changePassword(currentPassword: String, newPassword: String) =
+    override suspend fun changePassword(currentPassword: String, newPassword: String, humanCheckToken: String?) =
         PasswordChangeResult.Failed
 }
 

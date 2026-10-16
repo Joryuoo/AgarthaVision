@@ -80,11 +80,11 @@ class GetPatientReportCandidatesUseCaseTest {
         override fun observeLocalIdentity(): Flow<LocalIdentity?> = flowOf(null)
         override suspend fun currentLocalUserId(): String? = userId
         override suspend fun isAuthenticated(): Boolean = userId != null
-        override suspend fun signIn(email: String, password: String) = Unit
+        override suspend fun signIn(email: String, password: String, humanCheckToken: String?) = Unit
         override suspend fun hasActiveSession(): Boolean = userId != null
         override suspend fun getCurrentUserId(): String? = userId
         override suspend fun signOut() = Unit
-        override suspend fun changePassword(currentPassword: String, newPassword: String) =
+        override suspend fun changePassword(currentPassword: String, newPassword: String, humanCheckToken: String?) =
             PasswordChangeResult.Failed
     }
 
