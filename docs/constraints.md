@@ -281,7 +281,7 @@ configuration; neither describes what actually runs.
 
 ## C10 — Never commit secrets
 
-Supabase URLs, anon keys, and the inference bearer token live in `local.properties`, which is
+Supabase URLs, publishable keys, and the inference bearer token live in `local.properties`, which is
 gitignored (`/local.properties` and `local.properties` in `.gitignore`). They reach the app as
 `BuildConfig` fields read at build time (`localProperties` and `buildTypes` in
 `app/build.gradle.kts`). A missing property

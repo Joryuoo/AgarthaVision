@@ -120,7 +120,7 @@ Key rules — the full set of thirteen architectural/clinical/process constraint
    cp local.properties.example local.properties
    ```
 
-4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. Never commit real keys.
+4. Fill `local.properties` with the Supabase, Turnstile and inference values shared by the team. The Supabase key is the publishable one (`sb_publishable_…`, Project Settings → API Keys), never the legacy `anon` JWT. Never commit real keys.
 
 5. Open the project in Android Studio and let Gradle sync, or verify from the command line:
 
