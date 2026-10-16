@@ -300,6 +300,7 @@ internal fun VerificationSheetContent(
                         canGoNext = state.canGoNext,
                         onPrev = actions.onFramePrev,
                         onNext = actions.onFrameNext,
+                        centered = true,
                         modifier = Modifier.padding(top = 8.dp, bottom = 10.dp),
                     )
                 }
@@ -343,6 +344,7 @@ internal fun VerificationSheetContent(
                                     state.currentDetectionIndex + 1,
                                     boxCount,
                                 ),
+                                subtitle = stringResource(R.string.verify_detection_subtitle),
                                 prevDescription = stringResource(R.string.verify_prev_egg),
                                 nextDescription = stringResource(R.string.verify_next_egg),
                                 prevTag = VerifyTestTags.DETECTION_PREV,

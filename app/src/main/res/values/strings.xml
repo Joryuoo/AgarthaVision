@@ -168,8 +168,15 @@
     <string name="verify_q1">There is a parasitic egg in this box</string>
     <string name="verify_q2">The bounding box is correctly placed</string>
     <string name="verify_q3">This egg is %1$s</string>
-    <string name="verify_species_picker_label">Which species is it?</string>
-    <string name="verify_stage_picker_label">Developmental stage</string>
+    <string name="verify_species_picker_label">Species</string>
+    <string name="verify_species_placeholder">Choose the correct species</string>
+    <string name="verify_stage_picker_label">Stage</string>
+    <string name="verify_stage_placeholder">Choose a stage</string>
+    <string name="verify_detection_subtitle">Answer for the highlighted box</string>
+    <plurals name="verify_model_eggs_detected">
+        <item quantity="one">%1$d egg detected</item>
+        <item quantity="other">%1$d eggs detected</item>
+    </plurals>
     <string name="verify_other_stage_label">Other stage</string>
     <string name="verify_other_stage_hint">Type the developmental stage</string>
     <string name="verify_yes">Yes</string>

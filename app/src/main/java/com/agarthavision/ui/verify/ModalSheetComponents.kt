@@ -14,10 +14,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.ArrowForward
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,11 +25,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.agarthavision.domain.model.FlaggedFrame
 import com.agarthavision.ui.icons.AgarthaIcons
 import com.agarthavision.ui.icons.ArrowBackIosNew
-import com.agarthavision.domain.model.FlaggedFrame
+import com.agarthavision.ui.icons.ChevronLeft
+import com.agarthavision.ui.icons.ChevronRight
 import com.agarthavision.ui.theme.AgarthaTheme
 import com.agarthavision.ui.theme.AppTypography
 
@@ -86,13 +87,27 @@ fun ScreenTopBar(
 }
 
 @Composable
-internal fun ModeChip(text: String, modifier: Modifier = Modifier) {
+internal fun ModeChip(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+) {
     val colors = AgarthaTheme.colors
-    Box(
+    Row(
         modifier = modifier
             .background(colors.accentTint2, RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = colors.accent,
+                modifier = Modifier.size(13.dp),
+            )
+        }
         Text(
             text = text,
             fontSize = 11.sp,
@@ -222,37 +237,82 @@ internal fun CycleRow(
     onPrev: () -> Unit,
     onNext: () -> Unit,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    centered: Boolean = false,
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = indicator,
-            color = AgarthaTheme.colors.textSecondary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f),
-        )
-        CycleButton(
-            icon = Icons.AutoMirrored.Outlined.ArrowBack,
-            contentDescription = prevDescription,
-            enabled = canGoPrev,
-            onClick = onPrev,
-            tag = prevTag,
-        )
-        Spacer(modifier = Modifier.width(4.dp))
-        CycleButton(
-            icon = Icons.AutoMirrored.Outlined.ArrowForward,
-            contentDescription = nextDescription,
-            enabled = canGoNext,
-            onClick = onNext,
-            tag = nextTag,
-        )
+    if (centered) {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CycleButton(
+                icon = AgarthaIcons.ChevronLeft,
+                contentDescription = prevDescription,
+                enabled = canGoPrev,
+                onClick = onPrev,
+                tag = prevTag,
+            )
+            Text(
+                text = indicator,
+                color = AgarthaTheme.colors.textPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.weight(1f),
+            )
+            CycleButton(
+                icon = AgarthaIcons.ChevronRight,
+                contentDescription = nextDescription,
+                enabled = canGoNext,
+                onClick = onNext,
+                tag = nextTag,
+            )
+        }
+    } else {
+        Row(
+            modifier = modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = indicator,
+                    color = AgarthaTheme.colors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        color = AgarthaTheme.colors.textSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                    )
+                }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CycleButton(
+                    icon = AgarthaIcons.ChevronLeft,
+                    contentDescription = prevDescription,
+                    enabled = canGoPrev,
+                    onClick = onPrev,
+                    tag = prevTag,
+                )
+                CycleButton(
+                    icon = AgarthaIcons.ChevronRight,
+                    contentDescription = nextDescription,
+                    enabled = canGoNext,
+                    onClick = onNext,
+                    tag = nextTag,
+                )
+            }
+        }
     }
 }
 
-/** One side of a [CycleRow]. 48dp square — the minimum touch target, not a decorative size. */
+/** One side of a [CycleRow]. Circular outline button matching the Figma redesign. */
 @Composable
 private fun CycleButton(
     icon: ImageVector,
@@ -264,12 +324,12 @@ private fun CycleButton(
     val colors = AgarthaTheme.colors
     Box(
         modifier = Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(40.dp)
+            .clip(CircleShape)
             .border(
                 1.dp,
                 if (enabled) colors.borderStrong else colors.border,
-                RoundedCornerShape(12.dp),
+                CircleShape,
             )
             .clickable(enabled = enabled, onClick = onClick)
             .testTag(tag),
@@ -279,6 +339,7 @@ private fun CycleButton(
             imageVector = icon,
             contentDescription = contentDescription,
             tint = if (enabled) colors.textPrimary else colors.textTertiary,
+            modifier = Modifier.size(20.dp),
         )
     }
 }

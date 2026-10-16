@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
@@ -110,7 +111,10 @@ internal fun ModelOutputSection(
                 modifier = Modifier.weight(1f),
             )
             if (output is ModelOutput.Read && output.species.isNotEmpty()) {
-                ModeChip(stringResource(R.string.verify_ai_suggested_chip))
+                ModeChip(
+                    text = stringResource(R.string.verify_ai_suggested_chip),
+                    icon = Icons.Filled.AutoAwesome,
+                )
             }
         }
         Spacer(modifier = Modifier.height(12.dp))
@@ -146,37 +150,26 @@ internal fun ModelOutputSection(
                     fontSize = 13.sp,
                 )
             } else {
-                output.species.forEach { row ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
-                        Text(row.label, color = colors.textPrimary, fontSize = 13.sp)
-                        Text(
-                            row.count.toString(),
-                            color = colors.textPrimary,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        stringResource(R.string.verify_model_total),
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        output.total.toString(),
-                        color = colors.textSecondary,
-                        fontSize = 12.sp,
+                        text = pluralStringResource(
+                            R.plurals.verify_model_eggs_detected,
+                            output.total,
+                            output.total,
+                        ),
+                        color = colors.textPrimary,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = if (output.species.size == 1) {
+                            output.species.first().label
+                        } else {
+                            output.species.joinToString(" · ") { "${it.label} (${it.count})" }
+                        },
+                        color = colors.textSecondary,
+                        fontSize = 13.sp,
                     )
                 }
             }

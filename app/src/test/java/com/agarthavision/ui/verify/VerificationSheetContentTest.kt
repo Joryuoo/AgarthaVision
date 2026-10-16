@@ -742,7 +742,7 @@ class VerificationSheetContentTest {
 
         sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).assertIsDisplayed()
         composeRule.onNodeWithText("Ascaris").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("TOTAL").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("2 eggs detected").performScrollTo().assertIsDisplayed()
     }
 
     /**
