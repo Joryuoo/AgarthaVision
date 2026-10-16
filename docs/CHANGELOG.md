@@ -32,6 +32,55 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/active-member-writes — field data is written only by an active laboratory member · 2026-10-16
+
+### Write policies check the laboratory · `14zcqntnqpa`
+
+- **`0018_writes_need_active_lab_member.sql`** adds a RESTRICTIVE policy to every insert, update
+  and delete the app allows on `patients`, `sessions`, `samples`, `detections`, `predictions`,
+  `sample_species_findings` and `reports`, and to inserts and updates in the `samples` and
+  `reports` buckets. Each calls `app_private.require_active_lab_member()`: the caller must be an
+  active member, of any role, of an active laboratory (the console's `console_member_org()`
+  rule). The existing ownership checks still apply. A deactivated medtech, every member of a
+  deactivated laboratory, and an account in no laboratory are refused with 42501 and
+  `not_active_lab_member` in the message. Reads are unchanged.
+- **The 35 `TO public` policies are now `TO authenticated`**, rules unchanged.
+- **The phone says why.** When a sync pass hits that refusal, the Settings sync card shows
+  "Your account is no longer an active member of a laboratory…" instead of the raw error. The
+  unsynced work stays on the phone (`domain/sync/InactiveMemberRefusal.kt`,
+  `SyncPendingDataUseCase`).
+- Applied by hand (C6) after 0017. Its header carries a read-only query listing recent writers
+  who would be refused; check it first. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0018` and the console's migrations, in
+  both orders (app then console, and live's console then app): the new
+  `app_0018_writes_need_active_lab_member.test.sql` there replays 16 phone writes as an active
+  medtech and an active org admin (allowed), as each refused kind of account, and signed out.
+
+---
+
+## fix/advisor-hardening — signed-out visitors reach no app table or function · 2026-10-16
+
+### Supabase security advisor findings · `14zcqntnqxe`
+
+- **`0017_advisor_hardening.sql`** clears the app's findings from the advisor run of 2026-10-15.
+  `sessions_patient_is_fixed()` gets a fixed search_path. The trigger functions
+  (`handle_new_user`, `handle_deleted_user`, `link_patient_creator`, `dedupe_session_label`,
+  `sessions_patient_is_fixed`) lose EXECUTE for every client role; a trigger still fires
+  without it. The policy helpers and the two admin RPCs lose EXECUTE for `anon` and PUBLIC and
+  keep it for `authenticated`.
+- **`anon` loses every right on the nine app tables.** A signed-out read is now refused (42501)
+  instead of returning `[]`, so turning RLS off on a table by mistake no longer opens it.
+- **`is_admin(uuid)` answers a client only about themselves.** The check moved to
+  `app_private.is_admin(uuid)`; `public.is_admin` is security invoker and returns false when a
+  signed-in caller names someone else. Security-definer callers (the console's RPCs) still ask
+  about anyone. Signature unchanged, so no policy or view changed.
+- Applied by hand (C6), independent of any build. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0017` and the console's migrations:
+  the new `app_0017_advisor_hardening.test.sql` there checks each grant, a signed-out read and
+  RPC call, `is_admin()` from each side, and the phone's write flow as a medtech.
+
+---
+
 ## fix/patient-report-own-patient-sessions — a patient report pools only that patient's own sessions · 2026-10-05
 
 ### Patient report insert rule · `14zcqntk68x`

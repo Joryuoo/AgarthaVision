@@ -742,6 +742,7 @@
     <string name="settings_sync_nothing_to_sync">Nothing to sync</string>
     <string name="settings_sync_incomplete_badge">Sync incomplete</string>
     <string name="settings_sync_incomplete">Some data could not be downloaded. Retrying automatically.</string>
+    <string name="settings_sync_refused_inactive_member">Your account is no longer an active member of a laboratory, so your work cannot be uploaded. It stays saved on this phone. Ask your laboratory\'s admin to reactivate your account.</string>
     <string name="settings_appearance_dark_mode">Dark mode</string>
     <string name="settings_signed_in_as_label">Signed in as</string>
     <string name="settings_role_medtech">Medtech</string>
