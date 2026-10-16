@@ -10,8 +10,10 @@ import com.agarthavision.data.supabase.SyncReportUseCase
 import com.agarthavision.data.supabase.SyncSampleUseCase
 import com.agarthavision.data.supabase.SyncSessionUseCase
 import com.agarthavision.domain.repository.AuthRepository
+import com.agarthavision.domain.sync.INACTIVE_MEMBER_REFUSAL
 import com.agarthavision.domain.sync.LastSyncStore
 import com.agarthavision.domain.sync.SyncCompletion
+import com.agarthavision.domain.sync.isInactiveMemberRefusal
 import java.time.Clock
 import javax.inject.Inject
 
@@ -78,7 +80,8 @@ class SyncPendingDataUseCase @Inject constructor(
             return@runCatching SyncSummary.Skipped
         }
 
-        val failedLogList = mutableListOf<String>()
+        // Each failure with the row it belongs to, for the message Settings shows.
+        val failures = mutableListOf<Pair<String, Throwable>>()
 
         // Patients first: a session insert fails on sessions.patient_id otherwise. Scoped to
         // this medtech like every other type below — on a shared device an unscoped pass
@@ -86,37 +89,39 @@ class SyncPendingDataUseCase @Inject constructor(
         val patientsSynced = patientDao.getPatientsPendingSync(userId).count { patient ->
             val result = syncPatientUseCase(patient.patientId)
             result.onFailure { error ->
-                failedLogList.add("[Patient:${patient.patientId}] ${error.message}")
+                failures.add("[Patient:${patient.patientId}]" to error)
             }
             result.isSuccess
         }
         val sessionsSynced = sessionDao.getSessionsPendingSync(userId).count { session ->
             val result = syncSessionUseCase(session.sessionId)
             result.onFailure { error ->
-                failedLogList.add("[Session:${session.sessionId}] ${error.message}")
+                failures.add("[Session:${session.sessionId}]" to error)
             }
             result.isSuccess
         }
         val samplesSynced = sampleDao.getSamplesPendingSyncIncludingDeleted(userId).count { sample ->
             val result = syncSampleUseCase(sample.sampleId)
             result.onFailure { error ->
-                failedLogList.add("[Sample:${sample.sampleId}] ${error.message}")
+                failures.add("[Sample:${sample.sampleId}]" to error)
             }
             result.isSuccess
         }
         val reportsSynced = reportDao.getReportsPendingSync(userId).count { report ->
             val result = syncReportUseCase(report.reportId)
             result.onFailure { error ->
-                failedLogList.add("[Report:${report.reportId}] ${error.message}")
+                failures.add("[Report:${report.reportId}]" to error)
             }
             result.isSuccess
         }
 
-        if (failedLogList.isNotEmpty()) {
-            lastSyncStore.recordLastError(userId, failedLogList.first())
-        } else {
-            lastSyncStore.recordLastError(userId, "")
+        // A refusal because the account is no longer an active laboratory member outranks
+        // every other failure: it is the one the medtech cannot fix by retrying (0018).
+        val lastError = when {
+            failures.any { (_, error) -> error.isInactiveMemberRefusal() } -> INACTIVE_MEMBER_REFUSAL
+            else -> failures.firstOrNull()?.let { (row, error) -> "$row ${error.message}" }.orEmpty()
         }
+        lastSyncStore.recordLastError(userId, lastError)
 
         val totalSynced = patientsSynced + sessionsSynced + samplesSynced + reportsSynced
         if (totalSynced > 0) {

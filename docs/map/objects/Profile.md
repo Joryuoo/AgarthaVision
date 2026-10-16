@@ -71,6 +71,15 @@ policy recursion the original inline subquery caused —
 `legacy-dev/0004_fix_profiles_rls_recursion.sql`. Since 0014 it reads `super_admins` instead of
 `role`, with the same signature, so no caller changed (`0014_super_admins.sql:123-136`).
 
+**Since 0017 a client can only ask `is_admin()` about themselves.** The check moved to
+`app_private.is_admin(uuid)`, in a schema the API does not expose, and `public.is_admin(uuid)`
+became security invoker so it can see who is asking (`0017_advisor_hardening.sql`, section 5):
+called as `authenticated` (a policy, a view, or a client's RPC) it answers for `auth.uid()` and
+is false for any other ID; called inside a security-definer function it runs as the owner and
+answers for anyone, which the console's invitation and status RPCs rely on. `anon` cannot call
+it at all. **A new policy passes `auth.uid()`; a new RPC that asks about another user must be
+security definer.**
+
 ### Super admins
 
 `public.super_admins` (`0014_super_admins.sql:47-75`) holds one row per grant: `user_id`,
