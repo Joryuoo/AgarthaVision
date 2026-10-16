@@ -9,6 +9,32 @@ Verify any entry with `git log --oneline --reverse`.
 
 ---
 
+## fix/active-member-writes — field data is written only by an active laboratory member · 2026-10-16
+
+### Write policies check the laboratory · `14zcqntnqpa`
+
+- **`0018_writes_need_active_lab_member.sql`** adds a RESTRICTIVE policy to every insert, update
+  and delete the app allows on `patients`, `sessions`, `samples`, `detections`, `predictions`,
+  `sample_species_findings` and `reports`, and to inserts and updates in the `samples` and
+  `reports` buckets. Each calls `app_private.require_active_lab_member()`: the caller must be an
+  active member, of any role, of an active laboratory (the console's `console_member_org()`
+  rule). The existing ownership checks still apply. A deactivated medtech, every member of a
+  deactivated laboratory, and an account in no laboratory are refused with 42501 and
+  `not_active_lab_member` in the message. Reads are unchanged.
+- **The 35 `TO public` policies are now `TO authenticated`**, rules unchanged.
+- **The phone says why.** When a sync pass hits that refusal, the Settings sync card shows
+  "Your account is no longer an active member of a laboratory…" instead of the raw error. The
+  unsynced work stays on the phone (`domain/sync/InactiveMemberRefusal.kt`,
+  `SyncPendingDataUseCase`).
+- Applied by hand (C6) after 0017. Its header carries a read-only query listing recent writers
+  who would be refused; check it first. No row changed (C8).
+- Tested with the console's db tests against `0001`–`0018` and the console's migrations, in
+  both orders (app then console, and live's console then app): the new
+  `app_0018_writes_need_active_lab_member.test.sql` there replays 16 phone writes as an active
+  medtech and an active org admin (allowed), as each refused kind of account, and signed out.
+
+---
+
 ## fix/advisor-hardening — signed-out visitors reach no app table or function · 2026-10-16
 
 ### Supabase security advisor findings · `14zcqntnqxe`
