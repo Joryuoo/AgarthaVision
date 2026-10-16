@@ -55,8 +55,6 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -228,18 +226,12 @@ internal fun VerificationSheetContent(
                 title = if (isEditing) stringResource(R.string.verify_editing_title) else capturedAtLabel,
                 metaText = if (isEditing) stringResource(R.string.verify_captured_at, capturedAtLabel) else "",
                 onBack = actions.onCancel,
-                actions = {
-                    if (isEditing) {
-                        ModeChip(stringResource(R.string.verify_editing_chip))
-                    }
-                },
             )
 
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(bottom = 24.dp)
                     .onGloballyPositioned { anchor.sheet = it }
                     .collapseOnOutsideTap(
                         anchor = anchor,
@@ -411,7 +403,7 @@ internal fun VerificationSheetContent(
                         onValueChange = actions.onUserNoteChanged,
                         placeholder = stringResource(R.string.verify_remarks_placeholder),
                         enabled = !state.isAwaitingInference,
-                        modifier = Modifier.padding(bottom = 12.dp),
+                        modifier = Modifier.padding(bottom = 8.dp),
                     )
                 }
             }
@@ -421,16 +413,8 @@ internal fun VerificationSheetContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(colors.surface)
-                    .drawBehind {
-                        drawLine(
-                            color = colors.border,
-                            start = Offset(0f, 0f),
-                            end = Offset(size.width, 0f),
-                            strokeWidth = 1.dp.toPx(),
-                        )
-                    }
                     .padding(horizontal = 16.dp)
-                    .padding(top = 12.dp, bottom = 16.dp),
+                    .padding(top = 8.dp, bottom = 16.dp),
             ) {
                 state.errorMessage?.let {
                     Text(

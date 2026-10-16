@@ -1828,14 +1828,15 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `edit mode shows Save changes, Discard, and Editing chip`() {
+    fun `edit mode shows Save changes, Discard, and Editing title`() {
         setContentWithEditMode(state(), isEditing = true)
 
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_PRIMARY_ACTION)
             .assertTextContains("Save changes")
         composeRule.onNodeWithTag(VerifyTestTags.SHEET_SECONDARY_ACTION)
             .assertTextContains("Discard")
-        composeRule.onNodeWithText("Editing").assertIsDisplayed()
+        composeRule.onNodeWithText("Editing sample").assertIsDisplayed()
+        composeRule.onNodeWithText("Editing").assertDoesNotExist()
     }
 
     @Test

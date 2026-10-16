@@ -56,7 +56,12 @@ fun ScreenTopBar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp, horizontal = 16.dp),
+            .padding(
+                start = 16.dp,
+                end = 16.dp,
+                top = 8.dp,
+                bottom = if (metaText.isNotBlank()) 4.dp else 8.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
