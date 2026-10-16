@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -91,11 +92,12 @@ internal fun ModeChip(
     text: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    containerColor: Color? = null,
 ) {
     val colors = AgarthaTheme.colors
     Row(
         modifier = modifier
-            .background(colors.accentTint2, RoundedCornerShape(999.dp))
+            .background(containerColor ?: colors.accentTint2, RoundedCornerShape(999.dp))
             .padding(horizontal = 10.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),

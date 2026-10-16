@@ -73,6 +73,7 @@ import com.agarthavision.ui.theme.AgarthaTheme
  * same number as what submitting would write. The gap between the two is what the medtech is
  * here to create.
  */
+@Suppress("CyclomaticComplexMethod")
 @Composable
 internal fun ModelOutputSection(
     output: ModelOutput,
@@ -88,17 +89,26 @@ internal fun ModelOutputSection(
     footer: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
     val colors = AgarthaTheme.colors
-    val containerBg = if (output is ModelOutput.Unavailable) {
-        colors.accentTint2
-    } else {
-        colors.surface
+    val containerBg = when (output) {
+        is ModelOutput.Read -> colors.accentTint2
+        ModelOutput.Unavailable -> colors.accentTint2
+        ModelOutput.InProgress -> colors.surface
+    }
+    val borderColor = when (output) {
+        is ModelOutput.Read -> colors.accent
+        ModelOutput.Unavailable -> colors.border
+        ModelOutput.InProgress -> colors.border
+    }
+    val dividerColor = when (output) {
+        is ModelOutput.Read -> colors.accent.copy(alpha = 0.2f)
+        else -> colors.border
     }
     Column(
         modifier = modifier
             .fillMaxWidth()
             .testTag(VerifyTestTags.MODEL_OUTPUT_PANEL)
             .background(containerBg, RoundedCornerShape(16.dp))
-            .border(1.dp, colors.border, RoundedCornerShape(16.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
             .padding(16.dp),
     ) {
         Row(
@@ -113,6 +123,7 @@ internal fun ModelOutputSection(
                 ModeChip(
                     text = stringResource(R.string.verify_ai_suggested_chip),
                     icon = Icons.Filled.AutoAwesome,
+                    containerColor = colors.accentTint,
                 )
             }
         }
@@ -173,29 +184,26 @@ internal fun ModelOutputSection(
                 }
             }
         }
-        // The C7 caution, moved here from the detection card it used to sit under. It is a
-        // caution about model output, so it belongs to the section that reports model output -
-        // and it is now shown once per frame rather than once per box.
-        if (output is ModelOutput.Read && output.species.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.verify_ai_suggestion_note),
-                color = colors.textTertiary,
-                fontSize = 11.sp,
-                lineHeight = 14.sp,
-                modifier = Modifier
-                    .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
-                    .padding(top = 8.dp, start = 4.dp, end = 4.dp),
-            )
-        }
-
         if (footer != null) {
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 12.dp),
                 thickness = 1.dp,
-                color = colors.border,
+                color = dividerColor,
             )
             footer()
         }
+    }
+
+    if (output is ModelOutput.Read && output.species.isNotEmpty()) {
+        Text(
+            text = stringResource(R.string.verify_ai_suggestion_note),
+            color = colors.textTertiary,
+            fontSize = 11.sp,
+            lineHeight = 14.sp,
+            modifier = Modifier
+                .testTag(VerifyTestTags.AI_SUGGESTION_NOTE)
+                .padding(top = 8.dp, start = 4.dp, end = 4.dp),
+        )
     }
 }
 

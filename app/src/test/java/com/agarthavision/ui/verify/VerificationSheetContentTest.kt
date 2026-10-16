@@ -755,6 +755,12 @@ class VerificationSheetContentTest {
         setContent(state(frame = frame(source = FrameSource.MODEL)))
 
         sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).assertIsDisplayed()
+        val panelBounds = sheetNode(VerifyTestTags.MODEL_OUTPUT_PANEL).getBoundsInRoot()
+        val noteBounds = sheetNode(VerifyTestTags.AI_SUGGESTION_NOTE).getBoundsInRoot()
+        assertTrue(
+            "Note top (${noteBounds.top}) should be >= panel bottom (${panelBounds.bottom})",
+            noteBounds.top >= panelBounds.bottom,
+        )
     }
 
     @Test
