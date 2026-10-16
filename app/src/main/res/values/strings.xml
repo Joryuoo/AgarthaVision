@@ -196,11 +196,16 @@
     <string name="verify_ai_suggested_chip">AI suggested</string>
     <string name="verify_added_by_you_chip">Added by you</string>
     <string name="verify_added_species_title">Added species %1$d</string>
+    <string name="verify_added_species_subtitle">Not boxed by the model</string>
     <string name="verify_show_boxes">Show boxes on image</string>
     <string name="verify_action_discard">Discard</string>
     <string name="verify_action_save_changes">Save changes</string>
     <string name="verify_action_submit">Submit</string>
     <string name="verify_field_total_label">Egg count</string>
+    <string name="verify_eggs_of_this_species">Eggs of this species</string>
+    <string name="verify_seen_in_this_sample">Seen in this sample</string>
+    <string name="verify_decrement_egg_count">Decrease egg count</string>
+    <string name="verify_increment_egg_count">Increase egg count</string>
     <string name="verify_field_total_boxed">%1$d of them are already boxed by the model</string>
     <string name="verify_field_total_floor">Cannot be below %1$d — that many are already boxed or drawn</string>
     <string name="verify_locate_eggs_section">LOCATE EGGS</string>

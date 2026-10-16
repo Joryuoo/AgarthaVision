@@ -1582,7 +1582,7 @@ class VerificationSheetContentTest {
     }
 
     @Test
-    fun `remove button is positioned at lower right beside the count field`() {
+    fun `remove button is positioned below the count field`() {
         setContent(
             noModelOutputState(
                 findings = listOf(
@@ -1591,17 +1591,37 @@ class VerificationSheetContentTest {
             ).copy(expandedFindingIndex = 0),
         )
 
-        val countBounds = sheetNode(VerifyTestTags.countField(0)).getBoundsInRoot()
-        val removeBounds = sheetNode(VerifyTestTags.removeFinding(0)).getBoundsInRoot()
+        composeRule.onNodeWithTag(VerifyTestTags.addedSpeciesForm(0)).performScrollTo()
+        val countBounds = composeRule.onNodeWithTag(VerifyTestTags.countField(0)).getBoundsInRoot()
+        val removeBounds = composeRule.onNodeWithTag(VerifyTestTags.removeFinding(0)).getBoundsInRoot()
 
         assertTrue(
-            "Remove left edge (${removeBounds.left}) should be >= count field right edge (${countBounds.right})",
-            removeBounds.left >= countBounds.right,
+            "Remove top edge (${removeBounds.top}) should be >= count field bottom edge (${countBounds.bottom})",
+            removeBounds.top >= countBounds.bottom,
         )
-        assertTrue(
-            "Remove top edge (${removeBounds.top}) should be >= count field top edge (${countBounds.top})",
-            removeBounds.top >= countBounds.top,
+    }
+
+    @Test
+    fun `selecting the suggested species in the dropdown confirms Q3 and checks the box`() {
+        val r = setContent(
+            state(
+                answers = listOf(
+                    VerificationAnswers(
+                        isEgg = true,
+                        isBoxCorrect = true,
+                        speciesConfirmed = false,
+                        species = null,
+                    ),
+                ),
+                frame = frame(predictions = 1),
+            ),
         )
+
+        sheetNode(VerifyTestTags.SPECIES_DROPDOWN).assertIsDisplayed()
+        composeRule.onNodeWithText("Choose the correct species").performClick()
+        composeRule.onNodeWithText(EggSpecies.ASCARIS.displayName).performClick()
+
+        assertEquals(listOf(true), r.speciesConfirmed)
     }
 
     @Test

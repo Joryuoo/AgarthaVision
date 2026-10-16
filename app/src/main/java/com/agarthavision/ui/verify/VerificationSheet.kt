@@ -27,7 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CropFree
-import androidx.compose.material.icons.outlined.CropSquare
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
@@ -621,17 +620,6 @@ private fun BoundingBoxesToggle(checked: Boolean, onToggle: () -> Unit) {
             modifier = Modifier.testTag(VerifyTestTags.BOXES_TOGGLE),
             checked = checked,
             onCheckedChange = { onToggle() },
-            thumbContent = if (checked) {
-                {
-                    Icon(
-                        imageVector = Icons.Outlined.CropSquare,
-                        contentDescription = null,
-                        modifier = Modifier.size(SwitchDefaults.IconSize),
-                    )
-                }
-            } else {
-                null
-            },
             colors = SwitchDefaults.colors(
                 checkedThumbColor = AppColors.White,
                 checkedTrackColor = AgarthaTheme.colors.accent,
@@ -755,7 +743,13 @@ private fun BoxQuestionChain(
         SpeciesDropdown(
             selected = answers.species,
             otherText = answers.otherSpeciesText,
-            onSpeciesSelected = actions.onSpeciesSelected,
+            onSpeciesSelected = { species ->
+                if (suggestedSpecies != null && species == suggestedSpecies) {
+                    actions.onSpeciesConfirmed(true)
+                } else {
+                    actions.onSpeciesSelected(species)
+                }
+            },
             onOtherTextChanged = actions.onOtherSpeciesChanged,
             suggestions = suggestions,
             modifier = Modifier
@@ -1024,9 +1018,9 @@ private fun NoteField(
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = AgarthaTheme.colors.accent,
-            unfocusedBorderColor = AgarthaTheme.colors.borderStrong,
-            focusedContainerColor = AgarthaTheme.colors.surface,
-            unfocusedContainerColor = AgarthaTheme.colors.surface,
+            unfocusedBorderColor = AgarthaTheme.colors.border,
+            focusedContainerColor = AgarthaTheme.colors.surfaceMuted,
+            unfocusedContainerColor = AgarthaTheme.colors.surfaceMuted,
             focusedTextColor = AgarthaTheme.colors.textPrimary,
             unfocusedTextColor = AgarthaTheme.colors.textPrimary,
         ),

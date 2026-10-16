@@ -17,21 +17,21 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import com.agarthavision.ui.components.AgarthaButton
-import com.agarthavision.ui.components.AgarthaButtonSize
-import com.agarthavision.ui.components.AgarthaButtonVariant
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -299,12 +298,23 @@ internal fun AddedFindings(
                 .testTag(VerifyTestTags.ADD_SPECIES),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = stringResource(R.string.verify_add_species),
-                color = if (enabled) colors.accent else colors.textTertiary,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = null,
+                    tint = if (enabled) colors.accent else colors.textTertiary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = stringResource(R.string.verify_add_species),
+                    color = if (enabled) colors.accent else colors.textTertiary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
 
         LocateEggsSection(findings = findings, boxCount = boxCount, actions = actions)
@@ -344,14 +354,24 @@ private fun AddedFindingCard(
                 .padding(bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = stringResource(R.string.verify_added_species_title, ordinal),
-                color = colors.textPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.verify_added_species_title, ordinal),
+                    color = colors.textPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.verify_added_species_subtitle),
+                    color = colors.textSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                )
+            }
+            ModeChip(
+                text = stringResource(R.string.verify_added_by_you_chip),
+                icon = Icons.Outlined.Person,
             )
-            ModeChip(stringResource(R.string.verify_added_by_you_chip))
         }
 
         SpeciesDropdown(
@@ -381,60 +401,156 @@ private fun AddedFindingCard(
             )
         }
 
-        FieldLabel(stringResource(R.string.verify_field_total_label))
+        val currentCount = total ?: maxOf(floor, 1)
+        val canDecrement = currentCount > floor
+
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            // The field asks for the **total** for this species, not the eggs beyond the
-            // model's boxes. A medtech counting 23 Ascaris against nine boxed ones would
-            // otherwise have to work out 14 in their head, under time pressure, with nothing
-            // anywhere to catch a slip - and the wrong number reaches the low-power-field
-            // count in silence.
-            OutlinedTextField(
-                value = total?.toString().orEmpty(),
-                onValueChange = { actions.onFieldTotalChanged(index, it) },
-                textStyle = FieldTextStyle,
-                colors = fieldColors(AgarthaTheme.colors),
-                shape = FieldShape,
-                isError = belowFloor,
-                supportingText = when {
-                    belowFloor -> { { Text(stringResource(R.string.verify_field_total_floor, floor)) } }
-                    boxed > 0 -> { { Text(stringResource(R.string.verify_field_total_boxed, boxed)) } }
-                    else -> null
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier
-                    .width(100.dp)
-                    .testTag(VerifyTestTags.countField(index)),
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.verify_eggs_of_this_species),
+                    color = colors.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.verify_seen_in_this_sample),
+                    color = colors.textSecondary,
+                    fontSize = 13.sp,
+                )
+            }
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                AgarthaButton(
-                    onClick = { actions.onRemoveFinding(index) },
-                    variant = AgarthaButtonVariant.Secondary,
-                    size = AgarthaButtonSize.Default,
-                    modifier = Modifier.testTag(VerifyTestTags.removeFinding(index)),
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(
+                            1.dp,
+                            if (canDecrement) colors.borderStrong else colors.border,
+                            RoundedCornerShape(12.dp),
+                        )
+                        .clickable(enabled = canDecrement) {
+                            actions.onFieldTotalChanged(index, (currentCount - 1).toString())
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        text = stringResource(R.string.verify_remove_species),
-                        color = AgarthaTheme.colors.textPrimary,
-                        fontWeight = FontWeight.SemiBold,
+                    Icon(
+                        imageVector = Icons.Outlined.Remove,
+                        contentDescription = stringResource(R.string.verify_decrement_egg_count),
+                        tint = if (canDecrement) colors.textPrimary else colors.textTertiary,
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                AgarthaButton(
-                    onClick = { actions.onCollapseFinding(index) },
-                    enabled = !belowFloor,
-                    size = AgarthaButtonSize.Default,
-                    modifier = Modifier.testTag(VerifyTestTags.saveFinding(index)),
+
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 24.dp)
+                        .testTag(VerifyTestTags.countField(index)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(stringResource(R.string.verify_save_species))
+                    Text(
+                        text = currentCount.toString(),
+                        color = colors.textPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
                 }
+
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(
+                            1.dp,
+                            colors.borderStrong,
+                            RoundedCornerShape(12.dp),
+                        )
+                        .clickable {
+                            actions.onFieldTotalChanged(index, (currentCount + 1).toString())
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = stringResource(R.string.verify_increment_egg_count),
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+        }
+
+        if (belowFloor) {
+            Text(
+                text = stringResource(R.string.verify_field_total_floor, floor),
+                color = colors.danger,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        } else if (boxed > 0) {
+            Text(
+                text = stringResource(R.string.verify_field_total_boxed, boxed),
+                color = colors.textSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+
+        HorizontalDivider(
+            modifier = Modifier.padding(vertical = 12.dp),
+            thickness = 1.dp,
+            color = colors.border,
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(colors.surface)
+                    .border(1.dp, colors.borderStrong, RoundedCornerShape(12.dp))
+                    .clickable { actions.onRemoveFinding(index) }
+                    .testTag(VerifyTestTags.removeFinding(index)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_remove_species),
+                    color = colors.textPrimary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .heightIn(min = 44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(if (!belowFloor) colors.brandFill else colors.brandFill.copy(alpha = 0.4f))
+                    .clickable(enabled = !belowFloor) { actions.onCollapseFinding(index) }
+                    .testTag(VerifyTestTags.saveFinding(index)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = stringResource(R.string.verify_save_species),
+                    color = colors.onBrandFill,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                )
             }
         }
     }
